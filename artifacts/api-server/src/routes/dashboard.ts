@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, count, sum, lte, gte, and } from "drizzle-orm";
+import { eq, count, sum, lte, gte, and, desc } from "drizzle-orm";
 import { db, customersTable, quotesTable, workOrdersTable, paymentsTable, maintenanceRemindersTable, warrantiesTable } from "@workspace/db";
 
 const router: IRouter = Router();
@@ -41,7 +41,7 @@ router.get("/dashboard/summary", async (req, res): Promise<void> => {
         lte(warrantiesTable.endDate, thirtyDaysStr),
       )
     ),
-    db.select().from(customersTable).orderBy(customersTable.createdAt).limit(5),
+    db.select().from(customersTable).orderBy(desc(customersTable.createdAt)).limit(5),
   ]);
 
   res.json({

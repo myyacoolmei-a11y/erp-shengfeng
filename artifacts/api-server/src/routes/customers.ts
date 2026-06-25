@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, ilike, or, and, lt } from "drizzle-orm";
+import { eq, ilike, or, and, gte, desc } from "drizzle-orm";
 import { db, customersTable } from "@workspace/db";
 import {
   CreateCustomerBody,
@@ -14,8 +14,6 @@ const router: IRouter = Router();
 router.get("/customers", async (req, res): Promise<void> => {
   const { search, includeOld } = req.query as { search?: string; includeOld?: string };
 
-  let query = db.select().from(customersTable).$dynamic();
-
   const conditions = [];
 
   if (search) {
@@ -24,6 +22,7 @@ router.get("/customers", async (req, res): Promise<void> => {
         ilike(customersTable.name, `%${search}%`),
         ilike(customersTable.phone, `%${search}%`),
         ilike(customersTable.address, `%${search}%`),
+        ilike(customersTable.email, `%${search}%`),
       )
     );
   }
@@ -31,24 +30,15 @@ router.get("/customers", async (req, res): Promise<void> => {
   if (includeOld !== "true") {
     const twoYearsAgo = new Date();
     twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
-    conditions.push(
-      or(
-        eq(customersTable.id, customersTable.id),
-      )
-    );
+    conditions.push(gte(customersTable.createdAt, twoYearsAgo));
   }
 
-  if (conditions.length > 0) {
-    const results = await db
-      .select()
-      .from(customersTable)
-      .where(and(...conditions))
-      .orderBy(customersTable.createdAt);
-    res.json(results);
-    return;
-  }
+  const customers = await db
+    .select()
+    .from(customersTable)
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .orderBy(desc(customersTable.createdAt));
 
-  const customers = await db.select().from(customersTable).orderBy(customersTable.createdAt);
   res.json(customers);
 });
 
