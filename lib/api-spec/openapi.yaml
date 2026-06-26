@@ -10,6 +10,10 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: 驗證與授權
+  - name: users
+    description: 使用者管理
   - name: customers
     description: 客戶資料
   - name: acUnits

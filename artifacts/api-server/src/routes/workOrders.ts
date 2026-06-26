@@ -2,10 +2,16 @@ import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
 import { db, workOrdersTable, progressTable, customersTable } from "@workspace/db";
 import { CreateWorkOrderBody, UpdateWorkOrderBody, CreateProgressBody } from "@workspace/api-zod";
+import { requireRole } from "../lib/auth";
 
 const router: IRouter = Router();
 
-router.get("/work-orders", async (req, res): Promise<void> => {
+const WO_READ_ROLES = ["owner", "admin", "technician"];
+const WO_WRITE_ROLES = ["owner", "admin"];
+const WO_DELETE_ROLES = ["owner"];
+const PROGRESS_ROLES = ["owner", "admin", "technician"];
+
+router.get("/work-orders", requireRole(...WO_READ_ROLES), async (req, res): Promise<void> => {
   const { customerId, status } = req.query as { customerId?: string; status?: string };
   const conditions = [];
   if (customerId) {
@@ -44,7 +50,7 @@ router.get("/work-orders", async (req, res): Promise<void> => {
   })));
 });
 
-router.post("/work-orders", async (req, res): Promise<void> => {
+router.post("/work-orders", requireRole(...WO_WRITE_ROLES), async (req, res): Promise<void> => {
   const parsed = CreateWorkOrderBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -59,7 +65,7 @@ router.post("/work-orders", async (req, res): Promise<void> => {
   });
 });
 
-router.get("/work-orders/:id", async (req, res): Promise<void> => {
+router.get("/work-orders/:id", requireRole(...WO_READ_ROLES), async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   if (isNaN(id)) {
@@ -97,7 +103,7 @@ router.get("/work-orders/:id", async (req, res): Promise<void> => {
   });
 });
 
-router.patch("/work-orders/:id", async (req, res): Promise<void> => {
+router.patch("/work-orders/:id", requireRole(...WO_WRITE_ROLES), async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   if (isNaN(id)) {
@@ -122,7 +128,7 @@ router.patch("/work-orders/:id", async (req, res): Promise<void> => {
   });
 });
 
-router.delete("/work-orders/:id", async (req, res): Promise<void> => {
+router.delete("/work-orders/:id", requireRole(...WO_DELETE_ROLES), async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   if (isNaN(id)) {
@@ -137,7 +143,7 @@ router.delete("/work-orders/:id", async (req, res): Promise<void> => {
   res.sendStatus(204);
 });
 
-router.get("/work-orders/:workOrderId/progress", async (req, res): Promise<void> => {
+router.get("/work-orders/:workOrderId/progress", requireRole(...PROGRESS_ROLES), async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.workOrderId) ? req.params.workOrderId[0] : req.params.workOrderId;
   const workOrderId = parseInt(raw, 10);
   if (isNaN(workOrderId)) {
@@ -151,7 +157,7 @@ router.get("/work-orders/:workOrderId/progress", async (req, res): Promise<void>
   })));
 });
 
-router.post("/work-orders/:workOrderId/progress", async (req, res): Promise<void> => {
+router.post("/work-orders/:workOrderId/progress", requireRole(...PROGRESS_ROLES), async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.workOrderId) ? req.params.workOrderId[0] : req.params.workOrderId;
   const workOrderId = parseInt(raw, 10);
   if (isNaN(workOrderId)) {

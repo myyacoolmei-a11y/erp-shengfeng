@@ -2,12 +2,16 @@ import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
 import { db, quotesTable, customersTable } from "@workspace/db";
 import { CreateQuoteBody, UpdateQuoteBody } from "@workspace/api-zod";
+import { requireRole } from "../lib/auth";
 
 const router: IRouter = Router();
 
-router.get("/quotes", async (req, res): Promise<void> => {
-  const { customerId, status } = req.query as { customerId?: string; status?: string };
+const READ_ROLES = ["owner", "admin", "accountant"];
+const WRITE_ROLES = ["owner", "admin"];
+const DELETE_ROLES = ["owner"];
 
+router.get("/quotes", requireRole(...READ_ROLES), async (req, res): Promise<void> => {
+  const { customerId, status } = req.query as { customerId?: string; status?: string };
   const conditions = [];
   if (customerId) {
     const cid = parseInt(customerId, 10);
@@ -47,7 +51,7 @@ router.get("/quotes", async (req, res): Promise<void> => {
   })));
 });
 
-router.post("/quotes", async (req, res): Promise<void> => {
+router.post("/quotes", requireRole(...WRITE_ROLES), async (req, res): Promise<void> => {
   const parsed = CreateQuoteBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -71,7 +75,7 @@ router.post("/quotes", async (req, res): Promise<void> => {
   });
 });
 
-router.get("/quotes/:id", async (req, res): Promise<void> => {
+router.get("/quotes/:id", requireRole(...READ_ROLES), async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   if (isNaN(id)) {
@@ -111,7 +115,7 @@ router.get("/quotes/:id", async (req, res): Promise<void> => {
   });
 });
 
-router.patch("/quotes/:id", async (req, res): Promise<void> => {
+router.patch("/quotes/:id", requireRole(...WRITE_ROLES), async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   if (isNaN(id)) {
@@ -124,9 +128,9 @@ router.patch("/quotes/:id", async (req, res): Promise<void> => {
     return;
   }
   const data: Record<string, unknown> = { ...parsed.data };
-  if (parsed.data.amount != null) data.amount = String(parsed.data.amount);
-  if (parsed.data.discountAmount != null) data.discountAmount = String(parsed.data.discountAmount);
-  if (parsed.data.finalAmount != null) data.finalAmount = String(parsed.data.finalAmount);
+  if (parsed.data.amount != null) data["amount"] = String(parsed.data.amount);
+  if (parsed.data.discountAmount != null) data["discountAmount"] = String(parsed.data.discountAmount);
+  if (parsed.data.finalAmount != null) data["finalAmount"] = String(parsed.data.finalAmount);
   const [quote] = await db.update(quotesTable).set(data).where(eq(quotesTable.id, id)).returning();
   if (!quote) {
     res.status(404).json({ error: "找不到報價單" });
@@ -143,7 +147,7 @@ router.patch("/quotes/:id", async (req, res): Promise<void> => {
   });
 });
 
-router.delete("/quotes/:id", async (req, res): Promise<void> => {
+router.delete("/quotes/:id", requireRole(...DELETE_ROLES), async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   if (isNaN(id)) {

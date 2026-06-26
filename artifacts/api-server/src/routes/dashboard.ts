@@ -1,10 +1,11 @@
 import { Router, type IRouter } from "express";
 import { eq, count, sum, lte, gte, and, desc } from "drizzle-orm";
 import { db, customersTable, quotesTable, workOrdersTable, paymentsTable, maintenanceRemindersTable, warrantiesTable } from "@workspace/db";
+import { requireRole } from "../lib/auth";
 
 const router: IRouter = Router();
 
-router.get("/dashboard/summary", async (req, res): Promise<void> => {
+router.get("/dashboard/summary", requireRole("owner", "admin", "accountant"), async (req, res): Promise<void> => {
   const today = new Date().toISOString().split("T")[0];
   const inThirtyDays = new Date();
   inThirtyDays.setDate(inThirtyDays.getDate() + 30);

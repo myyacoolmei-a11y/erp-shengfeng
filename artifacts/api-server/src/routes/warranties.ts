@@ -2,10 +2,15 @@ import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
 import { db, warrantiesTable, customersTable } from "@workspace/db";
 import { CreateWarrantyBody, UpdateWarrantyBody } from "@workspace/api-zod";
+import { requireRole } from "../lib/auth";
 
 const router: IRouter = Router();
 
-router.get("/warranties", async (req, res): Promise<void> => {
+const READ_ROLES = ["owner", "admin", "accountant"];
+const WRITE_ROLES = ["owner", "admin"];
+const DELETE_ROLES = ["owner"];
+
+router.get("/warranties", requireRole(...READ_ROLES), async (req, res): Promise<void> => {
   const { customerId } = req.query as { customerId?: string };
   const conditions = [];
   if (customerId) {
@@ -36,7 +41,7 @@ router.get("/warranties", async (req, res): Promise<void> => {
   })));
 });
 
-router.post("/warranties", async (req, res): Promise<void> => {
+router.post("/warranties", requireRole(...WRITE_ROLES), async (req, res): Promise<void> => {
   const parsed = CreateWarrantyBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -50,7 +55,7 @@ router.post("/warranties", async (req, res): Promise<void> => {
   });
 });
 
-router.get("/warranties/:id", async (req, res): Promise<void> => {
+router.get("/warranties/:id", requireRole(...READ_ROLES), async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   if (isNaN(id)) {
@@ -83,7 +88,7 @@ router.get("/warranties/:id", async (req, res): Promise<void> => {
   });
 });
 
-router.patch("/warranties/:id", async (req, res): Promise<void> => {
+router.patch("/warranties/:id", requireRole(...WRITE_ROLES), async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   if (isNaN(id)) {
@@ -107,7 +112,7 @@ router.patch("/warranties/:id", async (req, res): Promise<void> => {
   });
 });
 
-router.delete("/warranties/:id", async (req, res): Promise<void> => {
+router.delete("/warranties/:id", requireRole(...DELETE_ROLES), async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   if (isNaN(id)) {

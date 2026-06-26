@@ -2,10 +2,16 @@ import { Router, type IRouter } from "express";
 import { eq, and, lte } from "drizzle-orm";
 import { db, maintenanceRemindersTable, customersTable } from "@workspace/db";
 import { CreateMaintenanceReminderBody, UpdateMaintenanceReminderBody } from "@workspace/api-zod";
+import { requireRole } from "../lib/auth";
 
 const router: IRouter = Router();
 
-router.get("/maintenance-reminders", async (req, res): Promise<void> => {
+const READ_ROLES = ["owner", "admin", "technician"];
+const WRITE_ROLES = ["owner", "admin"];
+const PATCH_ROLES = ["owner", "admin", "technician"];
+const DELETE_ROLES = ["owner"];
+
+router.get("/maintenance-reminders", requireRole(...READ_ROLES), async (req, res): Promise<void> => {
   const { customerId, status, upcoming } = req.query as { customerId?: string; status?: string; upcoming?: string };
   const conditions = [];
   if (customerId) {
@@ -44,7 +50,7 @@ router.get("/maintenance-reminders", async (req, res): Promise<void> => {
   })));
 });
 
-router.post("/maintenance-reminders", async (req, res): Promise<void> => {
+router.post("/maintenance-reminders", requireRole(...WRITE_ROLES), async (req, res): Promise<void> => {
   const parsed = CreateMaintenanceReminderBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -58,7 +64,7 @@ router.post("/maintenance-reminders", async (req, res): Promise<void> => {
   });
 });
 
-router.get("/maintenance-reminders/:id", async (req, res): Promise<void> => {
+router.get("/maintenance-reminders/:id", requireRole(...READ_ROLES), async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   if (isNaN(id)) {
@@ -91,7 +97,7 @@ router.get("/maintenance-reminders/:id", async (req, res): Promise<void> => {
   });
 });
 
-router.patch("/maintenance-reminders/:id", async (req, res): Promise<void> => {
+router.patch("/maintenance-reminders/:id", requireRole(...PATCH_ROLES), async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   if (isNaN(id)) {
@@ -115,7 +121,7 @@ router.patch("/maintenance-reminders/:id", async (req, res): Promise<void> => {
   });
 });
 
-router.delete("/maintenance-reminders/:id", async (req, res): Promise<void> => {
+router.delete("/maintenance-reminders/:id", requireRole(...DELETE_ROLES), async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   if (isNaN(id)) {

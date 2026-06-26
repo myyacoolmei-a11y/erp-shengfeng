@@ -4,16 +4,17 @@ import { db, customersTable } from "@workspace/db";
 import {
   CreateCustomerBody,
   UpdateCustomerBody,
-  GetCustomerParams,
-  UpdateCustomerParams,
-  DeleteCustomerParams,
 } from "@workspace/api-zod";
+import { requireRole } from "../lib/auth";
 
 const router: IRouter = Router();
 
-router.get("/customers", async (req, res): Promise<void> => {
-  const { search, includeOld } = req.query as { search?: string; includeOld?: string };
+const READ_ROLES = ["owner", "admin", "accountant"];
+const WRITE_ROLES = ["owner", "admin"];
+const DELETE_ROLES = ["owner"];
 
+router.get("/customers", requireRole(...READ_ROLES), async (req, res): Promise<void> => {
+  const { search, includeOld } = req.query as { search?: string; includeOld?: string };
   const conditions = [];
 
   if (search) {
@@ -42,7 +43,7 @@ router.get("/customers", async (req, res): Promise<void> => {
   res.json(customers);
 });
 
-router.post("/customers", async (req, res): Promise<void> => {
+router.post("/customers", requireRole(...WRITE_ROLES), async (req, res): Promise<void> => {
   const parsed = CreateCustomerBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -52,7 +53,7 @@ router.post("/customers", async (req, res): Promise<void> => {
   res.status(201).json(customer);
 });
 
-router.get("/customers/:id", async (req, res): Promise<void> => {
+router.get("/customers/:id", requireRole(...READ_ROLES), async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   if (isNaN(id)) {
@@ -67,7 +68,7 @@ router.get("/customers/:id", async (req, res): Promise<void> => {
   res.json(customer);
 });
 
-router.patch("/customers/:id", async (req, res): Promise<void> => {
+router.patch("/customers/:id", requireRole(...WRITE_ROLES), async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   if (isNaN(id)) {
@@ -91,7 +92,7 @@ router.patch("/customers/:id", async (req, res): Promise<void> => {
   res.json(customer);
 });
 
-router.delete("/customers/:id", async (req, res): Promise<void> => {
+router.delete("/customers/:id", requireRole(...DELETE_ROLES), async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   if (isNaN(id)) {

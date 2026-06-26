@@ -1,0 +1,1 @@
+- [JWT auth setup](jwt-auth.md) — api-server needs zod as direct dep (not just via @workspace/api-zod) for esbuild to resolve zod/v4 in route files
