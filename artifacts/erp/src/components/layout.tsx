@@ -46,8 +46,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const SidebarContent = () => (
     <div className="flex h-full flex-col py-4">
       <div className="px-6 py-2">
-        <h1 className="text-xl font-bold tracking-tight text-primary">晟風工程</h1>
-        <p className="text-xs text-muted-foreground mt-1 tracking-wider">ERP 系統</p>
+        <Link href="/">
+          <h1 className="text-xl font-bold tracking-tight text-primary cursor-pointer hover:opacity-80 transition-opacity">晟風工程</h1>
+          <p className="text-xs text-muted-foreground mt-1 tracking-wider">ERP 系統</p>
+        </Link>
       </div>
       <div className="flex-1 px-4 mt-2">
         <nav className="flex flex-col gap-1">
@@ -121,7 +123,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <SidebarContent />
             </SheetContent>
           </Sheet>
-          <div className="font-bold text-primary">晟風工程 ERP</div>
+          <Link href="/"><span className="font-bold text-primary cursor-pointer hover:opacity-80 transition-opacity">晟風工程 ERP</span></Link>
           {user && (
             <div className="ml-auto flex items-center gap-2">
               <Badge variant="secondary" className="text-xs">{ROLE_LABELS[user.role]}</Badge>
