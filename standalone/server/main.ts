@@ -1,0 +1,43 @@
+import app from "./app";
+import { logger } from "./lib/logger";
+import { seedDefaultUser } from "./routes/auth";
+import express from "express";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Default to 3000 so the app works out-of-the-box without extra env config
+const rawPort = process.env["PORT"] ?? "3000";
+const port = Number(rawPort);
+
+if (Number.isNaN(port) || port <= 0) {
+  throw new Error(`Invalid PORT value: "${rawPort}"`);
+}
+
+// ── Static file serving (production) ──────────────────────────────────────
+// The Vite build writes to dist/public; at runtime this file is in
+// dist/server/main.mjs, so "../public" correctly points to dist/public.
+const publicDir = path.join(__dirname, "../public");
+
+// Serve Vite-built assets
+app.use(express.static(publicDir, { maxAge: "1y", immutable: true }));
+
+// SPA catch-all: every non-API request returns index.html so that
+// client-side routing (Wouter) works on hard refresh / direct URL access.
+app.use((_req, res) => {
+  res.sendFile(path.join(publicDir, "index.html"));
+});
+
+// ── Start ──────────────────────────────────────────────────────────────────
+app.listen(port, async (err?: Error) => {
+  if (err) {
+    logger.error({ err }, "Error starting server");
+    process.exit(1);
+  }
+
+  logger.info({ port }, `Server listening — http://localhost:${port}`);
+
+  // Create the default owner account on first start if the DB is empty
+  await seedDefaultUser();
+});
