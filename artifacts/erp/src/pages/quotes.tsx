@@ -1,10 +1,12 @@
 import { useState } from "react";
+import { useSearch, useLocation } from "wouter";
 import {
   useListQuotes, useCreateQuote, useUpdateQuote, useDeleteQuote,
   useListCustomers, useCreateWorkOrder,
   getListQuotesQueryKey, getListWorkOrdersQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -95,6 +97,12 @@ function PrintQuoteDialog({ quote, onClose }: { quote: any; onClose: () => void 
 export default function Quotes() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const search = useSearch();
+  const [, navigate] = useLocation();
+  const urlParams = new URLSearchParams(search);
+  const filterCustomerId = parseInt(urlParams.get("customerId") ?? "0", 10) || null;
+  const filterCustomerName = urlParams.get("customerName") ?? "";
+
   const [statusFilter, setStatusFilter] = useState<string>("全部");
   const [showCreate, setShowCreate] = useState(false);
   const [editItem, setEditItem] = useState<any>(null);
@@ -103,7 +111,10 @@ export default function Quotes() {
   const [convertItem, setConvertItem] = useState<any>(null);
   const [woForm, setWoForm] = useState({ assignedTo: "", scheduledDate: "", notes: "" });
 
-  const { data: quotes, isLoading } = useListQuotes(statusFilter !== "全部" ? { status: statusFilter } : {});
+  const { data: quotes, isLoading } = useListQuotes({
+    ...(filterCustomerId ? { customerId: filterCustomerId } : {}),
+    ...(statusFilter !== "全部" ? { status: statusFilter } : {}),
+  });
   const { data: customers } = useListCustomers({});
 
   const createMutation = useCreateQuote({ mutation: { onSuccess: () => { queryClient.invalidateQueries({ queryKey: getListQuotesQueryKey() }); setShowCreate(false); toast({ title: "報價單已新增" }); } } });
@@ -147,6 +158,15 @@ export default function Quotes() {
         <div><h1 className="text-2xl font-bold">報價單管理</h1><p className="text-sm text-muted-foreground mt-0.5">管理所有客戶報價單</p></div>
         <Button size="sm" onClick={() => { setForm(emptyForm); setShowCreate(true); }}><Plus className="h-4 w-4 mr-1" />新增報價單</Button>
       </div>
+
+      {filterCustomerName && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg text-sm">
+          <span className="text-blue-800">篩選客戶：<strong>{filterCustomerName}</strong></span>
+          <button className="ml-auto flex items-center gap-1 text-blue-600 hover:text-blue-800 text-xs" onClick={() => navigate("/quotes")}>
+            <X className="h-3 w-3" />清除篩選
+          </button>
+        </div>
+      )}
 
       <div className="flex gap-2 flex-wrap">
         {["全部", ...STATUSES].map(s => (

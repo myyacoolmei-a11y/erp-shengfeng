@@ -1,6 +1,8 @@
 import { useState } from "react";
+import { useSearch, useLocation } from "wouter";
 import { useListWarranties, useCreateWarranty, useDeleteWarranty, useListCustomers, getListWarrantiesQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -25,10 +27,16 @@ function isExpired(endDate: string) {
 export default function Warranties() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const search = useSearch();
+  const [, navigate] = useLocation();
+  const urlParams = new URLSearchParams(search);
+  const filterCustomerId = parseInt(urlParams.get("customerId") ?? "0", 10) || null;
+  const filterCustomerName = urlParams.get("customerName") ?? "";
+
   const [showCreate, setShowCreate] = useState(false);
   const [deleteId, setDeleteId] = useState<number | null>(null);
 
-  const { data: warranties, isLoading } = useListWarranties({});
+  const { data: warranties, isLoading } = useListWarranties(filterCustomerId ? { customerId: filterCustomerId } : {});
   const { data: customers } = useListCustomers({});
   const createMutation = useCreateWarranty({ mutation: { onSuccess: () => { queryClient.invalidateQueries({ queryKey: getListWarrantiesQueryKey() }); setShowCreate(false); toast({ title: "保固資料已新增" }); } } });
   const deleteMutation = useDeleteWarranty({ mutation: { onSuccess: () => { queryClient.invalidateQueries({ queryKey: getListWarrantiesQueryKey() }); setDeleteId(null); toast({ title: "保固資料已刪除" }); } } });
@@ -42,6 +50,15 @@ export default function Warranties() {
         <div><h1 className="text-2xl font-bold">保固管理</h1><p className="text-sm text-muted-foreground mt-0.5">管理所有冷氣設備保固</p></div>
         <Button size="sm" onClick={() => { setForm(emptyForm); setShowCreate(true); }}><Plus className="h-4 w-4 mr-1" />新增保固</Button>
       </div>
+
+      {filterCustomerName && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg text-sm">
+          <span className="text-blue-800">篩選客戶：<strong>{filterCustomerName}</strong></span>
+          <button className="ml-auto flex items-center gap-1 text-blue-600 hover:text-blue-800 text-xs" onClick={() => navigate("/warranties")}>
+            <X className="h-3 w-3" />清除篩選
+          </button>
+        </div>
+      )}
 
       {isLoading ? (
         <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-14 w-full" />)}</div>

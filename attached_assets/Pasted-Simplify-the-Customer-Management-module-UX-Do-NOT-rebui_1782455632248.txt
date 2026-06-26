@@ -1,0 +1,78 @@
+Simplify the Customer Management module UX.
+
+Do NOT rebuild the ERP.
+Do NOT delete existing data.
+Do NOT modify unrelated modules.
+Keep the current Sheng Feng ERP style.
+
+Goal:
+Make customer management simple, fast, and suitable for mobile use.
+Reduce unnecessary clicks.
+
+Current problem:
+Users must click the eye/view button to enter the customer detail page, then click again to edit or check related records.
+This is too many steps.
+
+Please change the Customer List page:
+
+1. Remove the eye/view button from the customer list.
+
+2. On each customer row, show clear direct action buttons:
+- Edit
+- Quotations
+- Work Orders
+- Payments
+- Warranty
+- Delete
+
+3. Clicking the customer name should open Edit Customer directly.
+
+4. Edit button:
+Open customer edit modal directly from the list.
+
+5. Quotations button:
+Navigate to Quotation Management filtered by this customer.
+Do not edit quotations inside Customer Detail.
+
+6. Work Orders button:
+Navigate to Work Order Management filtered by this customer.
+Do not edit work orders inside Customer Detail.
+
+7. Payments button:
+Navigate to Payment Management filtered by this customer.
+
+8. Warranty button:
+Navigate to Warranty Management filtered by this customer.
+
+9. Delete button:
+Ask for confirmation.
+Do not allow deleting a customer with linked quotations, work orders, payments, or warranty records.
+Show a clear warning if deletion is blocked.
+
+10. Customer Detail page:
+Keep it only as optional read-only history page if needed, but do not make it the main workflow.
+The main workflow should happen directly from the customer list.
+
+11. Mobile UX:
+On mobile, show action buttons as compact icons with labels if space allows.
+Important actions should be reachable with one tap.
+
+12. Search:
+Keep the customer search bar.
+Allow searching by:
+- Customer name
+- Phone
+- Address
+- Company name
+
+13. Test:
+- Edit customer directly from the list.
+- Click customer name to edit.
+- Go to quotations filtered by customer.
+- Go to work orders filtered by customer.
+- Go to payments filtered by customer.
+- Delete customer with confirmation.
+- Verify mobile layout works.
+
+Commit changes with message:
+"Simplify customer management direct actions"

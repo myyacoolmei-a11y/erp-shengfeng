@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSearch, useLocation } from "wouter";
 import {
   useListWorkOrders, useCreateWorkOrder, useUpdateWorkOrder, useDeleteWorkOrder,
   useListCustomers, useListProgress, useCreateProgress,
@@ -16,7 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
-import { Plus, Pencil, Trash2, ChevronDown, ChevronUp, CreditCard, Printer, Share2, MapPin } from "lucide-react";
+import { Plus, Pencil, Trash2, ChevronDown, ChevronUp, CreditCard, Printer, Share2, MapPin, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
 
@@ -322,6 +323,12 @@ export default function WorkOrders() {
   const canWrite = user?.role === "owner" || user?.role === "admin";
   const queryClient = useQueryClient();
 
+  const search = useSearch();
+  const [, navigate] = useLocation();
+  const urlParams = new URLSearchParams(search);
+  const filterCustomerId = parseInt(urlParams.get("customerId") ?? "0", 10) || null;
+  const filterCustomerName = urlParams.get("customerName") ?? "";
+
   const [statusFilter, setStatusFilter] = useState("全部");
   const [showCreate, setShowCreate] = useState(false);
   const [editItem, setEditItem] = useState<any>(null);
@@ -329,7 +336,10 @@ export default function WorkOrders() {
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [form, setForm] = useState<WOForm>(makeEmpty());
 
-  const { data: orders, isLoading } = useListWorkOrders(statusFilter !== "全部" ? { status: statusFilter } : {});
+  const { data: orders, isLoading } = useListWorkOrders({
+    ...(filterCustomerId ? { customerId: filterCustomerId } : {}),
+    ...(statusFilter !== "全部" ? { status: statusFilter } : {}),
+  });
   const { data: customers } = useListCustomers({ includeOld: "true" });
 
   const createMutation = useCreateWorkOrder({
@@ -460,6 +470,15 @@ export default function WorkOrders() {
           </Button>
         )}
       </div>
+
+      {filterCustomerName && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg text-sm">
+          <span className="text-blue-800">篩選客戶：<strong>{filterCustomerName}</strong></span>
+          <button className="ml-auto flex items-center gap-1 text-blue-600 hover:text-blue-800 text-xs" onClick={() => navigate("/work-orders")}>
+            <X className="h-3 w-3" />清除篩選
+          </button>
+        </div>
+      )}
 
       {/* Status filter tabs */}
       <div className="flex gap-1.5 flex-wrap">
