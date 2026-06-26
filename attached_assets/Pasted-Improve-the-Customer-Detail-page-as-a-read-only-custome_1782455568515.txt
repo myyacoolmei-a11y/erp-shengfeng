@@ -1,0 +1,75 @@
+Improve the Customer Detail page as a read-only customer history and linked-record overview.
+
+Do NOT add Create Quotation button.
+Do NOT add Create Work Order button.
+Do NOT add Add Payment button.
+
+Customer Detail page should be used for:
+- Viewing customer basic information
+- Viewing related quotations
+- Viewing related work orders
+- Viewing payment history
+- Viewing warranty / maintenance records
+- Navigating to the original module if editing is needed
+
+Official editing locations:
+- Quotations are created and edited only in Quotation Management.
+- Work Orders are created and edited only in Work Order Management.
+- Payments are created and edited only in Payment Management.
+- Customer basic information is edited only through the customer edit button.
+
+Requirements:
+
+1. Keep the existing tabs:
+- Basic Info
+- Air Conditioner Equipment
+- Quotations
+- Work Orders
+- Payments
+- Warranty
+- Maintenance Reminders
+
+2. In the Quotations tab:
+Show this customer's quotations with:
+- Quotation Number
+- Date
+- Amount
+- Status
+- View Details
+- Go to Quotation
+
+View Details opens a read-only detail modal.
+Go to Quotation navigates to Quotation Management for editing.
+
+3. In the Work Orders tab:
+Show this customer's work orders with:
+- Work Order Number
+- Appointment Date
+- Project Type
+- Assigned Technician
+- Status
+- View Details
+- Go to Work Order
+
+View Details opens a read-only detail modal showing full work order information.
+Go to Work Order navigates to Work Order Management for editing, printing, PDF export, and LINE sharing.
+
+4. In the Payments tab:
+Show payment history with:
+- Payment Date
+- Amount
+- Payment Method
+- Related Work Order
+- Status
+- View Details
+- Go to Payment
+
+5. Do not duplicate edit logic inside the customer detail page.
+6. Do not rebuild the ERP.
+7. Do not delete existing data.
+8. Keep the current Sheng Feng ERP UI style.
+9. Test that all linked records display correctly.
+10. Test that navigation to the original module works.
+
+Commit changes with message:
+"Make customer detail page a read-only linked record overview"
