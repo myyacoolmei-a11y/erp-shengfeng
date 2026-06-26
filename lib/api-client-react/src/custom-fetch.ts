@@ -17,6 +17,7 @@ const DEFAULT_JSON_ACCEPT = "application/json, application/problem+json";
 
 let _baseUrl: string | null = null;
 let _authTokenGetter: AuthTokenGetter | null = null;
+let _on401Handler: (() => void) | null = null;
 
 /**
  * Set a base URL that is prepended to every relative request URL
@@ -42,6 +43,15 @@ export function setBaseUrl(url: string | null): void {
  */
 export function setAuthTokenGetter(getter: AuthTokenGetter | null): void {
   _authTokenGetter = getter;
+}
+
+/**
+ * Register a callback that is invoked whenever the server responds with 401.
+ * Use this to trigger a global logout + redirect to the login page.
+ * Pass `null` to remove the handler.
+ */
+export function setOn401Handler(handler: (() => void) | null): void {
+  _on401Handler = handler;
 }
 
 function isRequest(input: RequestInfo | URL): input is Request {
@@ -364,6 +374,9 @@ export async function customFetch<T = unknown>(
 
   if (!response.ok) {
     const errorData = await parseErrorBody(response, method);
+    if (response.status === 401 && _on401Handler) {
+      _on401Handler();
+    }
     throw new ApiError(response, errorData, requestInfo);
   }
 

@@ -8,7 +8,7 @@ import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 
-const ADMIN_PASSWORD = "12345678";
+const ADMIN_DEFAULT_PASSWORD = "admin1234";
 
 const LoginBody = z.object({
   username: z.string().min(1),
@@ -28,28 +28,19 @@ export async function seedDefaultUser(): Promise<void> {
       .where(eq(usersTable.username, "admin"))
       .limit(1);
 
-    const passwordHash = await bcrypt.hash(ADMIN_PASSWORD, 10);
-
     if (!existing) {
+      const passwordHash = await bcrypt.hash(ADMIN_DEFAULT_PASSWORD, 10);
       await db.insert(usersTable).values({
         username: "admin",
         passwordHash,
         displayName: "系統管理員",
         role: "owner",
         isActive: true,
-        mustChangePassword: false,
+        mustChangePassword: true,
       });
-      logger.info("預設管理員帳號已建立: admin / 12345678");
-    } else {
-      const valid = await bcrypt.compare(ADMIN_PASSWORD, existing.passwordHash);
-      if (!valid) {
-        await db
-          .update(usersTable)
-          .set({ passwordHash, mustChangePassword: false })
-          .where(eq(usersTable.username, "admin"));
-        logger.info("管理員帳號密碼已同步為: 12345678");
-      }
+      logger.info("預設管理員帳號已建立: admin / admin1234 (首次登入需變更密碼)");
     }
+    // Never overwrite an existing admin account on startup
   } catch (err) {
     logger.error({ err }, "無法初始化預設帳號");
   }

@@ -104,7 +104,14 @@ router.patch("/maintenance-reminders/:id", requireRole(...PATCH_ROLES), async (r
     res.status(400).json({ error: "Invalid id" });
     return;
   }
-  const parsed = UpdateMaintenanceReminderBody.safeParse(req.body);
+
+  const role = req.user?.role;
+  let bodyToParse = req.body as Record<string, unknown>;
+  if (role === "technician") {
+    bodyToParse = { status: bodyToParse["status"] };
+  }
+
+  const parsed = UpdateMaintenanceReminderBody.safeParse(bodyToParse);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;

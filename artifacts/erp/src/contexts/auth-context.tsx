@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
-import { setAuthTokenGetter } from "@workspace/api-client-react";
+import { setAuthTokenGetter, setOn401Handler } from "@workspace/api-client-react";
 
 export type UserRole = "owner" | "admin" | "technician" | "accountant";
 
@@ -36,8 +36,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   });
   const [isLoading, setIsLoading] = useState(true);
 
+  const logout = useCallback(() => {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(USER_KEY);
+    setAuthTokenGetter(null);
+    setOn401Handler(null);
+    setUser(null);
+  }, []);
+
   useEffect(() => {
     setAuthTokenGetter(() => localStorage.getItem(TOKEN_KEY));
+    setOn401Handler(() => {
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(USER_KEY);
+      setAuthTokenGetter(null);
+      setOn401Handler(null);
+      setUser(null);
+    });
 
     const token = localStorage.getItem(TOKEN_KEY);
     if (!token) {
@@ -74,13 +89,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem(USER_KEY, JSON.stringify(data.user));
     setAuthTokenGetter(() => localStorage.getItem(TOKEN_KEY));
     setUser(data.user);
-  }, []);
-
-  const logout = useCallback(() => {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
-    setAuthTokenGetter(null);
-    setUser(null);
   }, []);
 
   const updateUser = useCallback((updated: Partial<AuthUser>) => {
