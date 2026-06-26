@@ -6,10 +6,10 @@ import { requireRole } from "../lib/auth";
 
 const router: IRouter = Router();
 
-const WO_READ_ROLES = ["owner", "admin", "technician"];
-const WO_WRITE_ROLES = ["owner", "admin"];
-const WO_DELETE_ROLES = ["owner"];
-const PROGRESS_ROLES = ["owner", "admin", "technician"];
+const WO_READ_ROLES = ["owner", "admin", "engineer", "technician"];
+const WO_WRITE_ROLES = ["owner", "admin", "engineer"];
+const WO_DELETE_ROLES = ["owner", "admin"];
+const PROGRESS_ROLES = ["owner", "admin", "engineer", "technician"];
 
 function isoStr(v: unknown): string | null {
   if (!v) return null;

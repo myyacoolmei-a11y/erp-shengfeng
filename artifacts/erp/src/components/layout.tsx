@@ -11,6 +11,7 @@ import {
   Menu,
   LogOut,
   UserCog,
+  Receipt,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -25,15 +26,71 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { href: "/", label: "儀表板", icon: LayoutDashboard, roles: ["owner", "admin", "accountant"] },
-  { href: "/customers", label: "客戶管理", icon: Users, roles: ["owner", "admin", "accountant"] },
-  { href: "/quotes", label: "報價單管理", icon: FileText, roles: ["owner", "admin", "accountant"] },
-  { href: "/work-orders", label: "派工單管理", icon: Wrench, roles: ["owner", "admin", "technician"] },
-  { href: "/receivables", label: "應收帳款", icon: CreditCard, roles: ["owner", "admin", "accountant"] },
-  { href: "/warranties", label: "保固管理", icon: ShieldCheck, roles: ["owner", "admin", "accountant"] },
-  { href: "/maintenance", label: "保養提醒", icon: Bell, roles: ["owner", "admin", "technician"] },
-  { href: "/users", label: "用戶管理", icon: UserCog, roles: ["owner"] },
+  {
+    href: "/",
+    label: "儀表板",
+    icon: LayoutDashboard,
+    roles: ["owner", "admin", "accountant"],
+  },
+  {
+    href: "/customers",
+    label: "客戶管理",
+    icon: Users,
+    roles: ["owner", "admin", "sales", "accountant"],
+  },
+  {
+    href: "/quotes",
+    label: "報價單管理",
+    icon: FileText,
+    roles: ["owner", "admin", "sales", "distributor"],
+  },
+  {
+    href: "/work-orders",
+    label: "派工單管理",
+    icon: Wrench,
+    roles: ["owner", "admin", "engineer", "technician"],
+  },
+  {
+    href: "/receivables",
+    label: "應收帳款",
+    icon: CreditCard,
+    roles: ["owner", "admin", "accountant"],
+  },
+  {
+    href: "/payments",
+    label: "收款紀錄",
+    icon: Receipt,
+    roles: ["owner", "admin", "accountant"],
+  },
+  {
+    href: "/warranties",
+    label: "保固管理",
+    icon: ShieldCheck,
+    roles: ["owner", "admin", "accountant"],
+  },
+  {
+    href: "/maintenance",
+    label: "保養提醒",
+    icon: Bell,
+    roles: ["owner", "admin", "engineer", "technician"],
+  },
+  {
+    href: "/users",
+    label: "用戶管理",
+    icon: UserCog,
+    roles: ["owner"],
+  },
 ];
+
+const ROLE_COLORS: Record<UserRole, string> = {
+  owner: "bg-amber-100 text-amber-800 border-amber-200",
+  admin: "bg-blue-100 text-blue-800 border-blue-200",
+  sales: "bg-green-100 text-green-800 border-green-200",
+  engineer: "bg-purple-100 text-purple-800 border-purple-200",
+  technician: "bg-slate-100 text-slate-700 border-slate-200",
+  accountant: "bg-pink-100 text-pink-800 border-pink-200",
+  distributor: "bg-orange-100 text-orange-800 border-orange-200",
+};
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
@@ -90,9 +147,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium truncate">{user.displayName}</p>
-              <Badge variant="secondary" className="text-xs mt-0.5">
+              <span className={`inline-block text-xs mt-0.5 px-1.5 py-0.5 rounded border font-medium ${ROLE_COLORS[user.role]}`}>
                 {ROLE_LABELS[user.role]}
-              </Badge>
+              </span>
             </div>
           </div>
           <Button
@@ -136,7 +193,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </Link>
           {user && (
             <div className="ml-auto flex items-center gap-2">
-              <Badge variant="secondary" className="text-xs">{ROLE_LABELS[user.role]}</Badge>
+              <span className={`text-xs px-1.5 py-0.5 rounded border font-medium ${ROLE_COLORS[user.role]}`}>
+                {ROLE_LABELS[user.role]}
+              </span>
             </div>
           )}
         </header>

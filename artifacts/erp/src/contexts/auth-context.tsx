@@ -1,7 +1,14 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { setAuthTokenGetter, setOn401Handler } from "@workspace/api-client-react";
 
-export type UserRole = "owner" | "admin" | "technician" | "accountant";
+export type UserRole =
+  | "owner"
+  | "admin"
+  | "sales"
+  | "engineer"
+  | "technician"
+  | "accountant"
+  | "distributor";
 
 export interface AuthUser {
   id: number;
@@ -88,7 +95,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem(TOKEN_KEY, data.token);
     localStorage.setItem(USER_KEY, JSON.stringify(data.user));
     setAuthTokenGetter(() => localStorage.getItem(TOKEN_KEY));
-    // Re-register 401 handler so auto-logout works after login/logout cycles
     setOn401Handler(() => {
       localStorage.removeItem(TOKEN_KEY);
       localStorage.removeItem(USER_KEY);
@@ -123,7 +129,10 @@ export function useAuth() {
 
 export const ROLE_LABELS: Record<UserRole, string> = {
   owner: "老闆",
-  admin: "管理員",
+  admin: "行政管理",
+  sales: "業務",
+  engineer: "工程師",
   technician: "技術員",
   accountant: "會計",
+  distributor: "批發商",
 };

@@ -2,7 +2,15 @@ import { pgTable, text, serial, timestamp, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
-export const USER_ROLES = ["owner", "admin", "technician", "accountant"] as const;
+export const USER_ROLES = [
+  "owner",
+  "admin",
+  "sales",
+  "engineer",
+  "technician",
+  "accountant",
+  "distributor",
+] as const;
 export type UserRole = (typeof USER_ROLES)[number];
 
 export const usersTable = pgTable("users", {

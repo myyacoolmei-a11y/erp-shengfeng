@@ -55,8 +55,16 @@ function RoleGuard({
 
 /** Default landing path per role */
 function defaultPathForRole(role: UserRole): string {
-  if (role === "technician") return "/work-orders";
-  return "/";
+  switch (role) {
+    case "engineer":
+    case "technician":
+      return "/work-orders";
+    case "sales":
+    case "distributor":
+      return "/quotes";
+    default:
+      return "/";
+  }
 }
 
 function AppRoutes() {
@@ -71,17 +79,14 @@ function AppRoutes() {
     );
   }
 
-  // Not logged in — redirect to /login (unless already there)
   if (!isAuthenticated && location !== "/login") {
     return <Redirect to="/login" />;
   }
 
-  // Logged in but must change password — redirect to /change-password
   if (isAuthenticated && user?.mustChangePassword && location !== "/change-password") {
     return <Redirect to="/change-password" />;
   }
 
-  // Logged in, on login page — redirect to correct home
   if (isAuthenticated && location === "/login") {
     return <Redirect to={defaultPathForRole(user!.role)} />;
   }
@@ -99,31 +104,31 @@ function AppRoutes() {
               </RoleGuard>
             </Route>
             <Route path="/customers">
-              <RoleGuard roles={["owner", "admin", "accountant"]}>
+              <RoleGuard roles={["owner", "admin", "sales", "accountant"]}>
                 <Customers />
               </RoleGuard>
             </Route>
             <Route path="/customers/:id/history">
               {() => (
-                <RoleGuard roles={["owner", "admin", "accountant"]}>
+                <RoleGuard roles={["owner", "admin", "sales", "accountant"]}>
                   <CustomerHistory />
                 </RoleGuard>
               )}
             </Route>
             <Route path="/customers/:id">
               {() => (
-                <RoleGuard roles={["owner", "admin", "accountant"]}>
+                <RoleGuard roles={["owner", "admin", "sales", "accountant"]}>
                   <CustomerDetail />
                 </RoleGuard>
               )}
             </Route>
             <Route path="/quotes">
-              <RoleGuard roles={["owner", "admin", "accountant"]}>
+              <RoleGuard roles={["owner", "admin", "sales", "distributor"]}>
                 <Quotes />
               </RoleGuard>
             </Route>
             <Route path="/work-orders">
-              <RoleGuard roles={["owner", "admin", "technician"]}>
+              <RoleGuard roles={["owner", "admin", "engineer", "technician"]}>
                 <WorkOrders />
               </RoleGuard>
             </Route>
@@ -143,7 +148,7 @@ function AppRoutes() {
               </RoleGuard>
             </Route>
             <Route path="/maintenance">
-              <RoleGuard roles={["owner", "admin", "technician"]}>
+              <RoleGuard roles={["owner", "admin", "engineer", "technician"]}>
                 <Maintenance />
               </RoleGuard>
             </Route>
