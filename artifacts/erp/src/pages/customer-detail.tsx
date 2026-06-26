@@ -5,12 +5,12 @@ import {
   useListAcUnits, useCreateAcUnit, useDeleteAcUnit, getListAcUnitsQueryKey,
   useListQuotes,
   useListWorkOrders,
-  useListPayments,
+  useListReceivables,
   useListWarranties,
   useListMaintenanceReminders, getListMaintenanceRemindersQueryKey,
   useCreateMaintenanceReminder,
 } from "@workspace/api-client-react";
-import type { Quote, WorkOrder, Payment, Warranty, MaintenanceReminder } from "@workspace/api-client-react";
+import type { Quote, WorkOrder, Receivable, Warranty, MaintenanceReminder } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
