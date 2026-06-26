@@ -18,14 +18,15 @@ declare global {
   }
 }
 
-const DEV_FALLBACK_SECRET = "dev-jwt-secret-not-for-production-use";
 const JWT_SECRET = (() => {
   const secret = process.env["JWT_SECRET"];
   if (!secret) {
-    logger.warn(
-      "JWT_SECRET environment variable is not set. Using a development fallback — do NOT use this in production.",
-    );
-    return DEV_FALLBACK_SECRET;
+    if (process.env["NODE_ENV"] !== "development") {
+      logger.error("JWT_SECRET environment variable is required in non-development environments. Exiting.");
+      process.exit(1);
+    }
+    logger.warn("JWT_SECRET is not set. Using an insecure development-only fallback. Do NOT deploy without setting JWT_SECRET.");
+    return "dev-jwt-secret-change-before-deploying";
   }
   return secret;
 })();

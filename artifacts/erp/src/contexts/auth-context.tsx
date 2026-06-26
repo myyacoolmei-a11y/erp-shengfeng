@@ -88,6 +88,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem(TOKEN_KEY, data.token);
     localStorage.setItem(USER_KEY, JSON.stringify(data.user));
     setAuthTokenGetter(() => localStorage.getItem(TOKEN_KEY));
+    // Re-register 401 handler so auto-logout works after login/logout cycles
+    setOn401Handler(() => {
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(USER_KEY);
+      setAuthTokenGetter(null);
+      setOn401Handler(null);
+      setUser(null);
+    });
     setUser(data.user);
   }, []);
 

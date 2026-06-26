@@ -22,25 +22,20 @@ const ChangePasswordBody = z.object({
 
 export async function seedDefaultUser(): Promise<void> {
   try {
-    const [existing] = await db
-      .select()
-      .from(usersTable)
-      .where(eq(usersTable.username, "admin"))
-      .limit(1);
+    // Only seed when the users table is completely empty (first-run bootstrap)
+    const [anyUser] = await db.select({ id: usersTable.id }).from(usersTable).limit(1);
+    if (anyUser) return;
 
-    if (!existing) {
-      const passwordHash = await bcrypt.hash(ADMIN_DEFAULT_PASSWORD, 10);
-      await db.insert(usersTable).values({
-        username: "admin",
-        passwordHash,
-        displayName: "系統管理員",
-        role: "owner",
-        isActive: true,
-        mustChangePassword: true,
-      });
-      logger.info("預設管理員帳號已建立: admin / admin1234 (首次登入需變更密碼)");
-    }
-    // Never overwrite an existing admin account on startup
+    const passwordHash = await bcrypt.hash(ADMIN_DEFAULT_PASSWORD, 10);
+    await db.insert(usersTable).values({
+      username: "admin",
+      passwordHash,
+      displayName: "系統管理員",
+      role: "owner",
+      isActive: true,
+      mustChangePassword: true,
+    });
+    logger.info("首次啟動：預設管理員帳號已建立 (admin / admin1234)，請首次登入後立即變更密碼");
   } catch (err) {
     logger.error({ err }, "無法初始化預設帳號");
   }

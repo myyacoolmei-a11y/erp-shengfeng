@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Plus, Pencil, Trash2, ChevronDown, ChevronUp, CreditCard } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/auth-context";
 
 const STATUSES = ["待處理", "進行中", "已完成", "已取消"];
 const STATUS_COLORS: Record<string, string> = {
@@ -29,6 +30,8 @@ const STATUS_COLORS: Record<string, string> = {
 function ProgressPanel({ workOrderId, customerId, workOrderTitle }: { workOrderId: number; customerId: number; workOrderTitle: string }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { user } = useAuth();
+  const isTechnician = user?.role === "technician";
   const { data: progress } = useListProgress(workOrderId);
   const [note, setNote] = useState("");
   const [showPayForm, setShowPayForm] = useState(false);
@@ -75,14 +78,14 @@ function ProgressPanel({ workOrderId, customerId, workOrderTitle }: { workOrderI
         <Button size="sm" className="h-8 text-xs px-3" disabled={!note || createProgress.isPending} onClick={() => createProgress.mutate({ workOrderId, data: { description: note } })}>新增</Button>
       </div>
 
-      {/* Quick payment button */}
-      {!showPayForm && (
+      {/* Quick payment button — hidden for technicians (financial data) */}
+      {!isTechnician && !showPayForm && (
         <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setShowPayForm(true)}>
           <CreditCard className="h-3 w-3 mr-1" />登錄收款
         </Button>
       )}
 
-      {showPayForm && (
+      {!isTechnician && showPayForm && (
         <div className="bg-muted/30 rounded p-3 space-y-2">
           <p className="text-xs font-medium">快速登錄收款</p>
           <div className="grid grid-cols-2 gap-2">
@@ -118,6 +121,8 @@ function ProgressPanel({ workOrderId, customerId, workOrderTitle }: { workOrderI
 
 export default function WorkOrders() {
   const { toast } = useToast();
+  const { user } = useAuth();
+  const canWrite = user?.role === "owner" || user?.role === "admin";
   const queryClient = useQueryClient();
   const [statusFilter, setStatusFilter] = useState("全部");
   const [showCreate, setShowCreate] = useState(false);
@@ -138,7 +143,7 @@ export default function WorkOrders() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div><h1 className="text-2xl font-bold">派工單管理</h1><p className="text-sm text-muted-foreground mt-0.5">管理所有施工派工單</p></div>
-        <Button size="sm" onClick={() => { setForm(emptyForm); setShowCreate(true); }}><Plus className="h-4 w-4 mr-1" />新增派工單</Button>
+        {canWrite && <Button size="sm" onClick={() => { setForm(emptyForm); setShowCreate(true); }}><Plus className="h-4 w-4 mr-1" />新增派工單</Button>}
       </div>
 
       <div className="flex gap-2 flex-wrap">
@@ -171,8 +176,8 @@ export default function WorkOrders() {
                     <Button variant="ghost" size="icon" className="h-7 w-7" title="展開進度" onClick={() => setExpandedId(expandedId === o.id ? null : o.id)}>
                       {expandedId === o.id ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setForm({ customerId: o.customerId, title: o.title, description: o.description ?? "", assignedTo: o.assignedTo ?? "", scheduledDate: o.scheduledDate ?? "", completedDate: o.completedDate ?? "", status: o.status, notes: o.notes ?? "" }); setEditItem(o); }}><Pencil className="h-3.5 w-3.5" /></Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => setDeleteId(o.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                    {canWrite && <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setForm({ customerId: o.customerId, title: o.title, description: o.description ?? "", assignedTo: o.assignedTo ?? "", scheduledDate: o.scheduledDate ?? "", completedDate: o.completedDate ?? "", status: o.status, notes: o.notes ?? "" }); setEditItem(o); }}><Pencil className="h-3.5 w-3.5" /></Button>}
+                    {user?.role === "owner" && <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => setDeleteId(o.id)}><Trash2 className="h-3.5 w-3.5" /></Button>}
                   </div>
                 </div>
                 {expandedId === o.id && (

@@ -12,9 +12,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Plus, Search, Trash2, Eye } from "lucide-react";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/auth-context";
 
 export default function Customers() {
   const { toast } = useToast();
+  const { user } = useAuth();
+  const canWrite = user?.role === "owner" || user?.role === "admin";
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [includeOld, setIncludeOld] = useState(false);
@@ -56,9 +59,11 @@ export default function Customers() {
           <h1 className="text-2xl font-bold">客戶管理</h1>
           <p className="text-sm text-muted-foreground mt-0.5">管理所有客戶資料</p>
         </div>
-        <Button onClick={() => setShowCreate(true)} size="sm">
-          <Plus className="h-4 w-4 mr-1" />新增客戶
-        </Button>
+        {canWrite && (
+          <Button onClick={() => setShowCreate(true)} size="sm">
+            <Plus className="h-4 w-4 mr-1" />新增客戶
+          </Button>
+        )}
       </div>
 
       <div className="flex gap-3 items-center">
@@ -105,9 +110,11 @@ export default function Customers() {
                         <Eye className="h-3.5 w-3.5" />
                       </Button>
                     </Link>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => setDeleteId(c.id)}>
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
+                    {user?.role === "owner" && (
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => setDeleteId(c.id)}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
                   </div>
                 </div>
               ))}
