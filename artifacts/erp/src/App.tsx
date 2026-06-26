@@ -12,6 +12,7 @@ import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/dashboard";
 import Customers from "@/pages/customers";
 import CustomerDetail from "@/pages/customer-detail";
+import CustomerHistory from "@/pages/customer-history";
 import Quotes from "@/pages/quotes";
 import WorkOrders from "@/pages/work-orders";
 import Payments from "@/pages/payments";
@@ -100,6 +101,13 @@ function AppRoutes() {
               <RoleGuard roles={["owner", "admin", "accountant"]}>
                 <Customers />
               </RoleGuard>
+            </Route>
+            <Route path="/customers/:id/history">
+              {() => (
+                <RoleGuard roles={["owner", "admin", "accountant"]}>
+                  <CustomerHistory />
+                </RoleGuard>
+              )}
             </Route>
             <Route path="/customers/:id">
               {() => (

@@ -1,0 +1,343 @@
+Build a Customer 360 / Customer Full History feature for Sheng Feng ERP.
+
+Do NOT rebuild the ERP.
+Do NOT delete existing data.
+Do NOT modify unrelated modules unless required for linking existing data.
+Keep the current Sheng Feng ERP UI style.
+Preserve all existing customer, quotation, work order, payment, warranty, and maintenance data.
+
+## Goal
+
+Customer Management should become simple and practical.
+
+The customer list should stay clean and fast.
+
+Each customer should have a complete read-only history page that shows all related records in one place.
+
+This page should work like a customer service record / customer file.
+
+## Customer List
+
+Simplify the customer list actions.
+
+Each customer row should show only:
+
+* Edit
+* Customer History
+* Delete
+
+Behavior:
+
+1. Edit
+
+   * Opens the customer edit modal directly.
+   * Allows editing only customer basic information.
+
+2. Customer History
+
+   * Opens the Customer 360 / Full Customer History page or modal.
+   * This page shows all related records for this customer.
+
+3. Delete
+
+   * Ask for confirmation.
+   * Do not allow deleting a customer if linked quotations, work orders, payments, warranty records, or maintenance records exist.
+   * Show a clear warning message if deletion is blocked.
+
+Do NOT use the eye/view icon as the main workflow.
+Do NOT force users to enter a deep detail page just to confirm customer information.
+
+## Customer 360 / Full Customer History Page
+
+Create a page or full-screen modal named:
+
+「客戶完整履歷」
+
+It must be read-only by default.
+
+This page should show:
+
+### 1. Customer Summary
+
+* Customer Name
+* Company Name
+* Contact Person
+* Mobile Phone
+* Telephone
+* Email
+* Address
+* Customer Type
+* Discount Plan
+* Notes
+* Created Date
+* Last Updated Date
+
+Add quick buttons:
+
+* Edit Customer
+* Print Customer History
+* Export PDF
+* Back to Customer List
+
+### 2. Customer Statistics
+
+Show summary cards:
+
+* Total Quotation Amount
+* Total Paid Amount
+* Outstanding Balance
+* Number of Quotations
+* Number of Work Orders
+* Number of Completed Work Orders
+* Number of Warranty Records
+* Number of Maintenance Reminders
+* Last Service Date
+* Next Maintenance Date
+
+### 3. Equipment History
+
+Show this customer's air-conditioning equipment records:
+
+* Brand
+* Model Number
+* Quantity
+* Indoor Units
+* Outdoor Units
+* Installation Address
+* Installation Date
+* Remark
+
+### 4. Quotation History
+
+Show all quotations linked to this customer.
+
+Each quotation should show:
+
+* Quotation Number
+* Quotation Date
+* Project Name
+* Total Amount
+* Status
+* View Details
+* Go to Quotation
+
+View Details:
+
+* Opens a read-only quotation detail modal.
+* Shows quotation items, discount, total amount, notes, and terms.
+
+Go to Quotation:
+
+* Navigates to Quotation Management filtered to this quotation or customer for editing.
+
+Do NOT allow editing quotations inside Customer History.
+
+### 5. Work Order History
+
+Show all work orders linked to this customer.
+
+Each work order should show:
+
+* Work Order Number
+* Appointment Date
+* Appointment Time
+* Project Type
+* Assigned Technician
+* Assistant Technician
+* Status
+* Installation Address
+* View Details
+* Go to Work Order
+
+View Details:
+
+* Opens a read-only work order detail modal.
+* Shows:
+
+  * Customer name
+  * Phone
+  * Address
+  * Google Maps link
+  * Appointment date and time
+  * Assigned technician
+  * Assistant technician
+  * Project type
+  * Air conditioner brand
+  * Model number
+  * Quantity
+  * Indoor units
+  * Outdoor units
+  * Floor level
+  * Elevator available
+  * Work description
+  * Special notes
+  * Progress records if available
+  * Payment summary if linked
+
+Go to Work Order:
+
+* Navigates to Work Order Management for editing, printing, PDF export, and LINE sharing.
+
+Do NOT allow editing work orders inside Customer History.
+
+### 6. Payment History
+
+Show all payments linked to this customer.
+
+Each payment should show:
+
+* Payment Date
+* Amount
+* Payment Method
+* Related Work Order
+* Related Quotation
+* Payment Status
+* Remark
+* View Details
+* Go to Payment
+
+Do NOT allow editing payments inside Customer History.
+
+### 7. Warranty History
+
+Show all warranty records linked to this customer.
+
+Each warranty record should show:
+
+* Warranty Item
+* Start Date
+* End Date
+* Status
+* Related Work Order
+* Remark
+* View Details
+* Go to Warranty
+
+Do NOT allow editing warranty records inside Customer History.
+
+### 8. Maintenance Reminder History
+
+Show all maintenance reminders linked to this customer.
+
+Each reminder should show:
+
+* Reminder Date
+* Maintenance Type
+* Status
+* Related Equipment
+* Remark
+* View Details
+* Go to Maintenance Reminder
+
+Do NOT allow editing maintenance reminders inside Customer History.
+
+## Customer History PDF
+
+Add Export PDF function for Customer Full History.
+
+The PDF should be professional and suitable for internal company records.
+
+PDF title:
+
+「晟風工程 客戶完整履歷」
+
+PDF must include:
+
+* Company Name
+* Company Phone
+* Customer Summary
+* Customer Statistics
+* Equipment History
+* Quotation History
+* Work Order History
+* Payment History
+* Warranty History
+* Maintenance Reminder History
+* Generated Date
+
+The PDF should be clean, readable, and A4 friendly.
+
+Do NOT make it too decorative.
+This is an internal customer record, not a sales flyer.
+
+## Print
+
+Add Print Customer History button.
+
+It should print the same content as the PDF in a clean A4 layout.
+
+## Navigation / UX
+
+Customer List should remain simple.
+
+Main workflow:
+
+Customer List
+→ Customer History
+→ View details
+→ Go to original module only if editing is needed
+
+Rules:
+
+* Customer History is for viewing and printing.
+* Quotation Management is for editing quotations.
+* Work Order Management is for editing work orders.
+* Payment Management is for editing payments.
+* Warranty Management is for editing warranty records.
+* Maintenance Reminder Management is for editing maintenance reminders.
+
+Do not duplicate edit logic across pages.
+
+## Data Linking
+
+Make sure Customer History correctly loads records linked to the customer from:
+
+* Quotations
+* Work Orders
+* Payments
+* Warranty
+* Maintenance Reminders
+* Equipment
+
+If a record is missing a customer link but has matching customer name or phone, show it if safe and clearly linked.
+
+Prefer stable IDs where available.
+
+## Mobile
+
+Customer History must work well on tablets and mobile phones.
+
+Use collapsible sections for:
+
+* Quotations
+* Work Orders
+* Payments
+* Warranty
+* Maintenance Reminders
+
+Buttons must be large enough for mobile use.
+
+## Testing
+
+After implementation, test:
+
+1. Open Customer List.
+2. Click Customer History for a customer.
+3. Verify Customer Summary loads.
+4. Verify quotation history loads.
+5. Verify work order history loads.
+6. Verify payment history loads.
+7. Verify warranty history loads.
+8. Verify maintenance reminder history loads.
+9. Open read-only quotation details.
+10. Open read-only work order details.
+11. Navigate to Quotation Management from a history record.
+12. Navigate to Work Order Management from a history record.
+13. Print Customer History.
+14. Export Customer History PDF.
+15. Verify mobile layout works.
+16. Verify no existing data is deleted.
+
+Commit changes with message:
+
+"Add Customer 360 full history and PDF export"

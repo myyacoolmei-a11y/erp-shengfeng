@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useSearch, useLocation } from "wouter";
 import { useListMaintenanceReminders, useCreateMaintenanceReminder, useUpdateMaintenanceReminder, useDeleteMaintenanceReminder, useListCustomers, getListMaintenanceRemindersQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -9,7 +10,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Trash2, CheckCircle, Clock, AlertTriangle } from "lucide-react";
+import { Plus, Trash2, CheckCircle, Clock, AlertTriangle, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 const STATUSES = ["待處理", "已完成"];
@@ -20,12 +21,19 @@ function isUpcoming(date: string) { const d = new Date(date); const diff = (d.ge
 export default function Maintenance() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const search = useSearch();
+  const [, navigate] = useLocation();
+  const urlParams = new URLSearchParams(search);
+  const filterCustomerId = parseInt(urlParams.get("customerId") ?? "0", 10) || null;
+  const filterCustomerName = urlParams.get("customerName") ?? "";
+
   const [statusFilter, setStatusFilter] = useState("全部");
   const [upcomingOnly, setUpcomingOnly] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [deleteId, setDeleteId] = useState<number | null>(null);
 
-  const params: Record<string, string> = {};
+  const params: Record<string, string | number> = {};
+  if (filterCustomerId) params.customerId = filterCustomerId;
   if (statusFilter !== "全部") params.status = statusFilter;
   if (upcomingOnly) params.upcoming = "true";
   const { data: reminders, isLoading } = useListMaintenanceReminders(params);
@@ -43,6 +51,15 @@ export default function Maintenance() {
         <div><h1 className="text-2xl font-bold">保養提醒</h1><p className="text-sm text-muted-foreground mt-0.5">管理所有冷氣保養排程</p></div>
         <Button size="sm" onClick={() => { setForm(emptyForm); setShowCreate(true); }}><Plus className="h-4 w-4 mr-1" />新增提醒</Button>
       </div>
+
+      {filterCustomerName && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg text-sm">
+          <span className="text-blue-800">篩選客戶：<strong>{filterCustomerName}</strong></span>
+          <button className="ml-auto flex items-center gap-1 text-blue-600 hover:text-blue-800 text-xs" onClick={() => navigate("/maintenance")}>
+            <X className="h-3 w-3" />清除篩選
+          </button>
+        </div>
+      )}
 
       <div className="flex gap-2 flex-wrap items-center">
         {["全部", ...STATUSES].map(s => (

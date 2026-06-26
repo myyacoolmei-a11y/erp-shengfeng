@@ -5,6 +5,7 @@ import {
   useListQuotes, useListWorkOrders, useListPayments, useListWarranties,
   getListCustomersQueryKey,
 } from "@workspace/api-client-react";
+
 import type { Customer } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -15,7 +16,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Search, Trash2, Pencil, FileText, Wrench, CreditCard, ShieldCheck } from "lucide-react";
+import { Plus, Search, Trash2, Pencil, ClipboardList } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
 
@@ -152,10 +153,6 @@ export default function Customers() {
     setEditCustomer(c);
   }
 
-  function goTo(path: string, c: Customer) {
-    navigate(`${path}?customerId=${c.id}&customerName=${encodeURIComponent(c.name)}`);
-  }
-
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -226,31 +223,10 @@ export default function Customers() {
                       )}
                       <Button
                         variant="ghost" size="icon" className="h-7 w-7 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                        title="報價單"
-                        onClick={() => goTo("/quotes", c)}
+                        title="客戶完整履歷"
+                        onClick={() => navigate(`/customers/${c.id}/history`)}
                       >
-                        <FileText className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost" size="icon" className="h-7 w-7 text-purple-600 hover:text-purple-700 hover:bg-purple-50"
-                        title="派工單"
-                        onClick={() => goTo("/work-orders", c)}
-                      >
-                        <Wrench className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost" size="icon" className="h-7 w-7 text-green-600 hover:text-green-700 hover:bg-green-50"
-                        title="收款"
-                        onClick={() => goTo("/payments", c)}
-                      >
-                        <CreditCard className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost" size="icon" className="h-7 w-7 text-orange-500 hover:text-orange-600 hover:bg-orange-50"
-                        title="保固"
-                        onClick={() => goTo("/warranties", c)}
-                      >
-                        <ShieldCheck className="h-3.5 w-3.5" />
+                        <ClipboardList className="h-3.5 w-3.5" />
                       </Button>
                       {user?.role === "owner" && (
                         <Button
