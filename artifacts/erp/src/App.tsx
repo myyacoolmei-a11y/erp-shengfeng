@@ -7,6 +7,7 @@ import { AuthProvider, useAuth, type UserRole } from "@/contexts/auth-context";
 import { Layout } from "@/components/layout";
 import { AccessDenied } from "@/components/access-denied";
 import LoginPage from "@/pages/login";
+import ChangePasswordPage from "@/pages/change-password";
 import NotFound from "@/pages/not-found";
 import Dashboard from "@/pages/dashboard";
 import Customers from "@/pages/customers";
@@ -50,8 +51,14 @@ function RoleGuard({
   return <>{children}</>;
 }
 
+/** Default landing path per role */
+function defaultPathForRole(role: UserRole): string {
+  if (role === "technician") return "/work-orders";
+  return "/";
+}
+
 function AppRoutes() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
   const [location] = useLocation();
 
   if (isLoading) {
@@ -62,22 +69,30 @@ function AppRoutes() {
     );
   }
 
+  // Not logged in — redirect to /login (unless already there)
   if (!isAuthenticated && location !== "/login") {
     return <Redirect to="/login" />;
   }
 
+  // Logged in but must change password — redirect to /change-password
+  if (isAuthenticated && user?.mustChangePassword && location !== "/change-password") {
+    return <Redirect to="/change-password" />;
+  }
+
+  // Logged in, on login page — redirect to correct home
   if (isAuthenticated && location === "/login") {
-    return <Redirect to="/" />;
+    return <Redirect to={defaultPathForRole(user!.role)} />;
   }
 
   return (
     <Switch>
       <Route path="/login" component={LoginPage} />
+      <Route path="/change-password" component={ChangePasswordPage} />
       <Route>
         <Layout>
           <Switch>
             <Route path="/">
-              <RoleGuard roles={["owner", "admin", "accountant", "technician"]}>
+              <RoleGuard roles={["owner", "admin", "accountant"]}>
                 <Dashboard />
               </RoleGuard>
             </Route>
@@ -87,7 +102,7 @@ function AppRoutes() {
               </RoleGuard>
             </Route>
             <Route path="/customers/:id">
-              {(params) => (
+              {() => (
                 <RoleGuard roles={["owner", "admin", "accountant"]}>
                   <CustomerDetail />
                 </RoleGuard>

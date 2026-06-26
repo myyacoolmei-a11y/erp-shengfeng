@@ -1,11 +1,13 @@
 import jwt from "jsonwebtoken";
 import type { Request, Response, NextFunction } from "express";
+import { logger } from "./logger";
 
 export interface JwtPayload {
   id: number;
   username: string;
   displayName: string;
   role: string;
+  mustChangePassword: boolean;
 }
 
 declare global {
@@ -16,7 +18,17 @@ declare global {
   }
 }
 
-const JWT_SECRET = process.env["JWT_SECRET"] ?? "dev-jwt-secret-change-in-production";
+const DEV_FALLBACK_SECRET = "dev-jwt-secret-not-for-production-use";
+const JWT_SECRET = (() => {
+  const secret = process.env["JWT_SECRET"];
+  if (!secret) {
+    logger.warn(
+      "JWT_SECRET environment variable is not set. Using a development fallback — do NOT use this in production.",
+    );
+    return DEV_FALLBACK_SECRET;
+  }
+  return secret;
+})();
 
 export function signToken(payload: JwtPayload): string {
   return jwt.sign(payload, JWT_SECRET, { expiresIn: "7d" });

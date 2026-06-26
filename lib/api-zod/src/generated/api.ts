@@ -17,6 +17,145 @@ export const HealthCheckResponse = zod.object({
 
 
 /**
+ * @summary 登入
+ */
+
+
+
+
+export const LoginBody = zod.object({
+  "username": zod.string().min(1),
+  "password": zod.string().min(1)
+})
+
+export const LoginResponse = zod.object({
+  "token": zod.string(),
+  "user": zod.object({
+  "id": zod.number(),
+  "username": zod.string(),
+  "displayName": zod.string(),
+  "role": zod.string(),
+  "mustChangePassword": zod.boolean()
+})
+})
+
+
+/**
+ * @summary 登出
+ */
+export const LogoutResponse = zod.unknown()
+
+
+/**
+ * @summary 取得目前登入使用者
+ */
+export const GetMeResponse = zod.object({
+  "id": zod.number(),
+  "username": zod.string(),
+  "displayName": zod.string(),
+  "role": zod.string(),
+  "mustChangePassword": zod.boolean()
+})
+
+
+/**
+ * @summary 修改密碼
+ */
+
+export const changePasswordBodyNewPasswordMin = 6;
+
+
+
+export const ChangePasswordBody = zod.object({
+  "currentPassword": zod.string().min(1),
+  "newPassword": zod.string().min(changePasswordBodyNewPasswordMin)
+})
+
+export const ChangePasswordResponse = zod.object({
+  "token": zod.string(),
+  "user": zod.object({
+  "id": zod.number(),
+  "username": zod.string(),
+  "displayName": zod.string(),
+  "role": zod.string(),
+  "mustChangePassword": zod.boolean()
+})
+})
+
+
+/**
+ * @summary 列出所有使用者（老闆專用）
+ */
+export const ListUsersResponseItem = zod.object({
+  "id": zod.number(),
+  "username": zod.string(),
+  "displayName": zod.string(),
+  "role": zod.string(),
+  "isActive": zod.boolean(),
+  "mustChangePassword": zod.boolean(),
+  "createdAt": zod.string()
+})
+export const ListUsersResponse = zod.array(ListUsersResponseItem)
+
+
+/**
+ * @summary 新增使用者（老闆專用）
+ */
+
+export const createUserBodyPasswordMin = 6;
+
+
+
+
+export const CreateUserBody = zod.object({
+  "username": zod.string().min(1),
+  "password": zod.string().min(createUserBodyPasswordMin),
+  "displayName": zod.string().min(1),
+  "role": zod.enum(['owner', 'admin', 'technician', 'accountant']),
+  "mustChangePassword": zod.boolean().optional()
+})
+
+export const CreateUserResponse = zod.object({
+  "id": zod.number(),
+  "username": zod.string(),
+  "displayName": zod.string(),
+  "role": zod.string(),
+  "isActive": zod.boolean(),
+  "mustChangePassword": zod.boolean(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary 更新使用者（老闆專用）
+ */
+export const UpdateUserParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const updateUserBodyPasswordMin = 6;
+
+
+
+export const UpdateUserBody = zod.object({
+  "displayName": zod.string().optional(),
+  "role": zod.enum(['owner', 'admin', 'technician', 'accountant']).optional(),
+  "isActive": zod.boolean().optional(),
+  "password": zod.string().min(updateUserBodyPasswordMin).optional()
+})
+
+export const UpdateUserResponse = zod.object({
+  "id": zod.number(),
+  "username": zod.string(),
+  "displayName": zod.string(),
+  "role": zod.string(),
+  "isActive": zod.boolean(),
+  "mustChangePassword": zod.boolean(),
+  "createdAt": zod.string()
+})
+
+
+/**
  * @summary 列出所有客戶
  */
 export const ListCustomersQueryParams = zod.object({

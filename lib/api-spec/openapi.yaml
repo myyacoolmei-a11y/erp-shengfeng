@@ -47,6 +47,137 @@ paths:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
 
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: 登入
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginInput"
+      responses:
+        "200":
+          description: 登入成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: 帳號或密碼錯誤
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: 登出
+      responses:
+        "200":
+          description: 登出成功
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: 取得目前登入使用者
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: 目前登入使用者資訊
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUser"
+
+  /auth/password:
+    patch:
+      operationId: changePassword
+      tags: [auth]
+      summary: 修改密碼
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordInput"
+      responses:
+        "200":
+          description: 密碼修改成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: 目前密碼錯誤或格式不符
+
+  /users:
+    get:
+      operationId: listUsers
+      tags: [users]
+      summary: 列出所有使用者（老闆專用）
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: 使用者清單
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/UserItem"
+    post:
+      operationId: createUser
+      tags: [users]
+      summary: 新增使用者（老闆專用）
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserInput"
+      responses:
+        "201":
+          description: 使用者已建立
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserItem"
+
+  /users/{id}:
+    patch:
+      operationId: updateUser
+      tags: [users]
+      summary: 更新使用者（老闆專用）
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserInput"
+      responses:
+        "200":
+          description: 使用者已更新
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserItem"
+
   /customers:
     get:
       operationId: listCustomers
@@ -782,6 +913,12 @@ paths:
                 $ref: "#/components/schemas/DashboardSummary"
 
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
   schemas:
     HealthStatus:
       type: object
@@ -1063,6 +1200,72 @@ components:
         description: { type: string }
         status: { type: string }
         notes: { type: string }
+
+    LoginInput:
+      type: object
+      required: [username, password]
+      properties:
+        username: { type: string, minLength: 1 }
+        password: { type: string, minLength: 1 }
+
+    AuthUser:
+      type: object
+      required: [id, username, displayName, role, mustChangePassword]
+      properties:
+        id: { type: integer }
+        username: { type: string }
+        displayName: { type: string }
+        role: { type: string }
+        mustChangePassword: { type: boolean }
+
+    AuthResponse:
+      type: object
+      required: [token, user]
+      properties:
+        token: { type: string }
+        user:
+          $ref: "#/components/schemas/AuthUser"
+
+    ChangePasswordInput:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword: { type: string, minLength: 1 }
+        newPassword: { type: string, minLength: 6 }
+
+    UserItem:
+      type: object
+      required: [id, username, displayName, role, isActive, mustChangePassword, createdAt]
+      properties:
+        id: { type: integer }
+        username: { type: string }
+        displayName: { type: string }
+        role: { type: string }
+        isActive: { type: boolean }
+        mustChangePassword: { type: boolean }
+        createdAt: { type: string }
+
+    CreateUserInput:
+      type: object
+      required: [username, password, displayName, role]
+      properties:
+        username: { type: string, minLength: 1 }
+        password: { type: string, minLength: 6 }
+        displayName: { type: string, minLength: 1 }
+        role:
+          type: string
+          enum: [owner, admin, technician, accountant]
+        mustChangePassword: { type: boolean }
+
+    UpdateUserInput:
+      type: object
+      properties:
+        displayName: { type: string }
+        role:
+          type: string
+          enum: [owner, admin, technician, accountant]
+        isActive: { type: boolean }
+        password: { type: string, minLength: 6 }
 
     DashboardSummary:
       type: object

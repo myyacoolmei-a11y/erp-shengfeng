@@ -285,6 +285,82 @@ export interface MaintenanceReminderUpdate {
   notes?: string;
 }
 
+export interface LoginInput {
+  /** @minLength 1 */
+  username: string;
+  /** @minLength 1 */
+  password: string;
+}
+
+export interface AuthUser {
+  id: number;
+  username: string;
+  displayName: string;
+  role: string;
+  mustChangePassword: boolean;
+}
+
+export interface AuthResponse {
+  token: string;
+  user: AuthUser;
+}
+
+export interface ChangePasswordInput {
+  /** @minLength 1 */
+  currentPassword: string;
+  /** @minLength 6 */
+  newPassword: string;
+}
+
+export interface UserItem {
+  id: number;
+  username: string;
+  displayName: string;
+  role: string;
+  isActive: boolean;
+  mustChangePassword: boolean;
+  createdAt: string;
+}
+
+export type CreateUserInputRole = typeof CreateUserInputRole[keyof typeof CreateUserInputRole];
+
+
+export const CreateUserInputRole = {
+  owner: 'owner',
+  admin: 'admin',
+  technician: 'technician',
+  accountant: 'accountant',
+} as const;
+
+export interface CreateUserInput {
+  /** @minLength 1 */
+  username: string;
+  /** @minLength 6 */
+  password: string;
+  /** @minLength 1 */
+  displayName: string;
+  role: CreateUserInputRole;
+  mustChangePassword?: boolean;
+}
+
+export type UpdateUserInputRole = typeof UpdateUserInputRole[keyof typeof UpdateUserInputRole];
+
+
+export const UpdateUserInputRole = {
+  owner: 'owner',
+  admin: 'admin',
+  technician: 'technician',
+  accountant: 'accountant',
+} as const;
+
+export interface UpdateUserInput {
+  displayName?: string;
+  role?: UpdateUserInputRole;
+  isActive?: boolean;
+  /** @minLength 6 */
+  password?: string;
+}
+
 export interface DashboardSummary {
   totalCustomers: number;
   totalQuotes: number;
