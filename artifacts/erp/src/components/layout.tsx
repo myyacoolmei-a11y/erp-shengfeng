@@ -45,10 +45,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   const SidebarContent = () => (
     <div className="flex h-full flex-col py-4">
-      <div className="px-6 py-2">
+      <div className="px-4 py-3">
         <Link href="/">
-          <h1 className="text-xl font-bold tracking-tight text-primary cursor-pointer hover:opacity-80 transition-opacity">晟風工程</h1>
-          <p className="text-xs text-muted-foreground mt-1 tracking-wider">ERP 系統</p>
+          <div className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity">
+            <img src="/logo.png" alt="晟風空調" className="h-12 w-12 rounded-full object-cover shrink-0" />
+            <div>
+              <h1 className="text-base font-bold tracking-tight text-primary leading-tight">晟風工程</h1>
+              <p className="text-xs text-muted-foreground tracking-wider">ERP 系統</p>
+            </div>
+          </div>
         </Link>
       </div>
       <div className="flex-1 px-4 mt-2">
@@ -123,7 +128,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
               <SidebarContent />
             </SheetContent>
           </Sheet>
-          <Link href="/"><span className="font-bold text-primary cursor-pointer hover:opacity-80 transition-opacity">晟風工程 ERP</span></Link>
+          <Link href="/">
+            <div className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity">
+              <img src="/logo.png" alt="晟風空調" className="h-8 w-8 rounded-full object-cover" />
+              <span className="font-bold text-primary">晟風工程 ERP</span>
+            </div>
+          </Link>
           {user && (
             <div className="ml-auto flex items-center gap-2">
               <Badge variant="secondary" className="text-xs">{ROLE_LABELS[user.role]}</Badge>
