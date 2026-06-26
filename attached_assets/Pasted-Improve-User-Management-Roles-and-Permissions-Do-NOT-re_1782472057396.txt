@@ -1,0 +1,103 @@
+Improve User Management, Roles, and Permissions.
+
+Do NOT rebuild the ERP.
+Do NOT delete existing data.
+Keep the current Sheng Feng ERP style.
+
+Goal:
+Create complete role-based access control for Sheng Feng ERP.
+
+Roles:
+- Owner 老闆
+- Admin 行政管理
+- Sales 業務
+- Engineer 工程師
+- Technician 技術員
+- Accountant 會計/收款
+- Distributor 批發商
+
+Permissions:
+
+Owner:
+Full access to all modules and settings.
+
+Admin:
+Customers, quotations, work orders, warranty, maintenance, receivables.
+Cannot manage users or system settings.
+
+Sales:
+Customers and quotations.
+Can create/edit own customers and quotations.
+Cannot see company financial reports.
+Cannot delete records.
+
+Engineer:
+Work orders, progress, completion records, materials used, print/share dispatch forms.
+Cannot see quotations, receivables, invoices, or financial data.
+
+Technician:
+Assigned work orders only.
+Can update progress/status.
+Can print/share work orders.
+Cannot see prices, quotations, receivables, invoices, or user management.
+
+Accountant:
+Receivables, payments, invoices, customer basic info read-only, financial reports.
+Cannot edit work orders or quotations.
+Cannot manage users.
+
+Distributor:
+Can view own quotations/orders only.
+Can view product price if assigned.
+Cannot see other customers, internal finance, users, or system settings.
+
+User Management Requirements:
+
+1. Owner can create users.
+Fields:
+- Name
+- Username
+- Password
+- Role
+- Status: Active / Disabled
+
+2. Owner can edit users.
+Editable:
+- Name
+- Username
+- Role
+- Status
+
+3. Owner can delete users.
+Rules:
+- Cannot delete currently logged-in user.
+- Cannot delete the last active Owner.
+- Confirm before deleting.
+
+4. Owner can reset user passwords.
+- Password must be securely hashed.
+- Show success message.
+
+5. Sidebar permissions:
+Hide menu items based on role.
+
+6. Backend security:
+Enforce role permissions on API routes.
+Do not rely only on frontend hiding.
+
+7. Disabled users:
+Disabled users cannot login.
+
+8. Testing:
+- Owner can access everything.
+- Admin cannot access User Management.
+- Sales cannot access receivables.
+- Engineer cannot access quotations or payments.
+- Technician only sees assigned work orders.
+- Accountant sees receivables and invoices.
+- Distributor only sees own related records.
+- Cannot delete self.
+- Cannot delete last active Owner.
+
+Commit changes with message:
+"Add expanded role permissions and user management"

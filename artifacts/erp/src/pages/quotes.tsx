@@ -39,343 +39,287 @@ function printQuote(quote: any) {
   const baseAmt = Number(quote.amount ?? 0);
   const discAmt = Number(quote.discountAmount ?? 0);
   const finalAmt = Number(quote.finalAmount ?? quote.amount ?? 0);
-  const fmt = (n: number) => n > 0 ? `NT$ ${n.toLocaleString()}` : "—";
+  const preTax = Math.round(finalAmt / 1.05);
+  const taxAmt = finalAmt - preTax;
+  const fmt = (n: number) => `NT$ ${n.toLocaleString()}`;
   const esc = (s: string | null | undefined) => (s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-  const statusStamp = (() => {
-    const map: Record<string, [string, string]> = {
-      "已接受": ["ACCEPTED", "rgba(22,163,74,0.10)"],
-      "已完成": ["COMPLETED", "rgba(22,163,74,0.10)"],
-      "已拒絕": ["REJECTED", "rgba(220,38,38,0.10)"],
-    };
-    const entry = map[quote.status];
-    return entry
-      ? `<div style="position:fixed;top:38%;left:18%;transform:rotate(-28deg);font-size:52pt;font-weight:900;color:${entry[1]};pointer-events:none;white-space:nowrap;letter-spacing:8px;z-index:0">${entry[0]}</div>`
-      : "";
-  })();
+  // ── Brand detection ──
+  const searchText = `${quote.title ?? ""} ${quote.description ?? ""}`.toLowerCase();
+  const brandDefs: [string, string, string][] = [
+    ["panasonic", "Panasonic", "#0033A0"],
+    ["mitsubishi", "三菱重工", "#E60012"], ["三菱重工", "三菱重工", "#E60012"],
+    ["daikin", "Daikin 大金", "#0078BF"], ["大金", "Daikin 大金", "#0078BF"],
+    ["hitachi", "HITACHI 日立", "#C8002B"], ["日立", "HITACHI 日立", "#C8002B"],
+    ["sampo", "SAMPO 聲寶", "#00529C"], ["聲寶", "SAMPO 聲寶", "#00529C"],
+    ["冰點", "冰點", "#00B4D8"],
+  ];
+  const detectedBrand = brandDefs.find(([key]) => searchText.includes(key));
+  const brandBadge = detectedBrand
+    ? `<span style="background:${detectedBrand[2]};color:#fff;font-size:7pt;font-weight:700;padding:0.5mm 2mm;border-radius:1mm;letter-spacing:0.5px">${detectedBrand[1]}</span>`
+    : "";
 
-  const notesRows = (quote.notes ?? "")
-    .split(/\n/)
-    .filter((l: string) => l.trim())
-    .map((l: string, i: number) => `<div class="note-row"><span class="note-num">${i + 1}.</span><span>${esc(l.replace(/^\d+[.)、．]\s*/, ""))}</span></div>`)
-    .join("") || `<div class="note-row"><span class="note-num">1.</span><span>報價單有效期限為 30 日</span></div>
-<div class="note-row"><span class="note-num">2.</span><span>報價已含安裝施工費用</span></div>
-<div class="note-row"><span class="note-num">3.</span><span>施工前請確認現場電源容量是否充足</span></div>
-<div class="note-row"><span class="note-num">4.</span><span>施工前須支付 50% 訂金，完工驗收後付尾款</span></div>`;
+  // ── Status badge ──
+  const statusStyles: Record<string, string> = {
+    "草稿": "background:#e5e7eb;color:#374151",
+    "已送出": "background:#dbeafe;color:#1d4ed8",
+    "已接受": "background:#dcfce7;color:#15803d",
+    "已拒絕": "background:#fee2e2;color:#dc2626",
+    "已完成": "background:#d1fae5;color:#065f46",
+  };
+  const statusBadge = `<span style="font-size:8pt;font-weight:700;padding:1mm 3mm;border-radius:1mm;${statusStyles[quote.status] ?? "background:#f3f4f6;color:#111"}">${quote.status}</span>`;
+
+  // ── Materials checkbox auto-detect ──
+  const matText = `${quote.description ?? ""} ${quote.notes ?? ""}`.toLowerCase();
+  const chk = (k: string) => matText.includes(k) ? "☑" : "☐";
+
+  // ── Notes (max 4 lines) ──
+  const notesLines = (quote.notes ?? "").split(/\n/).filter((l: string) => l.trim()).slice(0, 4);
+  const defaultNotes = [
+    "報價單有效期限為 30 日，逾期請重新確認。",
+    "報價已含安裝人工及基本耗材，不含特殊工程。",
+    "施工前須支付 50% 訂金，完工驗收後付清尾款。",
+    "不含配電工程，如需配電請另行報價。",
+  ];
+  const notesHtml = (notesLines.length > 0 ? notesLines : defaultNotes)
+    .map((l: string, i: number) => `<div style="display:flex;gap:2mm;padding:0.8mm 0;font-size:8pt;line-height:1.4"><span style="color:#9ACD32;font-weight:700;min-width:4mm">${i + 1}.</span><span>${esc(l.replace(/^\d+[.)、．]\s*/, ""))}</span></div>`)
+    .join("");
+
+  // (legacy vars removed — replaced by statusBadge, notesHtml, brandBadge above)
 
   const html = `<!DOCTYPE html>
 <html lang="zh-TW"><head><meta charset="UTF-8">
 <title>報價單 ${quoteNo}</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;font-size:10pt;color:#111;background:#fff;position:relative}
-@page{size:A4;margin:14mm 14mm 22mm 14mm}
-@media print{
-  body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  .no-print{display:none!important}
-  .page-footer{position:fixed;bottom:0;left:0;right:0}
-}
-.wrap{max-width:182mm;margin:0 auto;padding:0}
+body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;font-size:8.5pt;color:#111;background:#fff;padding-bottom:18mm}
+@page{size:A4;margin:10mm 10mm 10mm 10mm}
+@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.no-print{display:none!important}.pf{position:fixed;bottom:0;left:0;right:0;background:#fff}}
 
-/* ── S1 Brand ── */
-.brand-hdr{display:flex;justify-content:space-between;align-items:flex-end;padding-bottom:5mm;border-bottom:3px solid #9ACD32;margin-bottom:6mm}
-.brand-l{display:flex;align-items:center;gap:4mm}
-.brand-logo{width:18mm;height:18mm;border-radius:50%;object-fit:cover;border:2px solid #9ACD32}
-.brand-name{font-size:19pt;font-weight:900;color:#111;letter-spacing:1px;line-height:1.1}
-.brand-sub{font-size:8pt;color:#555;margin-top:1.5mm;letter-spacing:1px}
+/* ── layout ── */
+.doc{max-width:190mm;margin:0 auto}
+.row{display:flex;gap:3mm}
+.sec{margin-bottom:2.5mm}
+.stitle{font-size:7pt;font-weight:700;background:#111;color:#9ACD32;padding:1mm 3mm;letter-spacing:2px;text-transform:uppercase;margin-bottom:1.5mm;display:flex;align-items:center;justify-content:space-between}
+
+/* ── header ── */
+.hdr{display:flex;justify-content:space-between;align-items:flex-end;padding-bottom:3mm;border-bottom:2.5px solid #9ACD32;margin-bottom:3mm}
+.hdr-l{display:flex;align-items:center;gap:3mm}
+.hdr-logo{width:14mm;height:14mm;border-radius:50%;object-fit:cover;border:2px solid #9ACD32}
+.co-name{font-size:15pt;font-weight:900;color:#111;line-height:1.1;letter-spacing:0.5px}
+.co-sub{font-size:7pt;color:#666;margin-top:1mm;letter-spacing:0.5px}
+.co-info{font-size:6.5pt;color:#888;margin-top:1mm;line-height:1.5}
 .doc-r{text-align:right}
-.doc-type{font-size:26pt;font-weight:900;color:#9ACD32;letter-spacing:10px;line-height:1}
-.doc-type-en{font-size:9pt;color:#888;letter-spacing:3px;margin-top:0.5mm}
-.doc-no{font-size:10.5pt;font-weight:700;font-family:monospace;color:#111;margin-top:2.5mm}
-.doc-meta{font-size:8.5pt;color:#555;margin-top:1mm;line-height:1.7}
+.doc-label{font-size:20pt;font-weight:900;color:#9ACD32;letter-spacing:8px;line-height:1}
+.doc-en{font-size:8pt;color:#aaa;letter-spacing:2px}
+.doc-no{font-size:9pt;font-weight:700;font-family:monospace;margin-top:2mm}
+.doc-dates{font-size:7.5pt;color:#555;line-height:1.7;margin-top:1mm}
 
-/* ── S2 Client ── */
-.section{margin-bottom:6mm;page-break-inside:avoid}
-.sec-title{font-size:8pt;font-weight:700;background:#111;color:#9ACD32;padding:1.5mm 4mm;letter-spacing:3px;text-transform:uppercase;margin-bottom:3mm}
-.client-grid{display:grid;grid-template-columns:1fr 1fr;gap:1.5mm 10mm}
-.c-row{display:flex;align-items:baseline;gap:2mm;padding:1.2mm 0;border-bottom:1px dotted #ddd}
-.c-lbl{font-size:8pt;color:#777;min-width:18mm;flex-shrink:0}
-.c-val{font-size:9.5pt;font-weight:600;color:#111;flex:1}
+/* ── client info ── */
+.ci-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:0.8mm 4mm}
+.ci-r{display:flex;align-items:baseline;gap:1.5mm;padding:0.8mm 0;border-bottom:1px dotted #e0e0e0}
+.ci-l{font-size:6.5pt;color:#888;min-width:13mm;flex-shrink:0}
+.ci-v{font-size:8pt;font-weight:600;flex:1}
+.ci-wide{grid-column:span 2}
 
-/* ── Tables ── */
-table{width:100%;border-collapse:collapse;font-size:8.5pt;margin-bottom:2mm}
-thead tr{background:#111}
-thead th{color:#9ACD32;padding:2.2mm 2mm;text-align:center;font-weight:700;font-size:8pt;white-space:nowrap;border-right:1px solid #333}
+/* ── equipment table ── */
+table{width:100%;border-collapse:collapse;font-size:7.5pt}
+thead th{background:#111;color:#9ACD32;padding:1.5mm 1.5mm;text-align:center;font-weight:700;font-size:7pt;white-space:nowrap;border-right:1px solid #333}
 thead th:last-child{border-right:none}
-tbody tr:nth-child(even){background:#f8f8f8}
-tbody td{padding:2mm 2mm;text-align:center;border-bottom:1px solid #e8e8e8;color:#111;vertical-align:middle}
-tbody td.tdl{text-align:left}
-tbody tr:last-child td{border-bottom:2px solid #9ACD32}
-tfoot td{padding:2mm 2mm;text-align:right;font-size:8pt;color:#666;border-top:1px solid #ddd}
+tbody tr:nth-child(even){background:#f7f7f7}
+tbody td{padding:1.5mm 1.5mm;text-align:center;border-bottom:1px solid #ebebeb;vertical-align:middle}
+tbody td.tl{text-align:left}
+tbody tr:last-child td{border-bottom:1.5px solid #9ACD32}
 
-/* ── S7 Amount ── */
-.amt-wrap{display:flex;justify-content:flex-end;margin-bottom:6mm;page-break-inside:avoid}
-.amt-box{width:90mm;border:2px solid #9ACD32;border-radius:1mm;overflow:hidden}
-.amt-row{display:flex;justify-content:space-between;padding:2.2mm 5mm;border-bottom:1px solid #e8e8e8;font-size:9.5pt}
-.amt-lbl{color:#666}
-.amt-val{font-weight:600;color:#111}
-.amt-disc .amt-val{color:#e53e3e}
-.amt-total{background:#111;padding:4mm 5mm;border-bottom:none}
-.amt-total .amt-lbl{color:#9ACD32;font-size:11pt;font-weight:900;letter-spacing:2px}
-.amt-total .amt-val{color:#fff;font-size:16pt;font-weight:900;font-family:monospace}
+/* ── checkboxes ── */
+.chk-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1mm 2mm;font-size:7.5pt}
+.chk-item{display:flex;align-items:center;gap:1mm}
+.chk-sym{font-size:9pt;color:#9ACD32}
+.chk-sym.off{color:#bbb}
+.chk-other{display:flex;align-items:center;gap:1mm;grid-column:span 2}
+.chk-line{flex:1;border-bottom:1px solid #999;min-width:20mm}
 
-/* ── S6 Description ── */
-.desc-block{border:1px solid #e0e0e0;border-left:4px solid #9ACD32;padding:4mm 5mm;min-height:22mm;font-size:9.5pt;white-space:pre-wrap;line-height:1.7;color:#333;background:#fafafa}
+/* ── middle row (materials + service) ── */
+.mid-l{flex:0 0 54%}
+.mid-r{flex:1;border:1px solid #e0e0e0;border-left:3px solid #9ACD32;padding:2mm 2.5mm;font-size:7.5pt;white-space:pre-wrap;line-height:1.5;color:#333;background:#fafafa;min-height:24mm}
 
-/* ── S8 Notes ── */
-.note-row{display:flex;gap:2mm;padding:1.5mm 0;border-bottom:1px dotted #eee;font-size:9pt;line-height:1.5}
-.note-num{color:#9ACD32;font-weight:700;min-width:5mm;flex-shrink:0}
+/* ── bottom row (terms + total) ── */
+.bot-l{flex:1}
+.bot-r{flex:0 0 72mm}
+.amt-box{border:2px solid #9ACD32;border-radius:1mm;overflow:hidden}
+.amt-r{display:flex;justify-content:space-between;padding:1.5mm 4mm;border-bottom:1px solid #ebebeb;font-size:8pt}
+.amt-r .lbl{color:#777}
+.amt-r .val{font-weight:600}
+.amt-r.disc .val{color:#dc2626}
+.amt-total{background:#111;padding:3mm 4mm}
+.amt-total .lbl{color:#9ACD32;font-size:9.5pt;font-weight:900;letter-spacing:1px}
+.amt-total .val{color:#fff;font-size:14pt;font-weight:900;font-family:monospace}
 
-/* ── S9 Signatures ── */
-.sig-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:5mm;margin-top:3mm;page-break-inside:avoid}
-.sig-box{border:1px solid #ccc;border-radius:1mm;padding:2mm;min-height:30mm;display:flex;flex-direction:column}
-.sig-area{flex:1}
-.sig-lbl{font-size:8pt;color:#555;border-top:1.5px solid #999;padding-top:1.5mm;text-align:center;margin-top:auto}
-.sig-date{font-size:7.5pt;color:#aaa;text-align:center;margin-top:1mm}
+/* ── signatures ── */
+.sig-row{display:grid;grid-template-columns:repeat(3,1fr);gap:3mm;margin-top:1mm}
+.sig-box{border:1px solid #ccc;border-radius:1mm;padding:1.5mm;min-height:22mm;display:flex;flex-direction:column}
+.sig-sp{flex:1}
+.sig-lbl{font-size:7pt;color:#555;border-top:1px solid #aaa;padding-top:1mm;text-align:center}
+.sig-dt{font-size:6.5pt;color:#bbb;text-align:center;margin-top:0.5mm}
 
-/* ── S10 Footer ── */
-.page-footer{border-top:2.5px solid #9ACD32;padding-top:3.5mm;margin-top:6mm;display:flex;justify-content:space-between;align-items:flex-start;background:#fff}
-.footer-l{display:flex;align-items:center;gap:3mm}
-.footer-logo{width:10mm;height:10mm;border-radius:50%;object-fit:cover;border:1.5px solid #9ACD32;flex-shrink:0}
-.footer-info{font-size:7.5pt;color:#666;line-height:1.7}
-.footer-info strong{color:#111;font-size:8pt}
+/* ── footer ── */
+.pf{border-top:2px solid #9ACD32;padding-top:2mm;margin-top:3mm;display:flex;justify-content:space-between;align-items:center}
+.pf-l{display:flex;align-items:center;gap:2mm}
+.pf-logo{width:8mm;height:8mm;border-radius:50%;object-fit:cover;border:1px solid #9ACD32}
+.pf-info{font-size:6.5pt;color:#666;line-height:1.5}
+.pf-info b{color:#111}
+.pf-r{font-size:6.5pt;color:#aaa;text-align:right;line-height:1.6}
 
-/* ── Print btn ── */
-.print-btn{position:fixed;top:10mm;right:10mm;background:#9ACD32;color:#111;border:none;padding:6px 18px;font-size:10pt;font-weight:700;cursor:pointer;border-radius:2px;z-index:100}
-.print-btn:hover{background:#7db220}
-</style>
-</head>
+/* ── print btn ── */
+.pbtn{position:fixed;top:8mm;right:8mm;background:#9ACD32;color:#111;border:none;padding:5px 16px;font-size:9.5pt;font-weight:700;cursor:pointer;border-radius:2px;z-index:100;letter-spacing:1px}
+.pbtn:hover{background:#7db220}
+</style></head>
 <body>
-${statusStamp}
-<button class="print-btn no-print" onclick="window.print()">列印 / PDF</button>
+<button class="pbtn no-print" onclick="window.print()">列印 / PDF</button>
+<div class="doc">
 
-<div class="wrap">
-
-<!-- ══ S1 品牌區 ══ -->
-<div class="brand-hdr">
-  <div class="brand-l">
-    <img src="${logoUrl}" class="brand-logo" alt="">
+<!-- HEADER -->
+<div class="hdr">
+  <div class="hdr-l">
+    <img src="${logoUrl}" class="hdr-logo" alt="">
     <div>
-      <div class="brand-name">晟風工程有限公司</div>
-      <div class="brand-sub">冷氣安裝｜保養｜維修｜設計</div>
+      <div class="co-name">晟風工程有限公司</div>
+      <div class="co-sub">冷氣安裝｜保養｜維修｜設計</div>
+      <div class="co-info">統編：93388506　Tel：0955-980-738<br>cfac07151025@gmail.com　彰化縣花壇鄉花南路212號</div>
     </div>
   </div>
   <div class="doc-r">
-    <div class="doc-type">報價單</div>
-    <div class="doc-type-en">QUOTATION</div>
-    <div class="doc-no">${quoteNo}</div>
-    <div class="doc-meta">
-      報價日期：${quoteDate}<br>
-      列印日期：${printDate}<br>
-      有效期限：${validDate}
+    <div class="doc-label">報價單</div>
+    <div class="doc-en">QUOTATION</div>
+    <div class="doc-no">${quoteNo}&nbsp;&nbsp;${statusBadge}${brandBadge ? `&nbsp;${brandBadge}` : ""}</div>
+    <div class="doc-dates">
+      報價日期：${quoteDate}　有效期限：${validDate}<br>
+      列印日期：${printDate}
     </div>
   </div>
 </div>
 
-<!-- ══ S2 客戶資訊 ══ -->
-<div class="section">
-  <div class="sec-title">▌ 客戶資訊　Client Information</div>
-  <div class="client-grid">
-    <div class="c-row"><span class="c-lbl">客戶名稱</span><span class="c-val">${esc(quote.customerName) || "—"}</span></div>
-    <div class="c-row"><span class="c-lbl">工程名稱</span><span class="c-val">${esc(quote.title) || "—"}</span></div>
-    <div class="c-row"><span class="c-lbl">聯絡人</span><span class="c-val">　</span></div>
-    <div class="c-row"><span class="c-lbl">付款方式</span><span class="c-val">　</span></div>
-    <div class="c-row"><span class="c-lbl">電話</span><span class="c-val">　</span></div>
-    <div class="c-row"><span class="c-lbl">付款條件</span><span class="c-val">　</span></div>
-    <div class="c-row"><span class="c-lbl">Email</span><span class="c-val">　</span></div>
-    <div class="c-row"><span class="c-lbl">統一編號</span><span class="c-val">　</span></div>
-    <div class="c-row" style="grid-column:span 2"><span class="c-lbl">施工地址</span><span class="c-val">　</span></div>
+<!-- CLIENT INFO -->
+<div class="sec">
+  <div class="stitle">▌ 客戶資訊 　Client Information</div>
+  <div class="ci-grid">
+    <div class="ci-r"><span class="ci-l">客戶名稱</span><span class="ci-v">${esc(quote.customerName) || "　"}</span></div>
+    <div class="ci-r"><span class="ci-l">聯絡人</span><span class="ci-v">　</span></div>
+    <div class="ci-r"><span class="ci-l">工程名稱</span><span class="ci-v">${esc(quote.title) || "　"}</span></div>
+    <div class="ci-r"><span class="ci-l">電話</span><span class="ci-v">　</span></div>
+    <div class="ci-r"><span class="ci-l">Email</span><span class="ci-v">　</span></div>
+    <div class="ci-r"><span class="ci-l">付款方式</span><span class="ci-v">　</span></div>
+    <div class="ci-r ci-wide"><span class="ci-l">施工地址</span><span class="ci-v">　</span></div>
+    <div class="ci-r"><span class="ci-l">付款條件</span><span class="ci-v">　</span></div>
   </div>
 </div>
 
-<!-- ══ S3 工程設備明細 ══ -->
-<div class="section">
-  <div class="sec-title">▌ 工程設備明細　Equipment Schedule</div>
+<!-- EQUIPMENT TABLE -->
+<div class="sec">
+  <div class="stitle">▌ 工程設備明細　Equipment Schedule</div>
   <table>
-    <thead>
-      <tr>
-        <th style="width:7mm">項次</th>
-        <th style="width:16mm">品牌</th>
-        <th>品名</th>
-        <th style="width:22mm">型號</th>
-        <th style="width:16mm">能力</th>
-        <th style="width:10mm">數量</th>
-        <th style="width:10mm">單位</th>
-        <th style="width:20mm">單價</th>
-        <th style="width:14mm">折扣</th>
-        <th style="width:22mm">小計</th>
-        <th style="width:20mm">備註</th>
-      </tr>
-    </thead>
+    <thead><tr>
+      <th style="width:6mm">項次</th>
+      <th style="width:14mm">品牌</th>
+      <th>品名</th>
+      <th style="width:20mm">型號</th>
+      <th style="width:9mm">數量</th>
+      <th style="width:9mm">單位</th>
+      <th style="width:18mm">單價</th>
+      <th style="width:12mm">折扣</th>
+      <th style="width:20mm">小計</th>
+      <th style="width:18mm">備註</th>
+    </tr></thead>
     <tbody>
       <tr>
         <td>1</td>
-        <td></td>
-        <td class="tdl">${esc(quote.title)}</td>
-        <td></td>
-        <td></td>
-        <td>1</td>
-        <td>式</td>
-        <td>${baseAmt > 0 ? `NT$ ${baseAmt.toLocaleString()}` : ""}</td>
-        <td>${discAmt > 0 ? `NT$ ${discAmt.toLocaleString()}` : "—"}</td>
-        <td>${baseAmt > 0 ? `NT$ ${(baseAmt - discAmt).toLocaleString()}` : ""}</td>
+        <td>${brandBadge || "　"}</td>
+        <td class="tl">${esc(quote.title)}</td>
+        <td></td><td>1</td><td>式</td>
+        <td>${baseAmt > 0 ? fmt(baseAmt) : ""}</td>
+        <td>${discAmt > 0 ? fmt(discAmt) : "—"}</td>
+        <td>${baseAmt > 0 ? fmt(baseAmt - discAmt) : ""}</td>
         <td></td>
       </tr>
-      <tr><td>2</td><td></td><td class="tdl"></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
-      <tr><td>3</td><td></td><td class="tdl"></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
-      <tr><td>4</td><td></td><td class="tdl"></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
-      <tr><td>5</td><td></td><td class="tdl"></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+      <tr><td>2</td><td></td><td class="tl"></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+      <tr><td>3</td><td></td><td class="tl"></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+      <tr><td>4</td><td></td><td class="tl"></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+      <tr><td>5</td><td></td><td class="tl"></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
     </tbody>
-    <tfoot>
-      <tr><td colspan="11" style="text-align:right;color:#777;font-size:8pt;padding:2mm 2mm">以下空白</td></tr>
-    </tfoot>
   </table>
 </div>
 
-<!-- ══ S4 追加材料 ══ -->
-<div class="section">
-  <div class="sec-title">▌ 追加材料　Additional Materials</div>
-  <table>
-    <thead>
-      <tr>
-        <th style="width:7mm">項次</th>
-        <th>材料名稱</th>
-        <th style="width:16mm">規格</th>
-        <th style="width:12mm">數量</th>
-        <th style="width:12mm">單位</th>
-        <th style="width:22mm">單價</th>
-        <th style="width:22mm">小計</th>
-        <th style="width:25mm">備註</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr><td>1</td><td class="tdl">銅管</td><td></td><td></td><td>尺</td><td></td><td></td><td></td></tr>
-      <tr><td>2</td><td class="tdl">冷媒補充</td><td></td><td></td><td>磅</td><td></td><td></td><td></td></tr>
-      <tr><td>3</td><td class="tdl">控制線</td><td></td><td></td><td>尺</td><td></td><td></td><td></td></tr>
-      <tr><td>4</td><td class="tdl">排水管</td><td></td><td></td><td>尺</td><td></td><td></td><td></td></tr>
-      <tr><td>5</td><td class="tdl">電源線</td><td></td><td></td><td>尺</td><td></td><td></td><td></td></tr>
-      <tr><td>6</td><td class="tdl">吊車 / 高空車</td><td></td><td></td><td>次</td><td></td><td></td><td></td></tr>
-      <tr><td>7</td><td class="tdl">洗孔</td><td></td><td></td><td>孔</td><td></td><td></td><td></td></tr>
-      <tr><td>8</td><td class="tdl">拆除舊機</td><td></td><td></td><td>台</td><td></td><td></td><td></td></tr>
-    </tbody>
-    <tfoot>
-      <tr><td colspan="8" style="text-align:right;color:#777;font-size:8pt;padding:2mm 2mm">以下空白</td></tr>
-    </tfoot>
-  </table>
+<!-- MIDDLE ROW: Materials + Service Content -->
+<div class="row sec">
+  <div class="mid-l">
+    <div class="stitle">▌ 追加材料　Additional Materials</div>
+    <div class="chk-grid">
+      <div class="chk-item"><span class="chk-sym ${chk("銅管")==="☑"?"":"off"}">${chk("銅管")}</span>銅管</div>
+      <div class="chk-item"><span class="chk-sym ${chk("冷媒")==="☑"?"":"off"}">${chk("冷媒")}</span>冷媒補充</div>
+      <div class="chk-item"><span class="chk-sym ${chk("控制線")==="☑"?"":"off"}">${chk("控制線")}</span>控制線</div>
+      <div class="chk-item"><span class="chk-sym ${chk("排水管")==="☑"?"":"off"}">${chk("排水管")}</span>排水管</div>
+      <div class="chk-item"><span class="chk-sym ${chk("電源線")==="☑"?"":"off"}">${chk("電源線")}</span>電源線</div>
+      <div class="chk-item"><span class="chk-sym ${chk("固定架")==="☑"?"":"off"}">${chk("固定架")}</span>室外固定架</div>
+      <div class="chk-item"><span class="chk-sym ${chk("洗孔")==="☑"?"":"off"}">${chk("洗孔")}</span>洗孔</div>
+      <div class="chk-item"><span class="chk-sym ${chk("吊車")==="☑"?"":"off"}">${chk("吊車")}</span>吊車</div>
+      <div class="chk-item"><span class="chk-sym ${chk("高空車")==="☑"?"":"off"}">${chk("高空車")}</span>高空車</div>
+      <div class="chk-item"><span class="chk-sym ${chk("拆除")==="☑"?"":"off"}">${chk("拆除")}</span>拆除舊機</div>
+      <div class="chk-item"><span class="chk-sym ${chk("冷凝水")==="☑"?"":"off"}">${chk("冷凝水")}</span>冷凝水幫浦</div>
+      <div class="chk-other"><span class="chk-sym off">☐</span>其他：<span class="chk-line"></span></div>
+    </div>
+  </div>
+  <div class="mid-r">
+    <div class="stitle" style="margin:-2mm -2.5mm 1.5mm;padding:1mm 2.5mm">▌ 服務內容　Service Content</div>${esc(quote.description) || "施工方式：\n施工天數：\n注意事項：\n停車位置："}</div>
 </div>
 
-<!-- ══ S5 免費贈送 ══ -->
-<div class="section">
-  <div class="sec-title">▌ 免費贈送項目　Complimentary Items</div>
-  <table>
-    <thead>
-      <tr>
-        <th style="width:7mm">項次</th>
-        <th>贈送項目</th>
-        <th style="width:16mm">數量</th>
-        <th style="width:16mm">單位</th>
-        <th>備註</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr><td>1</td><td class="tdl">延長保固</td><td></td><td>年</td><td class="tdl"></td></tr>
-      <tr><td>2</td><td class="tdl">室外機固定架</td><td></td><td>組</td><td class="tdl"></td></tr>
-      <tr><td>3</td><td class="tdl">遙控器</td><td></td><td>支</td><td class="tdl"></td></tr>
-      <tr><td>4</td><td class="tdl">免費保養</td><td></td><td>次</td><td class="tdl"></td></tr>
-    </tbody>
-    <tfoot>
-      <tr><td colspan="5" style="text-align:right;color:#777;font-size:8pt;padding:2mm 2mm">以下空白</td></tr>
-    </tfoot>
-  </table>
-</div>
-
-<!-- ══ S6 工程說明 ══ -->
-<div class="section">
-  <div class="sec-title">▌ 工程說明　Scope of Work</div>
-  <div class="desc-block">${esc(quote.description) || "施工方式：\n特殊施工說明：\n施工天數：\n注意事項：\n停車位置：\n施工限制：\n"}</div>
-</div>
-
-<!-- ══ S7 金額統計 ══ -->
-<div class="section amt-wrap">
-  <div class="amt-box">
-    <div class="amt-row"><span class="amt-lbl">報價金額</span><span class="amt-val">${fmt(baseAmt)}</span></div>
-    ${discAmt > 0 ? `<div class="amt-row amt-disc"><span class="amt-lbl">折扣優惠</span><span class="amt-val">－ NT$ ${discAmt.toLocaleString()}</span></div>` : ""}
-    <div class="amt-row"><span class="amt-lbl">未稅金額</span><span class="amt-val">${fmt(Math.round(finalAmt / 1.05))}</span></div>
-    <div class="amt-row"><span class="amt-lbl">稅額（5%）</span><span class="amt-val">${fmt(Math.round(finalAmt - finalAmt / 1.05))}</span></div>
-    <div class="amt-row amt-total">
-      <span class="amt-lbl">工程總價</span>
-      <span class="amt-val">NT$ ${finalAmt.toLocaleString()}</span>
+<!-- BOTTOM ROW: Terms + Total -->
+<div class="row sec">
+  <div class="bot-l">
+    <div class="stitle">▌ 注意事項　Terms &amp; Conditions</div>
+    ${notesHtml}
+  </div>
+  <div class="bot-r">
+    <div class="amt-box">
+      <div class="amt-r"><span class="lbl">材料費</span><span class="val">${fmt(baseAmt)}</span></div>
+      <div class="amt-r"><span class="lbl">施工費</span><span class="val">—</span></div>
+      ${discAmt > 0 ? `<div class="amt-r disc"><span class="lbl">折扣</span><span class="val">－ ${fmt(discAmt)}</span></div>` : ""}
+      <div class="amt-r"><span class="lbl">未稅小計</span><span class="val">${fmt(preTax)}</span></div>
+      <div class="amt-r"><span class="lbl">稅額 5%</span><span class="val">${fmt(taxAmt)}</span></div>
+      <div class="amt-total" style="display:flex;justify-content:space-between;align-items:center">
+        <span class="lbl">工程總價</span>
+        <span class="val">${fmt(finalAmt)}</span>
+      </div>
     </div>
   </div>
 </div>
 
-<!-- ══ S8 注意事項 ══ -->
-<div class="section">
-  <div class="sec-title">▌ 注意事項　Terms &amp; Conditions</div>
-  ${notesRows}
-</div>
-
-<!-- ══ S9 簽名 ══ -->
-<div class="section">
-  <div class="sec-title">▌ 確認簽署　Authorization</div>
-  <div class="sig-grid">
-    <div class="sig-box">
-      <div class="sig-area"></div>
-      <div class="sig-lbl">客戶簽名</div>
-      <div class="sig-date">日期：＿＿＿＿＿＿</div>
-    </div>
-    <div class="sig-box">
-      <div class="sig-area"></div>
-      <div class="sig-lbl">業務簽名</div>
-      <div class="sig-date">日期：＿＿＿＿＿＿</div>
-    </div>
-    <div class="sig-box">
-      <div class="sig-area"></div>
-      <div class="sig-lbl">業務主管</div>
-      <div class="sig-date">日期：＿＿＿＿＿＿</div>
-    </div>
-    <div class="sig-box">
-      <div class="sig-area"></div>
-      <div class="sig-lbl">公　司　章</div>
-      <div class="sig-date">&nbsp;</div>
-    </div>
+<!-- SIGNATURES -->
+<div class="sec">
+  <div class="stitle">▌ 確認簽署　Authorization</div>
+  <div class="sig-row">
+    <div class="sig-box"><div class="sig-sp"></div><div class="sig-lbl">客戶簽名</div><div class="sig-dt">日期：＿＿＿＿＿＿</div></div>
+    <div class="sig-box"><div class="sig-sp"></div><div class="sig-lbl">業務簽名</div><div class="sig-dt">日期：＿＿＿＿＿＿</div></div>
+    <div class="sig-box"><div class="sig-sp"></div><div class="sig-lbl">公　司　章</div><div class="sig-dt">&nbsp;</div></div>
   </div>
 </div>
 
-</div><!-- /wrap -->
+</div><!-- /doc -->
 
-<!-- ══ S10 Footer ══ -->
-<div class="page-footer">
-  <div class="footer-l">
-    <img src="${logoUrl}" class="footer-logo" alt="">
-    <div class="footer-info">
-      <strong>晟風工程有限公司</strong><br>
-      Tel：0955-980-738　LINE：@cf-aircon<br>
-      Email：service@cf-aircon.com.tw<br>
-      地址：台灣
+<!-- FOOTER -->
+<div class="pf">
+  <div class="pf-l">
+    <img src="${logoUrl}" class="pf-logo" alt="">
+    <div class="pf-info">
+      <b>晟風工程有限公司</b>　統編：93388506<br>
+      Tel：0955-980-738　cfac07151025@gmail.com　彰化縣花壇鄉花南路212號
     </div>
   </div>
-  <div class="footer-info" style="text-align:right;font-size:7.5pt;color:#aaa">
-    本報價單由晟風工程 ERP 系統產生<br>
-    列印日期：${printDate}
-  </div>
+  <div class="pf-r">Generated by 晟風工程 ERP<br>列印：${printDate}</div>
 </div>
 
-<script>
-(function(){
-  // delay to ensure images load
-  var imgs = document.querySelectorAll('img');
-  var loaded = 0;
-  if(imgs.length === 0){ return; }
-  imgs.forEach(function(img){
-    if(img.complete){ loaded++; if(loaded===imgs.length) return; }
-    else { img.addEventListener('load', function(){ loaded++; }); img.addEventListener('error', function(){ loaded++; }); }
-  });
-})();
-</script>
 </body></html>`;
 
-  const w = window.open("", "_blank", "width=960,height=1200");
+  const w = window.open("", "_blank", "width=900,height=1100");
   if (w) { w.document.write(html); w.document.close(); }
 }
 
