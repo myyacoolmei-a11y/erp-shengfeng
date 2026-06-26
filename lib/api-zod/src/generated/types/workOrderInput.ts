@@ -11,10 +11,24 @@ export interface WorkOrderInput {
   quoteId?: number;
   /** @minLength 1 */
   title: string;
-  description?: string;
-  assignedTo?: string;
-  scheduledDate?: string;
-  completedDate?: string;
   status: string;
+  contactPerson?: string;
+  mobilePhone?: string;
+  telephone?: string;
+  installAddress?: string;
+  scheduledDate?: string;
+  scheduledTime?: string;
+  completedDate?: string;
+  assignedTo?: string;
+  assistantTo?: string;
+  projectType?: string;
+  acBrand?: string;
+  modelNumber?: string;
+  quantity?: number;
+  indoorUnits?: number;
+  outdoorUnits?: number;
+  floorLevel?: string;
+  hasElevator?: string;
+  description?: string;
   notes?: string;
 }

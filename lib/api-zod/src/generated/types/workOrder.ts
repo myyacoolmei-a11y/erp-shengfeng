@@ -13,16 +13,46 @@ export interface WorkOrder {
   customerName?: string | null;
   /** @nullable */
   quoteId?: number | null;
+  /** @nullable */
+  workOrderNumber?: string | null;
   title: string;
+  status: string;
   /** @nullable */
-  description?: string | null;
+  contactPerson?: string | null;
   /** @nullable */
-  assignedTo?: string | null;
+  mobilePhone?: string | null;
+  /** @nullable */
+  telephone?: string | null;
+  /** @nullable */
+  installAddress?: string | null;
   /** @nullable */
   scheduledDate?: string | null;
   /** @nullable */
+  scheduledTime?: string | null;
+  /** @nullable */
   completedDate?: string | null;
-  status: string;
+  /** @nullable */
+  assignedTo?: string | null;
+  /** @nullable */
+  assistantTo?: string | null;
+  /** @nullable */
+  projectType?: string | null;
+  /** @nullable */
+  acBrand?: string | null;
+  /** @nullable */
+  modelNumber?: string | null;
+  /** @nullable */
+  quantity?: number | null;
+  /** @nullable */
+  indoorUnits?: number | null;
+  /** @nullable */
+  outdoorUnits?: number | null;
+  /** @nullable */
+  floorLevel?: string | null;
+  /** @nullable */
+  hasElevator?: string | null;
+  /** @nullable */
+  description?: string | null;
   /** @nullable */
   notes?: string | null;
   createdAt: string;

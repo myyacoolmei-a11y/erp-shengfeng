@@ -1048,12 +1048,27 @@ components:
         customerId: { type: integer }
         customerName: { type: ["string", "null"] }
         quoteId: { type: ["integer", "null"] }
+        workOrderNumber: { type: ["string", "null"] }
         title: { type: string }
-        description: { type: ["string", "null"] }
-        assignedTo: { type: ["string", "null"] }
-        scheduledDate: { type: ["string", "null"] }
-        completedDate: { type: ["string", "null"] }
         status: { type: string }
+        contactPerson: { type: ["string", "null"] }
+        mobilePhone: { type: ["string", "null"] }
+        telephone: { type: ["string", "null"] }
+        installAddress: { type: ["string", "null"] }
+        scheduledDate: { type: ["string", "null"] }
+        scheduledTime: { type: ["string", "null"] }
+        completedDate: { type: ["string", "null"] }
+        assignedTo: { type: ["string", "null"] }
+        assistantTo: { type: ["string", "null"] }
+        projectType: { type: ["string", "null"] }
+        acBrand: { type: ["string", "null"] }
+        modelNumber: { type: ["string", "null"] }
+        quantity: { type: ["integer", "null"] }
+        indoorUnits: { type: ["integer", "null"] }
+        outdoorUnits: { type: ["integer", "null"] }
+        floorLevel: { type: ["string", "null"] }
+        hasElevator: { type: ["string", "null"] }
+        description: { type: ["string", "null"] }
         notes: { type: ["string", "null"] }
         createdAt: { type: string }
         updatedAt: { type: string }
@@ -1065,22 +1080,50 @@ components:
         customerId: { type: integer }
         quoteId: { type: integer }
         title: { type: string, minLength: 1 }
-        description: { type: string }
-        assignedTo: { type: string }
-        scheduledDate: { type: string }
-        completedDate: { type: string }
         status: { type: string }
+        contactPerson: { type: string }
+        mobilePhone: { type: string }
+        telephone: { type: string }
+        installAddress: { type: string }
+        scheduledDate: { type: string }
+        scheduledTime: { type: string }
+        completedDate: { type: string }
+        assignedTo: { type: string }
+        assistantTo: { type: string }
+        projectType: { type: string }
+        acBrand: { type: string }
+        modelNumber: { type: string }
+        quantity: { type: integer }
+        indoorUnits: { type: integer }
+        outdoorUnits: { type: integer }
+        floorLevel: { type: string }
+        hasElevator: { type: string }
+        description: { type: string }
         notes: { type: string }
 
     WorkOrderUpdate:
       type: object
       properties:
         title: { type: string }
-        description: { type: string }
-        assignedTo: { type: string }
-        scheduledDate: { type: string }
-        completedDate: { type: string }
         status: { type: string }
+        contactPerson: { type: string }
+        mobilePhone: { type: string }
+        telephone: { type: string }
+        installAddress: { type: string }
+        scheduledDate: { type: string }
+        scheduledTime: { type: string }
+        completedDate: { type: string }
+        assignedTo: { type: string }
+        assistantTo: { type: string }
+        projectType: { type: string }
+        acBrand: { type: string }
+        modelNumber: { type: string }
+        quantity: { type: integer }
+        indoorUnits: { type: integer }
+        outdoorUnits: { type: integer }
+        floorLevel: { type: string }
+        hasElevator: { type: string }
+        description: { type: string }
         notes: { type: string }
 
     Progress:

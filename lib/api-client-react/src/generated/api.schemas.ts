@@ -132,16 +132,46 @@ export interface WorkOrder {
   customerName?: string | null;
   /** @nullable */
   quoteId?: number | null;
+  /** @nullable */
+  workOrderNumber?: string | null;
   title: string;
+  status: string;
   /** @nullable */
-  description?: string | null;
+  contactPerson?: string | null;
   /** @nullable */
-  assignedTo?: string | null;
+  mobilePhone?: string | null;
+  /** @nullable */
+  telephone?: string | null;
+  /** @nullable */
+  installAddress?: string | null;
   /** @nullable */
   scheduledDate?: string | null;
   /** @nullable */
+  scheduledTime?: string | null;
+  /** @nullable */
   completedDate?: string | null;
-  status: string;
+  /** @nullable */
+  assignedTo?: string | null;
+  /** @nullable */
+  assistantTo?: string | null;
+  /** @nullable */
+  projectType?: string | null;
+  /** @nullable */
+  acBrand?: string | null;
+  /** @nullable */
+  modelNumber?: string | null;
+  /** @nullable */
+  quantity?: number | null;
+  /** @nullable */
+  indoorUnits?: number | null;
+  /** @nullable */
+  outdoorUnits?: number | null;
+  /** @nullable */
+  floorLevel?: string | null;
+  /** @nullable */
+  hasElevator?: string | null;
+  /** @nullable */
+  description?: string | null;
   /** @nullable */
   notes?: string | null;
   createdAt: string;
@@ -153,21 +183,49 @@ export interface WorkOrderInput {
   quoteId?: number;
   /** @minLength 1 */
   title: string;
-  description?: string;
-  assignedTo?: string;
-  scheduledDate?: string;
-  completedDate?: string;
   status: string;
+  contactPerson?: string;
+  mobilePhone?: string;
+  telephone?: string;
+  installAddress?: string;
+  scheduledDate?: string;
+  scheduledTime?: string;
+  completedDate?: string;
+  assignedTo?: string;
+  assistantTo?: string;
+  projectType?: string;
+  acBrand?: string;
+  modelNumber?: string;
+  quantity?: number;
+  indoorUnits?: number;
+  outdoorUnits?: number;
+  floorLevel?: string;
+  hasElevator?: string;
+  description?: string;
   notes?: string;
 }
 
 export interface WorkOrderUpdate {
   title?: string;
-  description?: string;
-  assignedTo?: string;
-  scheduledDate?: string;
-  completedDate?: string;
   status?: string;
+  contactPerson?: string;
+  mobilePhone?: string;
+  telephone?: string;
+  installAddress?: string;
+  scheduledDate?: string;
+  scheduledTime?: string;
+  completedDate?: string;
+  assignedTo?: string;
+  assistantTo?: string;
+  projectType?: string;
+  acBrand?: string;
+  modelNumber?: string;
+  quantity?: number;
+  indoorUnits?: number;
+  outdoorUnits?: number;
+  floorLevel?: string;
+  hasElevator?: string;
+  description?: string;
   notes?: string;
 }
 

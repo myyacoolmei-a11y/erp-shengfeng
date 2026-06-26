@@ -1,0 +1,130 @@
+Upgrade the Work Order module into a practical air-conditioning service work order system for Sheng Feng Engineering.
+
+Keep the existing design style.
+
+Do not remove any existing functions.
+
+Improve only the Work Order module.
+
+==========================
+WORK ORDER
+==========================
+
+Each work order should include:
+
+- Auto Work Order Number
+- Status
+- Customer Name
+- Contact Person
+- Mobile Phone
+- Telephone
+- Installation Address
+- Google Maps Navigation Button
+- Appointment Date
+- Appointment Time
+- Assigned Technician
+- Assistant Technician
+- Project Type
+  - New Installation
+  - Maintenance
+  - Repair
+  - Relocation
+  - Cleaning
+  - Warranty Service
+- Air Conditioner Brand
+- Model Number
+- Quantity
+- Indoor Units
+- Outdoor Units
+- Floor Level
+- Elevator Available (Yes / No)
+- Work Description
+- Special Notes
+
+==========================
+CUSTOMER
+==========================
+
+When selecting an existing customer,
+
+automatically fill:
+
+- Contact Person
+- Mobile Phone
+- Telephone
+- Installation Address
+
+Do NOT import quotation information.
+
+Do NOT import warranty information.
+
+==========================
+PRINT
+==========================
+
+Add a Print button.
+
+Generate a clean professional A4 Work Order.
+
+Include:
+
+- Company Logo
+- Company Information
+- Work Order Number
+- Customer Information
+- Appointment Information
+- Technician Information
+- Work Description
+- Special Notes
+
+==========================
+EXPORT
+==========================
+
+Support:
+
+- Print
+- Export PDF
+
+==========================
+LINE
+==========================
+
+Add a LINE Share button.
+
+Generate a ready-to-send message containing:
+
+- Work Order Number
+- Customer Name
+- Mobile Phone
+- Installation Address
+- Google Maps Link
+- Appointment Date
+- Appointment Time
+- Technician
+- Work Description
+- Special Notes
+
+Do NOT upload photos.
+
+Do NOT implement photo management.
+
+Technicians will continue sending photos through LINE.
+
+==========================
+MOBILE
+==========================
+
+Optimize for mobile phones and tablets.
+
+==========================
+IMPORTANT
+==========================
+
+Keep the interface simple and fast.
+
+This ERP is designed for daily use by air-conditioning technicians.
+
+Avoid unnecessary fields.
+
+After implementation, automatically test all functions and fix any errors before finishing.

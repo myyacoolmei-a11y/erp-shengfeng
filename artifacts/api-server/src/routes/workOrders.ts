@@ -16,6 +16,41 @@ function isoStr(v: unknown): string | null {
   return v instanceof Date ? v.toISOString() : String(v);
 }
 
+const WO_SELECT = {
+  id: workOrdersTable.id,
+  customerId: workOrdersTable.customerId,
+  customerName: customersTable.name,
+  quoteId: workOrdersTable.quoteId,
+  workOrderNumber: workOrdersTable.workOrderNumber,
+  title: workOrdersTable.title,
+  status: workOrdersTable.status,
+  contactPerson: workOrdersTable.contactPerson,
+  mobilePhone: workOrdersTable.mobilePhone,
+  telephone: workOrdersTable.telephone,
+  installAddress: workOrdersTable.installAddress,
+  scheduledDate: workOrdersTable.scheduledDate,
+  scheduledTime: workOrdersTable.scheduledTime,
+  completedDate: workOrdersTable.completedDate,
+  assignedTo: workOrdersTable.assignedTo,
+  assistantTo: workOrdersTable.assistantTo,
+  projectType: workOrdersTable.projectType,
+  acBrand: workOrdersTable.acBrand,
+  modelNumber: workOrdersTable.modelNumber,
+  quantity: workOrdersTable.quantity,
+  indoorUnits: workOrdersTable.indoorUnits,
+  outdoorUnits: workOrdersTable.outdoorUnits,
+  floorLevel: workOrdersTable.floorLevel,
+  hasElevator: workOrdersTable.hasElevator,
+  description: workOrdersTable.description,
+  notes: workOrdersTable.notes,
+  createdAt: workOrdersTable.createdAt,
+  updatedAt: workOrdersTable.updatedAt,
+};
+
+function formatOrder(o: Record<string, unknown>) {
+  return { ...o, createdAt: isoStr(o.createdAt), updatedAt: isoStr(o.updatedAt) };
+}
+
 router.get("/work-orders", requireRole(...WO_READ_ROLES), async (req, res): Promise<void> => {
   const { customerId, status } = req.query as { customerId?: string; status?: string };
   const conditions = [];
@@ -27,38 +62,18 @@ router.get("/work-orders", requireRole(...WO_READ_ROLES), async (req, res): Prom
   if (status) {
     conditions.push(eq(workOrdersTable.status, status));
   }
-
-  // Technicians only see work orders assigned to them
   if (req.user?.role === "technician") {
     conditions.push(eq(workOrdersTable.assignedTo, req.user.displayName));
   }
 
   const orders = await db
-    .select({
-      id: workOrdersTable.id,
-      customerId: workOrdersTable.customerId,
-      customerName: customersTable.name,
-      quoteId: workOrdersTable.quoteId,
-      title: workOrdersTable.title,
-      description: workOrdersTable.description,
-      assignedTo: workOrdersTable.assignedTo,
-      scheduledDate: workOrdersTable.scheduledDate,
-      completedDate: workOrdersTable.completedDate,
-      status: workOrdersTable.status,
-      notes: workOrdersTable.notes,
-      createdAt: workOrdersTable.createdAt,
-      updatedAt: workOrdersTable.updatedAt,
-    })
+    .select(WO_SELECT)
     .from(workOrdersTable)
     .leftJoin(customersTable, eq(workOrdersTable.customerId, customersTable.id))
     .where(conditions.length > 0 ? and(...conditions) : undefined)
     .orderBy(workOrdersTable.createdAt);
 
-  res.json(orders.map(o => ({
-    ...o,
-    createdAt: isoStr(o.createdAt),
-    updatedAt: isoStr(o.updatedAt),
-  })));
+  res.json(orders.map(formatOrder));
 });
 
 router.post("/work-orders", requireRole(...WO_WRITE_ROLES), async (req, res): Promise<void> => {
@@ -68,12 +83,19 @@ router.post("/work-orders", requireRole(...WO_WRITE_ROLES), async (req, res): Pr
     return;
   }
   const [order] = await db.insert(workOrdersTable).values(parsed.data).returning();
-  res.status(201).json({
-    ...order,
-    customerName: null,
-    createdAt: isoStr(order.createdAt),
-    updatedAt: isoStr(order.updatedAt),
-  });
+
+  // Auto-generate work order number
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const workOrderNumber = `WO-${year}${month}-${String(order.id).padStart(4, "0")}`;
+  const [updated] = await db
+    .update(workOrdersTable)
+    .set({ workOrderNumber })
+    .where(eq(workOrdersTable.id, order.id))
+    .returning();
+
+  res.status(201).json(formatOrder({ ...updated, customerName: null }));
 });
 
 router.get("/work-orders/:id", requireRole(...WO_READ_ROLES), async (req, res): Promise<void> => {
@@ -82,34 +104,19 @@ router.get("/work-orders/:id", requireRole(...WO_READ_ROLES), async (req, res): 
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
   const [order] = await db
-    .select({
-      id: workOrdersTable.id,
-      customerId: workOrdersTable.customerId,
-      customerName: customersTable.name,
-      quoteId: workOrdersTable.quoteId,
-      title: workOrdersTable.title,
-      description: workOrdersTable.description,
-      assignedTo: workOrdersTable.assignedTo,
-      scheduledDate: workOrdersTable.scheduledDate,
-      completedDate: workOrdersTable.completedDate,
-      status: workOrdersTable.status,
-      notes: workOrdersTable.notes,
-      createdAt: workOrdersTable.createdAt,
-      updatedAt: workOrdersTable.updatedAt,
-    })
+    .select(WO_SELECT)
     .from(workOrdersTable)
     .leftJoin(customersTable, eq(workOrdersTable.customerId, customersTable.id))
     .where(eq(workOrdersTable.id, id));
 
   if (!order) { res.status(404).json({ error: "找不到派工單" }); return; }
 
-  // Technicians can only view work orders assigned to them
   if (req.user?.role === "technician" && order.assignedTo !== req.user.displayName) {
     res.status(403).json({ error: "您沒有權限查看此派工單" });
     return;
   }
 
-  res.json({ ...order, createdAt: isoStr(order.createdAt), updatedAt: isoStr(order.updatedAt) });
+  res.json(formatOrder(order));
 });
 
 router.patch("/work-orders/:id", requireRole(...WO_WRITE_ROLES), async (req, res): Promise<void> => {
@@ -123,7 +130,7 @@ router.patch("/work-orders/:id", requireRole(...WO_WRITE_ROLES), async (req, res
   const [order] = await db.update(workOrdersTable).set(parsed.data).where(eq(workOrdersTable.id, id)).returning();
   if (!order) { res.status(404).json({ error: "找不到派工單" }); return; }
 
-  res.json({ ...order, customerName: null, createdAt: isoStr(order.createdAt), updatedAt: isoStr(order.updatedAt) });
+  res.json(formatOrder({ ...order, customerName: null }));
 });
 
 router.delete("/work-orders/:id", requireRole(...WO_DELETE_ROLES), async (req, res): Promise<void> => {
@@ -141,7 +148,6 @@ router.get("/work-orders/:workOrderId/progress", requireRole(...PROGRESS_ROLES),
   const workOrderId = parseInt(raw, 10);
   if (isNaN(workOrderId)) { res.status(400).json({ error: "Invalid workOrderId" }); return; }
 
-  // Technicians can only view progress for their own work orders
   if (req.user?.role === "technician") {
     const [order] = await db.select({ assignedTo: workOrdersTable.assignedTo })
       .from(workOrdersTable).where(eq(workOrdersTable.id, workOrderId));
@@ -164,7 +170,6 @@ router.post("/work-orders/:workOrderId/progress", requireRole(...PROGRESS_ROLES)
   const workOrderId = parseInt(raw, 10);
   if (isNaN(workOrderId)) { res.status(400).json({ error: "Invalid workOrderId" }); return; }
 
-  // Technicians can only add progress to their own work orders
   if (req.user?.role === "technician") {
     const [order] = await db.select({ assignedTo: workOrdersTable.assignedTo })
       .from(workOrdersTable).where(eq(workOrdersTable.id, workOrderId));
