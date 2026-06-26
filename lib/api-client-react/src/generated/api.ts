@@ -36,6 +36,7 @@ import type {
   ListMaintenanceRemindersParams,
   ListPaymentsParams,
   ListQuotesParams,
+  ListReceivablesParams,
   ListWarrantiesParams,
   ListWorkOrdersParams,
   LoginInput,
@@ -50,6 +51,10 @@ import type {
   Quote,
   QuoteInput,
   QuoteUpdate,
+  Receivable,
+  ReceivableInput,
+  ReceivableUpdate,
+  RecordPaymentInput,
   UpdateUserInput,
   UserItem,
   Warranty,
@@ -3336,6 +3341,449 @@ export const useDeleteMaintenanceReminder = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getDeleteMaintenanceReminderMutationOptions(options));
+    }
+
+export const getListReceivablesUrl = (params?: ListReceivablesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/receivables?${stringifiedParams}` : `/api/receivables`
+}
+
+/**
+ * @summary 列出所有應收帳款
+ */
+export const listReceivables = async (params?: ListReceivablesParams, options?: RequestInit): Promise<Receivable[]> => {
+
+  return customFetch<Receivable[]>(getListReceivablesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListReceivablesQueryKey = (params?: ListReceivablesParams,) => {
+    return [
+    `/api/receivables`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListReceivablesQueryOptions = <TData = Awaited<ReturnType<typeof listReceivables>>, TError = ErrorType<unknown>>(params?: ListReceivablesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listReceivables>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListReceivablesQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listReceivables>>> = ({ signal }) => listReceivables(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listReceivables>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListReceivablesQueryResult = NonNullable<Awaited<ReturnType<typeof listReceivables>>>
+export type ListReceivablesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary 列出所有應收帳款
+ */
+
+export function useListReceivables<TData = Awaited<ReturnType<typeof listReceivables>>, TError = ErrorType<unknown>>(
+ params?: ListReceivablesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listReceivables>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListReceivablesQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateReceivableUrl = () => {
+
+
+
+
+  return `/api/receivables`
+}
+
+/**
+ * @summary 新增應收帳款
+ */
+export const createReceivable = async (receivableInput: ReceivableInput, options?: RequestInit): Promise<Receivable> => {
+
+  return customFetch<Receivable>(getCreateReceivableUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(receivableInput)
+  }
+);}
+
+
+
+
+export const getCreateReceivableMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createReceivable>>, TError,{data: BodyType<ReceivableInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createReceivable>>, TError,{data: BodyType<ReceivableInput>}, TContext> => {
+
+const mutationKey = ['createReceivable'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createReceivable>>, {data: BodyType<ReceivableInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createReceivable(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateReceivableMutationResult = NonNullable<Awaited<ReturnType<typeof createReceivable>>>
+    export type CreateReceivableMutationBody = BodyType<ReceivableInput>
+    export type CreateReceivableMutationError = ErrorType<unknown>
+
+    /**
+ * @summary 新增應收帳款
+ */
+export const useCreateReceivable = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createReceivable>>, TError,{data: BodyType<ReceivableInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createReceivable>>,
+        TError,
+        {data: BodyType<ReceivableInput>},
+        TContext
+      > => {
+      return useMutation(getCreateReceivableMutationOptions(options));
+    }
+
+export const getGetReceivableUrl = (id: number,) => {
+
+
+
+
+  return `/api/receivables/${id}`
+}
+
+/**
+ * @summary 取得應收帳款
+ */
+export const getReceivable = async (id: number, options?: RequestInit): Promise<Receivable> => {
+
+  return customFetch<Receivable>(getGetReceivableUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetReceivableQueryKey = (id: number,) => {
+    return [
+    `/api/receivables/${id}`
+    ] as const;
+    }
+
+
+export const getGetReceivableQueryOptions = <TData = Awaited<ReturnType<typeof getReceivable>>, TError = ErrorType<void>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getReceivable>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetReceivableQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getReceivable>>> = ({ signal }) => getReceivable(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getReceivable>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetReceivableQueryResult = NonNullable<Awaited<ReturnType<typeof getReceivable>>>
+export type GetReceivableQueryError = ErrorType<void>
+
+
+/**
+ * @summary 取得應收帳款
+ */
+
+export function useGetReceivable<TData = Awaited<ReturnType<typeof getReceivable>>, TError = ErrorType<void>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getReceivable>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetReceivableQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateReceivableUrl = (id: number,) => {
+
+
+
+
+  return `/api/receivables/${id}`
+}
+
+/**
+ * @summary 更新應收帳款
+ */
+export const updateReceivable = async (id: number,
+    receivableUpdate: ReceivableUpdate, options?: RequestInit): Promise<Receivable> => {
+
+  return customFetch<Receivable>(getUpdateReceivableUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(receivableUpdate)
+  }
+);}
+
+
+
+
+export const getUpdateReceivableMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateReceivable>>, TError,{id: number;data: BodyType<ReceivableUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateReceivable>>, TError,{id: number;data: BodyType<ReceivableUpdate>}, TContext> => {
+
+const mutationKey = ['updateReceivable'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateReceivable>>, {id: number;data: BodyType<ReceivableUpdate>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateReceivable(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateReceivableMutationResult = NonNullable<Awaited<ReturnType<typeof updateReceivable>>>
+    export type UpdateReceivableMutationBody = BodyType<ReceivableUpdate>
+    export type UpdateReceivableMutationError = ErrorType<unknown>
+
+    /**
+ * @summary 更新應收帳款
+ */
+export const useUpdateReceivable = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateReceivable>>, TError,{id: number;data: BodyType<ReceivableUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateReceivable>>,
+        TError,
+        {id: number;data: BodyType<ReceivableUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateReceivableMutationOptions(options));
+    }
+
+export const getDeleteReceivableUrl = (id: number,) => {
+
+
+
+
+  return `/api/receivables/${id}`
+}
+
+/**
+ * @summary 刪除應收帳款
+ */
+export const deleteReceivable = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteReceivableUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteReceivableMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteReceivable>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteReceivable>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteReceivable'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteReceivable>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteReceivable(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteReceivableMutationResult = NonNullable<Awaited<ReturnType<typeof deleteReceivable>>>
+
+    export type DeleteReceivableMutationError = ErrorType<unknown>
+
+    /**
+ * @summary 刪除應收帳款
+ */
+export const useDeleteReceivable = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteReceivable>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteReceivable>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteReceivableMutationOptions(options));
+    }
+
+export const getRecordReceivablePaymentUrl = (id: number,) => {
+
+
+
+
+  return `/api/receivables/${id}/payment`
+}
+
+/**
+ * @summary 記錄收款
+ */
+export const recordReceivablePayment = async (id: number,
+    recordPaymentInput: RecordPaymentInput, options?: RequestInit): Promise<Receivable> => {
+
+  return customFetch<Receivable>(getRecordReceivablePaymentUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(recordPaymentInput)
+  }
+);}
+
+
+
+
+export const getRecordReceivablePaymentMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recordReceivablePayment>>, TError,{id: number;data: BodyType<RecordPaymentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof recordReceivablePayment>>, TError,{id: number;data: BodyType<RecordPaymentInput>}, TContext> => {
+
+const mutationKey = ['recordReceivablePayment'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof recordReceivablePayment>>, {id: number;data: BodyType<RecordPaymentInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  recordReceivablePayment(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RecordReceivablePaymentMutationResult = NonNullable<Awaited<ReturnType<typeof recordReceivablePayment>>>
+    export type RecordReceivablePaymentMutationBody = BodyType<RecordPaymentInput>
+    export type RecordReceivablePaymentMutationError = ErrorType<unknown>
+
+    /**
+ * @summary 記錄收款
+ */
+export const useRecordReceivablePayment = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof recordReceivablePayment>>, TError,{id: number;data: BodyType<RecordPaymentInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof recordReceivablePayment>>,
+        TError,
+        {id: number;data: BodyType<RecordPaymentInput>},
+        TContext
+      > => {
+      return useMutation(getRecordReceivablePaymentMutationOptions(options));
     }
 
 export const getGetDashboardSummaryUrl = () => {

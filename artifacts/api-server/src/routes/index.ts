@@ -9,6 +9,7 @@ import workOrdersRouter from "./workOrders";
 import paymentsRouter from "./payments";
 import warrantiesRouter from "./warranties";
 import maintenanceRouter from "./maintenance";
+import receivablesRouter from "./receivables";
 import dashboardRouter from "./dashboard";
 import { authenticate } from "../lib/auth";
 
@@ -27,6 +28,7 @@ router.use(workOrdersRouter);
 router.use(paymentsRouter);
 router.use(warrantiesRouter);
 router.use(maintenanceRouter);
+router.use(receivablesRouter);
 router.use(dashboardRouter);
 
 export default router;

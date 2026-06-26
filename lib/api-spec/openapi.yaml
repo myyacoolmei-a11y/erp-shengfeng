@@ -30,6 +30,8 @@ tags:
     description: 保固資料
   - name: maintenance
     description: 保養提醒
+  - name: receivables
+    description: 應收帳款
   - name: dashboard
     description: 儀表板
 
@@ -899,6 +901,133 @@ paths:
         "204":
           description: 刪除成功
 
+  /receivables:
+    get:
+      operationId: listReceivables
+      tags: [receivables]
+      summary: 列出所有應收帳款
+      parameters:
+        - name: customerId
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: workOrderId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: 應收帳款列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Receivable"
+    post:
+      operationId: createReceivable
+      tags: [receivables]
+      summary: 新增應收帳款
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReceivableInput"
+      responses:
+        "201":
+          description: 新增成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Receivable"
+
+  /receivables/{id}:
+    get:
+      operationId: getReceivable
+      tags: [receivables]
+      summary: 取得應收帳款
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: 應收帳款
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Receivable"
+        "404":
+          description: 找不到應收帳款
+    patch:
+      operationId: updateReceivable
+      tags: [receivables]
+      summary: 更新應收帳款
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReceivableUpdate"
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Receivable"
+    delete:
+      operationId: deleteReceivable
+      tags: [receivables]
+      summary: 刪除應收帳款
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: 刪除成功
+
+  /receivables/{id}/payment:
+    post:
+      operationId: recordReceivablePayment
+      tags: [receivables]
+      summary: 記錄收款
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecordPaymentInput"
+      responses:
+        "200":
+          description: 收款記錄成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Receivable"
+
   /dashboard/summary:
     get:
       operationId: getDashboardSummary
@@ -1244,6 +1373,82 @@ components:
         status: { type: string }
         notes: { type: string }
 
+    Receivable:
+      type: object
+      required: [id, customerId, totalAmount, receivedAmount, paymentStatus, invoiceStatus, createdAt, updatedAt]
+      properties:
+        id: { type: integer }
+        customerId: { type: integer }
+        customerName: { type: ["string", "null"] }
+        workOrderId: { type: ["integer", "null"] }
+        workOrderNumber: { type: ["string", "null"] }
+        projectName: { type: ["string", "null"] }
+        projectType: { type: ["string", "null"] }
+        completionDate: { type: ["string", "null"] }
+        totalAmount: { type: number }
+        receivedAmount: { type: number }
+        paymentStatus: { type: string }
+        expectedPaymentDate: { type: ["string", "null"] }
+        actualPaymentDate: { type: ["string", "null"] }
+        paymentMethod: { type: ["string", "null"] }
+        notes: { type: ["string", "null"] }
+        invoiceStatus: { type: string }
+        invoiceType: { type: ["string", "null"] }
+        taxId: { type: ["string", "null"] }
+        invoiceTitle: { type: ["string", "null"] }
+        invoiceNumber: { type: ["string", "null"] }
+        invoiceDate: { type: ["string", "null"] }
+        invoiceNotes: { type: ["string", "null"] }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+
+    ReceivableInput:
+      type: object
+      required: [customerId, totalAmount]
+      properties:
+        customerId: { type: integer }
+        workOrderId: { type: integer }
+        workOrderNumber: { type: string }
+        projectName: { type: string }
+        projectType: { type: string }
+        completionDate: { type: string }
+        totalAmount: { type: number }
+        expectedPaymentDate: { type: string }
+        paymentMethod: { type: string }
+        notes: { type: string }
+        invoiceStatus: { type: string }
+        invoiceType: { type: string }
+        taxId: { type: string }
+        invoiceTitle: { type: string }
+        invoiceNumber: { type: string }
+        invoiceDate: { type: string }
+        invoiceNotes: { type: string }
+
+    ReceivableUpdate:
+      type: object
+      properties:
+        totalAmount: { type: number }
+        expectedPaymentDate: { type: string }
+        actualPaymentDate: { type: string }
+        paymentMethod: { type: string }
+        notes: { type: string }
+        invoiceStatus: { type: string }
+        invoiceType: { type: string }
+        taxId: { type: string }
+        invoiceTitle: { type: string }
+        invoiceNumber: { type: string }
+        invoiceDate: { type: string }
+        invoiceNotes: { type: string }
+
+    RecordPaymentInput:
+      type: object
+      required: [amount, paymentDate]
+      properties:
+        amount: { type: number }
+        paymentDate: { type: string }
+        paymentMethod: { type: string }
+        notes: { type: string }
+
     LoginInput:
       type: object
       required: [username, password]
@@ -1323,6 +1528,11 @@ components:
         totalPaymentsAmount: { type: number }
         upcomingMaintenanceCount: { type: integer }
         expiringWarrantiesCount: { type: integer }
+        totalReceivables: { type: number }
+        totalUnpaid: { type: number }
+        overdueAmount: { type: number }
+        paidThisMonthAR: { type: number }
+        invoiceNotIssuedCount: { type: integer }
         recentCustomers:
           type: array
           items:

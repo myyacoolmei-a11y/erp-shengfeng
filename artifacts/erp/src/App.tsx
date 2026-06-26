@@ -16,6 +16,7 @@ import CustomerHistory from "@/pages/customer-history";
 import Quotes from "@/pages/quotes";
 import WorkOrders from "@/pages/work-orders";
 import Payments from "@/pages/payments";
+import Receivables from "@/pages/receivables";
 import Warranties from "@/pages/warranties";
 import Maintenance from "@/pages/maintenance";
 import Users from "@/pages/users";
@@ -129,6 +130,11 @@ function AppRoutes() {
             <Route path="/payments">
               <RoleGuard roles={["owner", "admin", "accountant"]}>
                 <Payments />
+              </RoleGuard>
+            </Route>
+            <Route path="/receivables">
+              <RoleGuard roles={["owner", "admin", "accountant"]}>
+                <Receivables />
               </RoleGuard>
             </Route>
             <Route path="/warranties">

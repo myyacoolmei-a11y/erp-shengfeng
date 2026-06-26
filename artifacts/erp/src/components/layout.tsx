@@ -29,7 +29,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/customers", label: "客戶管理", icon: Users, roles: ["owner", "admin", "accountant"] },
   { href: "/quotes", label: "報價單管理", icon: FileText, roles: ["owner", "admin", "accountant"] },
   { href: "/work-orders", label: "派工單管理", icon: Wrench, roles: ["owner", "admin", "technician"] },
-  { href: "/payments", label: "收款紀錄", icon: CreditCard, roles: ["owner", "admin", "accountant"] },
+  { href: "/receivables", label: "應收帳款", icon: CreditCard, roles: ["owner", "admin", "accountant"] },
   { href: "/warranties", label: "保固管理", icon: ShieldCheck, roles: ["owner", "admin", "accountant"] },
   { href: "/maintenance", label: "保養提醒", icon: Bell, roles: ["owner", "admin", "technician"] },
   { href: "/users", label: "用戶管理", icon: UserCog, roles: ["owner"] },

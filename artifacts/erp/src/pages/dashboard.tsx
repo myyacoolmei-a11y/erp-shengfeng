@@ -2,7 +2,7 @@ import { useGetDashboardSummary } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Users, FileText, Wrench, CreditCard, Bell, ShieldCheck } from "lucide-react";
+import { Users, FileText, Wrench, CreditCard, Bell, ShieldCheck, DollarSign, AlertCircle, TrendingDown, ReceiptText } from "lucide-react";
 import { Link } from "wouter";
 
 function formatAmount(n: number) {
@@ -21,6 +21,14 @@ export default function Dashboard() {
     { label: "即將到期保固", value: data?.expiringWarrantiesCount ?? 0, icon: ShieldCheck, color: "text-red-600", href: "/warranties" },
   ];
 
+  const arStats = [
+    { label: "應收帳款總額", value: data ? formatAmount(data.totalReceivables ?? 0) : "NT$0", icon: DollarSign, color: "text-blue-600", href: "/receivables" },
+    { label: "未收金額", value: data ? formatAmount(data.totalUnpaid ?? 0) : "NT$0", icon: TrendingDown, color: "text-red-600", href: "/receivables?status=未收款" },
+    { label: "逾期金額", value: data ? formatAmount(data.overdueAmount ?? 0) : "NT$0", icon: AlertCircle, color: "text-rose-700", href: "/receivables?status=逾期" },
+    { label: "本月已收 (AR)", value: data ? formatAmount(data.paidThisMonthAR ?? 0) : "NT$0", icon: CreditCard, color: "text-green-600", href: "/receivables?status=已收款" },
+    { label: "發票未開立", value: data?.invoiceNotIssuedCount ?? 0, icon: ReceiptText, color: "text-orange-600", href: "/receivables?status=發票未開立" },
+  ];
+
   return (
     <div className="space-y-6">
       <div>
@@ -28,6 +36,7 @@ export default function Dashboard() {
         <p className="text-sm text-muted-foreground mt-1">晟風工程 ERP 系統總覽</p>
       </div>
 
+      {/* General stats */}
       <div className="grid gap-4 grid-cols-2 md:grid-cols-3">
         {stats.map((stat) => (
           <Link key={stat.label} href={stat.href}>
@@ -48,6 +57,32 @@ export default function Dashboard() {
             </Card>
           </Link>
         ))}
+      </div>
+
+      {/* AR stats */}
+      <div>
+        <h2 className="text-base font-semibold mb-3">應收帳款摘要</h2>
+        <div className="grid gap-3 grid-cols-2 md:grid-cols-5">
+          {arStats.map((stat) => (
+            <Link key={stat.label} href={stat.href}>
+              <Card className="cursor-pointer hover:shadow-md transition-shadow">
+                <CardContent className="p-3">
+                  <div className="flex items-start justify-between gap-1">
+                    <div className="min-w-0">
+                      <p className="text-xs text-muted-foreground font-medium leading-tight">{stat.label}</p>
+                      {isLoading ? (
+                        <Skeleton className="h-6 w-14 mt-1" />
+                      ) : (
+                        <p className="text-lg font-bold mt-0.5 truncate">{stat.value}</p>
+                      )}
+                    </div>
+                    <stat.icon className={`h-6 w-6 shrink-0 ${stat.color} opacity-80 mt-0.5`} />
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+          ))}
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">

@@ -17,5 +17,10 @@ export interface DashboardSummary {
   totalPaymentsAmount: number;
   upcomingMaintenanceCount: number;
   expiringWarrantiesCount: number;
+  totalReceivables?: number;
+  totalUnpaid?: number;
+  overdueAmount?: number;
+  paidThisMonthAR?: number;
+  invoiceNotIssuedCount?: number;
   recentCustomers?: Customer[];
 }

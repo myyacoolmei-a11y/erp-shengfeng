@@ -1,0 +1,200 @@
+Upgrade the Payment module into a practical Accounts Receivable system for Sheng Feng Engineering.
+
+Do NOT rebuild the ERP.
+Do NOT delete existing data.
+Do NOT modify unrelated modules unless needed for linking payments to work orders.
+Keep the current Sheng Feng ERP UI style.
+
+## Goal
+
+Payment Management should prevent missed collections.
+
+Workflow:
+
+Work Order Completed
+→ Automatically create Accounts Receivable
+→ Admin confirms receivable amount
+→ Record payment
+→ Record invoice information
+→ Mark as paid
+
+## 1. Work Order Completion
+
+When a work order status changes to Completed:
+
+* Show confirmation modal:
+  「此派工單已完成，是否建立應收帳款？」
+* Default answer should be Yes.
+* If confirmed, create one receivable record linked to this work order.
+* Do not create duplicate receivables for the same work order.
+
+## 2. Accounts Receivable Record
+
+Each receivable must include:
+
+* Customer
+* Related Work Order
+* Work Order Number
+* Project Name
+* Project Type
+* Completion Date
+* Total Receivable Amount
+* Received Amount
+* Remaining Balance
+* Payment Status:
+
+  * Unpaid
+  * Partial Paid
+  * Paid
+* Expected Payment Date
+* Actual Payment Date
+* Payment Method:
+
+  * Cash
+  * Bank Transfer
+  * Check
+  * Credit Card
+  * LINE Pay
+  * Other
+* Remark
+
+## 3. Invoice Tracking
+
+Add invoice fields:
+
+* Invoice Status:
+
+  * Not Issued
+  * Issued
+  * No Invoice Needed
+  * Pending Confirmation
+* Invoice Type:
+
+  * Two-part Invoice
+  * Three-part Invoice
+  * Electronic Invoice
+  * No Invoice
+* Tax ID Number
+* Invoice Title
+* Invoice Number
+* Invoice Date
+* Invoice Remark
+
+## 4. Payment Management Page
+
+Show clear sections:
+
+* All
+* Unpaid
+* Partial Paid
+* Paid
+* Overdue
+* Invoice Not Issued
+
+Each row/card should show:
+
+* Customer Name
+* Work Order Number
+* Project Name
+* Total Receivable Amount
+* Received Amount
+* Remaining Balance
+* Payment Status
+* Expected Payment Date
+* Overdue Days
+* Invoice Status
+* Invoice Number if issued
+
+## 5. Quick Actions
+
+Each receivable row should have:
+
+* View Details
+* Record Payment
+* Edit Invoice
+* LINE Reminder
+* Mark as Paid
+
+## 6. Record Payment
+
+Record Payment modal should allow:
+
+* Payment Amount
+* Payment Date
+* Payment Method
+* Remark
+
+After saving:
+
+* Add payment amount to Received Amount
+* Recalculate Remaining Balance
+* If Remaining Balance = 0, set status to Paid
+* If Received Amount > 0 but Remaining Balance > 0, set status to Partial Paid
+* If Received Amount = 0, set status to Unpaid
+
+## 7. Invoice Modal
+
+Edit Invoice modal should allow:
+
+* Invoice Status
+* Invoice Type
+* Tax ID Number
+* Invoice Title
+* Invoice Number
+* Invoice Date
+* Invoice Remark
+
+## 8. LINE Reminder
+
+Add LINE Reminder button.
+
+Do NOT send automatically.
+
+Generate a ready-to-copy LINE message:
+
+「晟風工程收款提醒」
+客戶：
+派工單號：
+工程名稱：
+完工日期：
+應收金額：
+已收金額：
+未收金額：
+預計收款日：
+逾期天數：
+發票狀態：
+備註：
+
+Add buttons:
+
+* Copy Message
+* Share to LINE
+
+## 9. Dashboard Summary
+
+Add dashboard cards:
+
+* Total Receivables
+* Total Unpaid Amount
+* Overdue Amount
+* Paid This Month
+* Invoice Not Issued Count
+
+## 10. Testing
+
+After implementation, test:
+
+1. Complete a work order.
+2. Confirm receivable is created.
+3. Prevent duplicate receivable for same work order.
+4. Record partial payment.
+5. Record full payment.
+6. Edit invoice information.
+7. Generate LINE reminder.
+8. Filter unpaid records.
+9. Filter overdue records.
+10. Verify dashboard summary updates.
+
+Commit changes with message:
+
+"Upgrade payments into accounts receivable workflow"

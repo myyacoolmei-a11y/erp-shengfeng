@@ -1067,6 +1067,232 @@ export const DeleteMaintenanceReminderResponse = zod.void()
 
 
 /**
+ * @summary 列出所有應收帳款
+ */
+export const ListReceivablesQueryParams = zod.object({
+  "customerId": zod.coerce.number().optional(),
+  "status": zod.coerce.string().optional(),
+  "workOrderId": zod.coerce.number().optional()
+})
+
+export const ListReceivablesResponseItem = zod.object({
+  "id": zod.number(),
+  "customerId": zod.number(),
+  "customerName": zod.string().nullish(),
+  "workOrderId": zod.number().nullish(),
+  "workOrderNumber": zod.string().nullish(),
+  "projectName": zod.string().nullish(),
+  "projectType": zod.string().nullish(),
+  "completionDate": zod.string().nullish(),
+  "totalAmount": zod.number(),
+  "receivedAmount": zod.number(),
+  "paymentStatus": zod.string(),
+  "expectedPaymentDate": zod.string().nullish(),
+  "actualPaymentDate": zod.string().nullish(),
+  "paymentMethod": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "invoiceStatus": zod.string(),
+  "invoiceType": zod.string().nullish(),
+  "taxId": zod.string().nullish(),
+  "invoiceTitle": zod.string().nullish(),
+  "invoiceNumber": zod.string().nullish(),
+  "invoiceDate": zod.string().nullish(),
+  "invoiceNotes": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+export const ListReceivablesResponse = zod.array(ListReceivablesResponseItem)
+
+
+/**
+ * @summary 新增應收帳款
+ */
+export const CreateReceivableBody = zod.object({
+  "customerId": zod.number(),
+  "workOrderId": zod.number().optional(),
+  "workOrderNumber": zod.string().optional(),
+  "projectName": zod.string().optional(),
+  "projectType": zod.string().optional(),
+  "completionDate": zod.string().optional(),
+  "totalAmount": zod.number(),
+  "expectedPaymentDate": zod.string().optional(),
+  "paymentMethod": zod.string().optional(),
+  "notes": zod.string().optional(),
+  "invoiceStatus": zod.string().optional(),
+  "invoiceType": zod.string().optional(),
+  "taxId": zod.string().optional(),
+  "invoiceTitle": zod.string().optional(),
+  "invoiceNumber": zod.string().optional(),
+  "invoiceDate": zod.string().optional(),
+  "invoiceNotes": zod.string().optional()
+})
+
+export const CreateReceivableResponse = zod.object({
+  "id": zod.number(),
+  "customerId": zod.number(),
+  "customerName": zod.string().nullish(),
+  "workOrderId": zod.number().nullish(),
+  "workOrderNumber": zod.string().nullish(),
+  "projectName": zod.string().nullish(),
+  "projectType": zod.string().nullish(),
+  "completionDate": zod.string().nullish(),
+  "totalAmount": zod.number(),
+  "receivedAmount": zod.number(),
+  "paymentStatus": zod.string(),
+  "expectedPaymentDate": zod.string().nullish(),
+  "actualPaymentDate": zod.string().nullish(),
+  "paymentMethod": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "invoiceStatus": zod.string(),
+  "invoiceType": zod.string().nullish(),
+  "taxId": zod.string().nullish(),
+  "invoiceTitle": zod.string().nullish(),
+  "invoiceNumber": zod.string().nullish(),
+  "invoiceDate": zod.string().nullish(),
+  "invoiceNotes": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary 取得應收帳款
+ */
+export const GetReceivableParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetReceivableResponse = zod.object({
+  "id": zod.number(),
+  "customerId": zod.number(),
+  "customerName": zod.string().nullish(),
+  "workOrderId": zod.number().nullish(),
+  "workOrderNumber": zod.string().nullish(),
+  "projectName": zod.string().nullish(),
+  "projectType": zod.string().nullish(),
+  "completionDate": zod.string().nullish(),
+  "totalAmount": zod.number(),
+  "receivedAmount": zod.number(),
+  "paymentStatus": zod.string(),
+  "expectedPaymentDate": zod.string().nullish(),
+  "actualPaymentDate": zod.string().nullish(),
+  "paymentMethod": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "invoiceStatus": zod.string(),
+  "invoiceType": zod.string().nullish(),
+  "taxId": zod.string().nullish(),
+  "invoiceTitle": zod.string().nullish(),
+  "invoiceNumber": zod.string().nullish(),
+  "invoiceDate": zod.string().nullish(),
+  "invoiceNotes": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary 更新應收帳款
+ */
+export const UpdateReceivableParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateReceivableBody = zod.object({
+  "totalAmount": zod.number().optional(),
+  "expectedPaymentDate": zod.string().optional(),
+  "actualPaymentDate": zod.string().optional(),
+  "paymentMethod": zod.string().optional(),
+  "notes": zod.string().optional(),
+  "invoiceStatus": zod.string().optional(),
+  "invoiceType": zod.string().optional(),
+  "taxId": zod.string().optional(),
+  "invoiceTitle": zod.string().optional(),
+  "invoiceNumber": zod.string().optional(),
+  "invoiceDate": zod.string().optional(),
+  "invoiceNotes": zod.string().optional()
+})
+
+export const UpdateReceivableResponse = zod.object({
+  "id": zod.number(),
+  "customerId": zod.number(),
+  "customerName": zod.string().nullish(),
+  "workOrderId": zod.number().nullish(),
+  "workOrderNumber": zod.string().nullish(),
+  "projectName": zod.string().nullish(),
+  "projectType": zod.string().nullish(),
+  "completionDate": zod.string().nullish(),
+  "totalAmount": zod.number(),
+  "receivedAmount": zod.number(),
+  "paymentStatus": zod.string(),
+  "expectedPaymentDate": zod.string().nullish(),
+  "actualPaymentDate": zod.string().nullish(),
+  "paymentMethod": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "invoiceStatus": zod.string(),
+  "invoiceType": zod.string().nullish(),
+  "taxId": zod.string().nullish(),
+  "invoiceTitle": zod.string().nullish(),
+  "invoiceNumber": zod.string().nullish(),
+  "invoiceDate": zod.string().nullish(),
+  "invoiceNotes": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary 刪除應收帳款
+ */
+export const DeleteReceivableParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteReceivableResponse = zod.void()
+
+
+/**
+ * @summary 記錄收款
+ */
+export const RecordReceivablePaymentParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const RecordReceivablePaymentBody = zod.object({
+  "amount": zod.number(),
+  "paymentDate": zod.string(),
+  "paymentMethod": zod.string().optional(),
+  "notes": zod.string().optional()
+})
+
+export const RecordReceivablePaymentResponse = zod.object({
+  "id": zod.number(),
+  "customerId": zod.number(),
+  "customerName": zod.string().nullish(),
+  "workOrderId": zod.number().nullish(),
+  "workOrderNumber": zod.string().nullish(),
+  "projectName": zod.string().nullish(),
+  "projectType": zod.string().nullish(),
+  "completionDate": zod.string().nullish(),
+  "totalAmount": zod.number(),
+  "receivedAmount": zod.number(),
+  "paymentStatus": zod.string(),
+  "expectedPaymentDate": zod.string().nullish(),
+  "actualPaymentDate": zod.string().nullish(),
+  "paymentMethod": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "invoiceStatus": zod.string(),
+  "invoiceType": zod.string().nullish(),
+  "taxId": zod.string().nullish(),
+  "invoiceTitle": zod.string().nullish(),
+  "invoiceNumber": zod.string().nullish(),
+  "invoiceDate": zod.string().nullish(),
+  "invoiceNotes": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
  * @summary 取得儀表板統計摘要
  */
 export const GetDashboardSummaryResponse = zod.object({
@@ -1079,6 +1305,11 @@ export const GetDashboardSummaryResponse = zod.object({
   "totalPaymentsAmount": zod.number(),
   "upcomingMaintenanceCount": zod.number(),
   "expiringWarrantiesCount": zod.number(),
+  "totalReceivables": zod.number().optional(),
+  "totalUnpaid": zod.number().optional(),
+  "overdueAmount": zod.number().optional(),
+  "paidThisMonthAR": zod.number().optional(),
+  "invoiceNotIssuedCount": zod.number().optional(),
   "recentCustomers": zod.array(zod.object({
   "id": zod.number(),
   "name": zod.string(),

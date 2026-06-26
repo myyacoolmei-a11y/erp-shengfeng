@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useSearch, useLocation } from "wouter";
 import {
   useListWorkOrders, useCreateWorkOrder, useUpdateWorkOrder, useDeleteWorkOrder,
   useListCustomers, useListProgress, useCreateProgress,
-  useCreatePayment,
-  getListWorkOrdersQueryKey, getListProgressQueryKey, getListPaymentsQueryKey,
+  useCreatePayment, useCreateReceivable,
+  getListWorkOrdersQueryKey, getListProgressQueryKey, getListPaymentsQueryKey, getListReceivablesQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -335,6 +335,8 @@ export default function WorkOrders() {
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [form, setForm] = useState<WOForm>(makeEmpty());
+  const [arModal, setArModal] = useState<{ order: any; amount: string } | null>(null);
+  const pendingARRef = useRef<any>(null);
 
   const { data: orders, isLoading } = useListWorkOrders({
     ...(filterCustomerId ? { customerId: filterCustomerId } : {}),
@@ -357,6 +359,29 @@ export default function WorkOrders() {
         queryClient.invalidateQueries({ queryKey: getListWorkOrdersQueryKey() });
         setEditItem(null);
         toast({ title: "派工單已更新" });
+        if (pendingARRef.current) {
+          const o = pendingARRef.current;
+          pendingARRef.current = null;
+          setArModal({ order: o, amount: "" });
+        }
+      },
+    },
+  });
+
+  const createARMutation = useCreateReceivable({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getListReceivablesQueryKey() });
+        setArModal(null);
+        toast({ title: "應收帳款已建立", description: "可至「應收帳款」頁面查看" });
+      },
+      onError: (err: any) => {
+        if (err?.status === 409) {
+          toast({ title: "此派工單已有應收帳款紀錄" });
+          setArModal(null);
+        } else {
+          toast({ title: "建立失敗，請稍後再試", variant: "destructive" });
+        }
       },
     },
   });
@@ -449,6 +474,9 @@ export default function WorkOrders() {
     if (mode === "create") {
       createMutation.mutate({ data: payload });
     } else {
+      if (form.status === "已完成" && editItem?.status !== "已完成") {
+        pendingARRef.current = { ...editItem, ...payload };
+      }
       updateMutation.mutate({ id: editItem.id, data: payload });
     }
   }
@@ -808,6 +836,53 @@ export default function WorkOrders() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* AR creation modal — fires when work order is completed */}
+      <Dialog open={!!arModal} onOpenChange={open => { if (!open) setArModal(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>建立應收帳款</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            此派工單已完成，是否建立應收帳款？
+          </p>
+          {arModal && (
+            <div className="text-xs text-muted-foreground bg-muted rounded p-2 space-y-1">
+              {arModal.order.workOrderNumber && <div>派工單號：{arModal.order.workOrderNumber}</div>}
+              <div>工程：{arModal.order.title}</div>
+              {arModal.order.projectType && <div>類別：{arModal.order.projectType}</div>}
+            </div>
+          )}
+          <div className="space-y-1">
+            <Label>應收金額 (NT$)</Label>
+            <Input
+              type="number"
+              placeholder="請輸入金額"
+              value={arModal?.amount ?? ""}
+              onChange={e => setArModal(m => m ? { ...m, amount: e.target.value } : m)}
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setArModal(null)}>略過</Button>
+            <Button
+              disabled={createARMutation.isPending}
+              onClick={() => {
+                if (!arModal) return;
+                const o = arModal.order;
+                createARMutation.mutate({ data: {
+                  customerId: o.customerId,
+                  workOrderId: o.id,
+                  workOrderNumber: o.workOrderNumber ?? undefined,
+                  projectName: o.title,
+                  projectType: o.projectType ?? undefined,
+                  completionDate: o.completedDate ?? undefined,
+                  totalAmount: parseFloat(arModal.amount) || 0,
+                }});
+              }}
+            >確認建立</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

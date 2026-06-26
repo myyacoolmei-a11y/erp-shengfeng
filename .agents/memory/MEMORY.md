@@ -1,1 +1,2 @@
 - [JWT auth setup](jwt-auth.md) — api-server needs zod as direct dep (not just via @workspace/api-zod) for esbuild to resolve zod/v4 in route files
+- [AR receivables pattern](ar-receivables.md) — duplicate work-order protection done via API 409 (not DB unique constraint); paymentStatus recomputed on each POST /receivables/:id/payment; pendingARRef pattern for work-order completion modal.

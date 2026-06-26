@@ -343,6 +343,91 @@ export interface MaintenanceReminderUpdate {
   notes?: string;
 }
 
+export interface Receivable {
+  id: number;
+  customerId: number;
+  /** @nullable */
+  customerName?: string | null;
+  /** @nullable */
+  workOrderId?: number | null;
+  /** @nullable */
+  workOrderNumber?: string | null;
+  /** @nullable */
+  projectName?: string | null;
+  /** @nullable */
+  projectType?: string | null;
+  /** @nullable */
+  completionDate?: string | null;
+  totalAmount: number;
+  receivedAmount: number;
+  paymentStatus: string;
+  /** @nullable */
+  expectedPaymentDate?: string | null;
+  /** @nullable */
+  actualPaymentDate?: string | null;
+  /** @nullable */
+  paymentMethod?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  invoiceStatus: string;
+  /** @nullable */
+  invoiceType?: string | null;
+  /** @nullable */
+  taxId?: string | null;
+  /** @nullable */
+  invoiceTitle?: string | null;
+  /** @nullable */
+  invoiceNumber?: string | null;
+  /** @nullable */
+  invoiceDate?: string | null;
+  /** @nullable */
+  invoiceNotes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ReceivableInput {
+  customerId: number;
+  workOrderId?: number;
+  workOrderNumber?: string;
+  projectName?: string;
+  projectType?: string;
+  completionDate?: string;
+  totalAmount: number;
+  expectedPaymentDate?: string;
+  paymentMethod?: string;
+  notes?: string;
+  invoiceStatus?: string;
+  invoiceType?: string;
+  taxId?: string;
+  invoiceTitle?: string;
+  invoiceNumber?: string;
+  invoiceDate?: string;
+  invoiceNotes?: string;
+}
+
+export interface ReceivableUpdate {
+  totalAmount?: number;
+  expectedPaymentDate?: string;
+  actualPaymentDate?: string;
+  paymentMethod?: string;
+  notes?: string;
+  invoiceStatus?: string;
+  invoiceType?: string;
+  taxId?: string;
+  invoiceTitle?: string;
+  invoiceNumber?: string;
+  invoiceDate?: string;
+  invoiceNotes?: string;
+}
+
+export interface RecordPaymentInput {
+  amount: number;
+  paymentDate: string;
+  paymentMethod?: string;
+  notes?: string;
+}
+
 export interface LoginInput {
   /** @minLength 1 */
   username: string;
@@ -429,6 +514,11 @@ export interface DashboardSummary {
   totalPaymentsAmount: number;
   upcomingMaintenanceCount: number;
   expiringWarrantiesCount: number;
+  totalReceivables?: number;
+  totalUnpaid?: number;
+  overdueAmount?: number;
+  paidThisMonthAR?: number;
+  invoiceNotIssuedCount?: number;
   recentCustomers?: Customer[];
 }
 
@@ -468,5 +558,11 @@ status?: string;
  * 是否只顯示即將到期的提醒 (true/false)
  */
 upcoming?: string;
+};
+
+export type ListReceivablesParams = {
+customerId?: number;
+status?: string;
+workOrderId?: number;
 };
 
