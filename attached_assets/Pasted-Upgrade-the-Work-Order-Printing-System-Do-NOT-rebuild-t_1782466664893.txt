@@ -1,0 +1,138 @@
+Upgrade the Work Order Printing System.
+
+Do NOT rebuild the ERP.
+Do NOT delete existing data.
+Do NOT change unrelated modules.
+Keep the current Sheng Feng ERP style.
+Only improve work order numbering and printing.
+
+## 1. Auto Work Order Number
+
+Every new work order must automatically generate a unique work order number.
+
+Format:
+
+WO-YYYYMMDD-0001
+
+Example:
+
+WO-20260626-0001
+
+Rules:
+
+* Generated automatically when creating a work order.
+* User cannot edit the number.
+* Never duplicate.
+* Show the number in:
+
+  * Work Order List
+  * Work Order Detail
+  * Print Version
+  * PDF
+  * LINE Share Message
+
+## 2. A4 Two-Copy Dispatch Form
+
+Create a new print format:
+
+「A4 上下聯派工單」
+
+A4 page should be divided into two equal copies:
+
+* Upper copy: 公司留底
+* Lower copy: 師傅留底 / 現場簽收
+
+Add a dotted cut line in the middle.
+
+The upper and lower copies should contain the same work order information.
+
+## 3. Each Copy Must Include
+
+* Company logo area
+* Company name: 晟風工程
+* Title: 派工單
+* Copy label: 公司留底 / 師傅留底
+* Work Order Number
+* Print Date
+* Customer Name
+* Customer Phone
+* Construction Address
+* Google Maps short link or QR code if available
+* Project Type
+* Scheduled Date
+* Scheduled Time
+* Lead Technician
+* Assistant Technician
+* Air Conditioner Brand
+* Model Number
+* Quantity
+* Indoor Units
+* Outdoor Units
+* Floor Level
+* Elevator Available
+* Work Description
+* Special Notes
+
+## 4. Signature Area
+
+Each copy must include signature lines:
+
+* 客戶簽名
+* 技師簽名
+* 公司經手人
+
+## 5. QR Code
+
+Generate a QR code on the printed dispatch form.
+
+The QR code should open the related work order in the ERP.
+
+Place the QR code near the work order number.
+
+## 6. Print Buttons
+
+Add two print options:
+
+1. Print Full A4 Work Order
+2. Print A4 Two-Copy Dispatch Form
+
+Default should be:
+
+Print A4 Two-Copy Dispatch Form
+
+## 7. PDF Support
+
+Both formats must support browser printing and saving as PDF.
+
+## 8. Status Stamp
+
+If the work order is:
+
+* Completed
+* Cancelled
+
+Show a light status stamp on the printed form.
+
+Examples:
+
+* 已完成
+* 已取消
+
+## 9. Testing
+
+After implementation, test:
+
+* Create a new work order.
+* Confirm work order number is auto-generated.
+* Confirm duplicate numbers cannot happen.
+* Print Full A4 Work Order.
+* Print A4 Two-Copy Dispatch Form.
+* Confirm both copies fit on one A4 page.
+* Confirm dotted cut line is centered.
+* Confirm signatures display.
+* Confirm QR code opens the correct work order.
+* Confirm PDF save works.
+
+Commit changes with message:
+
+"Add auto work order numbering and two-copy dispatch print"

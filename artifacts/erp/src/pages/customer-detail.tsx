@@ -180,25 +180,23 @@ function WorkOrderDetailModal({ workOrder, onClose }: { workOrder: WorkOrder; on
   );
 }
 
-function PaymentDetailModal({ payment, onClose }: { payment: Payment; onClose: () => void }) {
+function ReceivableQuickView({ rec, onClose }: { rec: Receivable; onClose: () => void }) {
+  const unpaid = Number(rec.totalAmount) - Number(rec.receivedAmount);
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="max-w-sm">
-        <DialogHeader>
-          <DialogTitle>收款詳情</DialogTitle>
-        </DialogHeader>
+        <DialogHeader><DialogTitle>應收帳款詳情</DialogTitle></DialogHeader>
         <div className="space-y-2 text-sm">
-          <InfoRow label="收款日期" value={payment.paymentDate} />
-          <InfoRow label="金額" value={`NT$${Number(payment.amount).toLocaleString()}`} />
-          <InfoRow label="收款方式" value={payment.paymentMethod} />
-          {payment.quoteId && <InfoRow label="關聯報價單" value={`#${payment.quoteId}`} />}
-          {payment.workOrderId && <InfoRow label="關聯派工單" value={`#${payment.workOrderId}`} />}
-          {payment.notes && <InfoRow label="備註" value={payment.notes} />}
-          <InfoRow label="建立時間" value={new Date(payment.createdAt).toLocaleDateString("zh-TW")} />
+          {rec.workOrderNumber && <InfoRow label="派工單號" value={rec.workOrderNumber} />}
+          <InfoRow label="應收金額" value={`NT$${Number(rec.totalAmount).toLocaleString()}`} />
+          <InfoRow label="已收金額" value={`NT$${Number(rec.receivedAmount).toLocaleString()}`} />
+          <InfoRow label="未收金額" value={`NT$${unpaid.toLocaleString()}`} />
+          <InfoRow label="付款狀態" value={rec.paymentStatus} />
+          {rec.expectedPaymentDate && <InfoRow label="預計收款日" value={rec.expectedPaymentDate} />}
+          {rec.notes && <InfoRow label="備註" value={rec.notes} />}
+          <InfoRow label="建立時間" value={new Date(rec.createdAt).toLocaleDateString("zh-TW")} />
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose}>關閉</Button>
-        </DialogFooter>
+        <DialogFooter><Button variant="outline" onClick={onClose}>關閉</Button></DialogFooter>
       </DialogContent>
     </Dialog>
   );
@@ -215,7 +213,7 @@ export default function CustomerDetail() {
   const { data: acUnits } = useListAcUnits(id);
   const { data: quotes } = useListQuotes({ customerId: id });
   const { data: workOrders } = useListWorkOrders({ customerId: id });
-  const { data: payments } = useListPayments({ customerId: id });
+  const { data: receivables } = useListReceivables({ customerId: id });
   const { data: warranties } = useListWarranties({ customerId: id });
   const { data: reminders } = useListMaintenanceReminders({ customerId: id });
 
@@ -264,7 +262,7 @@ export default function CustomerDetail() {
 
   const [selectedQuote, setSelectedQuote] = useState<Quote | null>(null);
   const [selectedWorkOrder, setSelectedWorkOrder] = useState<WorkOrder | null>(null);
-  const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
+  const [selectedReceivable, setSelectedReceivable] = useState<Receivable | null>(null);
 
   if (isLoading) return <div className="space-y-4"><Skeleton className="h-8 w-48" /><Skeleton className="h-40 w-full" /></div>;
   if (!customer) return <div className="py-12 text-center text-muted-foreground">找不到客戶資料</div>;
@@ -310,7 +308,7 @@ export default function CustomerDetail() {
             派工單{workOrders && workOrders.length > 0 && <span className="ml-1 text-xs text-muted-foreground">({workOrders.length})</span>}
           </TabsTrigger>
           <TabsTrigger value="payments" className="flex-1 text-xs">
-            收款{payments && payments.length > 0 && <span className="ml-1 text-xs text-muted-foreground">({payments.length})</span>}
+            收款{receivables && receivables.length > 0 && <span className="ml-1 text-xs text-muted-foreground">({receivables.length})</span>}
           </TabsTrigger>
           <TabsTrigger value="warranties" className="flex-1 text-xs">保固</TabsTrigger>
           <TabsTrigger value="reminders" className="flex-1 text-xs">保養提醒</TabsTrigger>
@@ -478,53 +476,57 @@ export default function CustomerDetail() {
           </div>
         </TabsContent>
 
-        {/* ── 收款 ── */}
+        {/* ── 應收帳款 ── */}
         <TabsContent value="payments">
           <div className="space-y-2">
             <div className="flex justify-end">
-              <Button variant="outline" size="sm" onClick={() => navigate("/payments")}>
-                <ExternalLink className="h-3.5 w-3.5 mr-1" />前往收款管理
+              <Button variant="outline" size="sm" onClick={() => navigate(`/receivables?customerId=${id}`)}>
+                <ExternalLink className="h-3.5 w-3.5 mr-1" />前往應收帳款
               </Button>
             </div>
-            {payments && payments.length > 0 ? (
+            {receivables && receivables.length > 0 ? (
               <Card>
                 <CardContent className="p-0">
                   <div className="divide-y">
-                    {payments.map(p => (
-                      <div key={p.id} className="px-4 py-3">
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium">NT${Number(p.amount).toLocaleString()}</p>
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                              {p.paymentDate}
-                              {p.paymentMethod && ` · ${p.paymentMethod}`}
-                              {p.workOrderId && ` · 派工單 #${p.workOrderId}`}
-                            </p>
-                            {p.notes && <p className="text-xs text-muted-foreground">{p.notes}</p>}
+                    {receivables.map((r: Receivable) => {
+                      const unpaid = Number(r.totalAmount) - Number(r.receivedAmount);
+                      return (
+                        <div key={r.id} className="px-4 py-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium">
+                                應收 NT${Number(r.totalAmount).toLocaleString()}
+                                {unpaid > 0 && <span className="text-xs text-amber-600 ml-2">未收 NT${unpaid.toLocaleString()}</span>}
+                              </p>
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                {r.workOrderNumber && `${r.workOrderNumber} · `}
+                                {r.expectedPaymentDate && `預計收款 ${r.expectedPaymentDate}`}
+                              </p>
+                            </div>
+                            <StatusBadge status={r.paymentStatus} />
                           </div>
-                          <StatusBadge status="已收款" />
+                          <div className="flex gap-2 mt-2">
+                            <Button
+                              variant="outline" size="sm" className="h-7 text-xs"
+                              onClick={() => setSelectedReceivable(r)}
+                            >
+                              <Eye className="h-3 w-3 mr-1" />查看詳情
+                            </Button>
+                            <Button
+                              variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground"
+                              onClick={() => navigate(`/receivables?customerId=${id}`)}
+                            >
+                              <ExternalLink className="h-3 w-3 mr-1" />前往應收帳款
+                            </Button>
+                          </div>
                         </div>
-                        <div className="flex gap-2 mt-2">
-                          <Button
-                            variant="outline" size="sm" className="h-7 text-xs"
-                            onClick={() => setSelectedPayment(p)}
-                          >
-                            <Eye className="h-3 w-3 mr-1" />查看詳情
-                          </Button>
-                          <Button
-                            variant="ghost" size="sm" className="h-7 text-xs text-muted-foreground"
-                            onClick={() => navigate("/payments")}
-                          >
-                            <ExternalLink className="h-3 w-3 mr-1" />前往收款
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </CardContent>
               </Card>
             ) : (
-              <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">尚無收款紀錄</CardContent></Card>
+              <Card><CardContent className="py-8 text-center text-sm text-muted-foreground">尚無應收帳款</CardContent></Card>
             )}
           </div>
         </TabsContent>
@@ -602,7 +604,7 @@ export default function CustomerDetail() {
       {/* ── Detail Modals ── */}
       {selectedQuote && <QuoteDetailModal quote={selectedQuote} onClose={() => setSelectedQuote(null)} />}
       {selectedWorkOrder && <WorkOrderDetailModal workOrder={selectedWorkOrder} onClose={() => setSelectedWorkOrder(null)} />}
-      {selectedPayment && <PaymentDetailModal payment={selectedPayment} onClose={() => setSelectedPayment(null)} />}
+      {selectedReceivable && <ReceivableQuickView rec={selectedReceivable} onClose={() => setSelectedReceivable(null)} />}
 
       {/* ── Edit Customer Dialog ── */}
       <Dialog open={editing} onOpenChange={setEditing}>

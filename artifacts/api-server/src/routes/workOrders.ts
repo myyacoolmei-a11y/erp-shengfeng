@@ -88,7 +88,8 @@ router.post("/work-orders", requireRole(...WO_WRITE_ROLES), async (req, res): Pr
   const now = new Date();
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, "0");
-  const workOrderNumber = `WO-${year}${month}-${String(order.id).padStart(4, "0")}`;
+  const day = String(now.getDate()).padStart(2, "0");
+  const workOrderNumber = `WO-${year}${month}${day}-${String(order.id).padStart(4, "0")}`;
   const [updated] = await db
     .update(workOrdersTable)
     .set({ workOrderNumber })
