@@ -1,0 +1,144 @@
+Small permission refinement only.
+
+Do NOT rebuild the ERP.
+Do NOT redesign the project.
+Do NOT regenerate existing modules.
+Only update role permissions and login routing.
+
+## 1. Login landing page
+
+Do NOT show "Access Denied" immediately after login.
+
+Each role should automatically land on its own home page.
+
+Owner
+→ Dashboard
+
+Admin
+→ Dashboard (Admin Version)
+
+Sales
+→ Customer Management
+
+Engineer
+→ Engineer Dashboard
+
+Technician
+→ My Work Orders
+
+Accountant
+→ Receivables Dashboard
+
+Distributor
+→ My Quotations
+
+If a user manually enters an unauthorized URL,
+then show the Access Denied page.
+
+Do NOT show Access Denied during normal login.
+
+---
+
+## 2. Engineer Dashboard
+
+Create a lightweight engineer dashboard.
+
+Show only:
+
+* Today's Work Orders
+* In Progress
+* Completed Today
+* Assigned Jobs
+* Quick Buttons:
+
+  * Start Work
+  * Upload Photos
+  * Complete Work
+  * Print Work Order
+
+Hide all financial information.
+
+---
+
+## 3. Technician Dashboard
+
+Create a simple technician home.
+
+Show only:
+
+* Assigned Work Orders
+* Navigation
+* Upload Photos
+* Complete Work
+
+Hide quotations, payments, invoices, finance and reports.
+
+---
+
+## 4. Admin permission refinement
+
+Admin CAN access:
+
+* Dashboard
+* Customers
+* Quotations
+* Work Orders
+* Warranty
+* Maintenance
+* Invoice Status
+
+Admin CANNOT access:
+
+* Receivable Amount
+* Payment Amount
+* Cost
+* Profit
+* Gross Margin
+* Financial Reports
+* Revenue
+* User Management
+* System Settings
+
+If payment information is needed,
+show only:
+
+* Paid
+* Unpaid
+* Overdue
+
+Never display money amounts.
+
+---
+
+## 5. Sidebar
+
+Hide menus that the current role cannot access.
+
+Do NOT show menu items that will later display "Access Denied".
+
+---
+
+## 6. Backend
+
+Keep backend permission enforcement.
+
+Frontend hiding is only for better UX.
+
+---
+
+## 7. Test
+
+Verify:
+
+* Engineer logs in directly to Engineer Dashboard.
+* Technician logs in directly to My Work Orders.
+* Admin logs in directly to Dashboard.
+* No role sees "Access Denied" immediately after login.
+* Admin cannot see payment amounts.
+* Engineer cannot access quotations or receivables.
+* Technician only sees assigned jobs.
+* Owner still has full access.
+
+Commit message:
+
+Refine role landing pages and permission visibility

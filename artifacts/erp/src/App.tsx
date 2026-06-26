@@ -20,6 +20,7 @@ import Receivables from "@/pages/receivables";
 import Warranties from "@/pages/warranties";
 import Maintenance from "@/pages/maintenance";
 import Users from "@/pages/users";
+import EngineerDashboard from "@/pages/engineer-dashboard";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -57,9 +58,13 @@ function RoleGuard({
 function defaultPathForRole(role: UserRole): string {
   switch (role) {
     case "engineer":
+      return "/engineer-dashboard";
     case "technician":
       return "/work-orders";
     case "sales":
+      return "/customers";
+    case "accountant":
+      return "/receivables";
     case "distributor":
       return "/quotes";
     default:
@@ -150,6 +155,11 @@ function AppRoutes() {
             <Route path="/maintenance">
               <RoleGuard roles={["owner", "admin", "engineer", "technician"]}>
                 <Maintenance />
+              </RoleGuard>
+            </Route>
+            <Route path="/engineer-dashboard">
+              <RoleGuard roles={["owner", "admin", "engineer"]}>
+                <EngineerDashboard />
               </RoleGuard>
             </Route>
             <Route path="/users">

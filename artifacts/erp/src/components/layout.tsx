@@ -12,6 +12,7 @@ import {
   LogOut,
   UserCog,
   Receipt,
+  HardHat,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -31,6 +32,12 @@ const NAV_ITEMS: NavItem[] = [
     label: "儀表板",
     icon: LayoutDashboard,
     roles: ["owner", "admin", "accountant"],
+  },
+  {
+    href: "/engineer-dashboard",
+    label: "工程師儀表板",
+    icon: HardHat,
+    roles: ["engineer"],
   },
   {
     href: "/customers",
