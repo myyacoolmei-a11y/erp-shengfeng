@@ -380,9 +380,14 @@ export default function CustomerHistory() {
 
       {/* Print-only title */}
       <div className="print-page-title mb-4">
-        <h1 style={{ fontSize: "18pt", fontWeight: "bold", marginBottom: "4px" }}>晟風工程 客戶完整履歷</h1>
-        <p style={{ fontSize: "10pt", color: "#666" }}>產生日期：{new Date().toLocaleDateString("zh-TW")}</p>
-        <hr style={{ marginTop: "8px" }} />
+        <div style={{ display: "flex", alignItems: "center", gap: "12px", marginBottom: "6px" }}>
+          <img src="/logo.png" alt="晟風空調" style={{ width: "52px", height: "52px", borderRadius: "50%", objectFit: "cover", border: "2px solid #16a34a" }} />
+          <div>
+            <h1 style={{ fontSize: "18pt", fontWeight: "bold", marginBottom: "2px" }}>晟風工程 客戶完整履歷</h1>
+            <p style={{ fontSize: "10pt", color: "#666" }}>產生日期：{new Date().toLocaleDateString("zh-TW")}</p>
+          </div>
+        </div>
+        <hr style={{ borderColor: "#16a34a", borderWidth: "2px", marginTop: "6px" }} />
       </div>
 
       {/* Page header */}

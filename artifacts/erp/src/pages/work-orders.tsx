@@ -58,6 +58,7 @@ function printWorkOrder(order: any) {
   const woNum = order.workOrderNumber || `#${order.id}`;
   const erpUrl = `${window.location.origin}/work-orders`;
   const qr = qrUrl(`${erpUrl}?wo=${encodeURIComponent(woNum)}`);
+  const logoUrl = `${window.location.origin}/logo.png`;
   const html = `<!DOCTYPE html>
 <html lang="zh-TW"><head><meta charset="UTF-8"><title>派工單 ${woNum}</title>
 <style>
@@ -81,9 +82,12 @@ h2{font-size:10pt;font-weight:700;background:#f3f3f3;padding:1.5mm 4mm;margin:3.
 <div class="page">
   ${stampHtml(order.status)}
   <div class="hdr">
-    <div>
-      <div class="co-name">晟風工程</div>
-      <div class="co-sub">冷氣空調工程專業服務</div>
+    <div style="display:flex;align-items:center;gap:4mm">
+      <img src="${logoUrl}" style="width:14mm;height:14mm;border-radius:50%;object-fit:cover;border:1.5px solid #16a34a" alt="">
+      <div>
+        <div class="co-name">晟風工程</div>
+        <div class="co-sub">冷氣空調工程專業服務</div>
+      </div>
     </div>
     <div class="wo-right">
       <img src="${qr}" width="80" height="80" alt="QR" style="border:1px solid #e5e7eb;border-radius:2px">
@@ -153,6 +157,7 @@ function printTwoCopyDispatch(order: any) {
   const woNum = order.workOrderNumber || `#${order.id}`;
   const erpUrl = `${window.location.origin}/work-orders`;
   const qr = qrUrl(`${erpUrl}?wo=${encodeURIComponent(woNum)}`);
+  const logoUrl = `${window.location.origin}/logo.png`;
   const printDate = new Date().toLocaleDateString("zh-TW");
   const stamp = stampHtml(order.status);
   const mapsLink = order.installAddress
@@ -164,9 +169,12 @@ function printTwoCopyDispatch(order: any) {
 <div class="copy" style="position:relative">
   ${stamp}
   <div class="hdr">
-    <div class="co">
-      <div class="co-name">晟風工程</div>
-      <div class="co-sub">冷氣空調工程專業服務</div>
+    <div class="co" style="display:flex;align-items:center;gap:3mm">
+      <img src="${logoUrl}" style="width:11mm;height:11mm;border-radius:50%;object-fit:cover;border:1.5px solid #16a34a;flex-shrink:0" alt="">
+      <div>
+        <div class="co-name">晟風工程</div>
+        <div class="co-sub">冷氣空調工程專業服務</div>
+      </div>
     </div>
     <div class="mid">
       <div class="title">派 工 單</div>

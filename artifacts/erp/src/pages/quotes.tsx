@@ -38,9 +38,12 @@ function PrintQuoteDialog({ quote, onClose }: { quote: any; onClose: () => void 
         </DialogHeader>
         <div id="print-area" className="space-y-4 text-sm border rounded-lg p-6">
           <div className="flex justify-between items-start">
-            <div>
-              <h2 className="text-xl font-bold">晟風工程</h2>
-              <p className="text-muted-foreground text-xs">冷氣安裝 · 維修 · 保養</p>
+            <div className="flex items-center gap-3">
+              <img src="/logo.png" alt="晟風空調" className="w-12 h-12 rounded-full object-cover border-2 border-green-500 shrink-0" />
+              <div>
+                <h2 className="text-xl font-bold">晟風工程</h2>
+                <p className="text-muted-foreground text-xs">冷氣安裝 · 維修 · 保養</p>
+              </div>
             </div>
             <div className="text-right text-xs text-muted-foreground">
               <p>報價日期：{today}</p>
