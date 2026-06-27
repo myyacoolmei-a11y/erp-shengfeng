@@ -37,8 +37,9 @@ export async function seedDefaultUser(): Promise<void> {
     });
     logger.info("首次啟動：預設管理員帳號已建立 (admin / admin1234)，請首次登入後立即變更密碼");
   } catch (err) {
+    logger.error(err);
+    console.error(err);
     logger.error({ err }, "無法初始化預設帳號");
-  }
 }
 
 router.post("/auth/login", async (req, res): Promise<void> => {
