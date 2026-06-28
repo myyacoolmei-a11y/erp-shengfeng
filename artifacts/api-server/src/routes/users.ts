@@ -52,21 +52,15 @@ function parseId(raw: unknown): number | null {
 
 /**
  * GET /users
- * super_admin → sees everyone (including other super_admins)
- * owner       → sees everyone EXCEPT super_admin accounts
+ * Both super_admin and owner see all users (including super_admin accounts).
+ * The frontend hides action buttons for super_admin rows when the caller is not super_admin,
+ * and the mutation endpoints enforce 403 for any unauthorized operation.
  */
-router.get("/users", requireRole("super_admin", "owner"), async (req, res): Promise<void> => {
-  const callerRole = req.user!.role;
-
-  const users =
-    callerRole === "super_admin"
-      ? await db.select(userPublicFields).from(usersTable).orderBy(usersTable.createdAt)
-      : await db
-          .select(userPublicFields)
-          .from(usersTable)
-          .where(ne(usersTable.role, "super_admin"))
-          .orderBy(usersTable.createdAt);
-
+router.get("/users", requireRole("super_admin", "owner"), async (_req, res): Promise<void> => {
+  const users = await db
+    .select(userPublicFields)
+    .from(usersTable)
+    .orderBy(usersTable.createdAt);
   res.json(users);
 });
 
