@@ -31,15 +31,45 @@ export async function seedDefaultUser(): Promise<void> {
       username: "admin",
       passwordHash,
       displayName: "系統管理員",
-      role: "owner",
+      role: "super_admin",
       isActive: true,
       mustChangePassword: true,
     });
-    logger.info("首次啟動：預設管理員帳號已建立 (admin / admin1234)，請首次登入後立即變更密碼");
+    logger.info("首次啟動：預設系統管理員帳號已建立 (admin / admin1234)，請首次登入後立即變更密碼");
   } catch (err) {
-    logger.error(err);
-    console.error(err);
     logger.error({ err }, "無法初始化預設帳號");
+  }
+}
+
+/**
+ * One-time startup migration: if no super_admin exists yet, upgrade the
+ * "admin" account (the original seeded account) to super_admin.
+ * This handles existing Railway deployments seeded before the role was added.
+ */
+export async function ensureSuperAdmin(): Promise<void> {
+  try {
+    const [existing] = await db
+      .select({ id: usersTable.id })
+      .from(usersTable)
+      .where(eq(usersTable.role, "super_admin"))
+      .limit(1);
+    if (existing) return;
+
+    const [adminUser] = await db
+      .select({ id: usersTable.id })
+      .from(usersTable)
+      .where(eq(usersTable.username, "admin"))
+      .limit(1);
+    if (adminUser) {
+      await db
+        .update(usersTable)
+        .set({ role: "super_admin" })
+        .where(eq(usersTable.id, adminUser.id));
+      logger.info('啟動遷移：帳號 "admin" 已升級為系統管理員（super_admin）');
+    }
+  } catch (err) {
+    logger.error({ err }, "無法執行 super_admin 升級遷移");
+  }
 }
 
 router.post("/auth/login", async (req, res): Promise<void> => {

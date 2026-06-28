@@ -57,6 +57,8 @@ function RoleGuard({
 /** Default landing path per role */
 function defaultPathForRole(role: UserRole): string {
   switch (role) {
+    case "super_admin":
+      return "/users";
     case "engineer":
       return "/engineer-dashboard";
     case "technician":
@@ -104,66 +106,66 @@ function AppRoutes() {
         <Layout>
           <Switch>
             <Route path="/">
-              <RoleGuard roles={["owner", "admin", "accountant"]}>
+              <RoleGuard roles={["super_admin", "owner", "admin", "accountant"]}>
                 <Dashboard />
               </RoleGuard>
             </Route>
             <Route path="/customers">
-              <RoleGuard roles={["owner", "admin", "sales", "accountant"]}>
+              <RoleGuard roles={["super_admin", "owner", "admin", "sales", "accountant"]}>
                 <Customers />
               </RoleGuard>
             </Route>
             <Route path="/customers/:id/history">
               {() => (
-                <RoleGuard roles={["owner", "admin", "sales", "accountant"]}>
+                <RoleGuard roles={["super_admin", "owner", "admin", "sales", "accountant"]}>
                   <CustomerHistory />
                 </RoleGuard>
               )}
             </Route>
             <Route path="/customers/:id">
               {() => (
-                <RoleGuard roles={["owner", "admin", "sales", "accountant"]}>
+                <RoleGuard roles={["super_admin", "owner", "admin", "sales", "accountant"]}>
                   <CustomerDetail />
                 </RoleGuard>
               )}
             </Route>
             <Route path="/quotes">
-              <RoleGuard roles={["owner", "admin", "sales", "distributor"]}>
+              <RoleGuard roles={["super_admin", "owner", "admin", "sales", "distributor"]}>
                 <Quotes />
               </RoleGuard>
             </Route>
             <Route path="/work-orders">
-              <RoleGuard roles={["owner", "admin", "engineer", "technician"]}>
+              <RoleGuard roles={["super_admin", "owner", "admin", "engineer", "technician"]}>
                 <WorkOrders />
               </RoleGuard>
             </Route>
             <Route path="/payments">
-              <RoleGuard roles={["owner", "admin", "accountant"]}>
+              <RoleGuard roles={["super_admin", "owner", "admin", "accountant"]}>
                 <Payments />
               </RoleGuard>
             </Route>
             <Route path="/receivables">
-              <RoleGuard roles={["owner", "admin", "accountant"]}>
+              <RoleGuard roles={["super_admin", "owner", "admin", "accountant"]}>
                 <Receivables />
               </RoleGuard>
             </Route>
             <Route path="/warranties">
-              <RoleGuard roles={["owner", "admin", "accountant"]}>
+              <RoleGuard roles={["super_admin", "owner", "admin", "accountant"]}>
                 <Warranties />
               </RoleGuard>
             </Route>
             <Route path="/maintenance">
-              <RoleGuard roles={["owner", "admin", "engineer", "technician"]}>
+              <RoleGuard roles={["super_admin", "owner", "admin", "engineer", "technician"]}>
                 <Maintenance />
               </RoleGuard>
             </Route>
             <Route path="/engineer-dashboard">
-              <RoleGuard roles={["owner", "admin", "engineer"]}>
+              <RoleGuard roles={["super_admin", "owner", "admin", "engineer"]}>
                 <EngineerDashboard />
               </RoleGuard>
             </Route>
             <Route path="/users">
-              <RoleGuard roles={["owner"]}>
+              <RoleGuard roles={["super_admin", "owner"]}>
                 <Users />
               </RoleGuard>
             </Route>

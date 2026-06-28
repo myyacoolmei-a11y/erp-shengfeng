@@ -1,6 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
-import { seedDefaultUser } from "./routes/auth";
+import { seedDefaultUser, ensureSuperAdmin } from "./routes/auth";
 import express from "express";
 import path from "path";
 import { fileURLToPath } from "url";
@@ -38,6 +38,8 @@ app.listen(port, async (err?: Error) => {
 
   logger.info({ port }, `Server listening — http://localhost:${port}`);
 
-  // Create the default owner account on first start if the DB is empty
+  // Create the default super_admin account on first start if the DB is empty
   await seedDefaultUser();
+  // Upgrade existing "admin" account to super_admin if no super_admin exists yet
+  await ensureSuperAdmin();
 });

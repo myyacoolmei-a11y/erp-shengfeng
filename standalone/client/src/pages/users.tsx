@@ -36,7 +36,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { UserPlus, Pencil, Trash2, KeyRound, Loader2, UserCheck, UserX } from "lucide-react";
+import { UserPlus, Pencil, Trash2, KeyRound, Loader2, UserCheck, UserX, ShieldAlert } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { ROLE_LABELS, useAuth, type UserRole } from "@/contexts/auth-context";
 
@@ -49,7 +49,7 @@ interface UserItem {
   createdAt: string;
 }
 
-const ALL_ROLES: { value: UserRole; label: string }[] = [
+const ALL_ROLES_FOR_OWNER: { value: UserRole; label: string }[] = [
   { value: "owner", label: "老闆" },
   { value: "admin", label: "行政管理" },
   { value: "sales", label: "業務" },
@@ -59,7 +59,13 @@ const ALL_ROLES: { value: UserRole; label: string }[] = [
   { value: "distributor", label: "批發商" },
 ];
 
+const ALL_ROLES_FOR_SUPER_ADMIN: { value: UserRole; label: string }[] = [
+  { value: "super_admin", label: "系統管理員" },
+  ...ALL_ROLES_FOR_OWNER,
+];
+
 const ROLE_COLORS: Record<string, string> = {
+  super_admin: "bg-red-100 text-red-800 border border-red-200",
   owner: "bg-amber-100 text-amber-800 border border-amber-200",
   admin: "bg-blue-100 text-blue-800 border border-blue-200",
   sales: "bg-green-100 text-green-800 border border-green-200",
@@ -90,6 +96,9 @@ export default function UsersPage() {
   const { toast } = useToast();
   const { user: me } = useAuth();
   const qc = useQueryClient();
+
+  const iAmSuperAdmin = me?.role === "super_admin";
+  const availableRoles = iAmSuperAdmin ? ALL_ROLES_FOR_SUPER_ADMIN : ALL_ROLES_FOR_OWNER;
 
   const [createOpen, setCreateOpen] = useState(false);
   const [createForm, setCreateForm] = useState(EMPTY_CREATE);
@@ -214,7 +223,8 @@ export default function UsersPage() {
         <p className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wide">角色權限說明</p>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-1.5 text-xs">
           {[
-            { role: "owner", desc: "所有功能完整存取" },
+            { role: "super_admin", desc: "系統核心設定，帳號不可被刪除或停用，僅本人可修改密碼" },
+            { role: "owner", desc: "所有業務功能完整存取，可管理一般使用者（不含系統管理員）" },
             { role: "admin", desc: "客戶、報價、派工、保固、收款（不含用戶管理）" },
             { role: "sales", desc: "客戶管理、報價單（不可刪除）" },
             { role: "engineer", desc: "派工單、進度、保養（不含財務）" },
@@ -224,7 +234,7 @@ export default function UsersPage() {
           ].map(({ role, desc }) => (
             <div key={role} className="flex items-start gap-1.5">
               <span className={`shrink-0 text-xs px-1.5 py-0.5 rounded font-medium ${ROLE_COLORS[role]}`}>
-                {ROLE_LABELS[role as UserRole]}
+                {ROLE_LABELS[role as UserRole] ?? role}
               </span>
               <span className="text-muted-foreground leading-tight">{desc}</span>
             </div>
@@ -255,6 +265,60 @@ export default function UsersPage() {
             <TableBody>
               {users.map((u) => {
                 const isSelf = me?.id === u.id;
+                const isTargetSuperAdmin = u.role === "super_admin";
+
+                /**
+                 * Three-way branch — no path can accidentally expose buttons
+                 * for a super_admin row to a non-super_admin caller:
+                 *
+                 * 1. Target IS super_admin AND not self → 受保護 (zero buttons)
+                 * 2. Target IS super_admin AND is self  → edit only (no reset, no delete)
+                 * 3. Target is NOT super_admin          → normal buttons
+                 */
+                const renderActions = () => {
+                  if (isTargetSuperAdmin && !isSelf) {
+                    return (
+                      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground px-2 py-1">
+                        <ShieldAlert className="h-3.5 w-3.5" />
+                        受保護
+                      </span>
+                    );
+                  }
+                  if (isTargetSuperAdmin && isSelf) {
+                    return (
+                      <Button variant="ghost" size="sm" onClick={() => openEdit(u)} title="編輯">
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                    );
+                  }
+                  return (
+                    <div className="flex items-center justify-end gap-1">
+                      <Button variant="ghost" size="sm" onClick={() => openEdit(u)} title="編輯">
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => { setResetTarget(u); setResetPassword(""); setResetError(null); }}
+                        title="重設密碼"
+                      >
+                        <KeyRound className="h-3.5 w-3.5" />
+                      </Button>
+                      {!isSelf && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => setDeleteTarget(u)}
+                          title="刪除"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                  );
+                };
+
                 return (
                   <TableRow key={u.id} className={!u.isActive ? "opacity-60" : ""}>
                     <TableCell className="font-medium">
@@ -282,29 +346,7 @@ export default function UsersPage() {
                       {new Date(u.createdAt).toLocaleDateString("zh-TW")}
                     </TableCell>
                     <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        <Button variant="ghost" size="sm" onClick={() => openEdit(u)} title="編輯">
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => { setResetTarget(u); setResetPassword(""); setResetError(null); }}
-                          title="重設密碼"
-                        >
-                          <KeyRound className="h-3.5 w-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                          onClick={() => setDeleteTarget(u)}
-                          disabled={isSelf}
-                          title={isSelf ? "不能刪除自己" : "刪除"}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      </div>
+                      {renderActions()}
                     </TableCell>
                   </TableRow>
                 );
@@ -348,7 +390,7 @@ export default function UsersPage() {
               <Select value={createForm.role} onValueChange={(v) => setCreateForm({ ...createForm, role: v as UserRole })}>
                 <SelectTrigger id="c-role"><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  {ALL_ROLES.map((opt) => (
+                  {availableRoles.map((opt) => (
                     <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                   ))}
                 </SelectContent>
@@ -394,30 +436,41 @@ export default function UsersPage() {
                 onChange={(e) => setEditForm({ ...editForm, username: e.target.value })}
                 required />
             </div>
+            {/* Role: locked when editing own super_admin account (cannot downgrade self) */}
             <div className="space-y-2">
               <Label htmlFor="e-role">角色</Label>
-              <Select value={editForm.role} onValueChange={(v) => setEditForm({ ...editForm, role: v as UserRole })}>
-                <SelectTrigger id="e-role"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {ALL_ROLES.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {editTarget?.role === "super_admin" ? (
+                <div className="flex items-center gap-2 rounded-md border bg-muted px-3 py-2 text-sm text-muted-foreground">
+                  <ShieldAlert className="h-4 w-4 shrink-0" />
+                  系統管理員（角色不可變更）
+                </div>
+              ) : (
+                <Select value={editForm.role} onValueChange={(v) => setEditForm({ ...editForm, role: v as UserRole })}>
+                  <SelectTrigger id="e-role"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {availableRoles.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="e-status">狀態</Label>
-              <Select
-                value={editForm.isActive ? "active" : "disabled"}
-                onValueChange={(v) => setEditForm({ ...editForm, isActive: v === "active" })}
-              >
-                <SelectTrigger id="e-status"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="active">啟用中</SelectItem>
-                  <SelectItem value="disabled">已停用</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            {/* Status: hidden when editing own super_admin account (cannot disable self) */}
+            {editTarget?.role !== "super_admin" && (
+              <div className="space-y-2">
+                <Label htmlFor="e-status">狀態</Label>
+                <Select
+                  value={editForm.isActive ? "active" : "disabled"}
+                  onValueChange={(v) => setEditForm({ ...editForm, isActive: v === "active" })}
+                >
+                  <SelectTrigger id="e-status"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">啟用中</SelectItem>
+                    <SelectItem value="disabled">已停用</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             {editError && (
               <p className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-md">{editError}</p>
             )}
