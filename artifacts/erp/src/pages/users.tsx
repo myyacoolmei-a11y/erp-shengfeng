@@ -267,10 +267,61 @@ export default function UsersPage() {
               {users.map((u) => {
                 const isSelf = me?.id === u.id;
                 const isTargetSuperAdmin = u.role === "super_admin";
-                // super_admin row: only self can edit (username/displayName only); no delete/reset for anyone
-                const canEdit = isTargetSuperAdmin ? (iAmSuperAdmin && isSelf) : true;
-                const canResetPassword = !isTargetSuperAdmin;
-                const canDelete = !isTargetSuperAdmin && !isSelf;
+
+                /**
+                 * Three-way branch for the action cell — no shared variables
+                 * that could accidentally mix paths:
+                 *
+                 * 1. Target IS super_admin AND it's someone else
+                 *    → "受保護" label, zero buttons, no dialogs reachable
+                 * 2. Target IS super_admin AND it's self (only super_admin can reach this)
+                 *    → edit button only (no reset-password, no delete)
+                 * 3. Target is NOT super_admin
+                 *    → normal buttons (edit, reset-password, delete if not self)
+                 */
+                const renderActions = () => {
+                  if (isTargetSuperAdmin && !isSelf) {
+                    return (
+                      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground px-2 py-1">
+                        <ShieldAlert className="h-3.5 w-3.5" />
+                        受保護
+                      </span>
+                    );
+                  }
+                  if (isTargetSuperAdmin && isSelf) {
+                    return (
+                      <Button variant="ghost" size="sm" onClick={() => openEdit(u)} title="編輯">
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                    );
+                  }
+                  return (
+                    <div className="flex items-center justify-end gap-1">
+                      <Button variant="ghost" size="sm" onClick={() => openEdit(u)} title="編輯">
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => { setResetTarget(u); setResetPassword(""); setResetError(null); }}
+                        title="重設密碼"
+                      >
+                        <KeyRound className="h-3.5 w-3.5" />
+                      </Button>
+                      {!isSelf && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => setDeleteTarget(u)}
+                          title="刪除"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
+                    </div>
+                  );
+                };
 
                 return (
                   <TableRow key={u.id} className={!u.isActive ? "opacity-60" : ""}>
@@ -299,41 +350,7 @@ export default function UsersPage() {
                       {new Date(u.createdAt).toLocaleDateString("zh-TW")}
                     </TableCell>
                     <TableCell className="text-right">
-                      {isTargetSuperAdmin && !isSelf ? (
-                        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground px-2 py-1">
-                          <ShieldAlert className="h-3.5 w-3.5" />
-                          受保護
-                        </span>
-                      ) : (
-                        <div className="flex items-center justify-end gap-1">
-                          {canEdit && (
-                            <Button variant="ghost" size="sm" onClick={() => openEdit(u)} title="編輯">
-                              <Pencil className="h-3.5 w-3.5" />
-                            </Button>
-                          )}
-                          {canResetPassword && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => { setResetTarget(u); setResetPassword(""); setResetError(null); }}
-                              title="重設密碼"
-                            >
-                              <KeyRound className="h-3.5 w-3.5" />
-                            </Button>
-                          )}
-                          {canDelete && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                              onClick={() => setDeleteTarget(u)}
-                              title="刪除"
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          )}
-                        </div>
-                      )}
+                      {renderActions()}
                     </TableCell>
                   </TableRow>
                 );
