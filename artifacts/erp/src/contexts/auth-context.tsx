@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { setAuthTokenGetter, setOn401Handler } from "@workspace/api-client-react";
 
 export type UserRole =
+  | "super_admin"
   | "owner"
   | "admin"
   | "sales"
@@ -128,6 +129,7 @@ export function useAuth() {
 }
 
 export const ROLE_LABELS: Record<UserRole, string> = {
+  super_admin: "系統管理員",
   owner: "老闆",
   admin: "行政管理",
   sales: "業務",
