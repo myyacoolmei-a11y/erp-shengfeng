@@ -366,6 +366,109 @@ export const DeleteAcUnitResponse = zod.void()
 
 
 /**
+ * @summary 列出所有員工
+ */
+export const ListEmployeesQueryParams = zod.object({
+  "position": zod.coerce.string().optional(),
+  "status": zod.coerce.string().optional()
+})
+
+export const ListEmployeesResponseItem = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "phone": zod.string().nullish(),
+  "position": zod.string(),
+  "status": zod.string(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+export const ListEmployeesResponse = zod.array(ListEmployeesResponseItem)
+
+
+/**
+ * @summary 新增員工
+ */
+
+
+
+export const CreateEmployeeBody = zod.object({
+  "name": zod.string().min(1),
+  "phone": zod.string().optional(),
+  "position": zod.string(),
+  "status": zod.string(),
+  "notes": zod.string().optional()
+})
+
+export const CreateEmployeeResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "phone": zod.string().nullish(),
+  "position": zod.string(),
+  "status": zod.string(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary 取得員工詳細資料
+ */
+export const GetEmployeeParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetEmployeeResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "phone": zod.string().nullish(),
+  "position": zod.string(),
+  "status": zod.string(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary 更新員工
+ */
+export const UpdateEmployeeParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateEmployeeBody = zod.object({
+  "name": zod.string().optional(),
+  "phone": zod.string().optional(),
+  "position": zod.string().optional(),
+  "status": zod.string().optional(),
+  "notes": zod.string().optional()
+})
+
+export const UpdateEmployeeResponse = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "phone": zod.string().nullish(),
+  "position": zod.string(),
+  "status": zod.string(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary 刪除員工
+ */
+export const DeleteEmployeeParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteEmployeeResponse = zod.void()
+
+
+/**
  * @summary 列出所有報價單
  */
 export const ListQuotesQueryParams = zod.object({
@@ -375,8 +478,9 @@ export const ListQuotesQueryParams = zod.object({
 
 export const ListQuotesResponseItem = zod.object({
   "id": zod.number(),
-  "customerId": zod.number(),
+  "customerId": zod.number().nullish(),
   "customerName": zod.string().nullish(),
+  "contactPerson": zod.string().nullish(),
   "title": zod.string(),
   "description": zod.string().nullish(),
   "amount": zod.number(),
@@ -384,6 +488,24 @@ export const ListQuotesResponseItem = zod.object({
   "finalAmount": zod.number().nullish(),
   "status": zod.string(),
   "notes": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "customerPhone": zod.string().nullish(),
+  "taxType": zod.string(),
+  "salesRepId": zod.number().nullish(),
+  "salesRepName": zod.string().nullish(),
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "quoteId": zod.number(),
+  "category": zod.string(),
+  "itemName": zod.string(),
+  "brand": zod.string().nullish(),
+  "quantity": zod.number(),
+  "unit": zod.string(),
+  "unitPrice": zod.number(),
+  "subtotal": zod.number(),
+  "notes": zod.string().nullish(),
+  "sortOrder": zod.number()
+})).optional(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -397,20 +519,37 @@ export const ListQuotesResponse = zod.array(ListQuotesResponseItem)
 
 
 export const CreateQuoteBody = zod.object({
-  "customerId": zod.number(),
+  "customerId": zod.number().optional(),
+  "customerName": zod.string().optional(),
+  "contactPerson": zod.string().optional(),
   "title": zod.string().min(1),
   "description": zod.string().optional(),
-  "amount": zod.number(),
+  "amount": zod.number().optional(),
   "discountAmount": zod.number().optional(),
   "finalAmount": zod.number().optional(),
   "status": zod.string(),
-  "notes": zod.string().optional()
+  "notes": zod.string().optional(),
+  "address": zod.string().optional(),
+  "customerPhone": zod.string().optional(),
+  "taxType": zod.string().optional(),
+  "salesRepId": zod.number().optional(),
+  "items": zod.array(zod.object({
+  "category": zod.string(),
+  "itemName": zod.string(),
+  "brand": zod.string().optional(),
+  "quantity": zod.number(),
+  "unit": zod.string(),
+  "unitPrice": zod.number(),
+  "notes": zod.string().optional(),
+  "sortOrder": zod.number().optional()
+})).optional()
 })
 
 export const CreateQuoteResponse = zod.object({
   "id": zod.number(),
-  "customerId": zod.number(),
+  "customerId": zod.number().nullish(),
   "customerName": zod.string().nullish(),
+  "contactPerson": zod.string().nullish(),
   "title": zod.string(),
   "description": zod.string().nullish(),
   "amount": zod.number(),
@@ -418,6 +557,24 @@ export const CreateQuoteResponse = zod.object({
   "finalAmount": zod.number().nullish(),
   "status": zod.string(),
   "notes": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "customerPhone": zod.string().nullish(),
+  "taxType": zod.string(),
+  "salesRepId": zod.number().nullish(),
+  "salesRepName": zod.string().nullish(),
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "quoteId": zod.number(),
+  "category": zod.string(),
+  "itemName": zod.string(),
+  "brand": zod.string().nullish(),
+  "quantity": zod.number(),
+  "unit": zod.string(),
+  "unitPrice": zod.number(),
+  "subtotal": zod.number(),
+  "notes": zod.string().nullish(),
+  "sortOrder": zod.number()
+})).optional(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -432,8 +589,9 @@ export const GetQuoteParams = zod.object({
 
 export const GetQuoteResponse = zod.object({
   "id": zod.number(),
-  "customerId": zod.number(),
+  "customerId": zod.number().nullish(),
   "customerName": zod.string().nullish(),
+  "contactPerson": zod.string().nullish(),
   "title": zod.string(),
   "description": zod.string().nullish(),
   "amount": zod.number(),
@@ -441,6 +599,24 @@ export const GetQuoteResponse = zod.object({
   "finalAmount": zod.number().nullish(),
   "status": zod.string(),
   "notes": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "customerPhone": zod.string().nullish(),
+  "taxType": zod.string(),
+  "salesRepId": zod.number().nullish(),
+  "salesRepName": zod.string().nullish(),
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "quoteId": zod.number(),
+  "category": zod.string(),
+  "itemName": zod.string(),
+  "brand": zod.string().nullish(),
+  "quantity": zod.number(),
+  "unit": zod.string(),
+  "unitPrice": zod.number(),
+  "subtotal": zod.number(),
+  "notes": zod.string().nullish(),
+  "sortOrder": zod.number()
+})).optional(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -454,19 +630,37 @@ export const UpdateQuoteParams = zod.object({
 })
 
 export const UpdateQuoteBody = zod.object({
+  "customerId": zod.number().optional(),
+  "customerName": zod.string().optional(),
+  "contactPerson": zod.string().optional(),
   "title": zod.string().optional(),
   "description": zod.string().optional(),
   "amount": zod.number().optional(),
   "discountAmount": zod.number().optional(),
   "finalAmount": zod.number().optional(),
   "status": zod.string().optional(),
-  "notes": zod.string().optional()
+  "notes": zod.string().optional(),
+  "address": zod.string().optional(),
+  "customerPhone": zod.string().optional(),
+  "taxType": zod.string().optional(),
+  "salesRepId": zod.number().optional(),
+  "items": zod.array(zod.object({
+  "category": zod.string(),
+  "itemName": zod.string(),
+  "brand": zod.string().optional(),
+  "quantity": zod.number(),
+  "unit": zod.string(),
+  "unitPrice": zod.number(),
+  "notes": zod.string().optional(),
+  "sortOrder": zod.number().optional()
+})).optional()
 })
 
 export const UpdateQuoteResponse = zod.object({
   "id": zod.number(),
-  "customerId": zod.number(),
+  "customerId": zod.number().nullish(),
   "customerName": zod.string().nullish(),
+  "contactPerson": zod.string().nullish(),
   "title": zod.string(),
   "description": zod.string().nullish(),
   "amount": zod.number(),
@@ -474,6 +668,24 @@ export const UpdateQuoteResponse = zod.object({
   "finalAmount": zod.number().nullish(),
   "status": zod.string(),
   "notes": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "customerPhone": zod.string().nullish(),
+  "taxType": zod.string(),
+  "salesRepId": zod.number().nullish(),
+  "salesRepName": zod.string().nullish(),
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "quoteId": zod.number(),
+  "category": zod.string(),
+  "itemName": zod.string(),
+  "brand": zod.string().nullish(),
+  "quantity": zod.number(),
+  "unit": zod.string(),
+  "unitPrice": zod.number(),
+  "subtotal": zod.number(),
+  "notes": zod.string().nullish(),
+  "sortOrder": zod.number()
+})).optional(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -524,6 +736,7 @@ export const ListWorkOrdersResponseItem = zod.object({
   "hasElevator": zod.string().nullish(),
   "description": zod.string().nullish(),
   "notes": zod.string().nullish(),
+  "technicians": zod.string().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -559,7 +772,8 @@ export const CreateWorkOrderBody = zod.object({
   "floorLevel": zod.string().optional(),
   "hasElevator": zod.string().optional(),
   "description": zod.string().optional(),
-  "notes": zod.string().optional()
+  "notes": zod.string().optional(),
+  "technicians": zod.string().optional()
 })
 
 export const CreateWorkOrderResponse = zod.object({
@@ -589,6 +803,7 @@ export const CreateWorkOrderResponse = zod.object({
   "hasElevator": zod.string().nullish(),
   "description": zod.string().nullish(),
   "notes": zod.string().nullish(),
+  "technicians": zod.string().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -628,6 +843,7 @@ export const GetWorkOrderResponse = zod.object({
   "hasElevator": zod.string().nullish(),
   "description": zod.string().nullish(),
   "notes": zod.string().nullish(),
+  "technicians": zod.string().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -661,7 +877,8 @@ export const UpdateWorkOrderBody = zod.object({
   "floorLevel": zod.string().optional(),
   "hasElevator": zod.string().optional(),
   "description": zod.string().optional(),
-  "notes": zod.string().optional()
+  "notes": zod.string().optional(),
+  "technicians": zod.string().optional()
 })
 
 export const UpdateWorkOrderResponse = zod.object({
@@ -691,6 +908,7 @@ export const UpdateWorkOrderResponse = zod.object({
   "hasElevator": zod.string().nullish(),
   "description": zod.string().nullish(),
   "notes": zod.string().nullish(),
+  "technicians": zod.string().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -1310,6 +1528,21 @@ export const GetDashboardSummaryResponse = zod.object({
   "overdueAmount": zod.number().optional(),
   "paidThisMonthAR": zod.number().optional(),
   "invoiceNotIssuedCount": zod.number().optional(),
+  "todayWorkOrderCount": zod.number().optional(),
+  "todayPaymentsAmount": zod.number().optional(),
+  "todayMaintenanceCount": zod.number().optional(),
+  "monthlyQuoteAmount": zod.number().optional(),
+  "monthlyWonAmount": zod.number().optional(),
+  "monthlyPaidAmount": zod.number().optional(),
+  "todayDueCount": zod.number().optional(),
+  "todayWorkOrders": zod.array(zod.object({
+  "id": zod.number().optional(),
+  "workOrderNumber": zod.string().nullish(),
+  "customerName": zod.string().nullish(),
+  "scheduledTime": zod.string().nullish(),
+  "technicians": zod.string().nullish(),
+  "installAddress": zod.string().nullish()
+})).optional(),
   "recentCustomers": zod.array(zod.object({
   "id": zod.number(),
   "name": zod.string(),

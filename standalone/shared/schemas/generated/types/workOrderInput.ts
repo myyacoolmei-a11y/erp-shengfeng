@@ -31,4 +31,5 @@ export interface WorkOrderInput {
   hasElevator?: string;
   description?: string;
   notes?: string;
+  technicians?: string;
 }

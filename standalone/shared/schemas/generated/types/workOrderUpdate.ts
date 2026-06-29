@@ -28,4 +28,5 @@ export interface WorkOrderUpdate {
   hasElevator?: string;
   description?: string;
   notes?: string;
+  technicians?: string;
 }

@@ -55,6 +55,8 @@ export interface WorkOrder {
   description?: string | null;
   /** @nullable */
   notes?: string | null;
+  /** @nullable */
+  technicians?: string | null;
   createdAt: string;
   updatedAt: string;
 }

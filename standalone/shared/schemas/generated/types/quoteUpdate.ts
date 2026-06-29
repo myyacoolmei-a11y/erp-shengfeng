@@ -5,8 +5,12 @@
  * 晟風工程 ERP API
  * OpenAPI spec version: 0.1.0
  */
+import type { QuoteItemInput } from './quoteItemInput';
 
 export interface QuoteUpdate {
+  customerId?: number;
+  customerName?: string;
+  contactPerson?: string;
   title?: string;
   description?: string;
   amount?: number;
@@ -14,4 +18,9 @@ export interface QuoteUpdate {
   finalAmount?: number;
   status?: string;
   notes?: string;
+  address?: string;
+  customerPhone?: string;
+  taxType?: string;
+  salesRepId?: number;
+  items?: QuoteItemInput[];
 }
