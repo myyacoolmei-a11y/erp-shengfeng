@@ -5,6 +5,7 @@
  * 晟風工程 ERP API
  * OpenAPI spec version: 0.1.0
  */
+import type { QuoteItem } from './quoteItem';
 
 export interface Quote {
   id: number;
@@ -12,6 +13,8 @@ export interface Quote {
   customerId?: number | null;
   /** @nullable */
   customerName?: string | null;
+  /** @nullable */
+  contactPerson?: string | null;
   title: string;
   /** @nullable */
   description?: string | null;
@@ -32,6 +35,7 @@ export interface Quote {
   salesRepId?: number | null;
   /** @nullable */
   salesRepName?: string | null;
+  items?: QuoteItem[];
   createdAt: string;
   updatedAt: string;
 }

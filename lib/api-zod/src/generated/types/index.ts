@@ -41,6 +41,8 @@ export * from './progress';
 export * from './progressInput';
 export * from './quote';
 export * from './quoteInput';
+export * from './quoteItem';
+export * from './quoteItemInput';
 export * from './quoteUpdate';
 export * from './receivable';
 export * from './receivableInput';

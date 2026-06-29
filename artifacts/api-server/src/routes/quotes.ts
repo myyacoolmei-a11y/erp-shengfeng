@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
-import { eq, and } from "drizzle-orm";
-import { db, quotesTable, customersTable, employeesTable } from "@workspace/db";
+import { eq, and, inArray } from "drizzle-orm";
+import { db, quotesTable, customersTable, employeesTable, quoteItemsTable } from "@workspace/db";
 import { CreateQuoteBody, UpdateQuoteBody } from "@workspace/api-zod";
 import { requireRole } from "../lib/auth";
 
@@ -10,39 +10,67 @@ const READ_ROLES = ["super_admin", "owner", "admin", "sales", "distributor"];
 const WRITE_ROLES = ["super_admin", "owner", "admin", "sales", "distributor"];
 const DELETE_ROLES = ["super_admin", "owner", "admin"];
 
-function serializeQuote(q: {
-  id: number;
-  customerId: number | null;
-  customerName: string | null;
-  title: string;
-  description: string | null;
-  amount: unknown;
-  discountAmount: unknown;
-  finalAmount: unknown;
-  status: string;
-  notes: string | null;
-  address: string | null;
-  customerPhone: string | null;
-  taxType: string;
-  salesRepId: number | null;
-  salesRepName: string | null;
-  createdAt: Date | string;
-  updatedAt: Date | string;
-}) {
+function serializeItem(item: typeof quoteItemsTable.$inferSelect) {
   return {
-    ...q,
+    id: item.id,
+    quoteId: item.quoteId,
+    category: item.category,
+    itemName: item.itemName,
+    brand: item.brand ?? null,
+    quantity: parseFloat(item.quantity as string),
+    unit: item.unit,
+    unitPrice: parseFloat(item.unitPrice as string),
+    subtotal: parseFloat(item.subtotal as string),
+    notes: item.notes ?? null,
+    sortOrder: item.sortOrder,
+  };
+}
+
+function serializeQuote(q: any, items: any[] = []) {
+  return {
+    id: q.id,
+    customerId: q.customerId ?? null,
+    customerName: q.customerName ?? q.joinedCustomerName ?? null,
+    contactPerson: q.contactPerson ?? null,
+    title: q.title,
+    description: q.description ?? null,
     amount: parseFloat(q.amount as string),
     discountAmount: q.discountAmount != null ? parseFloat(q.discountAmount as string) : null,
     finalAmount: q.finalAmount != null ? parseFloat(q.finalAmount as string) : null,
+    status: q.status,
+    notes: q.notes ?? null,
+    address: q.address ?? null,
+    customerPhone: q.customerPhone ?? null,
+    taxType: q.taxType ?? "未稅",
+    salesRepId: q.salesRepId ?? null,
+    salesRepName: q.salesRepName ?? null,
+    items,
     createdAt: q.createdAt instanceof Date ? q.createdAt.toISOString() : q.createdAt,
     updatedAt: q.updatedAt instanceof Date ? q.updatedAt.toISOString() : q.updatedAt,
   };
 }
 
+async function buildItemsInsert(itemInputs: any[], quoteId: number) {
+  return itemInputs.map((item: any, idx: number) => ({
+    quoteId,
+    category: item.category ?? "其他",
+    itemName: item.itemName ?? "",
+    brand: item.brand || null,
+    quantity: String(item.quantity ?? 1),
+    unit: item.unit ?? "台",
+    unitPrice: String(item.unitPrice ?? 0),
+    subtotal: String((item.quantity ?? 1) * (item.unitPrice ?? 0)),
+    notes: item.notes || null,
+    sortOrder: item.sortOrder ?? idx,
+  }));
+}
+
 const QUOTE_SELECT = {
   id: quotesTable.id,
   customerId: quotesTable.customerId,
-  customerName: customersTable.name,
+  customerName: quotesTable.customerName,
+  joinedCustomerName: customersTable.name,
+  contactPerson: quotesTable.contactPerson,
   title: quotesTable.title,
   description: quotesTable.description,
   amount: quotesTable.amount,
@@ -68,7 +96,7 @@ router.get("/quotes", requireRole(...READ_ROLES), async (req, res): Promise<void
   }
   if (status) conditions.push(eq(quotesTable.status, status));
 
-  const quotes = await db
+  const quoteRows = await db
     .select(QUOTE_SELECT)
     .from(quotesTable)
     .leftJoin(customersTable, eq(quotesTable.customerId, customersTable.id))
@@ -76,27 +104,55 @@ router.get("/quotes", requireRole(...READ_ROLES), async (req, res): Promise<void
     .where(conditions.length > 0 ? and(...conditions) : undefined)
     .orderBy(quotesTable.createdAt);
 
-  res.json(quotes.map(serializeQuote));
+  if (quoteRows.length === 0) { res.json([]); return; }
+
+  const quoteIds = quoteRows.map(q => q.id);
+  const allItems = await db.select().from(quoteItemsTable)
+    .where(inArray(quoteItemsTable.quoteId, quoteIds))
+    .orderBy(quoteItemsTable.quoteId, quoteItemsTable.sortOrder);
+
+  const itemsByQuote: Record<number, any[]> = {};
+  for (const item of allItems) {
+    const arr = itemsByQuote[item.quoteId] ?? [];
+    arr.push(serializeItem(item));
+    itemsByQuote[item.quoteId] = arr;
+  }
+
+  res.json(quoteRows.map(q => serializeQuote(q, itemsByQuote[q.id] ?? [])));
 });
 
 router.post("/quotes", requireRole(...WRITE_ROLES), async (req, res): Promise<void> => {
   const parsed = CreateQuoteBody.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
-    return;
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+  const { items: itemInputs = [], ...quoteFields } = parsed.data as any;
+
+  let amount = Number(quoteFields.amount ?? 0);
+  if (itemInputs.length > 0) {
+    amount = itemInputs.reduce((sum: number, item: any) => sum + (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0), 0);
   }
-  const data = {
-    ...parsed.data,
-    amount: String(parsed.data.amount ?? 0),
-    discountAmount: parsed.data.discountAmount != null ? String(parsed.data.discountAmount) : undefined,
-    finalAmount: parsed.data.finalAmount != null ? String(parsed.data.finalAmount) : undefined,
+  const discountAmount = Number(quoteFields.discountAmount ?? 0);
+  const finalAmount = Math.max(0, amount - discountAmount);
+
+  const data: any = {
+    ...quoteFields,
+    amount: String(amount),
+    discountAmount: discountAmount > 0 ? String(discountAmount) : undefined,
+    finalAmount: String(finalAmount),
   };
+
   const [quote] = await db.insert(quotesTable).values(data).returning();
-  res.status(201).json(serializeQuote({
-    ...quote,
-    customerName: null,
-    salesRepName: null,
-  }));
+
+  let insertedItems: any[] = [];
+  if (itemInputs.length > 0) {
+    const rows = await buildItemsInsert(itemInputs, quote.id);
+    insertedItems = await db.insert(quoteItemsTable).values(rows).returning();
+  }
+
+  res.status(201).json(serializeQuote(
+    { ...quote, joinedCustomerName: null, salesRepName: null },
+    insertedItems.map(serializeItem)
+  ));
 });
 
 router.get("/quotes/:id", requireRole(...READ_ROLES), async (req, res): Promise<void> => {
@@ -112,7 +168,12 @@ router.get("/quotes/:id", requireRole(...READ_ROLES), async (req, res): Promise<
     .where(eq(quotesTable.id, id));
 
   if (!quote) { res.status(404).json({ error: "找不到報價單" }); return; }
-  res.json(serializeQuote(quote));
+
+  const items = await db.select().from(quoteItemsTable)
+    .where(eq(quoteItemsTable.quoteId, id))
+    .orderBy(quoteItemsTable.sortOrder);
+
+  res.json(serializeQuote(quote, items.map(serializeItem)));
 });
 
 router.patch("/quotes/:id", requireRole(...WRITE_ROLES), async (req, res): Promise<void> => {
@@ -123,18 +184,40 @@ router.patch("/quotes/:id", requireRole(...WRITE_ROLES), async (req, res): Promi
   const parsed = UpdateQuoteBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
-  const data: Record<string, unknown> = { ...parsed.data };
-  if (parsed.data.amount != null) data["amount"] = String(parsed.data.amount);
-  if (parsed.data.discountAmount != null) data["discountAmount"] = String(parsed.data.discountAmount);
-  if (parsed.data.finalAmount != null) data["finalAmount"] = String(parsed.data.finalAmount);
+  const { items: itemInputs, ...quoteFields } = parsed.data as any;
+
+  const data: Record<string, unknown> = { ...quoteFields };
+  if (quoteFields.amount != null) data["amount"] = String(quoteFields.amount);
+  if (quoteFields.discountAmount != null) data["discountAmount"] = String(quoteFields.discountAmount);
+  if (quoteFields.finalAmount != null) data["finalAmount"] = String(quoteFields.finalAmount);
+
+  if (itemInputs !== undefined) {
+    const itemArr: any[] = Array.isArray(itemInputs) ? itemInputs : [];
+    const amount = itemArr.reduce((sum: number, item: any) => sum + (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0), 0);
+    const discountAmount = Number(data["discountAmount"] ?? 0);
+    const finalAmount = Math.max(0, amount - discountAmount);
+    data["amount"] = String(amount);
+    data["finalAmount"] = String(finalAmount);
+
+    await db.delete(quoteItemsTable).where(eq(quoteItemsTable.quoteId, id));
+
+    if (itemArr.length > 0) {
+      const rows = await buildItemsInsert(itemArr, id);
+      await db.insert(quoteItemsTable).values(rows);
+    }
+  }
 
   const [quote] = await db.update(quotesTable).set(data).where(eq(quotesTable.id, id)).returning();
   if (!quote) { res.status(404).json({ error: "找不到報價單" }); return; }
-  res.json(serializeQuote({
-    ...quote,
-    customerName: null,
-    salesRepName: null,
-  }));
+
+  const items = await db.select().from(quoteItemsTable)
+    .where(eq(quoteItemsTable.quoteId, id))
+    .orderBy(quoteItemsTable.sortOrder);
+
+  res.json(serializeQuote(
+    { ...quote, joinedCustomerName: null, salesRepName: null },
+    items.map(serializeItem)
+  ));
 });
 
 router.delete("/quotes/:id", requireRole(...DELETE_ROLES), async (req, res): Promise<void> => {

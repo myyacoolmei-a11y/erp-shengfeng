@@ -1230,6 +1230,35 @@ components:
         installationDate: { type: string }
         notes: { type: string }
 
+    QuoteItemInput:
+      type: object
+      required: [category, itemName, quantity, unit, unitPrice]
+      properties:
+        category: { type: string }
+        itemName: { type: string }
+        brand: { type: string }
+        quantity: { type: number }
+        unit: { type: string }
+        unitPrice: { type: number }
+        notes: { type: string }
+        sortOrder: { type: integer }
+
+    QuoteItem:
+      type: object
+      required: [id, quoteId, category, itemName, quantity, unit, unitPrice, subtotal, sortOrder]
+      properties:
+        id: { type: integer }
+        quoteId: { type: integer }
+        category: { type: string }
+        itemName: { type: string }
+        brand: { type: ["string", "null"] }
+        quantity: { type: number }
+        unit: { type: string }
+        unitPrice: { type: number }
+        subtotal: { type: number }
+        notes: { type: ["string", "null"] }
+        sortOrder: { type: integer }
+
     Quote:
       type: object
       required: [id, title, amount, status, taxType, createdAt, updatedAt]
@@ -1237,6 +1266,7 @@ components:
         id: { type: integer }
         customerId: { type: ["integer", "null"] }
         customerName: { type: ["string", "null"] }
+        contactPerson: { type: ["string", "null"] }
         title: { type: string }
         description: { type: ["string", "null"] }
         amount: { type: number }
@@ -1249,14 +1279,20 @@ components:
         taxType: { type: string }
         salesRepId: { type: ["integer", "null"] }
         salesRepName: { type: ["string", "null"] }
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuoteItem"
         createdAt: { type: string }
         updatedAt: { type: string }
 
     QuoteInput:
       type: object
-      required: [title, amount, status]
+      required: [title, status]
       properties:
         customerId: { type: integer }
+        customerName: { type: string }
+        contactPerson: { type: string }
         title: { type: string, minLength: 1 }
         description: { type: string }
         amount: { type: number }
@@ -1268,11 +1304,17 @@ components:
         customerPhone: { type: string }
         taxType: { type: string }
         salesRepId: { type: integer }
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuoteItemInput"
 
     QuoteUpdate:
       type: object
       properties:
         customerId: { type: integer }
+        customerName: { type: string }
+        contactPerson: { type: string }
         title: { type: string }
         description: { type: string }
         amount: { type: number }
@@ -1284,6 +1326,10 @@ components:
         customerPhone: { type: string }
         taxType: { type: string }
         salesRepId: { type: integer }
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuoteItemInput"
 
     Employee:
       type: object

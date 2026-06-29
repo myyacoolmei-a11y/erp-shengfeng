@@ -2,6 +2,7 @@ export * from "./customers";
 export * from "./acUnits";
 export * from "./employees";
 export * from "./quotes";
+export * from "./quoteItems";
 export * from "./workOrders";
 export * from "./progress";
 export * from "./payments";

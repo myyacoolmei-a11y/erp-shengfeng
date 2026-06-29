@@ -7,6 +7,8 @@ import { employeesTable } from "./employees";
 export const quotesTable = pgTable("quotes", {
   id: serial("id").primaryKey(),
   customerId: integer("customer_id").references(() => customersTable.id, { onDelete: "set null" }),
+  customerName: text("customer_name"),
+  contactPerson: text("contact_person"),
   title: text("title").notNull(),
   description: text("description"),
   amount: numeric("amount", { precision: 12, scale: 2 }).notNull().default("0"),

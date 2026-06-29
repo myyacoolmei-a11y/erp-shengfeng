@@ -6,7 +6,7 @@ import {
   getListQuotesQueryKey, getListWorkOrdersQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { X } from "lucide-react";
+import { X, Plus, Pencil, Trash2, Printer, Wrench, Copy } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -16,9 +16,23 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Pencil, Trash2, Printer, Wrench } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
+// ── Constants ──────────────────────────────────────────────────────────────
+const CATEGORIES = ["裝新機", "保養", "維修", "移機", "拆機", "冷媒工程", "配管工程", "其他"];
+const CATEGORY_ITEMS: Record<string, string[]> = {
+  "裝新機": ["壁掛分離式", "吊隱式", "直立式"],
+  "保養": ["分離式保養", "吊隱式保養", "直立式保養"],
+  "維修": ["維修"],
+  "移機": ["移機"],
+  "拆機": ["拆機"],
+  "冷媒工程": ["冷媒工程"],
+  "配管工程": ["配管工程"],
+  "其他": [],
+};
+const BRANDS = ["冰點", "聲寶", "國際", "三菱重工", "金鼎", "格力", "三洋", "日立", "奇美", "其他"];
+const KNOWN_BRANDS = BRANDS.filter(b => b !== "其他");
+const UNITS = ["台", "式", "個", "組", "套", "次", "公尺", "公斤"];
 const STATUSES = ["草稿", "已送出", "已接受", "已拒絕", "已完成"];
 const STATUS_COLORS: Record<string, string> = {
   "草稿": "bg-gray-100 text-gray-700",
@@ -28,47 +42,137 @@ const STATUS_COLORS: Record<string, string> = {
   "已完成": "bg-emerald-100 text-emerald-700",
 };
 
-function calcTax(finalAmt: number, taxType: string) {
-  if (taxType === "含稅") {
-    const preTax = Math.round(finalAmt / 1.05);
-    const taxAmt = finalAmt - preTax;
-    return { preTax, taxAmt, total: finalAmt };
-  }
-  const taxAmt = Math.round(finalAmt * 0.05);
-  return { preTax: finalAmt, taxAmt, total: finalAmt + taxAmt };
+// ── Types ──────────────────────────────────────────────────────────────────
+interface QuoteItem {
+  category: string;
+  itemName: string;
+  brand: string;
+  quantity: number;
+  unit: string;
+  unitPrice: number;
+  notes: string;
+  sortOrder: number;
+}
+interface QuoteForm {
+  customerId: number;
+  customerName: string;
+  contactPerson: string;
+  customerPhone: string;
+  address: string;
+  title: string;
+  description: string;
+  taxType: string;
+  salesRepId: number;
+  status: string;
+  notes: string;
+  discountAmount: number;
+  items: QuoteItem[];
 }
 
-function printQuote(quote: any) {
+const DEFAULT_ITEM = (): QuoteItem => ({
+  category: "裝新機", itemName: "壁掛分離式", brand: "冰點",
+  quantity: 1, unit: "台", unitPrice: 0, notes: "", sortOrder: 0,
+});
+const emptyForm = (): QuoteForm => ({
+  customerId: 0, customerName: "", contactPerson: "", customerPhone: "",
+  address: "", title: "", description: "", taxType: "未稅", salesRepId: 0,
+  status: "草稿", notes: "", discountAmount: 0, items: [],
+});
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+function calcTax(subtotal: number, taxType: string) {
+  if (taxType === "含稅") {
+    const preTax = Math.round(subtotal / 1.05);
+    return { preTax, taxAmt: subtotal - preTax, total: subtotal };
+  }
+  const taxAmt = Math.round(subtotal * 0.05);
+  return { preTax: subtotal, taxAmt, total: subtotal + taxAmt };
+}
+
+function computeTotals(items: QuoteItem[], discountAmount: number, taxType: string) {
+  const rawTotal = items.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
+  const subtotal = Math.max(0, rawTotal - (discountAmount || 0));
+  return { rawTotal, ...calcTax(subtotal, taxType) };
+}
+
+function formToApi(f: QuoteForm) {
+  const rawTotal = f.items.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
+  const discAmt = f.discountAmount || 0;
+  return {
+    ...(f.customerId > 0 ? { customerId: f.customerId } : {}),
+    customerName: f.customerName || undefined,
+    contactPerson: f.contactPerson || undefined,
+    title: f.title,
+    description: f.description || undefined,
+    amount: rawTotal,
+    discountAmount: discAmt > 0 ? discAmt : undefined,
+    finalAmount: Math.max(0, rawTotal - discAmt),
+    status: f.status,
+    notes: f.notes || undefined,
+    address: f.address || undefined,
+    customerPhone: f.customerPhone || undefined,
+    taxType: f.taxType,
+    ...(f.salesRepId > 0 ? { salesRepId: f.salesRepId } : {}),
+    items: f.items.map((item, idx) => ({
+      category: item.category,
+      itemName: item.itemName,
+      brand: item.brand || undefined,
+      quantity: item.quantity,
+      unit: item.unit,
+      unitPrice: item.unitPrice,
+      notes: item.notes || undefined,
+      sortOrder: idx,
+    })),
+  };
+}
+
+function quoteToForm(q: any): QuoteForm {
+  return {
+    customerId: q.customerId ?? 0,
+    customerName: q.customerName ?? "",
+    contactPerson: q.contactPerson ?? "",
+    customerPhone: q.customerPhone ?? "",
+    address: q.address ?? "",
+    title: q.title ?? "",
+    description: q.description ?? "",
+    taxType: q.taxType ?? "未稅",
+    salesRepId: q.salesRepId ?? 0,
+    status: q.status ?? "草稿",
+    notes: q.notes ?? "",
+    discountAmount: Number(q.discountAmount ?? 0),
+    items: (q.items ?? []).map((item: any, idx: number) => ({
+      category: item.category ?? "其他",
+      itemName: item.itemName ?? "",
+      brand: item.brand ?? "",
+      quantity: Number(item.quantity ?? 1),
+      unit: item.unit ?? "台",
+      unitPrice: Number(item.unitPrice ?? 0),
+      notes: item.notes ?? "",
+      sortOrder: idx,
+    })),
+  };
+}
+
+// ── Print ──────────────────────────────────────────────────────────────────
+function printQuote(quote: any, autoprint = true) {
+  const items: any[] = quote.items ?? [];
   const d = quote.createdAt ? new Date(quote.createdAt) : new Date();
   const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
   const quoteNo = `Q-${ymd}-${String(quote.id).padStart(4, "0")}`;
   const quoteDate = d.toLocaleDateString("zh-TW");
-  const validDate = new Date(d.getTime() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString("zh-TW");
+  const validDate = new Date(d.getTime() + 30 * 86400000).toLocaleDateString("zh-TW");
   const printDate = new Date().toLocaleDateString("zh-TW");
   const logoUrl = `${window.location.origin}/logo.png`;
-
-  const baseAmt = Number(quote.amount ?? 0);
-  const discAmt = Number(quote.discountAmount ?? 0);
-  const finalAmt = Number(quote.finalAmount ?? quote.amount ?? 0);
+  const esc = (s: any) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const fmt = (n: number) => `NT$ ${Math.round(n).toLocaleString()}`;
   const taxType = quote.taxType || "未稅";
-  const { preTax, taxAmt, total } = calcTax(finalAmt, taxType);
 
-  const fmt = (n: number) => `NT$ ${n.toLocaleString()}`;
-  const esc = (s: string | null | undefined) => (s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-
-  const searchText = `${quote.title ?? ""} ${quote.description ?? ""}`.toLowerCase();
-  const brandDefs: [string, string, string][] = [
-    ["panasonic", "Panasonic", "#0033A0"],
-    ["mitsubishi", "三菱重工", "#E60012"], ["三菱重工", "三菱重工", "#E60012"],
-    ["daikin", "Daikin 大金", "#0078BF"], ["大金", "Daikin 大金", "#0078BF"],
-    ["hitachi", "HITACHI 日立", "#C8002B"], ["日立", "HITACHI 日立", "#C8002B"],
-    ["sampo", "SAMPO 聲寶", "#00529C"], ["聲寶", "SAMPO 聲寶", "#00529C"],
-    ["冰點", "冰點", "#00B4D8"],
-  ];
-  const detectedBrand = brandDefs.find(([key]) => searchText.includes(key));
-  const brandBadge = detectedBrand
-    ? `<span style="background:${detectedBrand[2]};color:#fff;font-size:7pt;font-weight:700;padding:0.5mm 2mm;border-radius:1mm;letter-spacing:0.5px">${detectedBrand[1]}</span>`
-    : "";
+  const rawTotal = items.length > 0
+    ? items.reduce((s: number, i: any) => s + Number(i.subtotal || 0), 0)
+    : Number(quote.finalAmount ?? quote.amount ?? 0);
+  const discAmt = Number(quote.discountAmount ?? 0);
+  const subtotal = Math.max(0, rawTotal - discAmt);
+  const { preTax, taxAmt, total } = calcTax(subtotal, taxType);
 
   const statusStyles: Record<string, string> = {
     "草稿": "background:#e5e7eb;color:#374151",
@@ -77,73 +181,72 @@ function printQuote(quote: any) {
     "已拒絕": "background:#fee2e2;color:#dc2626",
     "已完成": "background:#d1fae5;color:#065f46",
   };
-  const statusBadge = `<span style="font-size:8pt;font-weight:700;padding:1mm 3mm;border-radius:1mm;${statusStyles[quote.status] ?? "background:#f3f4f6;color:#111"}">${quote.status}</span>`;
+  const statusBadge = `<span style="font-size:8pt;font-weight:700;padding:1mm 3mm;border-radius:1mm;${statusStyles[quote.status] ?? ""}">${quote.status ?? ""}</span>`;
 
-  const matText = `${quote.description ?? ""} ${quote.notes ?? ""}`.toLowerCase();
-  const chk = (k: string) => matText.includes(k) ? "☑" : "☐";
+  const itemRows = items.length > 0
+    ? items.map((item: any, i: number) => `
+      <tr>
+        <td>${i + 1}</td>
+        <td>${esc(item.category)}</td>
+        <td>${esc(item.brand || "—")}</td>
+        <td class="tl">${esc(item.itemName)}</td>
+        <td>${Number(item.quantity)}</td>
+        <td>${esc(item.unit)}</td>
+        <td style="text-align:right">${fmt(Number(item.unitPrice))}</td>
+        <td style="text-align:right;font-weight:600">${fmt(Number(item.subtotal))}</td>
+        <td class="tl">${esc(item.notes || "")}</td>
+      </tr>`).join("")
+    : `<tr><td>1</td><td>工程</td><td>—</td><td class="tl">${esc(quote.title)}</td><td>1</td><td>式</td><td style="text-align:right">${fmt(rawTotal)}</td><td style="text-align:right;font-weight:600">${fmt(rawTotal)}</td><td></td></tr>`;
 
-  const notesLines = (quote.notes ?? "").split(/\n/).filter((l: string) => l.trim()).slice(0, 4);
-  const defaultNotes = [
-    "報價單有效期限為 30 日，逾期請重新確認。",
-    "報價已含安裝人工及基本耗材，不含特殊工程。",
-    "施工前須支付 50% 訂金，完工驗收後付清尾款。",
-    "不含配電工程，如需配電請另行報價。",
-  ];
-  const notesHtml = (notesLines.length > 0 ? notesLines : defaultNotes)
-    .map((l: string, i: number) => `<div style="display:flex;gap:2mm;padding:0.8mm 0;font-size:8pt;line-height:1.4"><span style="color:#9ACD32;font-weight:700;min-width:4mm">${i + 1}.</span><span>${esc(l.replace(/^\d+[.)、．]\s*/, ""))}</span></div>`)
-    .join("");
+  const padRows = Array.from({ length: Math.max(0, 4 - items.length) }, (_, i) => `
+    <tr><td>${items.length + i + 1}</td><td></td><td></td><td class="tl"></td><td></td><td></td><td></td><td></td><td></td></tr>`).join("");
 
-  const html = `<!DOCTYPE html>
-<html lang="zh-TW"><head><meta charset="UTF-8">
-<title>報價單 ${quoteNo}</title>
+  const notesHtml = (quote.notes ?? "").split(/\n/).filter((l: string) => l.trim()).slice(0, 5)
+    .map((l: string, i: number) => `<div style="display:flex;gap:2mm;padding:0.8mm 0;font-size:8pt;line-height:1.4"><span style="color:#9ACD32;font-weight:700;min-width:4mm">${i + 1}.</span><span>${esc(l.replace(/^\d+[.)、．]\s*/, ""))}</span></div>`).join("")
+    || ["報價單有效期限為 30 日，逾期請重新確認。","施工前請支付 50% 訂金，完工驗收後付清尾款。","施工費已含基本配管耗材，特殊工程另計。","不含配電工程，如需配電請另行報價。"]
+      .map((l, i) => `<div style="display:flex;gap:2mm;padding:0.8mm 0;font-size:8pt;line-height:1.4"><span style="color:#9ACD32;font-weight:700;min-width:4mm">${i + 1}.</span><span>${l}</span></div>`).join("");
+
+  const html = `<!DOCTYPE html><html lang="zh-TW"><head><meta charset="UTF-8"><title>報價單 ${quoteNo}</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;font-size:8.5pt;color:#111;background:#fff;padding-bottom:18mm}
-@page{size:A4;margin:10mm 10mm 10mm 10mm}
-@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.no-print{display:none!important}.pf{position:fixed;bottom:0;left:0;right:0;background:#fff}}
-.doc{max-width:190mm;margin:0 auto}
-.row{display:flex;gap:3mm}
-.sec{margin-bottom:2.5mm}
-.stitle{font-size:7pt;font-weight:700;background:#111;color:#9ACD32;padding:1mm 3mm;letter-spacing:2px;text-transform:uppercase;margin-bottom:1.5mm;display:flex;align-items:center;justify-content:space-between}
+body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;font-size:8.5pt;color:#111;background:#fff}
+@page{size:A4;margin:10mm}
+@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.np{display:none!important}}
+.doc{max-width:190mm;margin:0 auto;padding-bottom:16mm}
 .hdr{display:flex;justify-content:space-between;align-items:flex-end;padding-bottom:3mm;border-bottom:2.5px solid #9ACD32;margin-bottom:3mm}
 .hdr-l{display:flex;align-items:center;gap:3mm}
 .hdr-logo{width:14mm;height:14mm;border-radius:50%;object-fit:cover;border:2px solid #9ACD32}
-.co-name{font-size:15pt;font-weight:900;color:#111;line-height:1.1;letter-spacing:0.5px}
-.co-sub{font-size:7pt;color:#666;margin-top:1mm;letter-spacing:0.5px}
+.co-name{font-size:15pt;font-weight:900}
+.co-sub{font-size:7pt;color:#666;margin-top:1mm}
 .co-info{font-size:6.5pt;color:#888;margin-top:1mm;line-height:1.5}
 .doc-r{text-align:right}
 .doc-label{font-size:20pt;font-weight:900;color:#9ACD32;letter-spacing:8px;line-height:1}
 .doc-en{font-size:8pt;color:#aaa;letter-spacing:2px}
 .doc-no{font-size:9pt;font-weight:700;font-family:monospace;margin-top:2mm}
 .doc-dates{font-size:7.5pt;color:#555;line-height:1.7;margin-top:1mm}
+.sec{margin-bottom:3mm}
+.stitle{font-size:7pt;font-weight:700;background:#111;color:#9ACD32;padding:1mm 3mm;letter-spacing:2px;margin-bottom:1.5mm;display:flex;align-items:center;justify-content:space-between}
 .ci-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:0.8mm 4mm}
 .ci-r{display:flex;align-items:baseline;gap:1.5mm;padding:0.8mm 0;border-bottom:1px dotted #e0e0e0}
-.ci-l{font-size:6.5pt;color:#888;min-width:13mm;flex-shrink:0}
+.ci-l{font-size:6.5pt;color:#888;min-width:14mm;flex-shrink:0}
 .ci-v{font-size:8pt;font-weight:600;flex:1}
 .ci-wide{grid-column:span 2}
 table{width:100%;border-collapse:collapse;font-size:7.5pt}
-thead th{background:#111;color:#9ACD32;padding:1.5mm 1.5mm;text-align:center;font-weight:700;font-size:7pt;white-space:nowrap;border-right:1px solid #333}
+thead th{background:#111;color:#9ACD32;padding:1.5mm 1.5mm;text-align:center;font-weight:700;font-size:7pt;border-right:1px solid #333;white-space:nowrap}
 thead th:last-child{border-right:none}
 tbody tr:nth-child(even){background:#f7f7f7}
 tbody td{padding:1.5mm 1.5mm;text-align:center;border-bottom:1px solid #ebebeb;vertical-align:middle}
 tbody td.tl{text-align:left}
 tbody tr:last-child td{border-bottom:1.5px solid #9ACD32}
-.chk-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1mm 2mm;font-size:7.5pt}
-.chk-item{display:flex;align-items:center;gap:1mm}
-.chk-sym{font-size:9pt;color:#9ACD32}
-.chk-sym.off{color:#bbb}
-.chk-other{display:flex;align-items:center;gap:1mm;grid-column:span 2}
-.chk-line{flex:1;border-bottom:1px solid #999;min-width:20mm}
-.mid-l{flex:0 0 54%}
-.mid-r{flex:1;border:1px solid #e0e0e0;border-left:3px solid #9ACD32;padding:2mm 2.5mm;font-size:7.5pt;white-space:pre-wrap;line-height:1.5;color:#333;background:#fafafa;min-height:24mm}
+.row{display:flex;gap:3mm}
+.mid-r{flex:1;border:1px solid #e0e0e0;border-left:3px solid #9ACD32;padding:2mm 2.5mm;font-size:8pt;white-space:pre-wrap;line-height:1.5;color:#333;background:#fafafa;min-height:20mm}
 .bot-l{flex:1}
-.bot-r{flex:0 0 72mm}
+.bot-r{flex:0 0 70mm}
 .amt-box{border:2px solid #9ACD32;border-radius:1mm;overflow:hidden}
 .amt-r{display:flex;justify-content:space-between;padding:1.5mm 4mm;border-bottom:1px solid #ebebeb;font-size:8pt}
 .amt-r .lbl{color:#777}
 .amt-r .val{font-weight:600}
-.amt-r.disc .val{color:#dc2626}
-.amt-total{background:#111;padding:3mm 4mm}
+.amt-total{background:#111;padding:3mm 4mm;display:flex;justify-content:space-between;align-items:center}
 .amt-total .lbl{color:#9ACD32;font-size:9.5pt;font-weight:900;letter-spacing:1px}
 .amt-total .val{color:#fff;font-size:14pt;font-weight:900;font-family:monospace}
 .sig-row{display:grid;grid-template-columns:repeat(3,1fr);gap:3mm;margin-top:1mm}
@@ -155,16 +258,12 @@ tbody tr:last-child td{border-bottom:1.5px solid #9ACD32}
 .pf-l{display:flex;align-items:center;gap:2mm}
 .pf-logo{width:8mm;height:8mm;border-radius:50%;object-fit:cover;border:1px solid #9ACD32}
 .pf-info{font-size:6.5pt;color:#666;line-height:1.5}
-.pf-info b{color:#111}
 .pf-r{font-size:6.5pt;color:#aaa;text-align:right;line-height:1.6}
 .pbtn{position:fixed;top:8mm;right:8mm;background:#9ACD32;color:#111;border:none;padding:5px 16px;font-size:9.5pt;font-weight:700;cursor:pointer;border-radius:2px;z-index:100;letter-spacing:1px}
 .pbtn:hover{background:#7db220}
-</style></head>
-<body>
-<button class="pbtn no-print" onclick="window.print()">列印 / PDF</button>
+</style></head><body>
+<button class="pbtn np" onclick="window.print()">列印 / PDF</button>
 <div class="doc">
-
-<!-- HEADER -->
 <div class="hdr">
   <div class="hdr-l">
     <img src="${logoUrl}" class="hdr-logo" alt="">
@@ -177,109 +276,63 @@ tbody tr:last-child td{border-bottom:1.5px solid #9ACD32}
   <div class="doc-r">
     <div class="doc-label">報價單</div>
     <div class="doc-en">QUOTATION</div>
-    <div class="doc-no">${quoteNo}&nbsp;&nbsp;${statusBadge}${brandBadge ? `&nbsp;${brandBadge}` : ""}</div>
-    <div class="doc-dates">
-      報價日期：${quoteDate}　有效期限：${validDate}<br>
-      列印日期：${printDate}
-    </div>
+    <div class="doc-no">${quoteNo}&nbsp;&nbsp;${statusBadge}</div>
+    <div class="doc-dates">報價日期：${quoteDate}　有效期限：${validDate}<br>列印日期：${printDate}</div>
   </div>
 </div>
 
-<!-- CLIENT INFO -->
 <div class="sec">
-  <div class="stitle">▌ 客戶資訊 　Client Information</div>
+  <div class="stitle">▌ 客戶資訊　Client Information</div>
   <div class="ci-grid">
     <div class="ci-r"><span class="ci-l">客戶名稱</span><span class="ci-v">${esc(quote.customerName) || "　"}</span></div>
+    <div class="ci-r"><span class="ci-l">聯絡人</span><span class="ci-v">${esc(quote.contactPerson) || "　"}</span></div>
     <div class="ci-r"><span class="ci-l">聯絡電話</span><span class="ci-v">${esc(quote.customerPhone) || "　"}</span></div>
-    <div class="ci-r"><span class="ci-l">工程名稱</span><span class="ci-v">${esc(quote.title) || "　"}</span></div>
     <div class="ci-r"><span class="ci-l">負責業務</span><span class="ci-v">${esc(quote.salesRepName) || "　"}</span></div>
+    <div class="ci-r"><span class="ci-l">工程名稱</span><span class="ci-v">${esc(quote.title) || "　"}</span></div>
     <div class="ci-r"><span class="ci-l">稅別</span><span class="ci-v">${esc(taxType)}</span></div>
-    <div class="ci-r"><span class="ci-l">付款方式</span><span class="ci-v">　</span></div>
     <div class="ci-r ci-wide"><span class="ci-l">施工地址</span><span class="ci-v">${esc(quote.address) || "　"}</span></div>
     <div class="ci-r"><span class="ci-l">付款條件</span><span class="ci-v">　</span></div>
   </div>
 </div>
 
-<!-- EQUIPMENT TABLE -->
 <div class="sec">
   <div class="stitle">▌ 工程設備明細　Equipment Schedule</div>
   <table>
     <thead><tr>
-      <th style="width:6mm">項次</th>
-      <th style="width:14mm">品牌</th>
-      <th>品名</th>
-      <th style="width:20mm">型號</th>
-      <th style="width:9mm">數量</th>
-      <th style="width:9mm">單位</th>
-      <th style="width:18mm">單價</th>
-      <th style="width:12mm">折扣</th>
-      <th style="width:20mm">小計</th>
+      <th style="width:6mm">項次</th><th style="width:16mm">類別</th>
+      <th style="width:14mm">品牌</th><th>品項</th>
+      <th style="width:9mm">數量</th><th style="width:9mm">單位</th>
+      <th style="width:22mm">單價</th><th style="width:22mm">小計</th>
       <th style="width:18mm">備註</th>
     </tr></thead>
-    <tbody>
-      <tr>
-        <td>1</td>
-        <td>${brandBadge || "　"}</td>
-        <td class="tl">${esc(quote.title)}</td>
-        <td></td><td>1</td><td>式</td>
-        <td>${baseAmt > 0 ? fmt(baseAmt) : ""}</td>
-        <td>${discAmt > 0 ? fmt(discAmt) : "—"}</td>
-        <td>${baseAmt > 0 ? fmt(baseAmt - discAmt) : ""}</td>
-        <td></td>
-      </tr>
-      <tr><td>2</td><td></td><td class="tl"></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
-      <tr><td>3</td><td></td><td class="tl"></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
-      <tr><td>4</td><td></td><td class="tl"></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
-      <tr><td>5</td><td></td><td class="tl"></td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
-    </tbody>
+    <tbody>${itemRows}${padRows}</tbody>
   </table>
 </div>
 
-<!-- MIDDLE ROW: Materials + Service Content -->
 <div class="row sec">
-  <div class="mid-l">
-    <div class="stitle">▌ 追加材料　Additional Materials</div>
-    <div class="chk-grid">
-      <div class="chk-item"><span class="chk-sym ${chk("銅管")==="☑"?"":"off"}">${chk("銅管")}</span>銅管</div>
-      <div class="chk-item"><span class="chk-sym ${chk("冷媒")==="☑"?"":"off"}">${chk("冷媒")}</span>冷媒補充</div>
-      <div class="chk-item"><span class="chk-sym ${chk("控制線")==="☑"?"":"off"}">${chk("控制線")}</span>控制線</div>
-      <div class="chk-item"><span class="chk-sym ${chk("排水管")==="☑"?"":"off"}">${chk("排水管")}</span>排水管</div>
-      <div class="chk-item"><span class="chk-sym ${chk("電源線")==="☑"?"":"off"}">${chk("電源線")}</span>電源線</div>
-      <div class="chk-item"><span class="chk-sym ${chk("固定架")==="☑"?"":"off"}">${chk("固定架")}</span>室外固定架</div>
-      <div class="chk-item"><span class="chk-sym ${chk("洗孔")==="☑"?"":"off"}">${chk("洗孔")}</span>洗孔</div>
-      <div class="chk-item"><span class="chk-sym ${chk("吊車")==="☑"?"":"off"}">${chk("吊車")}</span>吊車</div>
-      <div class="chk-item"><span class="chk-sym ${chk("高空車")==="☑"?"":"off"}">${chk("高空車")}</span>高空車</div>
-      <div class="chk-item"><span class="chk-sym ${chk("拆除")==="☑"?"":"off"}">${chk("拆除")}</span>拆除舊機</div>
-      <div class="chk-item"><span class="chk-sym ${chk("冷凝水")==="☑"?"":"off"}">${chk("冷凝水")}</span>冷凝水幫浦</div>
-      <div class="chk-other"><span class="chk-sym off">☐</span>其他：<span class="chk-line"></span></div>
-    </div>
+  <div style="flex:0 0 54%">
+    <div class="stitle">▌ 備註說明　Notes &amp; Remarks</div>
+    <div class="mid-r" style="min-height:${quote.description ? "auto" : "24mm"};margin-left:0;border-left:3px solid #9ACD32">${esc(quote.description) || "施工方式：\n施工天數：\n注意事項："}</div>
   </div>
-  <div class="mid-r">
-    <div class="stitle" style="margin:-2mm -2.5mm 1.5mm;padding:1mm 2.5mm">▌ 服務內容　Service Content</div>${esc(quote.description) || "施工方式：\n施工天數：\n注意事項：\n停車位置："}</div>
-</div>
-
-<!-- BOTTOM ROW: Terms + Total -->
-<div class="row sec">
-  <div class="bot-l">
+  <div style="flex:1">
     <div class="stitle">▌ 注意事項　Terms &amp; Conditions</div>
     ${notesHtml}
   </div>
+</div>
+
+<div class="row sec">
+  <div class="bot-l"></div>
   <div class="bot-r">
     <div class="amt-box">
-      <div class="amt-r"><span class="lbl">材料費</span><span class="val">${fmt(baseAmt)}</span></div>
-      <div class="amt-r"><span class="lbl">施工費</span><span class="val">—</span></div>
-      ${discAmt > 0 ? `<div class="amt-r disc"><span class="lbl">折扣</span><span class="val">－ ${fmt(discAmt)}</span></div>` : ""}
+      <div class="amt-r"><span class="lbl">項目小計</span><span class="val">${fmt(rawTotal)}</span></div>
+      ${discAmt > 0 ? `<div class="amt-r"><span class="lbl">折扣</span><span class="val" style="color:#dc2626">－ ${fmt(discAmt)}</span></div>` : ""}
       <div class="amt-r"><span class="lbl">未稅小計</span><span class="val">${fmt(preTax)}</span></div>
       <div class="amt-r"><span class="lbl">稅額 5%</span><span class="val">${fmt(taxAmt)}</span></div>
-      <div class="amt-total" style="display:flex;justify-content:space-between;align-items:center">
-        <span class="lbl">含稅總計</span>
-        <span class="val">${fmt(total)}</span>
-      </div>
+      <div class="amt-total"><span class="lbl">含稅總計</span><span class="val">${fmt(total)}</span></div>
     </div>
   </div>
 </div>
 
-<!-- SIGNATURES -->
 <div class="sec">
   <div class="stitle">▌ 確認簽署　Authorization</div>
   <div class="sig-row">
@@ -288,57 +341,135 @@ tbody tr:last-child td{border-bottom:1.5px solid #9ACD32}
     <div class="sig-box"><div class="sig-sp"></div><div class="sig-lbl">公　司　章</div><div class="sig-dt">&nbsp;</div></div>
   </div>
 </div>
+</div>
 
-</div><!-- /doc -->
-
-<!-- FOOTER -->
 <div class="pf">
   <div class="pf-l">
     <img src="${logoUrl}" class="pf-logo" alt="">
-    <div class="pf-info">
-      <b>晟風工程有限公司</b>　統編：93388506<br>
-      Tel：0955-980-738　cfac07151025@gmail.com　彰化縣花壇鄉花南路212號
-    </div>
+    <div class="pf-info"><b>晟風工程有限公司</b>　統編：93388506<br>Tel：0955-980-738　彰化縣花壇鄉花南路212號</div>
   </div>
   <div class="pf-r">Generated by 晟風工程 ERP<br>列印：${printDate}</div>
 </div>
-
 </body></html>`;
 
   const w = window.open("", "_blank", "width=900,height=1100");
-  if (w) { w.document.write(html); w.document.close(); }
+  if (w) {
+    w.document.write(html);
+    w.document.close();
+    if (autoprint) w.addEventListener("load", () => w.print(), { once: true });
+  }
 }
 
-interface QuoteForm {
-  customerId: number;
-  title: string;
-  description: string;
-  amount: number;
-  discountAmount: number;
-  finalAmount: number;
-  status: string;
-  notes: string;
-  address: string;
-  customerPhone: string;
-  taxType: string;
-  salesRepId: number;
+// ── ItemCard ───────────────────────────────────────────────────────────────
+function ItemCard({ item, index, onChange, onDelete }: {
+  item: QuoteItem; index: number;
+  onChange: (u: QuoteItem) => void; onDelete: () => void;
+}) {
+  const itemOptions = CATEGORY_ITEMS[item.category] || [];
+  const hasOptions = itemOptions.length > 0;
+  const isCustomItem = hasOptions && !itemOptions.includes(item.itemName);
+  const isCustomBrand = !!item.brand && !KNOWN_BRANDS.includes(item.brand);
+
+  return (
+    <div className="border rounded-lg p-3 space-y-2 bg-card/50">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-semibold text-muted-foreground">項目 {index + 1}</span>
+        <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground" onClick={onDelete}>
+          <X className="h-3.5 w-3.5" />
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <div className="space-y-1">
+          <Label className="text-xs">類別</Label>
+          <Select value={item.category} onValueChange={v => {
+            onChange({ ...item, category: v, itemName: CATEGORY_ITEMS[v]?.[0] || "" });
+          }}>
+            <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>{CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-1">
+          <Label className="text-xs">品項</Label>
+          {hasOptions ? (
+            <Select value={isCustomItem ? "其他" : item.itemName} onValueChange={v => onChange({ ...item, itemName: v === "其他" ? "" : v })}>
+              <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {itemOptions.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
+                <SelectItem value="其他">其他（自填）</SelectItem>
+              </SelectContent>
+            </Select>
+          ) : (
+            <Input className="h-8 text-xs" value={item.itemName} onChange={e => onChange({ ...item, itemName: e.target.value })} placeholder="請輸入品項" />
+          )}
+          {isCustomItem && (
+            <Input className="h-7 text-xs mt-1" value={item.itemName} onChange={e => onChange({ ...item, itemName: e.target.value })} placeholder="請輸入品項名稱" />
+          )}
+        </div>
+
+        <div className="space-y-1">
+          <Label className="text-xs">品牌</Label>
+          <Select value={isCustomBrand ? "其他" : (item.brand || "其他")} onValueChange={v => onChange({ ...item, brand: v === "其他" ? "" : v })}>
+            <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>{BRANDS.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}</SelectContent>
+          </Select>
+          {(isCustomBrand || item.brand === "") && (
+            <Input className="h-7 text-xs mt-1" value={item.brand} onChange={e => onChange({ ...item, brand: e.target.value })} placeholder="請輸入品牌" />
+          )}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 items-end">
+        <div className="space-y-1">
+          <Label className="text-xs">數量</Label>
+          <Input className="h-8 text-sm" type="number" min="0.01" step="0.01" value={item.quantity}
+            onChange={e => onChange({ ...item, quantity: parseFloat(e.target.value) || 0 })} />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">單位</Label>
+          <Select value={item.unit} onValueChange={v => onChange({ ...item, unit: v })}>
+            <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>{UNITS.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">單價</Label>
+          <Input className="h-8 text-sm" type="number" min="0" value={item.unitPrice}
+            onChange={e => onChange({ ...item, unitPrice: parseFloat(e.target.value) || 0 })} />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">小計</Label>
+          <div className="h-8 flex items-center px-2 bg-muted/50 rounded-md border text-xs font-semibold">
+            NT${(item.quantity * item.unitPrice).toLocaleString()}
+          </div>
+        </div>
+        <div className="space-y-1 col-span-2 sm:col-span-1">
+          <Label className="text-xs">備註</Label>
+          <Input className="h-8 text-xs" value={item.notes} onChange={e => onChange({ ...item, notes: e.target.value })} placeholder="選填" />
+        </div>
+      </div>
+    </div>
+  );
 }
 
+// ── Main Component ─────────────────────────────────────────────────────────
 export default function Quotes() {
   const { toast } = useToast();
-  const queryClient = useQueryClient();
+  const qc = useQueryClient();
   const search = useSearch();
   const [, navigate] = useLocation();
   const urlParams = new URLSearchParams(search);
   const filterCustomerId = parseInt(urlParams.get("customerId") ?? "0", 10) || null;
   const filterCustomerName = urlParams.get("customerName") ?? "";
 
-  const [statusFilter, setStatusFilter] = useState<string>("全部");
+  const [statusFilter, setStatusFilter] = useState("全部");
   const [showCreate, setShowCreate] = useState(false);
   const [editItem, setEditItem] = useState<any>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [convertItem, setConvertItem] = useState<any>(null);
   const [woForm, setWoForm] = useState({ assignedTo: "", scheduledDate: "", notes: "" });
+  const [form, setForm] = useState<QuoteForm>(emptyForm());
 
   const { data: quotes, isLoading } = useListQuotes({
     ...(filterCustomerId ? { customerId: filterCustomerId } : {}),
@@ -347,147 +478,111 @@ export default function Quotes() {
   const { data: customers } = useListCustomers({});
   const { data: salesReps } = useListEmployees({ position: "業務", status: "在職" });
 
-  const emptyForm: QuoteForm = {
-    customerId: 0, title: "", description: "", amount: 0, discountAmount: 0,
-    finalAmount: 0, status: "草稿", notes: "", address: "", customerPhone: "",
-    taxType: "未稅", salesRepId: 0,
-  };
-  const [form, setForm] = useState<QuoteForm>(emptyForm);
+  const invQuotes = () => qc.invalidateQueries({ queryKey: getListQuotesQueryKey() });
+  const createMutation = useCreateQuote({ mutation: { onSuccess: () => { invQuotes(); setShowCreate(false); toast({ title: "報價單已新增" }); } } });
+  const updateMutation = useUpdateQuote({ mutation: { onSuccess: () => { invQuotes(); setEditItem(null); toast({ title: "報價單已更新" }); } } });
+  const deleteMutation = useDeleteQuote({ mutation: { onSuccess: () => { invQuotes(); setDeleteId(null); toast({ title: "報價單已刪除" }); } } });
+  const createWoMutation = useCreateWorkOrder({ mutation: { onSuccess: () => { qc.invalidateQueries({ queryKey: getListWorkOrdersQueryKey() }); setConvertItem(null); toast({ title: "派工單已建立" }); } } });
 
-  function formToApi(f: QuoteForm) {
-    return {
-      ...(f.customerId > 0 ? { customerId: f.customerId } : {}),
-      title: f.title,
-      description: f.description || undefined,
-      amount: f.amount,
-      discountAmount: f.discountAmount > 0 ? f.discountAmount : undefined,
-      finalAmount: f.finalAmount > 0 ? f.finalAmount : undefined,
-      status: f.status,
-      notes: f.notes || undefined,
-      address: f.address || undefined,
-      customerPhone: f.customerPhone || undefined,
-      taxType: f.taxType,
-      ...(f.salesRepId > 0 ? { salesRepId: f.salesRepId } : {}),
-    };
+  function handleCustomerChange(v: string) {
+    const cid = parseInt(v, 10);
+    const c = customers?.find(x => x.id === cid);
+    setForm(f => ({
+      ...f, customerId: cid,
+      customerName: c ? c.name : f.customerName,
+      address: c ? (c.address || f.address) : f.address,
+      customerPhone: c ? (c.phone || f.customerPhone) : f.customerPhone,
+    }));
   }
 
-  const createMutation = useCreateQuote({ mutation: { onSuccess: () => { queryClient.invalidateQueries({ queryKey: getListQuotesQueryKey() }); setShowCreate(false); toast({ title: "報價單已新增" }); } } });
-  const updateMutation = useUpdateQuote({ mutation: { onSuccess: () => { queryClient.invalidateQueries({ queryKey: getListQuotesQueryKey() }); setEditItem(null); toast({ title: "報價單已更新" }); } } });
-  const deleteMutation = useDeleteQuote({ mutation: { onSuccess: () => { queryClient.invalidateQueries({ queryKey: getListQuotesQueryKey() }); setDeleteId(null); toast({ title: "報價單已刪除" }); } } });
-  const createWoMutation = useCreateWorkOrder({
-    mutation: {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getListWorkOrdersQueryKey() });
-        setConvertItem(null);
-        toast({ title: "派工單已建立，可至派工單管理查看" });
-      },
-    },
-  });
+  function handleCopy(q: any) {
+    setForm({ ...quoteToForm(q), title: `${q.title}（複製）`, status: "草稿" });
+    setShowCreate(true);
+  }
+
+  function openEdit(q: any) { setForm(quoteToForm(q)); setEditItem(q); }
+
+  function addItem() { setForm(f => ({ ...f, items: [...f.items, { ...DEFAULT_ITEM(), sortOrder: f.items.length }] })); }
+  function removeItem(idx: number) { setForm(f => ({ ...f, items: f.items.filter((_, i) => i !== idx) })); }
+  function updateItem(idx: number, updated: QuoteItem) { setForm(f => ({ ...f, items: f.items.map((item, i) => i === idx ? updated : item) })); }
 
   function handleConvert(e: React.FormEvent) {
     e.preventDefault();
     if (!convertItem) return;
-    createWoMutation.mutate({
-      data: {
-        customerId: convertItem.customerId,
-        quoteId: convertItem.id,
-        title: convertItem.title,
-        description: convertItem.description ?? "",
-        assignedTo: woForm.assignedTo,
-        scheduledDate: woForm.scheduledDate,
-        status: "待處理",
-        notes: woForm.notes,
-      },
-    });
+    createWoMutation.mutate({ data: { customerId: convertItem.customerId, quoteId: convertItem.id, title: convertItem.title, description: convertItem.description ?? "", assignedTo: woForm.assignedTo, scheduledDate: woForm.scheduledDate, status: "待處理", notes: woForm.notes } });
   }
 
-  function handleCustomerChange(v: string) {
-    const cid = parseInt(v, 10);
-    const customer = customers?.find(c => c.id === cid);
-    setForm(f => ({
-      ...f,
-      customerId: cid,
-      address: customer ? (customer.address || f.address) : f.address,
-      customerPhone: customer ? (customer.phone || f.customerPhone) : f.customerPhone,
-    }));
-  }
+  const { rawTotal, preTax, taxAmt, total } = computeTotals(form.items, form.discountAmount, form.taxType);
 
-  const subtotal = form.amount - (form.discountAmount || 0);
-  const finalForTax = form.finalAmount > 0 ? form.finalAmount : subtotal;
-  const { preTax, taxAmt, total } = calcTax(finalForTax, form.taxType);
+  const closeDialog = () => { if (editItem) setEditItem(null); else setShowCreate(false); };
+  const dialogOpen = showCreate || !!editItem;
 
   return (
     <div className="space-y-4">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div><h1 className="text-2xl font-bold">報價單管理</h1><p className="text-sm text-muted-foreground mt-0.5">管理所有客戶報價單</p></div>
-        <Button size="sm" onClick={() => { setForm(emptyForm); setShowCreate(true); }}><Plus className="h-4 w-4 mr-1" />新增報價單</Button>
+        <Button size="sm" onClick={() => { setForm(emptyForm()); setShowCreate(true); }}><Plus className="h-4 w-4 mr-1" />新增報價單</Button>
       </div>
 
       {filterCustomerName && (
         <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg text-sm">
           <span className="text-blue-800">篩選客戶：<strong>{filterCustomerName}</strong></span>
           <button className="ml-auto flex items-center gap-1 text-blue-600 hover:text-blue-800 text-xs" onClick={() => navigate("/quotes")}>
-            <X className="h-3 w-3" />清除篩選
+            <X className="h-3 w-3" />清除
           </button>
         </div>
       )}
 
+      {/* Status filter */}
       <div className="flex gap-2 flex-wrap">
         {["全部", ...STATUSES].map(s => (
-          <button key={s} onClick={() => setStatusFilter(s)} className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${statusFilter === s ? "bg-primary text-primary-foreground border-primary" : "bg-background border-border hover:bg-muted"}`}>{s}</button>
+          <button key={s} onClick={() => setStatusFilter(s)}
+            className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${statusFilter === s ? "bg-primary text-primary-foreground border-primary" : "bg-background border-border hover:bg-muted"}`}>
+            {s}
+          </button>
         ))}
       </div>
 
+      {/* List */}
       {isLoading ? (
-        <div className="space-y-2">{[1, 2, 3].map(i => <Skeleton key={i} className="h-16 w-full" />)}</div>
+        <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-16 w-full" />)}</div>
       ) : quotes && quotes.length > 0 ? (
         <Card><CardContent className="p-0">
           <div className="divide-y">
             {quotes.map(q => {
-              const qFinal = Number(q.finalAmount ?? q.amount ?? 0);
-              const { total: qTotal } = calcTax(qFinal, q.taxType ?? "未稅");
+              const qItems = (q.items ?? []) as any[];
+              const qRaw = qItems.length > 0 ? qItems.reduce((s: number, i: any) => s + Number(i.subtotal ?? 0), 0) : Number(q.finalAmount ?? q.amount ?? 0);
+              const qDisc = Number(q.discountAmount ?? 0);
+              const { total: qTotal } = calcTax(Math.max(0, qRaw - qDisc), q.taxType ?? "未稅");
               return (
-                <div key={q.id} className="px-4 py-3 flex items-center justify-between">
+                <div key={q.id} className="px-4 py-3 flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="font-medium text-sm">{q.title}</span>
-                      <span className={`text-xs px-2 py-0.5 rounded font-medium ${STATUS_COLORS[q.status] ?? "bg-gray-100 text-gray-700"}`}>{q.status}</span>
-                      <span className="text-xs px-1.5 py-0.5 rounded bg-slate-100 text-slate-600 font-medium">{q.taxType ?? "未稅"}</span>
+                      <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${STATUS_COLORS[q.status] ?? "bg-gray-100 text-gray-700"}`}>{q.status}</span>
+                      <span className="text-xs px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">{q.taxType ?? "未稅"}</span>
                     </div>
                     <div className="text-xs text-muted-foreground mt-0.5 flex gap-3 flex-wrap">
                       {q.customerName && <span>{q.customerName}</span>}
                       {q.customerPhone && <span>{q.customerPhone}</span>}
                       {q.salesRepName && <span>業務：{q.salesRepName}</span>}
-                      <span className="font-medium text-foreground">含稅 NT${qTotal.toLocaleString()}</span>
+                      {qItems.length > 0
+                        ? <span>{qItems.length} 項工程・含稅 NT${qTotal.toLocaleString()}</span>
+                        : <span>含稅 NT${qTotal.toLocaleString()}</span>
+                      }
                       <span>{new Date(q.createdAt).toLocaleDateString("zh-TW")}</span>
                     </div>
-                    {q.address && (
-                      <div className="text-xs text-muted-foreground mt-0.5 truncate max-w-sm">{q.address}</div>
-                    )}
+                    {q.address && <div className="text-xs text-muted-foreground truncate max-w-sm mt-0.5">{q.address}</div>}
                   </div>
-                  <div className="flex gap-1 ml-2">
-                    <Button variant="ghost" size="icon" className="h-7 w-7" title="列印報價單" onClick={() => printQuote(q)}><Printer className="h-3.5 w-3.5" /></Button>
+                  <div className="flex gap-0.5 flex-shrink-0">
+                    <Button variant="ghost" size="icon" className="h-7 w-7" title="列印/PDF" onClick={() => printQuote(q, true)}><Printer className="h-3.5 w-3.5" /></Button>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" title="複製" onClick={() => handleCopy(q)}><Copy className="h-3.5 w-3.5" /></Button>
                     {(q.status === "已接受" || q.status === "已送出") && (
                       <Button variant="ghost" size="icon" className="h-7 w-7 text-blue-600" title="轉為派工單" onClick={() => { setConvertItem(q); setWoForm({ assignedTo: "", scheduledDate: "", notes: "" }); }}><Wrench className="h-3.5 w-3.5" /></Button>
                     )}
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => {
-                      setForm({
-                        customerId: q.customerId ?? 0,
-                        title: q.title,
-                        description: q.description ?? "",
-                        amount: Number(q.amount),
-                        discountAmount: Number(q.discountAmount ?? 0),
-                        finalAmount: Number(q.finalAmount ?? q.amount),
-                        status: q.status,
-                        notes: q.notes ?? "",
-                        address: q.address ?? "",
-                        customerPhone: q.customerPhone ?? "",
-                        taxType: q.taxType ?? "未稅",
-                        salesRepId: q.salesRepId ?? 0,
-                      });
-                      setEditItem(q);
-                    }}><Pencil className="h-3.5 w-3.5" /></Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => setDeleteId(q.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" title="編輯" onClick={() => openEdit(q)}><Pencil className="h-3.5 w-3.5" /></Button>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" title="刪除" onClick={() => setDeleteId(q.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
                   </div>
                 </div>
               );
@@ -498,124 +593,164 @@ export default function Quotes() {
         <Card><CardContent className="py-12 text-center"><p className="text-muted-foreground">尚無報價單資料</p></CardContent></Card>
       )}
 
-      {/* Create / Edit Quote Dialog */}
-      {[showCreate && "create", editItem && "edit"].filter(Boolean).map(mode => {
-        const dialogSubtotal = form.amount - (form.discountAmount || 0);
-        const dialogFinal = form.finalAmount > 0 ? form.finalAmount : dialogSubtotal;
-        const { preTax: dPre, taxAmt: dTax, total: dTotal } = calcTax(dialogFinal, form.taxType);
-        return (
-          <Dialog key={mode as string} open={true} onOpenChange={() => mode === "create" ? setShowCreate(false) : setEditItem(null)}>
-            <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-              <DialogHeader><DialogTitle>{mode === "create" ? "新增報價單" : "編輯報價單"}</DialogTitle></DialogHeader>
-              <form onSubmit={e => {
-                e.preventDefault();
-                const apiData = formToApi(form);
-                if (mode === "create") {
-                  createMutation.mutate({ data: apiData });
-                } else {
-                  updateMutation.mutate({ id: editItem.id, data: apiData });
-                }
-              }} className="space-y-3">
+      {/* Create / Edit Dialog */}
+      <Dialog open={dialogOpen} onOpenChange={open => !open && closeDialog()}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editItem ? "編輯報價單" : "新增報價單"}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={e => {
+            e.preventDefault();
+            const data = formToApi(form) as any;
+            if (editItem) updateMutation.mutate({ id: editItem.id, data });
+            else createMutation.mutate({ data });
+          }} className="space-y-4">
 
-                {/* Customer */}
+            {/* Section: 客戶資訊 */}
+            <div className="space-y-3">
+              <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground border-b pb-1">客戶資訊</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
-                  <Label>客戶</Label>
+                  <Label>選擇客戶</Label>
                   <Select value={String(form.customerId)} onValueChange={handleCustomerChange}>
-                    <SelectTrigger><SelectValue placeholder="選擇客戶（可不選）" /></SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder="選擇既有客戶（可不選）" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="0">（不選擇客戶）</SelectItem>
+                      <SelectItem value="0">（不選擇）</SelectItem>
                       {customers?.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
-
-                {/* Phone + Address */}
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1.5">
-                    <Label>客戶電話</Label>
-                    <Input value={form.customerPhone} onChange={e => setForm(f => ({ ...f, customerPhone: e.target.value }))} placeholder="自動帶入或手動填寫" />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>稅別</Label>
-                    <Select value={form.taxType} onValueChange={v => setForm(f => ({ ...f, taxType: v }))}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="未稅">未稅</SelectItem>
-                        <SelectItem value="含稅">含稅</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                <div className="space-y-1.5">
+                  <Label>客戶姓名</Label>
+                  <Input value={form.customerName} onChange={e => setForm(f => ({ ...f, customerName: e.target.value }))} placeholder="輸入或自動帶入" />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>地址</Label>
-                  <Input value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="自動帶入或手動填寫" />
+                  <Label>聯絡電話</Label>
+                  <Input value={form.customerPhone} onChange={e => setForm(f => ({ ...f, customerPhone: e.target.value }))} placeholder="自動帶入或手動填寫" />
                 </div>
-
-                {/* Title + Description */}
-                <div className="space-y-1.5"><Label>標題 *</Label><Input required value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} /></div>
-                <div className="space-y-1.5"><Label>說明</Label><Textarea rows={2} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} /></div>
-
-                {/* Price */}
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="space-y-1.5"><Label>原價</Label><Input type="number" min="0" value={form.amount} onChange={e => setForm(f => ({ ...f, amount: parseFloat(e.target.value) || 0 }))} /></div>
-                  <div className="space-y-1.5"><Label>折扣</Label><Input type="number" min="0" value={form.discountAmount} onChange={e => setForm(f => ({ ...f, discountAmount: parseFloat(e.target.value) || 0 }))} /></div>
-                  <div className="space-y-1.5"><Label>成交價</Label><Input type="number" min="0" value={form.finalAmount} onChange={e => setForm(f => ({ ...f, finalAmount: parseFloat(e.target.value) || 0 }))} /></div>
+                <div className="space-y-1.5">
+                  <Label>聯絡人 <span className="text-muted-foreground text-xs">（選填）</span></Label>
+                  <Input value={form.contactPerson} onChange={e => setForm(f => ({ ...f, contactPerson: e.target.value }))} placeholder="聯絡人姓名" />
                 </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label>施工地址</Label>
+                <Input value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} placeholder="自動帶入或手動填寫" />
+              </div>
+            </div>
 
-                {/* Tax breakdown */}
-                <div className="bg-muted/50 rounded-md px-3 py-2 text-xs space-y-1">
-                  <div className="flex justify-between text-muted-foreground">
-                    <span>未稅小計</span><span>NT$ {dPre.toLocaleString()}</span>
+            {/* Section: 工程資訊 */}
+            <div className="space-y-3">
+              <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground border-b pb-1">工程資訊</h3>
+              <div className="space-y-1.5">
+                <Label>工程名稱 *</Label>
+                <Input required value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="例：台中南屯冷氣安裝工程" />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="space-y-1.5">
+                  <Label>負責業務</Label>
+                  <Select value={String(form.salesRepId)} onValueChange={v => setForm(f => ({ ...f, salesRepId: parseInt(v, 10) }))}>
+                    <SelectTrigger><SelectValue placeholder="選擇業務" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="0">（不指定）</SelectItem>
+                      {salesReps?.map(r => <SelectItem key={r.id} value={String(r.id)}>{r.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>稅別</Label>
+                  <Select value={form.taxType} onValueChange={v => setForm(f => ({ ...f, taxType: v }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="未稅">○ 未稅（加計 5% 稅額）</SelectItem>
+                      <SelectItem value="含稅">○ 含稅（已含 5% 稅額）</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>狀態</Label>
+                  <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: v }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>{STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+
+            {/* Section: 工程項目 */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between border-b pb-1">
+                <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">工程項目</h3>
+                <Button type="button" size="sm" variant="outline" className="h-7 text-xs" onClick={addItem}>
+                  <Plus className="h-3.5 w-3.5 mr-1" />新增項目
+                </Button>
+              </div>
+              {form.items.length === 0 ? (
+                <div className="border border-dashed rounded-lg py-8 text-center text-muted-foreground text-sm">
+                  <p>尚未新增工程項目</p>
+                  <Button type="button" variant="ghost" size="sm" className="mt-2" onClick={addItem}><Plus className="h-3.5 w-3.5 mr-1" />新增第一項</Button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {form.items.map((item, idx) => (
+                    <ItemCard key={idx} item={item} index={idx}
+                      onChange={updated => updateItem(idx, updated)}
+                      onDelete={() => removeItem(idx)} />
+                  ))}
+                </div>
+              )}
+
+              {/* Discount + Totals */}
+              <div className="flex justify-end">
+                <div className="w-full sm:w-72 space-y-1">
+                  <div className="flex items-center gap-2">
+                    <Label className="text-xs text-muted-foreground w-20 text-right flex-shrink-0">折扣</Label>
+                    <Input className="h-7 text-sm text-right" type="number" min="0" value={form.discountAmount || ""}
+                      placeholder="0"
+                      onChange={e => setForm(f => ({ ...f, discountAmount: parseFloat(e.target.value) || 0 }))} />
                   </div>
-                  <div className="flex justify-between text-muted-foreground">
-                    <span>稅額 5%</span><span>NT$ {dTax.toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between font-semibold border-t border-border pt-1">
-                    <span>含稅總計</span><span>NT$ {dTotal.toLocaleString()}</span>
+                  <div className="bg-muted/40 rounded-md px-3 py-2 text-xs space-y-1">
+                    <div className="flex justify-between text-muted-foreground"><span>項目小計</span><span>NT$ {rawTotal.toLocaleString()}</span></div>
+                    {form.discountAmount > 0 && <div className="flex justify-between text-red-600"><span>折扣</span><span>－ NT$ {form.discountAmount.toLocaleString()}</span></div>}
+                    <div className="flex justify-between text-muted-foreground"><span>未稅小計</span><span>NT$ {preTax.toLocaleString()}</span></div>
+                    <div className="flex justify-between text-muted-foreground"><span>稅額 5%</span><span>NT$ {taxAmt.toLocaleString()}</span></div>
+                    <div className="flex justify-between font-bold border-t pt-1 text-sm">
+                      <span>含稅總計</span><span>NT$ {total.toLocaleString()}</span>
+                    </div>
                   </div>
                 </div>
+              </div>
+            </div>
 
-                {/* Sales rep + Status */}
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="space-y-1.5">
-                    <Label>負責業務</Label>
-                    <Select value={String(form.salesRepId)} onValueChange={v => setForm(f => ({ ...f, salesRepId: parseInt(v, 10) }))}>
-                      <SelectTrigger><SelectValue placeholder="選擇業務" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="0">（不指定）</SelectItem>
-                        {salesReps?.map(r => <SelectItem key={r.id} value={String(r.id)}>{r.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>狀態</Label>
-                    <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: v }))}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>{STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-                    </Select>
-                  </div>
-                </div>
+            {/* Section: 備註 */}
+            <div className="space-y-3">
+              <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground border-b pb-1">說明與備註</h3>
+              <div className="space-y-1.5">
+                <Label>施工說明</Label>
+                <Textarea rows={3} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="施工方式、施工天數、注意事項…" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>備註 <span className="text-muted-foreground text-xs">（保固說明、其他約定事項等）</span></Label>
+                <Textarea rows={3} value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="保固說明、付款條件、其他約定…" />
+              </div>
+            </div>
 
-                <div className="space-y-1.5"><Label>備註</Label><Input value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} /></div>
+            <DialogFooter className="gap-2">
+              <Button type="button" variant="outline" onClick={closeDialog}>取消</Button>
+              <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending}>儲存</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
-                <DialogFooter>
-                  <Button type="button" variant="outline" onClick={() => mode === "create" ? setShowCreate(false) : setEditItem(null)}>取消</Button>
-                  <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending}>儲存</Button>
-                </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
-        );
-      })}
-
-      {/* Convert to Work Order Dialog */}
+      {/* Convert to Work Order */}
       {convertItem && (
         <Dialog open onOpenChange={() => setConvertItem(null)}>
           <DialogContent className="max-w-md">
             <DialogHeader><DialogTitle>轉為派工單</DialogTitle></DialogHeader>
-            <div className="text-sm text-muted-foreground bg-muted/30 rounded p-3 mb-2">
-              <p className="font-medium text-foreground">{convertItem.title}</p>
-              <p>客戶：{convertItem.customerName} · NT${Number(convertItem.finalAmount ?? convertItem.amount).toLocaleString()}</p>
+            <div className="text-sm bg-muted/30 rounded p-3 mb-2">
+              <p className="font-medium">{convertItem.title}</p>
+              <p className="text-muted-foreground">{convertItem.customerName} · NT${Number(convertItem.finalAmount ?? convertItem.amount).toLocaleString()}</p>
             </div>
             <form onSubmit={handleConvert} className="space-y-3">
               <div className="space-y-1.5"><Label>負責師傅</Label><Input value={woForm.assignedTo} onChange={e => setWoForm(f => ({ ...f, assignedTo: e.target.value }))} placeholder="張師傅" /></div>

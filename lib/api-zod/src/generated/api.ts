@@ -480,6 +480,7 @@ export const ListQuotesResponseItem = zod.object({
   "id": zod.number(),
   "customerId": zod.number().nullish(),
   "customerName": zod.string().nullish(),
+  "contactPerson": zod.string().nullish(),
   "title": zod.string(),
   "description": zod.string().nullish(),
   "amount": zod.number(),
@@ -492,6 +493,19 @@ export const ListQuotesResponseItem = zod.object({
   "taxType": zod.string(),
   "salesRepId": zod.number().nullish(),
   "salesRepName": zod.string().nullish(),
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "quoteId": zod.number(),
+  "category": zod.string(),
+  "itemName": zod.string(),
+  "brand": zod.string().nullish(),
+  "quantity": zod.number(),
+  "unit": zod.string(),
+  "unitPrice": zod.number(),
+  "subtotal": zod.number(),
+  "notes": zod.string().nullish(),
+  "sortOrder": zod.number()
+})).optional(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -506,9 +520,11 @@ export const ListQuotesResponse = zod.array(ListQuotesResponseItem)
 
 export const CreateQuoteBody = zod.object({
   "customerId": zod.number().optional(),
+  "customerName": zod.string().optional(),
+  "contactPerson": zod.string().optional(),
   "title": zod.string().min(1),
   "description": zod.string().optional(),
-  "amount": zod.number(),
+  "amount": zod.number().optional(),
   "discountAmount": zod.number().optional(),
   "finalAmount": zod.number().optional(),
   "status": zod.string(),
@@ -516,13 +532,24 @@ export const CreateQuoteBody = zod.object({
   "address": zod.string().optional(),
   "customerPhone": zod.string().optional(),
   "taxType": zod.string().optional(),
-  "salesRepId": zod.number().optional()
+  "salesRepId": zod.number().optional(),
+  "items": zod.array(zod.object({
+  "category": zod.string(),
+  "itemName": zod.string(),
+  "brand": zod.string().optional(),
+  "quantity": zod.number(),
+  "unit": zod.string(),
+  "unitPrice": zod.number(),
+  "notes": zod.string().optional(),
+  "sortOrder": zod.number().optional()
+})).optional()
 })
 
 export const CreateQuoteResponse = zod.object({
   "id": zod.number(),
   "customerId": zod.number().nullish(),
   "customerName": zod.string().nullish(),
+  "contactPerson": zod.string().nullish(),
   "title": zod.string(),
   "description": zod.string().nullish(),
   "amount": zod.number(),
@@ -535,6 +562,19 @@ export const CreateQuoteResponse = zod.object({
   "taxType": zod.string(),
   "salesRepId": zod.number().nullish(),
   "salesRepName": zod.string().nullish(),
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "quoteId": zod.number(),
+  "category": zod.string(),
+  "itemName": zod.string(),
+  "brand": zod.string().nullish(),
+  "quantity": zod.number(),
+  "unit": zod.string(),
+  "unitPrice": zod.number(),
+  "subtotal": zod.number(),
+  "notes": zod.string().nullish(),
+  "sortOrder": zod.number()
+})).optional(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -551,6 +591,7 @@ export const GetQuoteResponse = zod.object({
   "id": zod.number(),
   "customerId": zod.number().nullish(),
   "customerName": zod.string().nullish(),
+  "contactPerson": zod.string().nullish(),
   "title": zod.string(),
   "description": zod.string().nullish(),
   "amount": zod.number(),
@@ -563,6 +604,19 @@ export const GetQuoteResponse = zod.object({
   "taxType": zod.string(),
   "salesRepId": zod.number().nullish(),
   "salesRepName": zod.string().nullish(),
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "quoteId": zod.number(),
+  "category": zod.string(),
+  "itemName": zod.string(),
+  "brand": zod.string().nullish(),
+  "quantity": zod.number(),
+  "unit": zod.string(),
+  "unitPrice": zod.number(),
+  "subtotal": zod.number(),
+  "notes": zod.string().nullish(),
+  "sortOrder": zod.number()
+})).optional(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -577,6 +631,8 @@ export const UpdateQuoteParams = zod.object({
 
 export const UpdateQuoteBody = zod.object({
   "customerId": zod.number().optional(),
+  "customerName": zod.string().optional(),
+  "contactPerson": zod.string().optional(),
   "title": zod.string().optional(),
   "description": zod.string().optional(),
   "amount": zod.number().optional(),
@@ -587,13 +643,24 @@ export const UpdateQuoteBody = zod.object({
   "address": zod.string().optional(),
   "customerPhone": zod.string().optional(),
   "taxType": zod.string().optional(),
-  "salesRepId": zod.number().optional()
+  "salesRepId": zod.number().optional(),
+  "items": zod.array(zod.object({
+  "category": zod.string(),
+  "itemName": zod.string(),
+  "brand": zod.string().optional(),
+  "quantity": zod.number(),
+  "unit": zod.string(),
+  "unitPrice": zod.number(),
+  "notes": zod.string().optional(),
+  "sortOrder": zod.number().optional()
+})).optional()
 })
 
 export const UpdateQuoteResponse = zod.object({
   "id": zod.number(),
   "customerId": zod.number().nullish(),
   "customerName": zod.string().nullish(),
+  "contactPerson": zod.string().nullish(),
   "title": zod.string(),
   "description": zod.string().nullish(),
   "amount": zod.number(),
@@ -606,6 +673,19 @@ export const UpdateQuoteResponse = zod.object({
   "taxType": zod.string(),
   "salesRepId": zod.number().nullish(),
   "salesRepName": zod.string().nullish(),
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "quoteId": zod.number(),
+  "category": zod.string(),
+  "itemName": zod.string(),
+  "brand": zod.string().nullish(),
+  "quantity": zod.number(),
+  "unit": zod.string(),
+  "unitPrice": zod.number(),
+  "subtotal": zod.number(),
+  "notes": zod.string().nullish(),
+  "sortOrder": zod.number()
+})).optional(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })

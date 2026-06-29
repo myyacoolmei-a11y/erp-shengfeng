@@ -83,12 +83,41 @@ export interface AcUnitUpdate {
   notes?: string;
 }
 
+export interface QuoteItemInput {
+  category: string;
+  itemName: string;
+  brand?: string;
+  quantity: number;
+  unit: string;
+  unitPrice: number;
+  notes?: string;
+  sortOrder?: number;
+}
+
+export interface QuoteItem {
+  id: number;
+  quoteId: number;
+  category: string;
+  itemName: string;
+  /** @nullable */
+  brand?: string | null;
+  quantity: number;
+  unit: string;
+  unitPrice: number;
+  subtotal: number;
+  /** @nullable */
+  notes?: string | null;
+  sortOrder: number;
+}
+
 export interface Quote {
   id: number;
   /** @nullable */
   customerId?: number | null;
   /** @nullable */
   customerName?: string | null;
+  /** @nullable */
+  contactPerson?: string | null;
   title: string;
   /** @nullable */
   description?: string | null;
@@ -109,16 +138,19 @@ export interface Quote {
   salesRepId?: number | null;
   /** @nullable */
   salesRepName?: string | null;
+  items?: QuoteItem[];
   createdAt: string;
   updatedAt: string;
 }
 
 export interface QuoteInput {
   customerId?: number;
+  customerName?: string;
+  contactPerson?: string;
   /** @minLength 1 */
   title: string;
   description?: string;
-  amount: number;
+  amount?: number;
   discountAmount?: number;
   finalAmount?: number;
   status: string;
@@ -127,10 +159,13 @@ export interface QuoteInput {
   customerPhone?: string;
   taxType?: string;
   salesRepId?: number;
+  items?: QuoteItemInput[];
 }
 
 export interface QuoteUpdate {
   customerId?: number;
+  customerName?: string;
+  contactPerson?: string;
   title?: string;
   description?: string;
   amount?: number;
@@ -142,6 +177,7 @@ export interface QuoteUpdate {
   customerPhone?: string;
   taxType?: string;
   salesRepId?: number;
+  items?: QuoteItemInput[];
 }
 
 export interface Employee {

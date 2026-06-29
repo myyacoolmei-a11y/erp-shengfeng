@@ -5,13 +5,16 @@
  * 晟風工程 ERP API
  * OpenAPI spec version: 0.1.0
  */
+import type { QuoteItemInput } from './quoteItemInput';
 
 export interface QuoteInput {
   customerId?: number;
+  customerName?: string;
+  contactPerson?: string;
   /** @minLength 1 */
   title: string;
   description?: string;
-  amount: number;
+  amount?: number;
   discountAmount?: number;
   finalAmount?: number;
   status: string;
@@ -20,4 +23,5 @@ export interface QuoteInput {
   customerPhone?: string;
   taxType?: string;
   salesRepId?: number;
+  items?: QuoteItemInput[];
 }
