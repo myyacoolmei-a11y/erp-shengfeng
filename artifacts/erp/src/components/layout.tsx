@@ -18,7 +18,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
-import { useAuth, ROLE_LABELS, type UserRole } from "@/contexts/auth-context";
+import { useAuth, type UserRole } from "@/contexts/auth-context";
+import { ROLE_LABELS } from "@/lib/role-labels";
 
 interface NavItem {
   href: string;

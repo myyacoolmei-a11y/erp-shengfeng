@@ -38,7 +38,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { UserPlus, Pencil, Trash2, KeyRound, Loader2, UserCheck, UserX, ShieldAlert } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { ROLE_LABELS, useAuth, type UserRole } from "@/contexts/auth-context";
+import { useAuth, type UserRole } from "@/contexts/auth-context";
+import { ROLE_LABELS } from "@/lib/role-labels";
 
 interface UserItem {
   id: number;
