@@ -5,7 +5,6 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth, type UserRole } from "@/contexts/auth-context";
 import { Layout } from "@/components/layout";
-import { AccessDenied } from "@/components/access-denied";
 import LoginPage from "@/pages/login";
 import ChangePasswordPage from "@/pages/change-password";
 import NotFound from "@/pages/not-found";
@@ -48,9 +47,8 @@ function RoleGuard({
   children: React.ReactNode;
 }) {
   const { user } = useAuth();
-  if (!user || !roles.includes(user.role)) {
-    return <AccessDenied />;
-  }
+  if (!user) return <Redirect to="/login" />;
+  if (!roles.includes(user.role)) return <Redirect to={defaultPathForRole(user.role)} />;
   return <>{children}</>;
 }
 
