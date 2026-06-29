@@ -7,7 +7,7 @@
  */
 
 export interface QuoteInput {
-  customerId: number;
+  customerId?: number;
   /** @minLength 1 */
   title: string;
   description?: string;
@@ -16,4 +16,8 @@ export interface QuoteInput {
   finalAmount?: number;
   status: string;
   notes?: string;
+  address?: string;
+  customerPhone?: string;
+  taxType?: string;
+  salesRepId?: number;
 }

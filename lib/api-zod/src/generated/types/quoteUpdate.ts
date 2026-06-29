@@ -7,6 +7,7 @@
  */
 
 export interface QuoteUpdate {
+  customerId?: number;
   title?: string;
   description?: string;
   amount?: number;
@@ -14,4 +15,8 @@ export interface QuoteUpdate {
   finalAmount?: number;
   status?: string;
   notes?: string;
+  address?: string;
+  customerPhone?: string;
+  taxType?: string;
+  salesRepId?: number;
 }

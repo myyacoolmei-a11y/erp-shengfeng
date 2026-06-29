@@ -85,7 +85,8 @@ export interface AcUnitUpdate {
 
 export interface Quote {
   id: number;
-  customerId: number;
+  /** @nullable */
+  customerId?: number | null;
   /** @nullable */
   customerName?: string | null;
   title: string;
@@ -99,12 +100,21 @@ export interface Quote {
   status: string;
   /** @nullable */
   notes?: string | null;
+  /** @nullable */
+  address?: string | null;
+  /** @nullable */
+  customerPhone?: string | null;
+  taxType: string;
+  /** @nullable */
+  salesRepId?: number | null;
+  /** @nullable */
+  salesRepName?: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
 export interface QuoteInput {
-  customerId: number;
+  customerId?: number;
   /** @minLength 1 */
   title: string;
   description?: string;
@@ -113,14 +123,53 @@ export interface QuoteInput {
   finalAmount?: number;
   status: string;
   notes?: string;
+  address?: string;
+  customerPhone?: string;
+  taxType?: string;
+  salesRepId?: number;
 }
 
 export interface QuoteUpdate {
+  customerId?: number;
   title?: string;
   description?: string;
   amount?: number;
   discountAmount?: number;
   finalAmount?: number;
+  status?: string;
+  notes?: string;
+  address?: string;
+  customerPhone?: string;
+  taxType?: string;
+  salesRepId?: number;
+}
+
+export interface Employee {
+  id: number;
+  name: string;
+  /** @nullable */
+  phone?: string | null;
+  position: string;
+  status: string;
+  /** @nullable */
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EmployeeInput {
+  /** @minLength 1 */
+  name: string;
+  phone?: string;
+  position: string;
+  status: string;
+  notes?: string;
+}
+
+export interface EmployeeUpdate {
+  name?: string;
+  phone?: string;
+  position?: string;
   status?: string;
   notes?: string;
 }
@@ -531,6 +580,11 @@ search?: string;
  * 是否包含兩年前的客戶 (true/false)
  */
 includeOld?: string;
+};
+
+export type ListEmployeesParams = {
+position?: string;
+status?: string;
 };
 
 export type ListQuotesParams = {

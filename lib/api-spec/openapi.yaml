@@ -34,6 +34,8 @@ tags:
     description: 應收帳款
   - name: dashboard
     description: 儀表板
+  - name: employees
+    description: 員工管理
 
 paths:
   /healthz:
@@ -356,6 +358,106 @@ paths:
       operationId: deleteAcUnit
       tags: [acUnits]
       summary: 刪除冷氣設備
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: 刪除成功
+
+  /employees:
+    get:
+      operationId: listEmployees
+      tags: [employees]
+      summary: 列出所有員工
+      parameters:
+        - name: position
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 員工列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Employee"
+    post:
+      operationId: createEmployee
+      tags: [employees]
+      summary: 新增員工
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmployeeInput"
+      responses:
+        "201":
+          description: 新增成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Employee"
+
+  /employees/{id}:
+    get:
+      operationId: getEmployee
+      tags: [employees]
+      summary: 取得員工詳細資料
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: 員工資料
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Employee"
+        "404":
+          description: 找不到員工
+    patch:
+      operationId: updateEmployee
+      tags: [employees]
+      summary: 更新員工
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmployeeUpdate"
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Employee"
+        "404":
+          description: 找不到員工
+    delete:
+      operationId: deleteEmployee
+      tags: [employees]
+      summary: 刪除員工
       parameters:
         - name: id
           in: path
@@ -1130,10 +1232,10 @@ components:
 
     Quote:
       type: object
-      required: [id, customerId, title, amount, status, createdAt, updatedAt]
+      required: [id, title, amount, status, taxType, createdAt, updatedAt]
       properties:
         id: { type: integer }
-        customerId: { type: integer }
+        customerId: { type: ["integer", "null"] }
         customerName: { type: ["string", "null"] }
         title: { type: string }
         description: { type: ["string", "null"] }
@@ -1142,12 +1244,17 @@ components:
         finalAmount: { type: ["number", "null"] }
         status: { type: string }
         notes: { type: ["string", "null"] }
+        address: { type: ["string", "null"] }
+        customerPhone: { type: ["string", "null"] }
+        taxType: { type: string }
+        salesRepId: { type: ["integer", "null"] }
+        salesRepName: { type: ["string", "null"] }
         createdAt: { type: string }
         updatedAt: { type: string }
 
     QuoteInput:
       type: object
-      required: [customerId, title, amount, status]
+      required: [title, amount, status]
       properties:
         customerId: { type: integer }
         title: { type: string, minLength: 1 }
@@ -1157,15 +1264,56 @@ components:
         finalAmount: { type: number }
         status: { type: string }
         notes: { type: string }
+        address: { type: string }
+        customerPhone: { type: string }
+        taxType: { type: string }
+        salesRepId: { type: integer }
 
     QuoteUpdate:
       type: object
       properties:
+        customerId: { type: integer }
         title: { type: string }
         description: { type: string }
         amount: { type: number }
         discountAmount: { type: number }
         finalAmount: { type: number }
+        status: { type: string }
+        notes: { type: string }
+        address: { type: string }
+        customerPhone: { type: string }
+        taxType: { type: string }
+        salesRepId: { type: integer }
+
+    Employee:
+      type: object
+      required: [id, name, position, status, createdAt, updatedAt]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        phone: { type: ["string", "null"] }
+        position: { type: string }
+        status: { type: string }
+        notes: { type: ["string", "null"] }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+
+    EmployeeInput:
+      type: object
+      required: [name, position, status]
+      properties:
+        name: { type: string, minLength: 1 }
+        phone: { type: string }
+        position: { type: string }
+        status: { type: string }
+        notes: { type: string }
+
+    EmployeeUpdate:
+      type: object
+      properties:
+        name: { type: string }
+        phone: { type: string }
+        position: { type: string }
         status: { type: string }
         notes: { type: string }
 

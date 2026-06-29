@@ -8,7 +8,8 @@
 
 export interface Quote {
   id: number;
-  customerId: number;
+  /** @nullable */
+  customerId?: number | null;
   /** @nullable */
   customerName?: string | null;
   title: string;
@@ -22,6 +23,15 @@ export interface Quote {
   status: string;
   /** @nullable */
   notes?: string | null;
+  /** @nullable */
+  address?: string | null;
+  /** @nullable */
+  customerPhone?: string | null;
+  taxType: string;
+  /** @nullable */
+  salesRepId?: number | null;
+  /** @nullable */
+  salesRepName?: string | null;
   createdAt: string;
   updatedAt: string;
 }
