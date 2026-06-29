@@ -6,10 +6,10 @@ import { requireRole } from "../lib/auth";
 
 const router: IRouter = Router();
 
-const READ_ROLES = ["owner", "admin", "engineer", "technician"];
-const WRITE_ROLES = ["owner", "admin", "engineer"];
-const PATCH_ROLES = ["owner", "admin", "engineer", "technician"];
-const DELETE_ROLES = ["owner", "admin"];
+const READ_ROLES = ["super_admin", "owner", "admin", "engineer", "technician"];
+const WRITE_ROLES = ["super_admin", "owner", "admin", "engineer"];
+const PATCH_ROLES = ["super_admin", "owner", "admin", "engineer", "technician"];
+const DELETE_ROLES = ["super_admin", "owner", "admin"];
 
 router.get("/maintenance-reminders", requireRole(...READ_ROLES), async (req, res): Promise<void> => {
   const { customerId, status, upcoming } = req.query as { customerId?: string; status?: string; upcoming?: string };

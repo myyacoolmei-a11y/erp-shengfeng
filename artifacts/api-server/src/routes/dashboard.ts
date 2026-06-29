@@ -5,7 +5,7 @@ import { requireRole } from "../lib/auth";
 
 const router: IRouter = Router();
 
-router.get("/dashboard/summary", requireRole("owner", "admin", "accountant"), async (req, res): Promise<void> => {
+router.get("/dashboard/summary", requireRole("super_admin", "owner", "admin", "accountant"), async (req, res): Promise<void> => {
   const today = new Date().toISOString().split("T")[0];
   const inThirtyDays = new Date();
   inThirtyDays.setDate(inThirtyDays.getDate() + 30);
