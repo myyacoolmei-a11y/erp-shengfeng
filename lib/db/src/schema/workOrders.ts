@@ -30,6 +30,7 @@ export const workOrdersTable = pgTable("work_orders", {
   hasElevator: text("has_elevator"),
   description: text("description"),
   notes: text("notes"),
+  technicians: text("technicians"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

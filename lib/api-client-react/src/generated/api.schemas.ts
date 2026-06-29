@@ -259,6 +259,8 @@ export interface WorkOrder {
   description?: string | null;
   /** @nullable */
   notes?: string | null;
+  /** @nullable */
+  technicians?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -288,6 +290,7 @@ export interface WorkOrderInput {
   hasElevator?: string;
   description?: string;
   notes?: string;
+  technicians?: string;
 }
 
 export interface WorkOrderUpdate {
@@ -312,6 +315,7 @@ export interface WorkOrderUpdate {
   hasElevator?: string;
   description?: string;
   notes?: string;
+  technicians?: string;
 }
 
 export interface Progress {

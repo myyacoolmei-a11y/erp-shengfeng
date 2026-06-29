@@ -1393,6 +1393,7 @@ components:
         hasElevator: { type: ["string", "null"] }
         description: { type: ["string", "null"] }
         notes: { type: ["string", "null"] }
+        technicians: { type: ["string", "null"] }
         createdAt: { type: string }
         updatedAt: { type: string }
 
@@ -1423,6 +1424,7 @@ components:
         hasElevator: { type: string }
         description: { type: string }
         notes: { type: string }
+        technicians: { type: string }
 
     WorkOrderUpdate:
       type: object
@@ -1448,6 +1450,7 @@ components:
         hasElevator: { type: string }
         description: { type: string }
         notes: { type: string }
+        technicians: { type: string }
 
     Progress:
       type: object

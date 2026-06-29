@@ -736,6 +736,7 @@ export const ListWorkOrdersResponseItem = zod.object({
   "hasElevator": zod.string().nullish(),
   "description": zod.string().nullish(),
   "notes": zod.string().nullish(),
+  "technicians": zod.string().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -771,7 +772,8 @@ export const CreateWorkOrderBody = zod.object({
   "floorLevel": zod.string().optional(),
   "hasElevator": zod.string().optional(),
   "description": zod.string().optional(),
-  "notes": zod.string().optional()
+  "notes": zod.string().optional(),
+  "technicians": zod.string().optional()
 })
 
 export const CreateWorkOrderResponse = zod.object({
@@ -801,6 +803,7 @@ export const CreateWorkOrderResponse = zod.object({
   "hasElevator": zod.string().nullish(),
   "description": zod.string().nullish(),
   "notes": zod.string().nullish(),
+  "technicians": zod.string().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -840,6 +843,7 @@ export const GetWorkOrderResponse = zod.object({
   "hasElevator": zod.string().nullish(),
   "description": zod.string().nullish(),
   "notes": zod.string().nullish(),
+  "technicians": zod.string().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -873,7 +877,8 @@ export const UpdateWorkOrderBody = zod.object({
   "floorLevel": zod.string().optional(),
   "hasElevator": zod.string().optional(),
   "description": zod.string().optional(),
-  "notes": zod.string().optional()
+  "notes": zod.string().optional(),
+  "technicians": zod.string().optional()
 })
 
 export const UpdateWorkOrderResponse = zod.object({
@@ -903,6 +908,7 @@ export const UpdateWorkOrderResponse = zod.object({
   "hasElevator": zod.string().nullish(),
   "description": zod.string().nullish(),
   "notes": zod.string().nullish(),
+  "technicians": zod.string().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })

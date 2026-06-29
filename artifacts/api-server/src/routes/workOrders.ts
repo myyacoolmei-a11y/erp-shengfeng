@@ -43,6 +43,7 @@ const WO_SELECT = {
   hasElevator: workOrdersTable.hasElevator,
   description: workOrdersTable.description,
   notes: workOrdersTable.notes,
+  technicians: workOrdersTable.technicians,
   createdAt: workOrdersTable.createdAt,
   updatedAt: workOrdersTable.updatedAt,
 };
