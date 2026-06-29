@@ -542,7 +542,7 @@ type WOForm = ReturnType<typeof makeEmpty>;
 export default function WorkOrders() {
   const { toast } = useToast();
   const { user } = useAuth();
-  const canWrite = user?.role === "owner" || user?.role === "admin";
+  const canWrite = user?.role === "super_admin" || user?.role === "owner" || user?.role === "admin";
   const queryClient = useQueryClient();
 
   const search = useSearch();
@@ -879,7 +879,7 @@ export default function WorkOrders() {
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
                       )}
-                      {user?.role === "owner" && (
+                      {(user?.role === "owner" || user?.role === "super_admin") && (
                         <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" title="刪除" onClick={() => setDeleteId(o.id)}>
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
