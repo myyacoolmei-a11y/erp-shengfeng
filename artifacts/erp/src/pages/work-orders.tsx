@@ -642,14 +642,14 @@ export default function WorkOrders() {
     const quote = quotes?.find(q => q.id === qid);
     if (!quote) return;
 
-    const cust = customers?.find(c => c.id === quote.customerId);
+    const cust = customers?.find(c => c.id === (quote.customerId ?? 0));
     setForm(f => ({
       ...f,
       quoteId: qid,
       customerId: quote.customerId ?? f.customerId,
-      contactPerson: (quote as any).contactPerson || f.contactPerson || "",
-      mobilePhone: cust?.phone || f.mobilePhone || "",
-      installAddress: cust?.address || f.installAddress || "",
+      contactPerson: quote.contactPerson || f.contactPerson || "",
+      mobilePhone: quote.customerPhone || cust?.phone || f.mobilePhone || "",
+      installAddress: quote.address || cust?.address || f.installAddress || "",
     }));
   }
 
@@ -925,8 +925,7 @@ export default function WorkOrders() {
                   <SelectItem value="__none__">（不連結報價單）</SelectItem>
                   {(quotes ?? []).map(q => (
                     <SelectItem key={q.id} value={String(q.id)}>
-                      {(q as any).quoteNumber || `#${q.id}`}
-                      {(q as any).customerName ? ` — ${(q as any).customerName}` : ""}
+                      {q.title}{q.customerName ? ` — ${q.customerName}` : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
