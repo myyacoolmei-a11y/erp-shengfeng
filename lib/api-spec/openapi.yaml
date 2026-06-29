@@ -1730,6 +1730,24 @@ components:
         overdueAmount: { type: number }
         paidThisMonthAR: { type: number }
         invoiceNotIssuedCount: { type: integer }
+        todayWorkOrderCount: { type: integer }
+        todayPaymentsAmount: { type: number }
+        todayMaintenanceCount: { type: integer }
+        monthlyQuoteAmount: { type: number }
+        monthlyWonAmount: { type: number }
+        monthlyPaidAmount: { type: number }
+        todayDueCount: { type: integer }
+        todayWorkOrders:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              workOrderNumber: { type: ["string", "null"] }
+              customerName: { type: ["string", "null"] }
+              scheduledTime: { type: ["string", "null"] }
+              technicians: { type: ["string", "null"] }
+              installAddress: { type: ["string", "null"] }
         recentCustomers:
           type: array
           items:

@@ -593,6 +593,20 @@ export interface UpdateUserInput {
   password?: string;
 }
 
+export type DashboardSummaryTodayWorkOrdersItem = {
+  id?: number;
+  /** @nullable */
+  workOrderNumber?: string | null;
+  /** @nullable */
+  customerName?: string | null;
+  /** @nullable */
+  scheduledTime?: string | null;
+  /** @nullable */
+  technicians?: string | null;
+  /** @nullable */
+  installAddress?: string | null;
+};
+
 export interface DashboardSummary {
   totalCustomers: number;
   totalQuotes: number;
@@ -608,6 +622,14 @@ export interface DashboardSummary {
   overdueAmount?: number;
   paidThisMonthAR?: number;
   invoiceNotIssuedCount?: number;
+  todayWorkOrderCount?: number;
+  todayPaymentsAmount?: number;
+  todayMaintenanceCount?: number;
+  monthlyQuoteAmount?: number;
+  monthlyWonAmount?: number;
+  monthlyPaidAmount?: number;
+  todayDueCount?: number;
+  todayWorkOrders?: DashboardSummaryTodayWorkOrdersItem[];
   recentCustomers?: Customer[];
 }
 

@@ -18,6 +18,7 @@ export * from './customer';
 export * from './customerInput';
 export * from './customerUpdate';
 export * from './dashboardSummary';
+export * from './dashboardSummaryTodayWorkOrdersItem';
 export * from './employee';
 export * from './employeeInput';
 export * from './employeeUpdate';

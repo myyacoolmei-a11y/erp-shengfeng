@@ -1528,6 +1528,21 @@ export const GetDashboardSummaryResponse = zod.object({
   "overdueAmount": zod.number().optional(),
   "paidThisMonthAR": zod.number().optional(),
   "invoiceNotIssuedCount": zod.number().optional(),
+  "todayWorkOrderCount": zod.number().optional(),
+  "todayPaymentsAmount": zod.number().optional(),
+  "todayMaintenanceCount": zod.number().optional(),
+  "monthlyQuoteAmount": zod.number().optional(),
+  "monthlyWonAmount": zod.number().optional(),
+  "monthlyPaidAmount": zod.number().optional(),
+  "todayDueCount": zod.number().optional(),
+  "todayWorkOrders": zod.array(zod.object({
+  "id": zod.number().optional(),
+  "workOrderNumber": zod.string().nullish(),
+  "customerName": zod.string().nullish(),
+  "scheduledTime": zod.string().nullish(),
+  "technicians": zod.string().nullish(),
+  "installAddress": zod.string().nullish()
+})).optional(),
   "recentCustomers": zod.array(zod.object({
   "id": zod.number(),
   "name": zod.string(),

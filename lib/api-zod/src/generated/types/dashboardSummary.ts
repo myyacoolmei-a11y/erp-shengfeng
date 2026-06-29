@@ -6,6 +6,7 @@
  * OpenAPI spec version: 0.1.0
  */
 import type { Customer } from './customer';
+import type { DashboardSummaryTodayWorkOrdersItem } from './dashboardSummaryTodayWorkOrdersItem';
 
 export interface DashboardSummary {
   totalCustomers: number;
@@ -22,5 +23,13 @@ export interface DashboardSummary {
   overdueAmount?: number;
   paidThisMonthAR?: number;
   invoiceNotIssuedCount?: number;
+  todayWorkOrderCount?: number;
+  todayPaymentsAmount?: number;
+  todayMaintenanceCount?: number;
+  monthlyQuoteAmount?: number;
+  monthlyWonAmount?: number;
+  monthlyPaidAmount?: number;
+  todayDueCount?: number;
+  todayWorkOrders?: DashboardSummaryTodayWorkOrdersItem[];
   recentCustomers?: Customer[];
 }
