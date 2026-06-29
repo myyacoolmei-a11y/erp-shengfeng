@@ -568,8 +568,8 @@ export default function WorkOrders() {
   const { data: employees } = useListEmployees();
   const { data: quotes } = useListQuotes({ includeOld: "true" } as any);
 
-  // Technician options: employees with position "師傅技師"
-  const technicianOptions = (employees ?? []).filter(e => e.position === "師傅技師" && e.status === "在職");
+  // Technician options: employees whose position contains "技師" and are active
+  const technicianOptions = (employees ?? []).filter(e => e.position?.includes("技師") && e.status === "在職");
 
   const createMutation = useCreateWorkOrder({
     mutation: {
@@ -650,6 +650,7 @@ export default function WorkOrders() {
       contactPerson: quote.contactPerson || f.contactPerson || "",
       mobilePhone: quote.customerPhone || cust?.phone || f.mobilePhone || "",
       installAddress: quote.address || cust?.address || f.installAddress || "",
+      description: quote.description || f.description || "",
     }));
   }
 
@@ -835,11 +836,11 @@ export default function WorkOrders() {
                       {/* AR button for completed orders */}
                       {canWrite && o.status === "已完成" && (
                         <Button
-                          variant="ghost" size="icon" className="h-7 w-7 text-emerald-600 hover:text-emerald-700"
-                          title="建立應收帳款"
+                          variant="outline" size="sm"
+                          className="h-7 text-xs px-2 text-emerald-700 border-emerald-300 hover:bg-emerald-50"
                           onClick={() => setArModal({ order: o, amount: "" })}
                         >
-                          <CreditCard className="h-3.5 w-3.5" />
+                          <CreditCard className="h-3.5 w-3.5 mr-1" />建立帳款
                         </Button>
                       )}
                       <DropdownMenu>
