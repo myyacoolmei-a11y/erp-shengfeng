@@ -6,9 +6,9 @@ import { requireRole } from "../lib/auth";
 
 const router: IRouter = Router();
 
-const READ_ROLES = ["owner", "admin", "accountant"];
-const WRITE_ROLES = ["owner", "admin"];
-const DELETE_ROLES = ["owner"];
+const READ_ROLES = ["super_admin", "owner", "admin", "accountant"];
+const WRITE_ROLES = ["super_admin", "owner", "admin"];
+const DELETE_ROLES = ["super_admin", "owner"];
 
 router.get("/warranties", requireRole(...READ_ROLES), async (req, res): Promise<void> => {
   const { customerId } = req.query as { customerId?: string };

@@ -20,6 +20,7 @@ import Warranties from "@/pages/warranties";
 import Maintenance from "@/pages/maintenance";
 import Users from "@/pages/users";
 import EngineerDashboard from "@/pages/engineer-dashboard";
+import Employees from "@/pages/employees";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -160,6 +161,11 @@ function AppRoutes() {
             <Route path="/engineer-dashboard">
               <RoleGuard roles={["super_admin", "owner", "admin", "engineer"]}>
                 <EngineerDashboard />
+              </RoleGuard>
+            </Route>
+            <Route path="/employees">
+              <RoleGuard roles={["super_admin", "owner", "admin"]}>
+                <Employees />
               </RoleGuard>
             </Route>
             <Route path="/users">

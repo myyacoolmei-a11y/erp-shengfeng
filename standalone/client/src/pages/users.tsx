@@ -38,7 +38,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { UserPlus, Pencil, Trash2, KeyRound, Loader2, UserCheck, UserX, ShieldAlert } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { ROLE_LABELS, useAuth, type UserRole } from "@/contexts/auth-context";
+import { useAuth, type UserRole } from "@/contexts/auth-context";
+import { ROLE_LABELS } from "@/lib/role-labels";
 
 interface UserItem {
   id: number;
@@ -98,6 +99,7 @@ export default function UsersPage() {
   const qc = useQueryClient();
 
   const iAmSuperAdmin = me?.role === "super_admin";
+
   const availableRoles = iAmSuperAdmin ? ALL_ROLES_FOR_SUPER_ADMIN : ALL_ROLES_FOR_OWNER;
 
   const [createOpen, setCreateOpen] = useState(false);
@@ -268,12 +270,15 @@ export default function UsersPage() {
                 const isTargetSuperAdmin = u.role === "super_admin";
 
                 /**
-                 * Three-way branch — no path can accidentally expose buttons
-                 * for a super_admin row to a non-super_admin caller:
+                 * Three-way branch for the action cell — no shared variables
+                 * that could accidentally mix paths:
                  *
-                 * 1. Target IS super_admin AND not self → 受保護 (zero buttons)
-                 * 2. Target IS super_admin AND is self  → edit only (no reset, no delete)
-                 * 3. Target is NOT super_admin          → normal buttons
+                 * 1. Target IS super_admin AND it's someone else
+                 *    → "受保護" label, zero buttons, no dialogs reachable
+                 * 2. Target IS super_admin AND it's self (only super_admin can reach this)
+                 *    → edit button only (no reset-password, no delete)
+                 * 3. Target is NOT super_admin
+                 *    → normal buttons (edit, reset-password, delete if not self)
                  */
                 const renderActions = () => {
                   if (isTargetSuperAdmin && !isSelf) {
@@ -436,7 +441,7 @@ export default function UsersPage() {
                 onChange={(e) => setEditForm({ ...editForm, username: e.target.value })}
                 required />
             </div>
-            {/* Role: locked when editing own super_admin account (cannot downgrade self) */}
+            {/* Role: disabled when editing own super_admin account (cannot downgrade self) */}
             <div className="space-y-2">
               <Label htmlFor="e-role">角色</Label>
               {editTarget?.role === "super_admin" ? (

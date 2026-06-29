@@ -13,11 +13,13 @@ import {
   UserCog,
   Receipt,
   HardHat,
+  Briefcase,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Badge } from "@/components/ui/badge";
-import { useAuth, ROLE_LABELS, type UserRole } from "@/contexts/auth-context";
+import { useAuth, type UserRole } from "@/contexts/auth-context";
+import { ROLE_LABELS } from "@/lib/role-labels";
 
 interface NavItem {
   href: string;
@@ -44,6 +46,12 @@ const NAV_ITEMS: NavItem[] = [
     label: "客戶管理",
     icon: Users,
     roles: ["super_admin", "owner", "admin", "sales", "accountant"],
+  },
+  {
+    href: "/employees",
+    label: "員工管理",
+    icon: Briefcase,
+    roles: ["super_admin", "owner", "admin"],
   },
   {
     href: "/quotes",

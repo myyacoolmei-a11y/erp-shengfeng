@@ -6,10 +6,10 @@ import { requireRole } from "../lib/auth";
 
 const router: IRouter = Router();
 
-const WO_READ_ROLES = ["owner", "admin", "engineer", "technician"];
-const WO_WRITE_ROLES = ["owner", "admin", "engineer"];
-const WO_DELETE_ROLES = ["owner", "admin"];
-const PROGRESS_ROLES = ["owner", "admin", "engineer", "technician"];
+const WO_READ_ROLES = ["super_admin", "owner", "admin", "engineer", "technician"];
+const WO_WRITE_ROLES = ["super_admin", "owner", "admin", "engineer"];
+const WO_DELETE_ROLES = ["super_admin", "owner", "admin"];
+const PROGRESS_ROLES = ["super_admin", "owner", "admin", "engineer", "technician"];
 
 function isoStr(v: unknown): string | null {
   if (!v) return null;
@@ -43,12 +43,27 @@ const WO_SELECT = {
   hasElevator: workOrdersTable.hasElevator,
   description: workOrdersTable.description,
   notes: workOrdersTable.notes,
+  technicians: workOrdersTable.technicians,
   createdAt: workOrdersTable.createdAt,
   updatedAt: workOrdersTable.updatedAt,
 };
 
 function formatOrder(o: Record<string, unknown>) {
   return { ...o, createdAt: isoStr(o.createdAt), updatedAt: isoStr(o.updatedAt) };
+}
+
+/** Convert empty strings to undefined for date/string columns that can't be empty */
+function sanitizeWOData<T extends Record<string, unknown>>(data: T): T {
+  const DATE_FIELDS = ["scheduledDate", "completedDate"];
+  const result = { ...data } as Record<string, unknown>;
+  for (const f of DATE_FIELDS) {
+    if (result[f] === "") result[f] = undefined;
+  }
+  // Also remove undefined keys so Drizzle skips them entirely
+  for (const key of Object.keys(result)) {
+    if (result[key] === undefined) delete result[key];
+  }
+  return result as T;
 }
 
 router.get("/work-orders", requireRole(...WO_READ_ROLES), async (req, res): Promise<void> => {
@@ -82,7 +97,7 @@ router.post("/work-orders", requireRole(...WO_WRITE_ROLES), async (req, res): Pr
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [order] = await db.insert(workOrdersTable).values(parsed.data).returning();
+  const [order] = await db.insert(workOrdersTable).values(sanitizeWOData(parsed.data)).returning();
 
   // Auto-generate work order number
   const now = new Date();
@@ -128,7 +143,7 @@ router.patch("/work-orders/:id", requireRole(...WO_WRITE_ROLES), async (req, res
   const parsed = UpdateWorkOrderBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
-  const [order] = await db.update(workOrdersTable).set(parsed.data).where(eq(workOrdersTable.id, id)).returning();
+  const [order] = await db.update(workOrdersTable).set(sanitizeWOData(parsed.data)).where(eq(workOrdersTable.id, id)).returning();
   if (!order) { res.status(404).json({ error: "找不到派工單" }); return; }
 
   res.json(formatOrder({ ...order, customerName: null }));

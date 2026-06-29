@@ -44,7 +44,7 @@ export async function seedDefaultUser(): Promise<void> {
 /**
  * One-time startup migration: if no super_admin exists yet, upgrade the
  * "admin" account (the original seeded account) to super_admin.
- * This handles existing Railway deployments seeded before the role was added.
+ * This handles existing deployments that were seeded before the role was added.
  */
 export async function ensureSuperAdmin(): Promise<void> {
   try {

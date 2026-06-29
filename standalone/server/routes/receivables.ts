@@ -6,9 +6,9 @@ import { z } from "zod/v4";
 
 const router: IRouter = Router();
 
-const READ_ROLES = ["owner", "admin", "accountant"];
-const WRITE_ROLES = ["owner", "admin", "accountant"];
-const DELETE_ROLES = ["owner", "admin"];
+const READ_ROLES = ["super_admin", "owner", "admin", "accountant"];
+const WRITE_ROLES = ["super_admin", "owner", "admin", "accountant"];
+const DELETE_ROLES = ["super_admin", "owner", "admin"];
 
 function parseId(raw: unknown): number | null {
   const id = parseInt(String(Array.isArray(raw) ? raw[0] : raw), 10);

@@ -53,7 +53,7 @@ function parseId(raw: unknown): number | null {
 /**
  * GET /users
  * Both super_admin and owner see all users (including super_admin accounts).
- * The frontend hides action buttons for super_admin rows when caller is not super_admin,
+ * The frontend hides action buttons for super_admin rows when the caller is not super_admin,
  * and the mutation endpoints enforce 403 for any unauthorized operation.
  */
 router.get("/users", requireRole("super_admin", "owner"), async (_req, res): Promise<void> => {
