@@ -123,7 +123,7 @@ const ROLE_COLORS: Record<UserRole, string> = {
 };
 
 function NavContent() {
-  const [location] = useLocation();
+  const [location, navigate] = useLocation();
   const { user, logout } = useAuth();
   const isWholesalePath = location.startsWith("/wholesale");
   const [wholesaleOpen, setWholesaleOpen] = useState(isWholesalePath);
@@ -185,7 +185,10 @@ function NavContent() {
           {showWholesale && (
             <div>
               <button
-                onClick={() => setWholesaleOpen((v) => !v)}
+                onClick={() => {
+                  if (!isWholesalePath) navigate("/wholesale/customers");
+                  setWholesaleOpen((v) => !v);
+                }}
                 className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium w-full transition-colors ${
                   isWholesalePath
                     ? "bg-primary/10 text-primary"
