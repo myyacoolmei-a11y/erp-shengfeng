@@ -362,26 +362,32 @@ ${copyHtml("師傅聯")}
 function shareViaLine(order: any) {
   const woNum = order.workOrderNumber || `#${order.id}`;
   const techDisplay = getTechDisplay(order);
-  const mapsUrl = order.installAddress
-    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.installAddress)}`
+  const addr = order.installAddress || "";
+  const mapsUrl = addr
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}`
     : "";
+  const workContent =
+    order.description || order.workContent || order.content ||
+    order.workDescription || order.serviceContent || "";
+  const notesContent = order.notes || order.remark || "";
   const lines = [
     "【晟風工程 派工通知】",
     "",
     `派工單號：${woNum}`,
     `客戶：${order.customerName || "—"}`,
+    `聯絡人：${order.contactPerson || "—"}`,
     `行動電話：${order.mobilePhone || "—"}`,
-    `施工地址：${order.installAddress || "—"}`,
+    `施工地址：${addr || "—"}`,
     mapsUrl ? `地圖導航：${mapsUrl}` : "",
     "",
     `施工日期：${order.scheduledDate || "—"}`,
     `施工時間：${order.scheduledTime || "—"}`,
-    "",
     `施工技師：${techDisplay}`,
     "",
-    `施工內容：${order.description || "—"}`,
-    order.notes ? `\n施工備註：${order.notes}` : "",
-  ].filter(l => l !== undefined).join("\n").replace(/\n{3,}/g, "\n\n");
+    `施工內容：\n${workContent || "—"}`,
+    "",
+    notesContent ? `備註：\n${notesContent}` : "",
+  ].filter(l => l !== "").join("\n").replace(/\n{3,}/g, "\n\n").trim();
   window.open(`https://line.me/R/msg/text?${encodeURIComponent(lines)}`, "_blank");
 }
 
