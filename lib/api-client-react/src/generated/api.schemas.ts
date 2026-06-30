@@ -633,6 +633,126 @@ export interface DashboardSummary {
   recentCustomers?: Customer[];
 }
 
+export interface Product {
+  id: number;
+  /** @nullable */
+  productNumber?: string | null;
+  /** @nullable */
+  brand?: string | null;
+  /** @nullable */
+  category?: string | null;
+  name: string;
+  /** @nullable */
+  model?: string | null;
+  /** @nullable */
+  spec?: string | null;
+  /** @nullable */
+  unit?: string | null;
+  /** @nullable */
+  imageUrl?: string | null;
+  isActive: boolean;
+  /** @nullable */
+  costPrice?: string | null;
+  /** @nullable */
+  retailPrice?: string | null;
+  /** @nullable */
+  wholesalePrice?: string | null;
+  /** @nullable */
+  minPrice?: string | null;
+  taxIncluded: boolean;
+  stockQty: number;
+  /** @nullable */
+  safetyStock?: number | null;
+  /** @nullable */
+  warehouseLocation?: string | null;
+  /** @nullable */
+  coolingCapacity?: string | null;
+  /** @nullable */
+  heatingCapacity?: string | null;
+  /** @nullable */
+  cspf?: string | null;
+  /** @nullable */
+  energyEfficiency?: string | null;
+  /** @nullable */
+  voltage?: string | null;
+  /** @nullable */
+  refrigerant?: string | null;
+  /** @nullable */
+  warrantyMonths?: number | null;
+  /** @nullable */
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProductInput {
+  brand?: string;
+  category?: string;
+  /** @minLength 1 */
+  name: string;
+  model?: string;
+  spec?: string;
+  unit?: string;
+  imageUrl?: string;
+  isActive?: boolean;
+  /** @nullable */
+  costPrice?: number | null;
+  /** @nullable */
+  retailPrice?: number | null;
+  /** @nullable */
+  wholesalePrice?: number | null;
+  /** @nullable */
+  minPrice?: number | null;
+  taxIncluded?: boolean;
+  stockQty?: number;
+  /** @nullable */
+  safetyStock?: number | null;
+  warehouseLocation?: string;
+  coolingCapacity?: string;
+  heatingCapacity?: string;
+  cspf?: string;
+  energyEfficiency?: string;
+  voltage?: string;
+  refrigerant?: string;
+  /** @nullable */
+  warrantyMonths?: number | null;
+  notes?: string;
+}
+
+export interface UpdateProductInput {
+  brand?: string;
+  category?: string;
+  /** @minLength 1 */
+  name?: string;
+  model?: string;
+  spec?: string;
+  unit?: string;
+  imageUrl?: string;
+  isActive?: boolean;
+  /** @nullable */
+  costPrice?: number | null;
+  /** @nullable */
+  retailPrice?: number | null;
+  /** @nullable */
+  wholesalePrice?: number | null;
+  /** @nullable */
+  minPrice?: number | null;
+  taxIncluded?: boolean;
+  stockQty?: number;
+  /** @nullable */
+  safetyStock?: number | null;
+  warehouseLocation?: string;
+  coolingCapacity?: string;
+  heatingCapacity?: string;
+  cspf?: string;
+  energyEfficiency?: string;
+  voltage?: string;
+  refrigerant?: string;
+  /** @nullable */
+  warrantyMonths?: number | null;
+  notes?: string;
+}
+
 export type ListCustomersParams = {
 /**
  * 搜尋關鍵字（姓名、電話、地址）
@@ -680,5 +800,12 @@ export type ListReceivablesParams = {
 customerId?: number;
 status?: string;
 workOrderId?: number;
+};
+
+export type ListProductsParams = {
+search?: string;
+brand?: string;
+category?: string;
+isActive?: string;
 };
 

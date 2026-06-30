@@ -12,6 +12,7 @@ import warrantiesRouter from "./warranties";
 import maintenanceRouter from "./maintenance";
 import receivablesRouter from "./receivables";
 import dashboardRouter from "./dashboard";
+import productsRouter from "./products";
 import { authenticate } from "../lib/auth";
 
 const router: IRouter = Router();
@@ -32,5 +33,6 @@ router.use(warrantiesRouter);
 router.use(maintenanceRouter);
 router.use(receivablesRouter);
 router.use(dashboardRouter);
+router.use(productsRouter);
 
 export default router;

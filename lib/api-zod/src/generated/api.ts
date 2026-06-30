@@ -1557,3 +1557,229 @@ export const GetDashboardSummaryResponse = zod.object({
 })
 
 
+/**
+ * @summary 列出商品
+ */
+export const ListProductsQueryParams = zod.object({
+  "search": zod.coerce.string().optional(),
+  "brand": zod.coerce.string().optional(),
+  "category": zod.coerce.string().optional(),
+  "isActive": zod.coerce.string().optional()
+})
+
+export const ListProductsResponseItem = zod.object({
+  "id": zod.number(),
+  "productNumber": zod.string().nullish(),
+  "brand": zod.string().nullish(),
+  "category": zod.string().nullish(),
+  "name": zod.string(),
+  "model": zod.string().nullish(),
+  "spec": zod.string().nullish(),
+  "unit": zod.string().nullish(),
+  "imageUrl": zod.string().nullish(),
+  "isActive": zod.boolean(),
+  "costPrice": zod.string().nullish(),
+  "retailPrice": zod.string().nullish(),
+  "wholesalePrice": zod.string().nullish(),
+  "minPrice": zod.string().nullish(),
+  "taxIncluded": zod.boolean(),
+  "stockQty": zod.number(),
+  "safetyStock": zod.number().nullish(),
+  "warehouseLocation": zod.string().nullish(),
+  "coolingCapacity": zod.string().nullish(),
+  "heatingCapacity": zod.string().nullish(),
+  "cspf": zod.string().nullish(),
+  "energyEfficiency": zod.string().nullish(),
+  "voltage": zod.string().nullish(),
+  "refrigerant": zod.string().nullish(),
+  "warrantyMonths": zod.number().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+export const ListProductsResponse = zod.array(ListProductsResponseItem)
+
+
+/**
+ * @summary 新增商品
+ */
+
+
+
+export const CreateProductBody = zod.object({
+  "brand": zod.string().optional(),
+  "category": zod.string().optional(),
+  "name": zod.string().min(1),
+  "model": zod.string().optional(),
+  "spec": zod.string().optional(),
+  "unit": zod.string().optional(),
+  "imageUrl": zod.string().optional(),
+  "isActive": zod.boolean().optional(),
+  "costPrice": zod.number().nullish(),
+  "retailPrice": zod.number().nullish(),
+  "wholesalePrice": zod.number().nullish(),
+  "minPrice": zod.number().nullish(),
+  "taxIncluded": zod.boolean().optional(),
+  "stockQty": zod.number().optional(),
+  "safetyStock": zod.number().nullish(),
+  "warehouseLocation": zod.string().optional(),
+  "coolingCapacity": zod.string().optional(),
+  "heatingCapacity": zod.string().optional(),
+  "cspf": zod.string().optional(),
+  "energyEfficiency": zod.string().optional(),
+  "voltage": zod.string().optional(),
+  "refrigerant": zod.string().optional(),
+  "warrantyMonths": zod.number().nullish(),
+  "notes": zod.string().optional()
+})
+
+export const CreateProductResponse = zod.object({
+  "id": zod.number(),
+  "productNumber": zod.string().nullish(),
+  "brand": zod.string().nullish(),
+  "category": zod.string().nullish(),
+  "name": zod.string(),
+  "model": zod.string().nullish(),
+  "spec": zod.string().nullish(),
+  "unit": zod.string().nullish(),
+  "imageUrl": zod.string().nullish(),
+  "isActive": zod.boolean(),
+  "costPrice": zod.string().nullish(),
+  "retailPrice": zod.string().nullish(),
+  "wholesalePrice": zod.string().nullish(),
+  "minPrice": zod.string().nullish(),
+  "taxIncluded": zod.boolean(),
+  "stockQty": zod.number(),
+  "safetyStock": zod.number().nullish(),
+  "warehouseLocation": zod.string().nullish(),
+  "coolingCapacity": zod.string().nullish(),
+  "heatingCapacity": zod.string().nullish(),
+  "cspf": zod.string().nullish(),
+  "energyEfficiency": zod.string().nullish(),
+  "voltage": zod.string().nullish(),
+  "refrigerant": zod.string().nullish(),
+  "warrantyMonths": zod.number().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary 取得商品
+ */
+export const GetProductParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetProductResponse = zod.object({
+  "id": zod.number(),
+  "productNumber": zod.string().nullish(),
+  "brand": zod.string().nullish(),
+  "category": zod.string().nullish(),
+  "name": zod.string(),
+  "model": zod.string().nullish(),
+  "spec": zod.string().nullish(),
+  "unit": zod.string().nullish(),
+  "imageUrl": zod.string().nullish(),
+  "isActive": zod.boolean(),
+  "costPrice": zod.string().nullish(),
+  "retailPrice": zod.string().nullish(),
+  "wholesalePrice": zod.string().nullish(),
+  "minPrice": zod.string().nullish(),
+  "taxIncluded": zod.boolean(),
+  "stockQty": zod.number(),
+  "safetyStock": zod.number().nullish(),
+  "warehouseLocation": zod.string().nullish(),
+  "coolingCapacity": zod.string().nullish(),
+  "heatingCapacity": zod.string().nullish(),
+  "cspf": zod.string().nullish(),
+  "energyEfficiency": zod.string().nullish(),
+  "voltage": zod.string().nullish(),
+  "refrigerant": zod.string().nullish(),
+  "warrantyMonths": zod.number().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary 更新商品
+ */
+export const UpdateProductParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+
+
+export const UpdateProductBody = zod.object({
+  "brand": zod.string().optional(),
+  "category": zod.string().optional(),
+  "name": zod.string().min(1).optional(),
+  "model": zod.string().optional(),
+  "spec": zod.string().optional(),
+  "unit": zod.string().optional(),
+  "imageUrl": zod.string().optional(),
+  "isActive": zod.boolean().optional(),
+  "costPrice": zod.number().nullish(),
+  "retailPrice": zod.number().nullish(),
+  "wholesalePrice": zod.number().nullish(),
+  "minPrice": zod.number().nullish(),
+  "taxIncluded": zod.boolean().optional(),
+  "stockQty": zod.number().optional(),
+  "safetyStock": zod.number().nullish(),
+  "warehouseLocation": zod.string().optional(),
+  "coolingCapacity": zod.string().optional(),
+  "heatingCapacity": zod.string().optional(),
+  "cspf": zod.string().optional(),
+  "energyEfficiency": zod.string().optional(),
+  "voltage": zod.string().optional(),
+  "refrigerant": zod.string().optional(),
+  "warrantyMonths": zod.number().nullish(),
+  "notes": zod.string().optional()
+})
+
+export const UpdateProductResponse = zod.object({
+  "id": zod.number(),
+  "productNumber": zod.string().nullish(),
+  "brand": zod.string().nullish(),
+  "category": zod.string().nullish(),
+  "name": zod.string(),
+  "model": zod.string().nullish(),
+  "spec": zod.string().nullish(),
+  "unit": zod.string().nullish(),
+  "imageUrl": zod.string().nullish(),
+  "isActive": zod.boolean(),
+  "costPrice": zod.string().nullish(),
+  "retailPrice": zod.string().nullish(),
+  "wholesalePrice": zod.string().nullish(),
+  "minPrice": zod.string().nullish(),
+  "taxIncluded": zod.boolean(),
+  "stockQty": zod.number(),
+  "safetyStock": zod.number().nullish(),
+  "warehouseLocation": zod.string().nullish(),
+  "coolingCapacity": zod.string().nullish(),
+  "heatingCapacity": zod.string().nullish(),
+  "cspf": zod.string().nullish(),
+  "energyEfficiency": zod.string().nullish(),
+  "voltage": zod.string().nullish(),
+  "refrigerant": zod.string().nullish(),
+  "warrantyMonths": zod.number().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary 刪除商品
+ */
+export const DeleteProductParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteProductResponse = zod.void()
+
+

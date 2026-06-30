@@ -14,6 +14,7 @@ import {
   Briefcase,
   ShoppingCart,
   Package,
+  Archive,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -64,6 +65,12 @@ const NAV_ITEMS: NavItem[] = [
     label: "收款 / 應收帳款",
     icon: CreditCard,
     roles: ["super_admin", "owner", "admin", "accountant"],
+  },
+  {
+    href: "/products",
+    label: "商品管理",
+    icon: Archive,
+    roles: ["super_admin", "owner", "admin", "sales"],
   },
   {
     href: "/wholesale",

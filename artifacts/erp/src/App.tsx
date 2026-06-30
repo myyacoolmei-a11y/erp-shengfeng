@@ -21,6 +21,7 @@ import Maintenance from "@/pages/maintenance";
 import Users from "@/pages/users";
 import EngineerDashboard from "@/pages/engineer-dashboard";
 import Employees from "@/pages/employees";
+import Products from "@/pages/products";
 
 function ComingSoon({ title }: { title: string }) {
   return (
@@ -171,6 +172,11 @@ function AppRoutes() {
             <Route path="/engineer-dashboard">
               <RoleGuard roles={["super_admin", "owner", "admin", "engineer"]}>
                 <EngineerDashboard />
+              </RoleGuard>
+            </Route>
+            <Route path="/products">
+              <RoleGuard roles={["super_admin", "owner", "admin", "sales"]}>
+                <Products />
               </RoleGuard>
             </Route>
             <Route path="/wholesale">

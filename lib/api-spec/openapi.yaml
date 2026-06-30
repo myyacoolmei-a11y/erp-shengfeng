@@ -36,6 +36,8 @@ tags:
     description: 儀表板
   - name: employees
     description: 員工管理
+  - name: products
+    description: 商品管理
 
 paths:
   /healthz:
@@ -1143,6 +1145,109 @@ paths:
               schema:
                 $ref: "#/components/schemas/DashboardSummary"
 
+  /products:
+    get:
+      operationId: listProducts
+      tags: [products]
+      summary: 列出商品
+      parameters:
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: brand
+          in: query
+          schema: { type: string }
+        - name: category
+          in: query
+          schema: { type: string }
+        - name: isActive
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: 商品列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Product"
+    post:
+      operationId: createProduct
+      tags: [products]
+      summary: 新增商品
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductInput"
+      responses:
+        "201":
+          description: 新增成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+
+  /products/{id}:
+    get:
+      operationId: getProduct
+      tags: [products]
+      summary: 取得商品
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: 商品資料
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "404":
+          description: 找不到商品
+    patch:
+      operationId: updateProduct
+      tags: [products]
+      summary: 更新商品
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProductInput"
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "404":
+          description: 找不到商品
+    delete:
+      operationId: deleteProduct
+      tags: [products]
+      summary: 刪除商品
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "204":
+          description: 刪除成功
+        "404":
+          description: 找不到商品
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1752,3 +1857,93 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/Customer"
+
+    Product:
+      type: object
+      required: [id, name, isActive, taxIncluded, stockQty, createdAt, updatedAt]
+      properties:
+        id: { type: integer }
+        productNumber: { type: ["string", "null"] }
+        brand: { type: ["string", "null"] }
+        category: { type: ["string", "null"] }
+        name: { type: string }
+        model: { type: ["string", "null"] }
+        spec: { type: ["string", "null"] }
+        unit: { type: ["string", "null"] }
+        imageUrl: { type: ["string", "null"] }
+        isActive: { type: boolean }
+        costPrice: { type: ["string", "null"] }
+        retailPrice: { type: ["string", "null"] }
+        wholesalePrice: { type: ["string", "null"] }
+        minPrice: { type: ["string", "null"] }
+        taxIncluded: { type: boolean }
+        stockQty: { type: integer }
+        safetyStock: { type: ["integer", "null"] }
+        warehouseLocation: { type: ["string", "null"] }
+        coolingCapacity: { type: ["string", "null"] }
+        heatingCapacity: { type: ["string", "null"] }
+        cspf: { type: ["string", "null"] }
+        energyEfficiency: { type: ["string", "null"] }
+        voltage: { type: ["string", "null"] }
+        refrigerant: { type: ["string", "null"] }
+        warrantyMonths: { type: ["integer", "null"] }
+        notes: { type: ["string", "null"] }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+
+    ProductInput:
+      type: object
+      required: [name]
+      properties:
+        brand: { type: string }
+        category: { type: string }
+        name: { type: string, minLength: 1 }
+        model: { type: string }
+        spec: { type: string }
+        unit: { type: string }
+        imageUrl: { type: string }
+        isActive: { type: boolean }
+        costPrice: { type: ["number", "null"] }
+        retailPrice: { type: ["number", "null"] }
+        wholesalePrice: { type: ["number", "null"] }
+        minPrice: { type: ["number", "null"] }
+        taxIncluded: { type: boolean }
+        stockQty: { type: integer }
+        safetyStock: { type: ["integer", "null"] }
+        warehouseLocation: { type: string }
+        coolingCapacity: { type: string }
+        heatingCapacity: { type: string }
+        cspf: { type: string }
+        energyEfficiency: { type: string }
+        voltage: { type: string }
+        refrigerant: { type: string }
+        warrantyMonths: { type: ["integer", "null"] }
+        notes: { type: string }
+
+    UpdateProductInput:
+      type: object
+      properties:
+        brand: { type: string }
+        category: { type: string }
+        name: { type: string, minLength: 1 }
+        model: { type: string }
+        spec: { type: string }
+        unit: { type: string }
+        imageUrl: { type: string }
+        isActive: { type: boolean }
+        costPrice: { type: ["number", "null"] }
+        retailPrice: { type: ["number", "null"] }
+        wholesalePrice: { type: ["number", "null"] }
+        minPrice: { type: ["number", "null"] }
+        taxIncluded: { type: boolean }
+        stockQty: { type: integer }
+        safetyStock: { type: ["integer", "null"] }
+        warehouseLocation: { type: string }
+        coolingCapacity: { type: string }
+        heatingCapacity: { type: string }
+        cspf: { type: string }
+        energyEfficiency: { type: string }
+        voltage: { type: string }
+        refrigerant: { type: string }
+        warrantyMonths: { type: ["integer", "null"] }
+        notes: { type: string }

@@ -10,3 +10,4 @@ export * from "./warranties";
 export * from "./maintenanceReminders";
 export * from "./receivables";
 export * from "./users";
+export * from "./products";
