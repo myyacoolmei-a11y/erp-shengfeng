@@ -22,6 +22,16 @@ import Users from "@/pages/users";
 import EngineerDashboard from "@/pages/engineer-dashboard";
 import Employees from "@/pages/employees";
 
+function ComingSoon({ title }: { title: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-24 text-center">
+      <p className="text-4xl mb-4">🚧</p>
+      <h2 className="text-xl font-bold mb-2">{title}</h2>
+      <p className="text-muted-foreground text-sm">此功能即將推出，敬請期待。</p>
+    </div>
+  );
+}
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -161,6 +171,16 @@ function AppRoutes() {
             <Route path="/engineer-dashboard">
               <RoleGuard roles={["super_admin", "owner", "admin", "engineer"]}>
                 <EngineerDashboard />
+              </RoleGuard>
+            </Route>
+            <Route path="/wholesale">
+              <RoleGuard roles={["super_admin", "owner", "admin"]}>
+                <ComingSoon title="批發管理" />
+              </RoleGuard>
+            </Route>
+            <Route path="/inventory">
+              <RoleGuard roles={["super_admin", "owner", "admin"]}>
+                <ComingSoon title="庫存管理" />
               </RoleGuard>
             </Route>
             <Route path="/employees">
