@@ -519,9 +519,10 @@ export default function Quotes() {
     ...(statusFilter !== "全部" ? { status: statusFilter } : {}),
   });
   const { data: customers } = useListCustomers({ includeOld: "true" });
-  const { data: salesReps } = useListEmployees({ position: "業務", status: "在職" });
-  const { data: allEmployees } = useListEmployees({ status: "在職" });
-  const technicianOptions = (allEmployees ?? []).filter(e => e.position?.includes("技師"));
+  const { data: allSalesReps } = useListEmployees({ position: "業務" });
+  const salesReps = (allSalesReps ?? []).filter(e => e.status !== "離職");
+  const { data: allEmployees } = useListEmployees({});
+  const technicianOptions = (allEmployees ?? []).filter(e => e.position?.includes("技師") && e.status !== "離職");
 
   const invQuotes = () => qc.invalidateQueries({ queryKey: getListQuotesQueryKey() });
   const createMutation = useCreateQuote({ mutation: { onSuccess: () => { invQuotes(); setShowCreate(false); toast({ title: "報價單已新增" }); } } });

@@ -77,7 +77,7 @@ export default function Employees() {
       </div>
 
       <div className="flex gap-2 flex-wrap">
-        {["全部", "在職", "離職"].map(s => (
+        {["全部", "在職", "配合", "離職"].map(s => (
           <button
             key={s}
             onClick={() => setStatusFilter(s)}
@@ -107,7 +107,11 @@ export default function Employees() {
                       <span className={`text-xs px-2 py-0.5 rounded font-medium ${POSITION_COLORS[e.position] ?? "bg-gray-100 text-gray-700"}`}>
                         {e.position}
                       </span>
-                      <span className={`text-xs px-2 py-0.5 rounded font-medium ${e.status === "在職" ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
+                      <span className={`text-xs px-2 py-0.5 rounded font-medium ${
+                        e.status === "在職" ? "bg-green-100 text-green-700"
+                        : e.status === "配合" ? "bg-yellow-100 text-yellow-700"
+                        : "bg-gray-100 text-gray-500"
+                      }`}>
                         {e.status}
                       </span>
                     </div>
@@ -126,10 +130,10 @@ export default function Employees() {
                     >
                       <Pencil className="h-3.5 w-3.5" />
                     </Button>
-                    {e.status === "在職" && (
+                    {e.status !== "離職" && (
                       <Button
                         variant="ghost" size="icon" className="h-7 w-7 text-orange-600 hover:text-orange-700"
-                        title="停用" onClick={() => setDisableId(e.id)}
+                        title="標記為離職" onClick={() => setDisableId(e.id)}
                       >
                         <UserX className="h-3.5 w-3.5" />
                       </Button>
@@ -192,6 +196,7 @@ export default function Employees() {
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="在職">在職</SelectItem>
+                      <SelectItem value="配合">配合</SelectItem>
                       <SelectItem value="離職">離職</SelectItem>
                     </SelectContent>
                   </Select>
@@ -216,7 +221,7 @@ export default function Employees() {
           <AlertDialogHeader>
             <AlertDialogTitle>確認停用</AlertDialogTitle>
             <AlertDialogDescription>
-              確定要停用這名員工嗎？狀態將改為「離職」，之後仍可透過編輯重新啟用。
+              確定要將此員工標記為「離職」？歷史資料與派工紀錄將完整保留，之後仍可透過編輯重新調整狀態。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
