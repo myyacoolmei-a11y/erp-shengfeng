@@ -16,9 +16,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Separator } from "@/components/ui/separator";
-import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
+import { WorkOrderFormFields, makeEmpty, buildPayload, type WOForm } from "@/components/work-order-form";
 
 // ── Constants ──────────────────────────────────────────────────────────────
 const CATEGORIES = ["裝新機", "保養", "維修", "移機", "拆機", "冷媒工程", "配管工程", "其他"];
@@ -512,21 +511,14 @@ export default function Quotes() {
   const [editItem, setEditItem] = useState<any>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [convertItem, setConvertItem] = useState<any>(null);
-  const [woForm, setWoForm] = useState({
-    scheduledDate: "",
-    scheduledTime: "",
-    projectType: "",
-    technicians: [] as string[],
-    description: "",
-    notes: "",
-  });
+  const [woForm, setWoForm] = useState<WOForm>(makeEmpty());
   const [form, setForm] = useState<QuoteForm>(emptyForm());
 
   const { data: quotes, isLoading } = useListQuotes({
     ...(filterCustomerId ? { customerId: filterCustomerId } : {}),
     ...(statusFilter !== "全部" ? { status: statusFilter } : {}),
   });
-  const { data: customers } = useListCustomers({});
+  const { data: customers } = useListCustomers({ includeOld: "true" });
   const { data: salesReps } = useListEmployees({ position: "業務", status: "在職" });
   const { data: allEmployees } = useListEmployees({ status: "在職" });
   const technicianOptions = (allEmployees ?? []).filter(e => e.position?.includes("技師"));
@@ -562,30 +554,8 @@ export default function Quotes() {
   function handleConvert(e: React.FormEvent) {
     e.preventDefault();
     if (!convertItem) return;
-    createWoMutation.mutate({ data: {
-      customerId: convertItem.customerId,
-      quoteId: convertItem.id,
-      title: convertItem.title,
-      status: "待施工",
-      contactPerson: convertItem.contactPerson || undefined,
-      mobilePhone: convertItem.customerPhone || undefined,
-      installAddress: convertItem.address || undefined,
-      scheduledDate: woForm.scheduledDate || undefined,
-      scheduledTime: woForm.scheduledTime || undefined,
-      projectType: woForm.projectType || undefined,
-      technicians: woForm.technicians.length > 0 ? JSON.stringify(woForm.technicians) : undefined,
-      description: woForm.description || undefined,
-      notes: woForm.notes || undefined,
-    } });
-  }
-
-  function toggleWoTechnician(name: string) {
-    setWoForm(f => ({
-      ...f,
-      technicians: f.technicians.includes(name)
-        ? f.technicians.filter(n => n !== name)
-        : [...f.technicians, name],
-    }));
+    const payload = buildPayload(woForm);
+    createWoMutation.mutate({ data: payload });
   }
 
   const { rawTotal, preTax, taxAmt, total } = computeTotals(form.items, form.discountAmount, form.taxType);
@@ -658,7 +628,16 @@ export default function Quotes() {
                     {(q.status === "已接受" || q.status === "已送出") && (
                       <Button variant="ghost" size="icon" className="h-7 w-7 text-blue-600" title="轉為派工單" onClick={() => {
                         setConvertItem(q);
-                        setWoForm({ scheduledDate: "", scheduledTime: "", projectType: "", technicians: [], description: q.description ?? "", notes: "" });
+                        setWoForm({
+                          ...makeEmpty(),
+                          quoteId: q.id,
+                          customerId: q.customerId ?? 0,
+                          title: q.title ?? "",
+                          contactPerson: q.contactPerson ?? "",
+                          mobilePhone: q.customerPhone ?? "",
+                          installAddress: q.address ?? "",
+                          description: q.description ?? "",
+                        });
                       }}><Wrench className="h-3.5 w-3.5" /></Button>
                     )}
                     <Button variant="ghost" size="icon" className="h-7 w-7" title="編輯" onClick={() => openEdit(q)}><Pencil className="h-3.5 w-3.5" /></Button>
@@ -826,87 +805,17 @@ export default function Quotes() {
       {/* Convert to Work Order */}
       {convertItem && (
         <Dialog open onOpenChange={() => setConvertItem(null)}>
-          <DialogContent className="max-w-lg max-h-[92dvh] overflow-y-auto">
+          <DialogContent className="max-w-2xl w-full max-h-[92dvh] overflow-y-auto p-4 sm:p-6">
             <DialogHeader><DialogTitle>轉為派工單</DialogTitle></DialogHeader>
-            {/* Quote summary */}
-            <div className="text-sm bg-muted/30 rounded p-3">
-              <p className="font-medium">{convertItem.title}</p>
-              <p className="text-muted-foreground text-xs mt-0.5">
-                {convertItem.customerName}
-                {convertItem.customerPhone && ` · ${convertItem.customerPhone}`}
-                {convertItem.address && ` · ${convertItem.address}`}
-              </p>
-            </div>
-            <form onSubmit={handleConvert} className="space-y-4">
-
-              {/* 施工資訊 */}
-              <div>
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">施工資訊</p>
-                <Separator className="mt-1 mb-3" />
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1">
-                    <Label>施工日期</Label>
-                    <Input type="date" value={woForm.scheduledDate} onChange={e => setWoForm(f => ({ ...f, scheduledDate: e.target.value }))} />
-                  </div>
-                  <div className="space-y-1">
-                    <Label>施工時間</Label>
-                    <Input type="time" value={woForm.scheduledTime} onChange={e => setWoForm(f => ({ ...f, scheduledTime: e.target.value }))} />
-                  </div>
-                  <div className="space-y-1 col-span-2">
-                    <Label>工程類型</Label>
-                    <Select value={woForm.projectType} onValueChange={v => setWoForm(f => ({ ...f, projectType: v }))}>
-                      <SelectTrigger><SelectValue placeholder="選擇類型" /></SelectTrigger>
-                      <SelectContent>
-                        {["新裝", "維修", "保養", "移機", "拆機", "冷媒", "配管", "其他"].map(t => (
-                          <SelectItem key={t} value={t}>{t}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </div>
-
-              {/* 施工技師 */}
-              <div>
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">施工技師</p>
-                <Separator className="mt-1 mb-2" />
-                {technicianOptions.length > 0 ? (
-                  <div className="border rounded-md p-2 max-h-32 overflow-y-auto space-y-1.5">
-                    {technicianOptions.map(emp => (
-                      <div key={emp.id} className="flex items-center gap-2">
-                        <Checkbox
-                          id={`wo-tech-${emp.id}`}
-                          checked={woForm.technicians.includes(emp.name)}
-                          onCheckedChange={() => toggleWoTechnician(emp.name)}
-                        />
-                        <label htmlFor={`wo-tech-${emp.id}`} className="text-sm cursor-pointer">{emp.name}</label>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground border rounded-md p-2">尚無在職技師（請至員工管理新增職位含「技師」的員工）</p>
-                )}
-                {woForm.technicians.length > 0 && (
-                  <p className="text-xs text-muted-foreground mt-1">已選：{woForm.technicians.join("、")}</p>
-                )}
-              </div>
-
-              {/* 說明與備註 */}
-              <div>
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">說明與備註</p>
-                <Separator className="mt-1 mb-3" />
-                <div className="space-y-3">
-                  <div className="space-y-1">
-                    <Label>施工內容</Label>
-                    <Textarea rows={3} placeholder="描述施工內容…" value={woForm.description} onChange={e => setWoForm(f => ({ ...f, description: e.target.value }))} />
-                  </div>
-                  <div className="space-y-1">
-                    <Label>備註</Label>
-                    <Textarea rows={2} placeholder="停車、注意事項…" value={woForm.notes} onChange={e => setWoForm(f => ({ ...f, notes: e.target.value }))} />
-                  </div>
-                </div>
-              </div>
-
+            <form onSubmit={handleConvert} className="space-y-4 mt-1">
+              <WorkOrderFormFields
+                form={woForm}
+                setForm={setWoForm}
+                customers={customers ?? []}
+                technicianOptions={technicianOptions}
+                showQuoteSelector={false}
+                customerDisabled={true}
+              />
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setConvertItem(null)}>取消</Button>
                 <Button type="submit" disabled={createWoMutation.isPending}><Wrench className="h-3.5 w-3.5 mr-1" />建立派工單</Button>

@@ -23,10 +23,9 @@ import { Plus, Pencil, Trash2, ChevronDown, ChevronUp, CreditCard, Printer, Shar
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
+import { WO_STATUSES, makeEmpty, type WOForm, buildPayload, WorkOrderFormFields } from "@/components/work-order-form";
 
-const STATUSES = ["待施工", "已完成"];
-const PROJECT_TYPES = ["新裝", "維修", "保養", "遷機", "清洗", "保固服務"];
-const ELEVATOR_OPTIONS = ["有電梯", "無電梯"];
+const STATUSES = WO_STATUSES;
 
 const STATUS_COLORS: Record<string, string> = {
   "待施工": "bg-amber-100 text-amber-700",
@@ -498,45 +497,6 @@ function ProgressPanel({ workOrderId, customerId, workOrderTitle }: {
   );
 }
 
-// ─── Section heading ─────────────────────────────────────────────────────────
-function SectionHeading({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="pt-1 pb-0.5">
-      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{children}</p>
-      <Separator className="mt-1" />
-    </div>
-  );
-}
-
-// ─── Empty form ──────────────────────────────────────────────────────────────
-function makeEmpty() {
-  return {
-    quoteId: undefined as number | undefined,
-    customerId: 0,
-    title: "",
-    status: "待施工",
-    contactPerson: "",
-    mobilePhone: "",
-    telephone: "",
-    installAddress: "",
-    scheduledDate: "",
-    scheduledTime: "",
-    completedDate: "",
-    technicians: [] as string[],
-    projectType: "",
-    acBrand: "",
-    modelNumber: "",
-    quantity: undefined as number | undefined,
-    indoorUnits: undefined as number | undefined,
-    outdoorUnits: undefined as number | undefined,
-    floorLevel: "",
-    hasElevator: "",
-    description: "",
-    notes: "",
-  };
-}
-
-type WOForm = ReturnType<typeof makeEmpty>;
 
 // ─── Main Page ───────────────────────────────────────────────────────────────
 export default function WorkOrders() {
@@ -622,38 +582,6 @@ export default function WorkOrders() {
     },
   });
 
-  function handleCustomerChange(v: string) {
-    const cid = parseInt(v);
-    const cust = customers?.find(c => c.id === cid);
-    setForm(f => ({
-      ...f,
-      customerId: cid,
-      mobilePhone: f.mobilePhone || cust?.phone || "",
-      installAddress: f.installAddress || cust?.address || "",
-    }));
-  }
-
-  function handleQuoteChange(v: string) {
-    if (!v || v === "__none__") {
-      setForm(f => ({ ...f, quoteId: undefined }));
-      return;
-    }
-    const qid = parseInt(v);
-    const quote = quotes?.find(q => q.id === qid);
-    if (!quote) return;
-
-    const cust = customers?.find(c => c.id === (quote.customerId ?? 0));
-    setForm(f => ({
-      ...f,
-      quoteId: qid,
-      customerId: quote.customerId ?? f.customerId,
-      contactPerson: quote.contactPerson || f.contactPerson || "",
-      mobilePhone: quote.customerPhone || cust?.phone || f.mobilePhone || "",
-      installAddress: quote.address || cust?.address || f.installAddress || "",
-      description: quote.description || f.description || "",
-    }));
-  }
-
   function openCreate() {
     setForm(makeEmpty());
     setShowCreate(true);
@@ -693,34 +621,6 @@ export default function WorkOrders() {
     setEditItem(o);
   }
 
-  function buildPayload(f: WOForm) {
-    const title = f.title.trim() || `${f.projectType || "派工"} 派工單`;
-    return {
-      customerId: f.customerId,
-      quoteId: f.quoteId,
-      title,
-      status: f.status,
-      contactPerson: f.contactPerson || undefined,
-      mobilePhone: f.mobilePhone || undefined,
-      telephone: f.telephone || undefined,
-      installAddress: f.installAddress || undefined,
-      scheduledDate: f.scheduledDate || undefined,
-      scheduledTime: f.scheduledTime || undefined,
-      completedDate: f.completedDate || undefined,
-      technicians: f.technicians.length > 0 ? JSON.stringify(f.technicians) : undefined,
-      projectType: f.projectType || undefined,
-      acBrand: f.acBrand || undefined,
-      modelNumber: f.modelNumber || undefined,
-      quantity: f.quantity,
-      indoorUnits: f.indoorUnits,
-      outdoorUnits: f.outdoorUnits,
-      floorLevel: f.floorLevel || undefined,
-      hasElevator: f.hasElevator || undefined,
-      description: f.description || undefined,
-      notes: f.notes || undefined,
-    };
-  }
-
   function handleSubmit(e: React.FormEvent, mode: "create" | "edit") {
     e.preventDefault();
     if (!form.customerId) { toast({ title: "請選擇客戶", variant: "destructive" }); return; }
@@ -733,15 +633,6 @@ export default function WorkOrders() {
       }
       updateMutation.mutate({ id: editItem.id, data: payload });
     }
-  }
-
-  function toggleTechnician(name: string) {
-    setForm(f => ({
-      ...f,
-      technicians: f.technicians.includes(name)
-        ? f.technicians.filter(n => n !== name)
-        : [...f.technicians, name],
-    }));
   }
 
   const isDialogOpen = showCreate || !!editItem;
@@ -910,225 +801,15 @@ export default function WorkOrders() {
           </DialogHeader>
 
           <form onSubmit={e => handleSubmit(e, dialogMode)} className="space-y-4 mt-1">
-
-            {/* ── 對應報價單 ── */}
-            <SectionHeading>對應報價單（選填）</SectionHeading>
-            <div className="space-y-1">
-              <Label>報價單</Label>
-              <Select
-                value={form.quoteId ? String(form.quoteId) : "__none__"}
-                onValueChange={handleQuoteChange}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="選擇報價單（可不填）" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">（不連結報價單）</SelectItem>
-                  {(quotes ?? []).map(q => (
-                    <SelectItem key={q.id} value={String(q.id)}>
-                      {q.title}{q.customerName ? ` — ${q.customerName}` : ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {form.quoteId && (
-                <p className="text-xs text-muted-foreground">已自動帶入報價單客戶資料，可修改</p>
-              )}
-            </div>
-
-            {/* ── 客戶資訊 ── */}
-            <SectionHeading>客戶資訊</SectionHeading>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="space-y-1 sm:col-span-2">
-                <Label>客戶 *</Label>
-                <Select
-                  value={form.customerId ? String(form.customerId) : ""}
-                  onValueChange={handleCustomerChange}
-                  disabled={dialogMode === "edit"}
-                >
-                  <SelectTrigger><SelectValue placeholder="選擇客戶" /></SelectTrigger>
-                  <SelectContent>
-                    {customers?.map(c => (
-                      <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label>聯絡人</Label>
-                <Input placeholder="聯絡人姓名" value={form.contactPerson} onChange={e => setForm(f => ({ ...f, contactPerson: e.target.value }))} />
-              </div>
-              <div className="space-y-1">
-                <Label>行動電話</Label>
-                <Input type="tel" placeholder="0912-345-678" value={form.mobilePhone} onChange={e => setForm(f => ({ ...f, mobilePhone: e.target.value }))} />
-              </div>
-              <div className="space-y-1">
-                <Label>聯絡電話</Label>
-                <Input type="tel" placeholder="(02) 1234-5678" value={form.telephone} onChange={e => setForm(f => ({ ...f, telephone: e.target.value }))} />
-              </div>
-              <div className="space-y-1 sm:col-span-2">
-                <Label>施工地址</Label>
-                <div className="flex gap-2">
-                  <Input
-                    className="flex-1"
-                    placeholder="施工地址"
-                    value={form.installAddress}
-                    onChange={e => setForm(f => ({ ...f, installAddress: e.target.value }))}
-                  />
-                  {form.installAddress && (
-                    <Button type="button" variant="outline" size="icon" asChild title="Google Maps 導航">
-                      <a
-                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(form.installAddress)}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        <MapPin className="h-4 w-4" />
-                      </a>
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            {/* ── 施工資訊 ── */}
-            <SectionHeading>施工資訊</SectionHeading>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              <div className="space-y-1">
-                <Label>狀態</Label>
-                <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: v }))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label>施工日期</Label>
-                <Input type="date" value={form.scheduledDate} onChange={e => setForm(f => ({ ...f, scheduledDate: e.target.value }))} />
-              </div>
-              <div className="space-y-1">
-                <Label>施工時間</Label>
-                <Input type="time" value={form.scheduledTime} onChange={e => setForm(f => ({ ...f, scheduledTime: e.target.value }))} />
-              </div>
-              <div className="space-y-1">
-                <Label>完成日期</Label>
-                <Input type="date" value={form.completedDate} onChange={e => setForm(f => ({ ...f, completedDate: e.target.value }))} />
-              </div>
-              <div className="space-y-1">
-                <Label>工程類型</Label>
-                <Select value={form.projectType} onValueChange={v => setForm(f => ({ ...f, projectType: v }))}>
-                  <SelectTrigger><SelectValue placeholder="選擇類型" /></SelectTrigger>
-                  <SelectContent>{PROJECT_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1">
-                <Label>工程標題</Label>
-                <Input
-                  placeholder={`${form.projectType || "派工"} 派工單`}
-                  value={form.title}
-                  onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
-                />
-              </div>
-            </div>
-
-            {/* ── 施工技師 ── */}
-            <div className="space-y-1">
-              <Label>施工技師</Label>
-              {technicianOptions.length > 0 ? (
-                <div className="border rounded-md p-2 max-h-36 overflow-y-auto space-y-1.5">
-                  {technicianOptions.map(emp => (
-                    <div key={emp.id} className="flex items-center gap-2">
-                      <Checkbox
-                        id={`tech-${emp.id}`}
-                        checked={form.technicians.includes(emp.name)}
-                        onCheckedChange={() => toggleTechnician(emp.name)}
-                      />
-                      <label htmlFor={`tech-${emp.id}`} className="text-sm cursor-pointer">{emp.name}</label>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-xs text-muted-foreground border rounded-md p-2">尚無在職技師資料（請至員工管理新增職位為「師傅技師」的員工）</p>
-              )}
-              {form.technicians.length > 0 && (
-                <p className="text-xs text-muted-foreground">已選：{form.technicians.join("、")}</p>
-              )}
-            </div>
-
-            {/* ── 冷氣設備 ── */}
-            <SectionHeading>冷氣設備</SectionHeading>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              <div className="space-y-1">
-                <Label>冷氣品牌</Label>
-                <Input placeholder="大金、日立…" value={form.acBrand} onChange={e => setForm(f => ({ ...f, acBrand: e.target.value }))} />
-              </div>
-              <div className="space-y-1">
-                <Label>型號</Label>
-                <Input placeholder="型號" value={form.modelNumber} onChange={e => setForm(f => ({ ...f, modelNumber: e.target.value }))} />
-              </div>
-              <div className="space-y-1">
-                <Label>數量（台）</Label>
-                <Input
-                  type="number" min="0"
-                  placeholder="0"
-                  value={form.quantity ?? ""}
-                  onChange={e => setForm(f => ({ ...f, quantity: e.target.value ? parseInt(e.target.value) : undefined }))}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label>室內機（台）</Label>
-                <Input
-                  type="number" min="0"
-                  placeholder="0"
-                  value={form.indoorUnits ?? ""}
-                  onChange={e => setForm(f => ({ ...f, indoorUnits: e.target.value ? parseInt(e.target.value) : undefined }))}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label>室外機（台）</Label>
-                <Input
-                  type="number" min="0"
-                  placeholder="0"
-                  value={form.outdoorUnits ?? ""}
-                  onChange={e => setForm(f => ({ ...f, outdoorUnits: e.target.value ? parseInt(e.target.value) : undefined }))}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label>樓層</Label>
-                <Input placeholder="例：3樓" value={form.floorLevel} onChange={e => setForm(f => ({ ...f, floorLevel: e.target.value }))} />
-              </div>
-              <div className="space-y-1">
-                <Label>電梯</Label>
-                <Select value={form.hasElevator} onValueChange={v => setForm(f => ({ ...f, hasElevator: v }))}>
-                  <SelectTrigger><SelectValue placeholder="選擇" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">（未填）</SelectItem>
-                    {ELEVATOR_OPTIONS.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* ── 施工內容 ── */}
-            <SectionHeading>施工說明</SectionHeading>
-            <div className="space-y-3">
-              <div className="space-y-1">
-                <Label>施工內容</Label>
-                <Textarea
-                  rows={3}
-                  placeholder="描述施工內容、要求…"
-                  value={form.description}
-                  onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label>施工備註</Label>
-                <Textarea
-                  rows={2}
-                  placeholder="停車、進出限制、注意事項…"
-                  value={form.notes}
-                  onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-                />
-              </div>
-            </div>
+            <WorkOrderFormFields
+              form={form}
+              setForm={setForm}
+              customers={customers ?? []}
+              technicianOptions={technicianOptions}
+              quotes={quotes ?? []}
+              showQuoteSelector={true}
+              customerDisabled={dialogMode === "edit"}
+            />
 
             <DialogFooter className="pt-2">
               <Button
