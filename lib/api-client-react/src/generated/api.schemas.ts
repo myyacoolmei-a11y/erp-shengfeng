@@ -753,6 +753,220 @@ export interface UpdateProductInput {
   notes?: string;
 }
 
+export interface WholesaleCustomer {
+  id: number;
+  companyName: string;
+  /** @nullable */
+  contactPerson?: string | null;
+  /** @nullable */
+  mobile?: string | null;
+  /** @nullable */
+  telephone?: string | null;
+  /** @nullable */
+  taxId?: string | null;
+  /** @nullable */
+  address?: string | null;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  paymentTerms?: string | null;
+  /** @nullable */
+  creditLimit?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WholesaleCustomerInput {
+  /** @minLength 1 */
+  companyName: string;
+  contactPerson?: string;
+  mobile?: string;
+  telephone?: string;
+  taxId?: string;
+  address?: string;
+  email?: string;
+  paymentTerms?: string;
+  /** @nullable */
+  creditLimit?: number | null;
+  notes?: string;
+}
+
+export interface WholesaleQuoteItemInput {
+  /** @nullable */
+  productId?: number | null;
+  productName: string;
+  brand?: string;
+  model?: string;
+  unit?: string;
+  /** @minimum 1 */
+  qty: number;
+  unitPrice: number;
+  discount?: number;
+  amount?: number;
+  sortOrder?: number;
+}
+
+export interface WholesaleQuoteItem {
+  id: number;
+  quoteId: number;
+  /** @nullable */
+  productId?: number | null;
+  productName: string;
+  /** @nullable */
+  brand?: string | null;
+  /** @nullable */
+  model?: string | null;
+  /** @nullable */
+  unit?: string | null;
+  qty: number;
+  unitPrice: string;
+  discount: string;
+  amount: string;
+  sortOrder: number;
+}
+
+export interface WholesaleQuote {
+  id: number;
+  /** @nullable */
+  quoteNumber?: string | null;
+  /** @nullable */
+  customerId?: number | null;
+  /** @nullable */
+  customerName?: string | null;
+  quoteDate: string;
+  /** @nullable */
+  expiryDate?: string | null;
+  /** @nullable */
+  salesperson?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  subtotal: string;
+  taxRate: string;
+  taxAmount: string;
+  shippingFee: string;
+  total: string;
+  status: string;
+  items?: WholesaleQuoteItem[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WholesaleQuoteInput {
+  /** @nullable */
+  customerId?: number | null;
+  customerName?: string;
+  quoteDate: string;
+  expiryDate?: string;
+  salesperson?: string;
+  notes?: string;
+  taxRate?: number;
+  shippingFee?: number;
+  status?: string;
+  items: WholesaleQuoteItemInput[];
+}
+
+export interface WholesaleOrderItem {
+  id: number;
+  orderId: number;
+  /** @nullable */
+  productId?: number | null;
+  productName: string;
+  /** @nullable */
+  brand?: string | null;
+  /** @nullable */
+  model?: string | null;
+  /** @nullable */
+  unit?: string | null;
+  qty: number;
+  unitPrice: string;
+  discount: string;
+  amount: string;
+  sortOrder: number;
+}
+
+export interface WholesaleOrder {
+  id: number;
+  /** @nullable */
+  orderNumber?: string | null;
+  /** @nullable */
+  quoteId?: number | null;
+  /** @nullable */
+  quoteNumber?: string | null;
+  /** @nullable */
+  customerId?: number | null;
+  /** @nullable */
+  customerName?: string | null;
+  orderDate: string;
+  /** @nullable */
+  expectedDelivery?: string | null;
+  /** @nullable */
+  salesperson?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  subtotal: string;
+  taxRate: string;
+  taxAmount: string;
+  shippingFee: string;
+  total: string;
+  status: string;
+  items?: WholesaleOrderItem[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WholesaleOrderInput {
+  /** @nullable */
+  quoteId?: number | null;
+  quoteNumber?: string;
+  /** @nullable */
+  customerId?: number | null;
+  customerName?: string;
+  orderDate: string;
+  expectedDelivery?: string;
+  salesperson?: string;
+  notes?: string;
+  taxRate?: number;
+  shippingFee?: number;
+  status?: string;
+  items: WholesaleQuoteItemInput[];
+}
+
+export interface WholesaleReceivable {
+  id: number;
+  /** @nullable */
+  orderId?: number | null;
+  /** @nullable */
+  orderNumber?: string | null;
+  /** @nullable */
+  customerId?: number | null;
+  /** @nullable */
+  customerName?: string | null;
+  totalAmount: string;
+  receivedAmount: string;
+  /** @nullable */
+  dueDate?: string | null;
+  /** @nullable */
+  paidDate?: string | null;
+  paymentStatus: string;
+  /** @nullable */
+  paymentMethod?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UpdateWholesaleReceivableInput {
+  receivedAmount?: number;
+  dueDate?: string;
+  paidDate?: string;
+  paymentStatus?: string;
+  paymentMethod?: string;
+  notes?: string;
+}
+
 export type ListCustomersParams = {
 /**
  * 搜尋關鍵字（姓名、電話、地址）
@@ -807,5 +1021,26 @@ search?: string;
 brand?: string;
 category?: string;
 isActive?: string;
+};
+
+export type ListWholesaleCustomersParams = {
+search?: string;
+};
+
+export type ListWholesaleQuotesParams = {
+search?: string;
+status?: string;
+customerId?: number;
+};
+
+export type ListWholesaleOrdersParams = {
+search?: string;
+status?: string;
+customerId?: number;
+};
+
+export type ListWholesaleReceivablesParams = {
+orderId?: number;
+status?: string;
 };
 

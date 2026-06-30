@@ -38,6 +38,14 @@ tags:
     description: 員工管理
   - name: products
     description: 商品管理
+  - name: wholesale-customers
+    description: 批發客戶
+  - name: wholesale-quotes
+    description: 批發報價單
+  - name: wholesale-orders
+    description: 批發訂單
+  - name: wholesale-receivables
+    description: 批發應收款
 
 paths:
   /healthz:
@@ -1248,6 +1256,346 @@ paths:
         "404":
           description: 找不到商品
 
+  /wholesale/customers:
+    get:
+      operationId: listWholesaleCustomers
+      tags: [wholesale-customers]
+      summary: 列出批發客戶
+      parameters:
+        - name: search
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: 批發客戶列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WholesaleCustomer"
+    post:
+      operationId: createWholesaleCustomer
+      tags: [wholesale-customers]
+      summary: 新增批發客戶
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WholesaleCustomerInput"
+      responses:
+        "201":
+          description: 新增成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WholesaleCustomer"
+
+  /wholesale/customers/{id}:
+    get:
+      operationId: getWholesaleCustomer
+      tags: [wholesale-customers]
+      summary: 取得批發客戶
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: 批發客戶資料
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WholesaleCustomer"
+    patch:
+      operationId: updateWholesaleCustomer
+      tags: [wholesale-customers]
+      summary: 更新批發客戶
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WholesaleCustomerInput"
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WholesaleCustomer"
+    delete:
+      operationId: deleteWholesaleCustomer
+      tags: [wholesale-customers]
+      summary: 刪除批發客戶
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "204":
+          description: 刪除成功
+
+  /wholesale/quotes:
+    get:
+      operationId: listWholesaleQuotes
+      tags: [wholesale-quotes]
+      summary: 列出批發報價單
+      parameters:
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: customerId
+          in: query
+          schema: { type: integer }
+      responses:
+        "200":
+          description: 批發報價單列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WholesaleQuote"
+    post:
+      operationId: createWholesaleQuote
+      tags: [wholesale-quotes]
+      summary: 新增批發報價單
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WholesaleQuoteInput"
+      responses:
+        "201":
+          description: 新增成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WholesaleQuote"
+
+  /wholesale/quotes/{id}:
+    get:
+      operationId: getWholesaleQuote
+      tags: [wholesale-quotes]
+      summary: 取得批發報價單
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: 批發報價單資料
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WholesaleQuote"
+    patch:
+      operationId: updateWholesaleQuote
+      tags: [wholesale-quotes]
+      summary: 更新批發報價單
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WholesaleQuoteInput"
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WholesaleQuote"
+    delete:
+      operationId: deleteWholesaleQuote
+      tags: [wholesale-quotes]
+      summary: 刪除批發報價單
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "204":
+          description: 刪除成功
+
+  /wholesale/quotes/{id}/convert:
+    post:
+      operationId: convertWholesaleQuote
+      tags: [wholesale-quotes]
+      summary: 將報價單轉為訂單
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "201":
+          description: 訂單建立成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WholesaleOrder"
+
+  /wholesale/orders:
+    get:
+      operationId: listWholesaleOrders
+      tags: [wholesale-orders]
+      summary: 列出批發訂單
+      parameters:
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: customerId
+          in: query
+          schema: { type: integer }
+      responses:
+        "200":
+          description: 批發訂單列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WholesaleOrder"
+    post:
+      operationId: createWholesaleOrder
+      tags: [wholesale-orders]
+      summary: 新增批發訂單
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WholesaleOrderInput"
+      responses:
+        "201":
+          description: 新增成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WholesaleOrder"
+
+  /wholesale/orders/{id}:
+    get:
+      operationId: getWholesaleOrder
+      tags: [wholesale-orders]
+      summary: 取得批發訂單
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: 批發訂單資料
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WholesaleOrder"
+    patch:
+      operationId: updateWholesaleOrder
+      tags: [wholesale-orders]
+      summary: 更新批發訂單
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WholesaleOrderInput"
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WholesaleOrder"
+    delete:
+      operationId: deleteWholesaleOrder
+      tags: [wholesale-orders]
+      summary: 刪除批發訂單
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "204":
+          description: 刪除成功
+
+  /wholesale/receivables:
+    get:
+      operationId: listWholesaleReceivables
+      tags: [wholesale-receivables]
+      summary: 列出批發應收款
+      parameters:
+        - name: orderId
+          in: query
+          schema: { type: integer }
+        - name: status
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: 批發應收款列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WholesaleReceivable"
+
+  /wholesale/receivables/{id}:
+    patch:
+      operationId: updateWholesaleReceivable
+      tags: [wholesale-receivables]
+      summary: 更新批發應收款
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateWholesaleReceivableInput"
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WholesaleReceivable"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1946,4 +2294,205 @@ components:
         voltage: { type: string }
         refrigerant: { type: string }
         warrantyMonths: { type: ["integer", "null"] }
+        notes: { type: string }
+
+    WholesaleCustomer:
+      type: object
+      required: [id, companyName, createdAt, updatedAt]
+      properties:
+        id: { type: integer }
+        companyName: { type: string }
+        contactPerson: { type: ["string", "null"] }
+        mobile: { type: ["string", "null"] }
+        telephone: { type: ["string", "null"] }
+        taxId: { type: ["string", "null"] }
+        address: { type: ["string", "null"] }
+        email: { type: ["string", "null"] }
+        paymentTerms: { type: ["string", "null"] }
+        creditLimit: { type: ["string", "null"] }
+        notes: { type: ["string", "null"] }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+
+    WholesaleCustomerInput:
+      type: object
+      required: [companyName]
+      properties:
+        companyName: { type: string, minLength: 1 }
+        contactPerson: { type: string }
+        mobile: { type: string }
+        telephone: { type: string }
+        taxId: { type: string }
+        address: { type: string }
+        email: { type: string }
+        paymentTerms: { type: string }
+        creditLimit: { type: ["number", "null"] }
+        notes: { type: string }
+
+    WholesaleQuoteItemInput:
+      type: object
+      required: [productName, qty, unitPrice]
+      properties:
+        productId: { type: ["integer", "null"] }
+        productName: { type: string }
+        brand: { type: string }
+        model: { type: string }
+        unit: { type: string }
+        qty: { type: integer, minimum: 1 }
+        unitPrice: { type: number }
+        discount: { type: number }
+        amount: { type: number }
+        sortOrder: { type: integer }
+
+    WholesaleQuoteItem:
+      type: object
+      required: [id, quoteId, productName, qty, unitPrice, discount, amount, sortOrder]
+      properties:
+        id: { type: integer }
+        quoteId: { type: integer }
+        productId: { type: ["integer", "null"] }
+        productName: { type: string }
+        brand: { type: ["string", "null"] }
+        model: { type: ["string", "null"] }
+        unit: { type: ["string", "null"] }
+        qty: { type: integer }
+        unitPrice: { type: string }
+        discount: { type: string }
+        amount: { type: string }
+        sortOrder: { type: integer }
+
+    WholesaleQuote:
+      type: object
+      required: [id, quoteDate, status, subtotal, taxRate, taxAmount, shippingFee, total, createdAt, updatedAt]
+      properties:
+        id: { type: integer }
+        quoteNumber: { type: ["string", "null"] }
+        customerId: { type: ["integer", "null"] }
+        customerName: { type: ["string", "null"] }
+        quoteDate: { type: string }
+        expiryDate: { type: ["string", "null"] }
+        salesperson: { type: ["string", "null"] }
+        notes: { type: ["string", "null"] }
+        subtotal: { type: string }
+        taxRate: { type: string }
+        taxAmount: { type: string }
+        shippingFee: { type: string }
+        total: { type: string }
+        status: { type: string }
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/WholesaleQuoteItem"
+        createdAt: { type: string }
+        updatedAt: { type: string }
+
+    WholesaleQuoteInput:
+      type: object
+      required: [quoteDate, items]
+      properties:
+        customerId: { type: ["integer", "null"] }
+        customerName: { type: string }
+        quoteDate: { type: string }
+        expiryDate: { type: string }
+        salesperson: { type: string }
+        notes: { type: string }
+        taxRate: { type: number }
+        shippingFee: { type: number }
+        status: { type: string }
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/WholesaleQuoteItemInput"
+
+    WholesaleOrderItem:
+      type: object
+      required: [id, orderId, productName, qty, unitPrice, discount, amount, sortOrder]
+      properties:
+        id: { type: integer }
+        orderId: { type: integer }
+        productId: { type: ["integer", "null"] }
+        productName: { type: string }
+        brand: { type: ["string", "null"] }
+        model: { type: ["string", "null"] }
+        unit: { type: ["string", "null"] }
+        qty: { type: integer }
+        unitPrice: { type: string }
+        discount: { type: string }
+        amount: { type: string }
+        sortOrder: { type: integer }
+
+    WholesaleOrder:
+      type: object
+      required: [id, orderDate, status, subtotal, taxRate, taxAmount, shippingFee, total, createdAt, updatedAt]
+      properties:
+        id: { type: integer }
+        orderNumber: { type: ["string", "null"] }
+        quoteId: { type: ["integer", "null"] }
+        quoteNumber: { type: ["string", "null"] }
+        customerId: { type: ["integer", "null"] }
+        customerName: { type: ["string", "null"] }
+        orderDate: { type: string }
+        expectedDelivery: { type: ["string", "null"] }
+        salesperson: { type: ["string", "null"] }
+        notes: { type: ["string", "null"] }
+        subtotal: { type: string }
+        taxRate: { type: string }
+        taxAmount: { type: string }
+        shippingFee: { type: string }
+        total: { type: string }
+        status: { type: string }
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/WholesaleOrderItem"
+        createdAt: { type: string }
+        updatedAt: { type: string }
+
+    WholesaleOrderInput:
+      type: object
+      required: [orderDate, items]
+      properties:
+        quoteId: { type: ["integer", "null"] }
+        quoteNumber: { type: string }
+        customerId: { type: ["integer", "null"] }
+        customerName: { type: string }
+        orderDate: { type: string }
+        expectedDelivery: { type: string }
+        salesperson: { type: string }
+        notes: { type: string }
+        taxRate: { type: number }
+        shippingFee: { type: number }
+        status: { type: string }
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/WholesaleQuoteItemInput"
+
+    WholesaleReceivable:
+      type: object
+      required: [id, totalAmount, receivedAmount, paymentStatus, createdAt, updatedAt]
+      properties:
+        id: { type: integer }
+        orderId: { type: ["integer", "null"] }
+        orderNumber: { type: ["string", "null"] }
+        customerId: { type: ["integer", "null"] }
+        customerName: { type: ["string", "null"] }
+        totalAmount: { type: string }
+        receivedAmount: { type: string }
+        dueDate: { type: ["string", "null"] }
+        paidDate: { type: ["string", "null"] }
+        paymentStatus: { type: string }
+        paymentMethod: { type: ["string", "null"] }
+        notes: { type: ["string", "null"] }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+
+    UpdateWholesaleReceivableInput:
+      type: object
+      properties:
+        receivedAmount: { type: number }
+        dueDate: { type: string }
+        paidDate: { type: string }
+        paymentStatus: { type: string }
+        paymentMethod: { type: string }
         notes: { type: string }

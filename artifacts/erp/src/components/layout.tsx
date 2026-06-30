@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard,
@@ -15,6 +15,10 @@ import {
   ShoppingCart,
   Package,
   Archive,
+  ChevronDown,
+  Building2,
+  ClipboardList,
+  ReceiptText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -73,12 +77,6 @@ const NAV_ITEMS: NavItem[] = [
     roles: ["super_admin", "owner", "admin", "sales"],
   },
   {
-    href: "/wholesale",
-    label: "批發管理",
-    icon: ShoppingCart,
-    roles: ["super_admin", "owner", "admin"],
-  },
-  {
     href: "/inventory",
     label: "庫存管理",
     icon: Package,
@@ -104,6 +102,15 @@ const NAV_ITEMS: NavItem[] = [
   },
 ];
 
+const WHOLESALE_ROLES: UserRole[] = ["super_admin", "owner", "admin", "sales"];
+
+const WHOLESALE_SUB_ITEMS = [
+  { href: "/wholesale/customers", label: "批發客戶", icon: Building2 },
+  { href: "/wholesale/products", label: "批發商品", icon: Archive },
+  { href: "/wholesale/quotes", label: "批發報價", icon: ClipboardList },
+  { href: "/wholesale/orders", label: "批發訂單", icon: ReceiptText },
+];
+
 const ROLE_COLORS: Record<UserRole, string> = {
   super_admin: "bg-red-100 text-red-800 border-red-200",
   owner: "bg-amber-100 text-amber-800 border-amber-200",
@@ -115,15 +122,48 @@ const ROLE_COLORS: Record<UserRole, string> = {
   distributor: "bg-orange-100 text-orange-800 border-orange-200",
 };
 
-export function Layout({ children }: { children: React.ReactNode }) {
+function NavContent() {
   const [location] = useLocation();
   const { user, logout } = useAuth();
+  const isWholesalePath = location.startsWith("/wholesale");
+  const [wholesaleOpen, setWholesaleOpen] = useState(isWholesalePath);
 
-  const visibleItems = NAV_ITEMS.filter(
-    (item) => user && item.roles.includes(user.role)
+  const showWholesale = user && WHOLESALE_ROLES.includes(user.role);
+  const visibleItems = NAV_ITEMS.filter((item) => user && item.roles.includes(user.role));
+
+  // Split items into before/after wholesale group
+  const beforeWholesale = visibleItems.filter(
+    (item) => !["/inventory", "/warranties", "/employees", "/users"].includes(item.href)
+      && item.href !== "/wholesale"
+  ).filter((item) =>
+    !["/warranties", "/employees", "/users", "/inventory"].includes(item.href)
+  );
+  // Actually render all items normally but inject the wholesale group between products and inventory
+  const topItems = visibleItems.filter(
+    (item) => !(["/inventory", "/warranties", "/employees", "/users"].includes(item.href))
+  );
+  const bottomItems = visibleItems.filter(
+    (item) => ["/warranties", "/employees", "/users", "/inventory"].includes(item.href)
   );
 
-  const SidebarContent = () => (
+  function NavLink({ item }: { item: NavItem }) {
+    const isActive = location === item.href || (item.href !== "/" && location.startsWith(item.href));
+    return (
+      <Link
+        href={item.href}
+        className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+          isActive
+            ? "bg-primary text-primary-foreground"
+            : "text-muted-foreground hover:bg-muted hover:text-foreground"
+        }`}
+      >
+        <item.icon className="h-4 w-4" />
+        {item.label}
+      </Link>
+    );
+  }
+
+  return (
     <div className="flex h-full flex-col py-4">
       <div className="px-4 py-3">
         <Link href="/">
@@ -136,27 +176,53 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </div>
         </Link>
       </div>
-      <div className="flex-1 px-4 mt-2">
+
+      <div className="flex-1 px-4 mt-2 overflow-y-auto">
         <nav className="flex flex-col gap-1">
-          {visibleItems.map((item) => {
-            const isActive =
-              location === item.href ||
-              (item.href !== "/" && location.startsWith(item.href));
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                  isActive
-                    ? "bg-primary text-primary-foreground"
+          {topItems.map((item) => <NavLink key={item.href} item={item} />)}
+
+          {/* Wholesale group */}
+          {showWholesale && (
+            <div>
+              <button
+                onClick={() => setWholesaleOpen((v) => !v)}
+                className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium w-full transition-colors ${
+                  isWholesalePath
+                    ? "bg-primary/10 text-primary"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground"
                 }`}
               >
-                <item.icon className="h-4 w-4" />
-                {item.label}
-              </Link>
-            );
-          })}
+                <ShoppingCart className="h-4 w-4" />
+                批發管理
+                <ChevronDown
+                  className={`ml-auto h-3.5 w-3.5 transition-transform duration-200 ${wholesaleOpen ? "" : "-rotate-90"}`}
+                />
+              </button>
+              {wholesaleOpen && (
+                <div className="ml-3 mt-0.5 flex flex-col gap-0.5 border-l pl-3">
+                  {WHOLESALE_SUB_ITEMS.map((sub) => {
+                    const isActive = location === sub.href || location.startsWith(sub.href);
+                    return (
+                      <Link
+                        key={sub.href}
+                        href={sub.href}
+                        className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium transition-colors ${
+                          isActive
+                            ? "bg-primary text-primary-foreground"
+                            : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                        }`}
+                      >
+                        <sub.icon className="h-3.5 w-3.5" />
+                        {sub.label}
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
+          {bottomItems.map((item) => <NavLink key={item.href} item={item} />)}
         </nav>
       </div>
 
@@ -164,9 +230,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <div className="px-4 pb-2 border-t pt-4">
           <div className="flex items-center gap-3 px-3 py-2 rounded-md bg-muted/50 mb-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 shrink-0">
-              <span className="text-xs font-bold text-primary">
-                {user.displayName.charAt(0)}
-              </span>
+              <span className="text-xs font-bold text-primary">{user.displayName.charAt(0)}</span>
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium truncate">{user.displayName}</p>
@@ -188,11 +252,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
       )}
     </div>
   );
+}
+
+export function Layout({ children }: { children: React.ReactNode }) {
+  const [location] = useLocation();
+  const { user } = useAuth();
 
   return (
     <div className="flex min-h-screen bg-background">
       <aside className="hidden w-64 flex-col border-r bg-card md:flex shadow-sm">
-        <SidebarContent />
+        <NavContent />
       </aside>
 
       <div className="flex flex-1 flex-col overflow-hidden">
@@ -205,7 +274,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
               </Button>
             </SheetTrigger>
             <SheetContent side="left" className="w-64 p-0">
-              <SidebarContent />
+              <NavContent />
             </SheetContent>
           </Sheet>
           <Link href="/">

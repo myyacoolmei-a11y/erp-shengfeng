@@ -22,6 +22,10 @@ import Users from "@/pages/users";
 import EngineerDashboard from "@/pages/engineer-dashboard";
 import Employees from "@/pages/employees";
 import Products from "@/pages/products";
+import WholesaleCustomers from "@/pages/wholesale-customers";
+import WholesaleProducts from "@/pages/wholesale-products";
+import WholesaleQuotes from "@/pages/wholesale-quotes";
+import WholesaleOrders from "@/pages/wholesale-orders";
 
 function ComingSoon({ title }: { title: string }) {
   return (
@@ -179,9 +183,24 @@ function AppRoutes() {
                 <Products />
               </RoleGuard>
             </Route>
-            <Route path="/wholesale">
-              <RoleGuard roles={["super_admin", "owner", "admin"]}>
-                <ComingSoon title="批發管理" />
+            <Route path="/wholesale/customers">
+              <RoleGuard roles={["super_admin", "owner", "admin", "sales"]}>
+                <WholesaleCustomers />
+              </RoleGuard>
+            </Route>
+            <Route path="/wholesale/products">
+              <RoleGuard roles={["super_admin", "owner", "admin", "sales"]}>
+                <WholesaleProducts />
+              </RoleGuard>
+            </Route>
+            <Route path="/wholesale/quotes">
+              <RoleGuard roles={["super_admin", "owner", "admin", "sales"]}>
+                <WholesaleQuotes />
+              </RoleGuard>
+            </Route>
+            <Route path="/wholesale/orders">
+              <RoleGuard roles={["super_admin", "owner", "admin", "sales"]}>
+                <WholesaleOrders />
               </RoleGuard>
             </Route>
             <Route path="/inventory">
