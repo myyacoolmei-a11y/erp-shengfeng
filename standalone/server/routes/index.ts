@@ -12,6 +12,11 @@ import warrantiesRouter from "./warranties";
 import maintenanceRouter from "./maintenance";
 import receivablesRouter from "./receivables";
 import dashboardRouter from "./dashboard";
+import productsRouter from "./products";
+import wholesaleCustomersRouter from "./wholesale-customers";
+import wholesaleQuotesRouter from "./wholesale-quotes";
+import wholesaleOrdersRouter from "./wholesale-orders";
+import wholesaleReceivablesRouter from "./wholesale-receivables";
 import { authenticate } from "../lib/auth";
 
 const router: IRouter = Router();
@@ -32,5 +37,10 @@ router.use(warrantiesRouter);
 router.use(maintenanceRouter);
 router.use(receivablesRouter);
 router.use(dashboardRouter);
+router.use(productsRouter);
+router.use(wholesaleCustomersRouter);
+router.use(wholesaleQuotesRouter);
+router.use(wholesaleOrdersRouter);
+router.use(wholesaleReceivablesRouter);
 
 export default router;

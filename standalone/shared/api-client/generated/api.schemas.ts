@@ -633,6 +633,340 @@ export interface DashboardSummary {
   recentCustomers?: Customer[];
 }
 
+export interface Product {
+  id: number;
+  /** @nullable */
+  productNumber?: string | null;
+  /** @nullable */
+  brand?: string | null;
+  /** @nullable */
+  category?: string | null;
+  name: string;
+  /** @nullable */
+  model?: string | null;
+  /** @nullable */
+  spec?: string | null;
+  /** @nullable */
+  unit?: string | null;
+  /** @nullable */
+  imageUrl?: string | null;
+  isActive: boolean;
+  /** @nullable */
+  costPrice?: string | null;
+  /** @nullable */
+  retailPrice?: string | null;
+  /** @nullable */
+  wholesalePrice?: string | null;
+  /** @nullable */
+  minPrice?: string | null;
+  taxIncluded: boolean;
+  stockQty: number;
+  /** @nullable */
+  safetyStock?: number | null;
+  /** @nullable */
+  warehouseLocation?: string | null;
+  /** @nullable */
+  coolingCapacity?: string | null;
+  /** @nullable */
+  heatingCapacity?: string | null;
+  /** @nullable */
+  cspf?: string | null;
+  /** @nullable */
+  energyEfficiency?: string | null;
+  /** @nullable */
+  voltage?: string | null;
+  /** @nullable */
+  refrigerant?: string | null;
+  /** @nullable */
+  warrantyMonths?: number | null;
+  /** @nullable */
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProductInput {
+  brand?: string;
+  category?: string;
+  /** @minLength 1 */
+  name: string;
+  model?: string;
+  spec?: string;
+  unit?: string;
+  imageUrl?: string;
+  isActive?: boolean;
+  /** @nullable */
+  costPrice?: number | null;
+  /** @nullable */
+  retailPrice?: number | null;
+  /** @nullable */
+  wholesalePrice?: number | null;
+  /** @nullable */
+  minPrice?: number | null;
+  taxIncluded?: boolean;
+  stockQty?: number;
+  /** @nullable */
+  safetyStock?: number | null;
+  warehouseLocation?: string;
+  coolingCapacity?: string;
+  heatingCapacity?: string;
+  cspf?: string;
+  energyEfficiency?: string;
+  voltage?: string;
+  refrigerant?: string;
+  /** @nullable */
+  warrantyMonths?: number | null;
+  notes?: string;
+}
+
+export interface UpdateProductInput {
+  brand?: string;
+  category?: string;
+  /** @minLength 1 */
+  name?: string;
+  model?: string;
+  spec?: string;
+  unit?: string;
+  imageUrl?: string;
+  isActive?: boolean;
+  /** @nullable */
+  costPrice?: number | null;
+  /** @nullable */
+  retailPrice?: number | null;
+  /** @nullable */
+  wholesalePrice?: number | null;
+  /** @nullable */
+  minPrice?: number | null;
+  taxIncluded?: boolean;
+  stockQty?: number;
+  /** @nullable */
+  safetyStock?: number | null;
+  warehouseLocation?: string;
+  coolingCapacity?: string;
+  heatingCapacity?: string;
+  cspf?: string;
+  energyEfficiency?: string;
+  voltage?: string;
+  refrigerant?: string;
+  /** @nullable */
+  warrantyMonths?: number | null;
+  notes?: string;
+}
+
+export interface WholesaleCustomer {
+  id: number;
+  companyName: string;
+  /** @nullable */
+  contactPerson?: string | null;
+  /** @nullable */
+  mobile?: string | null;
+  /** @nullable */
+  telephone?: string | null;
+  /** @nullable */
+  taxId?: string | null;
+  /** @nullable */
+  address?: string | null;
+  /** @nullable */
+  email?: string | null;
+  /** @nullable */
+  paymentTerms?: string | null;
+  /** @nullable */
+  creditLimit?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WholesaleCustomerInput {
+  /** @minLength 1 */
+  companyName: string;
+  contactPerson?: string;
+  mobile?: string;
+  telephone?: string;
+  taxId?: string;
+  address?: string;
+  email?: string;
+  paymentTerms?: string;
+  /** @nullable */
+  creditLimit?: number | null;
+  notes?: string;
+}
+
+export interface WholesaleQuoteItemInput {
+  /** @nullable */
+  productId?: number | null;
+  productName: string;
+  brand?: string;
+  model?: string;
+  unit?: string;
+  /** @minimum 1 */
+  qty: number;
+  unitPrice: number;
+  discount?: number;
+  amount?: number;
+  sortOrder?: number;
+}
+
+export interface WholesaleQuoteItem {
+  id: number;
+  quoteId: number;
+  /** @nullable */
+  productId?: number | null;
+  productName: string;
+  /** @nullable */
+  brand?: string | null;
+  /** @nullable */
+  model?: string | null;
+  /** @nullable */
+  unit?: string | null;
+  qty: number;
+  unitPrice: string;
+  discount: string;
+  amount: string;
+  sortOrder: number;
+}
+
+export interface WholesaleQuote {
+  id: number;
+  /** @nullable */
+  quoteNumber?: string | null;
+  /** @nullable */
+  customerId?: number | null;
+  /** @nullable */
+  customerName?: string | null;
+  quoteDate: string;
+  /** @nullable */
+  expiryDate?: string | null;
+  /** @nullable */
+  salesperson?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  subtotal: string;
+  taxRate: string;
+  taxAmount: string;
+  shippingFee: string;
+  total: string;
+  status: string;
+  items?: WholesaleQuoteItem[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WholesaleQuoteInput {
+  /** @nullable */
+  customerId?: number | null;
+  customerName?: string;
+  quoteDate: string;
+  expiryDate?: string;
+  salesperson?: string;
+  notes?: string;
+  taxRate?: number;
+  shippingFee?: number;
+  status?: string;
+  items: WholesaleQuoteItemInput[];
+}
+
+export interface WholesaleOrderItem {
+  id: number;
+  orderId: number;
+  /** @nullable */
+  productId?: number | null;
+  productName: string;
+  /** @nullable */
+  brand?: string | null;
+  /** @nullable */
+  model?: string | null;
+  /** @nullable */
+  unit?: string | null;
+  qty: number;
+  unitPrice: string;
+  discount: string;
+  amount: string;
+  sortOrder: number;
+}
+
+export interface WholesaleOrder {
+  id: number;
+  /** @nullable */
+  orderNumber?: string | null;
+  /** @nullable */
+  quoteId?: number | null;
+  /** @nullable */
+  quoteNumber?: string | null;
+  /** @nullable */
+  customerId?: number | null;
+  /** @nullable */
+  customerName?: string | null;
+  orderDate: string;
+  /** @nullable */
+  expectedDelivery?: string | null;
+  /** @nullable */
+  salesperson?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  subtotal: string;
+  taxRate: string;
+  taxAmount: string;
+  shippingFee: string;
+  total: string;
+  status: string;
+  items?: WholesaleOrderItem[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface WholesaleOrderInput {
+  /** @nullable */
+  quoteId?: number | null;
+  quoteNumber?: string;
+  /** @nullable */
+  customerId?: number | null;
+  customerName?: string;
+  orderDate: string;
+  expectedDelivery?: string;
+  salesperson?: string;
+  notes?: string;
+  taxRate?: number;
+  shippingFee?: number;
+  status?: string;
+  items: WholesaleQuoteItemInput[];
+}
+
+export interface WholesaleReceivable {
+  id: number;
+  /** @nullable */
+  orderId?: number | null;
+  /** @nullable */
+  orderNumber?: string | null;
+  /** @nullable */
+  customerId?: number | null;
+  /** @nullable */
+  customerName?: string | null;
+  totalAmount: string;
+  receivedAmount: string;
+  /** @nullable */
+  dueDate?: string | null;
+  /** @nullable */
+  paidDate?: string | null;
+  paymentStatus: string;
+  /** @nullable */
+  paymentMethod?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UpdateWholesaleReceivableInput {
+  receivedAmount?: number;
+  dueDate?: string;
+  paidDate?: string;
+  paymentStatus?: string;
+  paymentMethod?: string;
+  notes?: string;
+}
+
 export type ListCustomersParams = {
 /**
  * 搜尋關鍵字（姓名、電話、地址）
@@ -680,5 +1014,33 @@ export type ListReceivablesParams = {
 customerId?: number;
 status?: string;
 workOrderId?: number;
+};
+
+export type ListProductsParams = {
+search?: string;
+brand?: string;
+category?: string;
+isActive?: string;
+};
+
+export type ListWholesaleCustomersParams = {
+search?: string;
+};
+
+export type ListWholesaleQuotesParams = {
+search?: string;
+status?: string;
+customerId?: number;
+};
+
+export type ListWholesaleOrdersParams = {
+search?: string;
+status?: string;
+customerId?: number;
+};
+
+export type ListWholesaleReceivablesParams = {
+orderId?: number;
+status?: string;
 };
 

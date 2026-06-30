@@ -39,9 +39,14 @@ import type {
   ListEmployeesParams,
   ListMaintenanceRemindersParams,
   ListPaymentsParams,
+  ListProductsParams,
   ListQuotesParams,
   ListReceivablesParams,
   ListWarrantiesParams,
+  ListWholesaleCustomersParams,
+  ListWholesaleOrdersParams,
+  ListWholesaleQuotesParams,
+  ListWholesaleReceivablesParams,
   ListWorkOrdersParams,
   LoginInput,
   MaintenanceReminder,
@@ -50,6 +55,8 @@ import type {
   Payment,
   PaymentInput,
   PaymentUpdate,
+  Product,
+  ProductInput,
   Progress,
   ProgressInput,
   Quote,
@@ -59,11 +66,20 @@ import type {
   ReceivableInput,
   ReceivableUpdate,
   RecordPaymentInput,
+  UpdateProductInput,
   UpdateUserInput,
+  UpdateWholesaleReceivableInput,
   UserItem,
   Warranty,
   WarrantyInput,
   WarrantyUpdate,
+  WholesaleCustomer,
+  WholesaleCustomerInput,
+  WholesaleOrder,
+  WholesaleOrderInput,
+  WholesaleQuote,
+  WholesaleQuoteInput,
+  WholesaleReceivable,
   WorkOrder,
   WorkOrderInput,
   WorkOrderUpdate
@@ -4238,4 +4254,1717 @@ export function useGetDashboardSummary<TData = Awaited<ReturnType<typeof getDash
 
 
 
+
+export const getListProductsUrl = (params?: ListProductsParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/products?${stringifiedParams}` : `/api/products`
+}
+
+/**
+ * @summary 列出商品
+ */
+export const listProducts = async (params?: ListProductsParams, options?: RequestInit): Promise<Product[]> => {
+
+  return customFetch<Product[]>(getListProductsUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListProductsQueryKey = (params?: ListProductsParams,) => {
+    return [
+    `/api/products`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListProductsQueryOptions = <TData = Awaited<ReturnType<typeof listProducts>>, TError = ErrorType<unknown>>(params?: ListProductsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listProducts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListProductsQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listProducts>>> = ({ signal }) => listProducts(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listProducts>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListProductsQueryResult = NonNullable<Awaited<ReturnType<typeof listProducts>>>
+export type ListProductsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary 列出商品
+ */
+
+export function useListProducts<TData = Awaited<ReturnType<typeof listProducts>>, TError = ErrorType<unknown>>(
+ params?: ListProductsParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listProducts>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListProductsQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateProductUrl = () => {
+
+
+
+
+  return `/api/products`
+}
+
+/**
+ * @summary 新增商品
+ */
+export const createProduct = async (productInput: ProductInput, options?: RequestInit): Promise<Product> => {
+
+  return customFetch<Product>(getCreateProductUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(productInput)
+  }
+);}
+
+
+
+
+export const getCreateProductMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createProduct>>, TError,{data: BodyType<ProductInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createProduct>>, TError,{data: BodyType<ProductInput>}, TContext> => {
+
+const mutationKey = ['createProduct'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createProduct>>, {data: BodyType<ProductInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createProduct(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateProductMutationResult = NonNullable<Awaited<ReturnType<typeof createProduct>>>
+    export type CreateProductMutationBody = BodyType<ProductInput>
+    export type CreateProductMutationError = ErrorType<unknown>
+
+    /**
+ * @summary 新增商品
+ */
+export const useCreateProduct = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createProduct>>, TError,{data: BodyType<ProductInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createProduct>>,
+        TError,
+        {data: BodyType<ProductInput>},
+        TContext
+      > => {
+      return useMutation(getCreateProductMutationOptions(options));
+    }
+
+export const getGetProductUrl = (id: number,) => {
+
+
+
+
+  return `/api/products/${id}`
+}
+
+/**
+ * @summary 取得商品
+ */
+export const getProduct = async (id: number, options?: RequestInit): Promise<Product> => {
+
+  return customFetch<Product>(getGetProductUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetProductQueryKey = (id: number,) => {
+    return [
+    `/api/products/${id}`
+    ] as const;
+    }
+
+
+export const getGetProductQueryOptions = <TData = Awaited<ReturnType<typeof getProduct>>, TError = ErrorType<void>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProduct>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetProductQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getProduct>>> = ({ signal }) => getProduct(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getProduct>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetProductQueryResult = NonNullable<Awaited<ReturnType<typeof getProduct>>>
+export type GetProductQueryError = ErrorType<void>
+
+
+/**
+ * @summary 取得商品
+ */
+
+export function useGetProduct<TData = Awaited<ReturnType<typeof getProduct>>, TError = ErrorType<void>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getProduct>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetProductQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateProductUrl = (id: number,) => {
+
+
+
+
+  return `/api/products/${id}`
+}
+
+/**
+ * @summary 更新商品
+ */
+export const updateProduct = async (id: number,
+    updateProductInput: UpdateProductInput, options?: RequestInit): Promise<Product> => {
+
+  return customFetch<Product>(getUpdateProductUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(updateProductInput)
+  }
+);}
+
+
+
+
+export const getUpdateProductMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateProduct>>, TError,{id: number;data: BodyType<UpdateProductInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateProduct>>, TError,{id: number;data: BodyType<UpdateProductInput>}, TContext> => {
+
+const mutationKey = ['updateProduct'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateProduct>>, {id: number;data: BodyType<UpdateProductInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateProduct(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateProductMutationResult = NonNullable<Awaited<ReturnType<typeof updateProduct>>>
+    export type UpdateProductMutationBody = BodyType<UpdateProductInput>
+    export type UpdateProductMutationError = ErrorType<void>
+
+    /**
+ * @summary 更新商品
+ */
+export const useUpdateProduct = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateProduct>>, TError,{id: number;data: BodyType<UpdateProductInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateProduct>>,
+        TError,
+        {id: number;data: BodyType<UpdateProductInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateProductMutationOptions(options));
+    }
+
+export const getDeleteProductUrl = (id: number,) => {
+
+
+
+
+  return `/api/products/${id}`
+}
+
+/**
+ * @summary 刪除商品
+ */
+export const deleteProduct = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteProductUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteProductMutationOptions = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteProduct>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteProduct>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteProduct'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteProduct>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteProduct(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteProductMutationResult = NonNullable<Awaited<ReturnType<typeof deleteProduct>>>
+
+    export type DeleteProductMutationError = ErrorType<void>
+
+    /**
+ * @summary 刪除商品
+ */
+export const useDeleteProduct = <TError = ErrorType<void>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteProduct>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteProduct>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteProductMutationOptions(options));
+    }
+
+export const getListWholesaleCustomersUrl = (params?: ListWholesaleCustomersParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/wholesale/customers?${stringifiedParams}` : `/api/wholesale/customers`
+}
+
+/**
+ * @summary 列出批發客戶
+ */
+export const listWholesaleCustomers = async (params?: ListWholesaleCustomersParams, options?: RequestInit): Promise<WholesaleCustomer[]> => {
+
+  return customFetch<WholesaleCustomer[]>(getListWholesaleCustomersUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListWholesaleCustomersQueryKey = (params?: ListWholesaleCustomersParams,) => {
+    return [
+    `/api/wholesale/customers`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListWholesaleCustomersQueryOptions = <TData = Awaited<ReturnType<typeof listWholesaleCustomers>>, TError = ErrorType<unknown>>(params?: ListWholesaleCustomersParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listWholesaleCustomers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListWholesaleCustomersQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listWholesaleCustomers>>> = ({ signal }) => listWholesaleCustomers(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listWholesaleCustomers>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListWholesaleCustomersQueryResult = NonNullable<Awaited<ReturnType<typeof listWholesaleCustomers>>>
+export type ListWholesaleCustomersQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary 列出批發客戶
+ */
+
+export function useListWholesaleCustomers<TData = Awaited<ReturnType<typeof listWholesaleCustomers>>, TError = ErrorType<unknown>>(
+ params?: ListWholesaleCustomersParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listWholesaleCustomers>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListWholesaleCustomersQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateWholesaleCustomerUrl = () => {
+
+
+
+
+  return `/api/wholesale/customers`
+}
+
+/**
+ * @summary 新增批發客戶
+ */
+export const createWholesaleCustomer = async (wholesaleCustomerInput: WholesaleCustomerInput, options?: RequestInit): Promise<WholesaleCustomer> => {
+
+  return customFetch<WholesaleCustomer>(getCreateWholesaleCustomerUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(wholesaleCustomerInput)
+  }
+);}
+
+
+
+
+export const getCreateWholesaleCustomerMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createWholesaleCustomer>>, TError,{data: BodyType<WholesaleCustomerInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createWholesaleCustomer>>, TError,{data: BodyType<WholesaleCustomerInput>}, TContext> => {
+
+const mutationKey = ['createWholesaleCustomer'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createWholesaleCustomer>>, {data: BodyType<WholesaleCustomerInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createWholesaleCustomer(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateWholesaleCustomerMutationResult = NonNullable<Awaited<ReturnType<typeof createWholesaleCustomer>>>
+    export type CreateWholesaleCustomerMutationBody = BodyType<WholesaleCustomerInput>
+    export type CreateWholesaleCustomerMutationError = ErrorType<unknown>
+
+    /**
+ * @summary 新增批發客戶
+ */
+export const useCreateWholesaleCustomer = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createWholesaleCustomer>>, TError,{data: BodyType<WholesaleCustomerInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createWholesaleCustomer>>,
+        TError,
+        {data: BodyType<WholesaleCustomerInput>},
+        TContext
+      > => {
+      return useMutation(getCreateWholesaleCustomerMutationOptions(options));
+    }
+
+export const getGetWholesaleCustomerUrl = (id: number,) => {
+
+
+
+
+  return `/api/wholesale/customers/${id}`
+}
+
+/**
+ * @summary 取得批發客戶
+ */
+export const getWholesaleCustomer = async (id: number, options?: RequestInit): Promise<WholesaleCustomer> => {
+
+  return customFetch<WholesaleCustomer>(getGetWholesaleCustomerUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetWholesaleCustomerQueryKey = (id: number,) => {
+    return [
+    `/api/wholesale/customers/${id}`
+    ] as const;
+    }
+
+
+export const getGetWholesaleCustomerQueryOptions = <TData = Awaited<ReturnType<typeof getWholesaleCustomer>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWholesaleCustomer>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetWholesaleCustomerQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getWholesaleCustomer>>> = ({ signal }) => getWholesaleCustomer(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getWholesaleCustomer>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetWholesaleCustomerQueryResult = NonNullable<Awaited<ReturnType<typeof getWholesaleCustomer>>>
+export type GetWholesaleCustomerQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary 取得批發客戶
+ */
+
+export function useGetWholesaleCustomer<TData = Awaited<ReturnType<typeof getWholesaleCustomer>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWholesaleCustomer>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetWholesaleCustomerQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateWholesaleCustomerUrl = (id: number,) => {
+
+
+
+
+  return `/api/wholesale/customers/${id}`
+}
+
+/**
+ * @summary 更新批發客戶
+ */
+export const updateWholesaleCustomer = async (id: number,
+    wholesaleCustomerInput: WholesaleCustomerInput, options?: RequestInit): Promise<WholesaleCustomer> => {
+
+  return customFetch<WholesaleCustomer>(getUpdateWholesaleCustomerUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(wholesaleCustomerInput)
+  }
+);}
+
+
+
+
+export const getUpdateWholesaleCustomerMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateWholesaleCustomer>>, TError,{id: number;data: BodyType<WholesaleCustomerInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateWholesaleCustomer>>, TError,{id: number;data: BodyType<WholesaleCustomerInput>}, TContext> => {
+
+const mutationKey = ['updateWholesaleCustomer'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateWholesaleCustomer>>, {id: number;data: BodyType<WholesaleCustomerInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateWholesaleCustomer(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateWholesaleCustomerMutationResult = NonNullable<Awaited<ReturnType<typeof updateWholesaleCustomer>>>
+    export type UpdateWholesaleCustomerMutationBody = BodyType<WholesaleCustomerInput>
+    export type UpdateWholesaleCustomerMutationError = ErrorType<unknown>
+
+    /**
+ * @summary 更新批發客戶
+ */
+export const useUpdateWholesaleCustomer = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateWholesaleCustomer>>, TError,{id: number;data: BodyType<WholesaleCustomerInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateWholesaleCustomer>>,
+        TError,
+        {id: number;data: BodyType<WholesaleCustomerInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateWholesaleCustomerMutationOptions(options));
+    }
+
+export const getDeleteWholesaleCustomerUrl = (id: number,) => {
+
+
+
+
+  return `/api/wholesale/customers/${id}`
+}
+
+/**
+ * @summary 刪除批發客戶
+ */
+export const deleteWholesaleCustomer = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteWholesaleCustomerUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteWholesaleCustomerMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteWholesaleCustomer>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteWholesaleCustomer>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteWholesaleCustomer'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteWholesaleCustomer>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteWholesaleCustomer(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteWholesaleCustomerMutationResult = NonNullable<Awaited<ReturnType<typeof deleteWholesaleCustomer>>>
+
+    export type DeleteWholesaleCustomerMutationError = ErrorType<unknown>
+
+    /**
+ * @summary 刪除批發客戶
+ */
+export const useDeleteWholesaleCustomer = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteWholesaleCustomer>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteWholesaleCustomer>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteWholesaleCustomerMutationOptions(options));
+    }
+
+export const getListWholesaleQuotesUrl = (params?: ListWholesaleQuotesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/wholesale/quotes?${stringifiedParams}` : `/api/wholesale/quotes`
+}
+
+/**
+ * @summary 列出批發報價單
+ */
+export const listWholesaleQuotes = async (params?: ListWholesaleQuotesParams, options?: RequestInit): Promise<WholesaleQuote[]> => {
+
+  return customFetch<WholesaleQuote[]>(getListWholesaleQuotesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListWholesaleQuotesQueryKey = (params?: ListWholesaleQuotesParams,) => {
+    return [
+    `/api/wholesale/quotes`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListWholesaleQuotesQueryOptions = <TData = Awaited<ReturnType<typeof listWholesaleQuotes>>, TError = ErrorType<unknown>>(params?: ListWholesaleQuotesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listWholesaleQuotes>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListWholesaleQuotesQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listWholesaleQuotes>>> = ({ signal }) => listWholesaleQuotes(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listWholesaleQuotes>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListWholesaleQuotesQueryResult = NonNullable<Awaited<ReturnType<typeof listWholesaleQuotes>>>
+export type ListWholesaleQuotesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary 列出批發報價單
+ */
+
+export function useListWholesaleQuotes<TData = Awaited<ReturnType<typeof listWholesaleQuotes>>, TError = ErrorType<unknown>>(
+ params?: ListWholesaleQuotesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listWholesaleQuotes>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListWholesaleQuotesQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateWholesaleQuoteUrl = () => {
+
+
+
+
+  return `/api/wholesale/quotes`
+}
+
+/**
+ * @summary 新增批發報價單
+ */
+export const createWholesaleQuote = async (wholesaleQuoteInput: WholesaleQuoteInput, options?: RequestInit): Promise<WholesaleQuote> => {
+
+  return customFetch<WholesaleQuote>(getCreateWholesaleQuoteUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(wholesaleQuoteInput)
+  }
+);}
+
+
+
+
+export const getCreateWholesaleQuoteMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createWholesaleQuote>>, TError,{data: BodyType<WholesaleQuoteInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createWholesaleQuote>>, TError,{data: BodyType<WholesaleQuoteInput>}, TContext> => {
+
+const mutationKey = ['createWholesaleQuote'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createWholesaleQuote>>, {data: BodyType<WholesaleQuoteInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createWholesaleQuote(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateWholesaleQuoteMutationResult = NonNullable<Awaited<ReturnType<typeof createWholesaleQuote>>>
+    export type CreateWholesaleQuoteMutationBody = BodyType<WholesaleQuoteInput>
+    export type CreateWholesaleQuoteMutationError = ErrorType<unknown>
+
+    /**
+ * @summary 新增批發報價單
+ */
+export const useCreateWholesaleQuote = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createWholesaleQuote>>, TError,{data: BodyType<WholesaleQuoteInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createWholesaleQuote>>,
+        TError,
+        {data: BodyType<WholesaleQuoteInput>},
+        TContext
+      > => {
+      return useMutation(getCreateWholesaleQuoteMutationOptions(options));
+    }
+
+export const getGetWholesaleQuoteUrl = (id: number,) => {
+
+
+
+
+  return `/api/wholesale/quotes/${id}`
+}
+
+/**
+ * @summary 取得批發報價單
+ */
+export const getWholesaleQuote = async (id: number, options?: RequestInit): Promise<WholesaleQuote> => {
+
+  return customFetch<WholesaleQuote>(getGetWholesaleQuoteUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetWholesaleQuoteQueryKey = (id: number,) => {
+    return [
+    `/api/wholesale/quotes/${id}`
+    ] as const;
+    }
+
+
+export const getGetWholesaleQuoteQueryOptions = <TData = Awaited<ReturnType<typeof getWholesaleQuote>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWholesaleQuote>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetWholesaleQuoteQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getWholesaleQuote>>> = ({ signal }) => getWholesaleQuote(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getWholesaleQuote>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetWholesaleQuoteQueryResult = NonNullable<Awaited<ReturnType<typeof getWholesaleQuote>>>
+export type GetWholesaleQuoteQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary 取得批發報價單
+ */
+
+export function useGetWholesaleQuote<TData = Awaited<ReturnType<typeof getWholesaleQuote>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWholesaleQuote>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetWholesaleQuoteQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateWholesaleQuoteUrl = (id: number,) => {
+
+
+
+
+  return `/api/wholesale/quotes/${id}`
+}
+
+/**
+ * @summary 更新批發報價單
+ */
+export const updateWholesaleQuote = async (id: number,
+    wholesaleQuoteInput: WholesaleQuoteInput, options?: RequestInit): Promise<WholesaleQuote> => {
+
+  return customFetch<WholesaleQuote>(getUpdateWholesaleQuoteUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(wholesaleQuoteInput)
+  }
+);}
+
+
+
+
+export const getUpdateWholesaleQuoteMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateWholesaleQuote>>, TError,{id: number;data: BodyType<WholesaleQuoteInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateWholesaleQuote>>, TError,{id: number;data: BodyType<WholesaleQuoteInput>}, TContext> => {
+
+const mutationKey = ['updateWholesaleQuote'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateWholesaleQuote>>, {id: number;data: BodyType<WholesaleQuoteInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateWholesaleQuote(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateWholesaleQuoteMutationResult = NonNullable<Awaited<ReturnType<typeof updateWholesaleQuote>>>
+    export type UpdateWholesaleQuoteMutationBody = BodyType<WholesaleQuoteInput>
+    export type UpdateWholesaleQuoteMutationError = ErrorType<unknown>
+
+    /**
+ * @summary 更新批發報價單
+ */
+export const useUpdateWholesaleQuote = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateWholesaleQuote>>, TError,{id: number;data: BodyType<WholesaleQuoteInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateWholesaleQuote>>,
+        TError,
+        {id: number;data: BodyType<WholesaleQuoteInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateWholesaleQuoteMutationOptions(options));
+    }
+
+export const getDeleteWholesaleQuoteUrl = (id: number,) => {
+
+
+
+
+  return `/api/wholesale/quotes/${id}`
+}
+
+/**
+ * @summary 刪除批發報價單
+ */
+export const deleteWholesaleQuote = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteWholesaleQuoteUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteWholesaleQuoteMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteWholesaleQuote>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteWholesaleQuote>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteWholesaleQuote'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteWholesaleQuote>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteWholesaleQuote(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteWholesaleQuoteMutationResult = NonNullable<Awaited<ReturnType<typeof deleteWholesaleQuote>>>
+
+    export type DeleteWholesaleQuoteMutationError = ErrorType<unknown>
+
+    /**
+ * @summary 刪除批發報價單
+ */
+export const useDeleteWholesaleQuote = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteWholesaleQuote>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteWholesaleQuote>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteWholesaleQuoteMutationOptions(options));
+    }
+
+export const getConvertWholesaleQuoteUrl = (id: number,) => {
+
+
+
+
+  return `/api/wholesale/quotes/${id}/convert`
+}
+
+/**
+ * @summary 將報價單轉為訂單
+ */
+export const convertWholesaleQuote = async (id: number, options?: RequestInit): Promise<WholesaleOrder> => {
+
+  return customFetch<WholesaleOrder>(getConvertWholesaleQuoteUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+export const getConvertWholesaleQuoteMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof convertWholesaleQuote>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof convertWholesaleQuote>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['convertWholesaleQuote'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof convertWholesaleQuote>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  convertWholesaleQuote(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ConvertWholesaleQuoteMutationResult = NonNullable<Awaited<ReturnType<typeof convertWholesaleQuote>>>
+
+    export type ConvertWholesaleQuoteMutationError = ErrorType<unknown>
+
+    /**
+ * @summary 將報價單轉為訂單
+ */
+export const useConvertWholesaleQuote = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof convertWholesaleQuote>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof convertWholesaleQuote>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getConvertWholesaleQuoteMutationOptions(options));
+    }
+
+export const getListWholesaleOrdersUrl = (params?: ListWholesaleOrdersParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/wholesale/orders?${stringifiedParams}` : `/api/wholesale/orders`
+}
+
+/**
+ * @summary 列出批發訂單
+ */
+export const listWholesaleOrders = async (params?: ListWholesaleOrdersParams, options?: RequestInit): Promise<WholesaleOrder[]> => {
+
+  return customFetch<WholesaleOrder[]>(getListWholesaleOrdersUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListWholesaleOrdersQueryKey = (params?: ListWholesaleOrdersParams,) => {
+    return [
+    `/api/wholesale/orders`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListWholesaleOrdersQueryOptions = <TData = Awaited<ReturnType<typeof listWholesaleOrders>>, TError = ErrorType<unknown>>(params?: ListWholesaleOrdersParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listWholesaleOrders>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListWholesaleOrdersQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listWholesaleOrders>>> = ({ signal }) => listWholesaleOrders(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listWholesaleOrders>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListWholesaleOrdersQueryResult = NonNullable<Awaited<ReturnType<typeof listWholesaleOrders>>>
+export type ListWholesaleOrdersQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary 列出批發訂單
+ */
+
+export function useListWholesaleOrders<TData = Awaited<ReturnType<typeof listWholesaleOrders>>, TError = ErrorType<unknown>>(
+ params?: ListWholesaleOrdersParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listWholesaleOrders>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListWholesaleOrdersQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateWholesaleOrderUrl = () => {
+
+
+
+
+  return `/api/wholesale/orders`
+}
+
+/**
+ * @summary 新增批發訂單
+ */
+export const createWholesaleOrder = async (wholesaleOrderInput: WholesaleOrderInput, options?: RequestInit): Promise<WholesaleOrder> => {
+
+  return customFetch<WholesaleOrder>(getCreateWholesaleOrderUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(wholesaleOrderInput)
+  }
+);}
+
+
+
+
+export const getCreateWholesaleOrderMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createWholesaleOrder>>, TError,{data: BodyType<WholesaleOrderInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createWholesaleOrder>>, TError,{data: BodyType<WholesaleOrderInput>}, TContext> => {
+
+const mutationKey = ['createWholesaleOrder'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createWholesaleOrder>>, {data: BodyType<WholesaleOrderInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createWholesaleOrder(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateWholesaleOrderMutationResult = NonNullable<Awaited<ReturnType<typeof createWholesaleOrder>>>
+    export type CreateWholesaleOrderMutationBody = BodyType<WholesaleOrderInput>
+    export type CreateWholesaleOrderMutationError = ErrorType<unknown>
+
+    /**
+ * @summary 新增批發訂單
+ */
+export const useCreateWholesaleOrder = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createWholesaleOrder>>, TError,{data: BodyType<WholesaleOrderInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createWholesaleOrder>>,
+        TError,
+        {data: BodyType<WholesaleOrderInput>},
+        TContext
+      > => {
+      return useMutation(getCreateWholesaleOrderMutationOptions(options));
+    }
+
+export const getGetWholesaleOrderUrl = (id: number,) => {
+
+
+
+
+  return `/api/wholesale/orders/${id}`
+}
+
+/**
+ * @summary 取得批發訂單
+ */
+export const getWholesaleOrder = async (id: number, options?: RequestInit): Promise<WholesaleOrder> => {
+
+  return customFetch<WholesaleOrder>(getGetWholesaleOrderUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetWholesaleOrderQueryKey = (id: number,) => {
+    return [
+    `/api/wholesale/orders/${id}`
+    ] as const;
+    }
+
+
+export const getGetWholesaleOrderQueryOptions = <TData = Awaited<ReturnType<typeof getWholesaleOrder>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWholesaleOrder>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetWholesaleOrderQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getWholesaleOrder>>> = ({ signal }) => getWholesaleOrder(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getWholesaleOrder>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetWholesaleOrderQueryResult = NonNullable<Awaited<ReturnType<typeof getWholesaleOrder>>>
+export type GetWholesaleOrderQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary 取得批發訂單
+ */
+
+export function useGetWholesaleOrder<TData = Awaited<ReturnType<typeof getWholesaleOrder>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getWholesaleOrder>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetWholesaleOrderQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateWholesaleOrderUrl = (id: number,) => {
+
+
+
+
+  return `/api/wholesale/orders/${id}`
+}
+
+/**
+ * @summary 更新批發訂單
+ */
+export const updateWholesaleOrder = async (id: number,
+    wholesaleOrderInput: WholesaleOrderInput, options?: RequestInit): Promise<WholesaleOrder> => {
+
+  return customFetch<WholesaleOrder>(getUpdateWholesaleOrderUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(wholesaleOrderInput)
+  }
+);}
+
+
+
+
+export const getUpdateWholesaleOrderMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateWholesaleOrder>>, TError,{id: number;data: BodyType<WholesaleOrderInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateWholesaleOrder>>, TError,{id: number;data: BodyType<WholesaleOrderInput>}, TContext> => {
+
+const mutationKey = ['updateWholesaleOrder'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateWholesaleOrder>>, {id: number;data: BodyType<WholesaleOrderInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateWholesaleOrder(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateWholesaleOrderMutationResult = NonNullable<Awaited<ReturnType<typeof updateWholesaleOrder>>>
+    export type UpdateWholesaleOrderMutationBody = BodyType<WholesaleOrderInput>
+    export type UpdateWholesaleOrderMutationError = ErrorType<unknown>
+
+    /**
+ * @summary 更新批發訂單
+ */
+export const useUpdateWholesaleOrder = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateWholesaleOrder>>, TError,{id: number;data: BodyType<WholesaleOrderInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateWholesaleOrder>>,
+        TError,
+        {id: number;data: BodyType<WholesaleOrderInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateWholesaleOrderMutationOptions(options));
+    }
+
+export const getDeleteWholesaleOrderUrl = (id: number,) => {
+
+
+
+
+  return `/api/wholesale/orders/${id}`
+}
+
+/**
+ * @summary 刪除批發訂單
+ */
+export const deleteWholesaleOrder = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteWholesaleOrderUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteWholesaleOrderMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteWholesaleOrder>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteWholesaleOrder>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteWholesaleOrder'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteWholesaleOrder>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteWholesaleOrder(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteWholesaleOrderMutationResult = NonNullable<Awaited<ReturnType<typeof deleteWholesaleOrder>>>
+
+    export type DeleteWholesaleOrderMutationError = ErrorType<unknown>
+
+    /**
+ * @summary 刪除批發訂單
+ */
+export const useDeleteWholesaleOrder = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteWholesaleOrder>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteWholesaleOrder>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteWholesaleOrderMutationOptions(options));
+    }
+
+export const getListWholesaleReceivablesUrl = (params?: ListWholesaleReceivablesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/wholesale/receivables?${stringifiedParams}` : `/api/wholesale/receivables`
+}
+
+/**
+ * @summary 列出批發應收款
+ */
+export const listWholesaleReceivables = async (params?: ListWholesaleReceivablesParams, options?: RequestInit): Promise<WholesaleReceivable[]> => {
+
+  return customFetch<WholesaleReceivable[]>(getListWholesaleReceivablesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListWholesaleReceivablesQueryKey = (params?: ListWholesaleReceivablesParams,) => {
+    return [
+    `/api/wholesale/receivables`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListWholesaleReceivablesQueryOptions = <TData = Awaited<ReturnType<typeof listWholesaleReceivables>>, TError = ErrorType<unknown>>(params?: ListWholesaleReceivablesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listWholesaleReceivables>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListWholesaleReceivablesQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listWholesaleReceivables>>> = ({ signal }) => listWholesaleReceivables(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listWholesaleReceivables>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListWholesaleReceivablesQueryResult = NonNullable<Awaited<ReturnType<typeof listWholesaleReceivables>>>
+export type ListWholesaleReceivablesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary 列出批發應收款
+ */
+
+export function useListWholesaleReceivables<TData = Awaited<ReturnType<typeof listWholesaleReceivables>>, TError = ErrorType<unknown>>(
+ params?: ListWholesaleReceivablesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listWholesaleReceivables>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListWholesaleReceivablesQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateWholesaleReceivableUrl = (id: number,) => {
+
+
+
+
+  return `/api/wholesale/receivables/${id}`
+}
+
+/**
+ * @summary 更新批發應收款
+ */
+export const updateWholesaleReceivable = async (id: number,
+    updateWholesaleReceivableInput: UpdateWholesaleReceivableInput, options?: RequestInit): Promise<WholesaleReceivable> => {
+
+  return customFetch<WholesaleReceivable>(getUpdateWholesaleReceivableUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(updateWholesaleReceivableInput)
+  }
+);}
+
+
+
+
+export const getUpdateWholesaleReceivableMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateWholesaleReceivable>>, TError,{id: number;data: BodyType<UpdateWholesaleReceivableInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateWholesaleReceivable>>, TError,{id: number;data: BodyType<UpdateWholesaleReceivableInput>}, TContext> => {
+
+const mutationKey = ['updateWholesaleReceivable'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateWholesaleReceivable>>, {id: number;data: BodyType<UpdateWholesaleReceivableInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateWholesaleReceivable(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateWholesaleReceivableMutationResult = NonNullable<Awaited<ReturnType<typeof updateWholesaleReceivable>>>
+    export type UpdateWholesaleReceivableMutationBody = BodyType<UpdateWholesaleReceivableInput>
+    export type UpdateWholesaleReceivableMutationError = ErrorType<unknown>
+
+    /**
+ * @summary 更新批發應收款
+ */
+export const useUpdateWholesaleReceivable = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateWholesaleReceivable>>, TError,{id: number;data: BodyType<UpdateWholesaleReceivableInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateWholesaleReceivable>>,
+        TError,
+        {id: number;data: BodyType<UpdateWholesaleReceivableInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateWholesaleReceivableMutationOptions(options));
+    }
 

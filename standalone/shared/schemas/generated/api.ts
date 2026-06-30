@@ -1557,3 +1557,934 @@ export const GetDashboardSummaryResponse = zod.object({
 })
 
 
+/**
+ * @summary 列出商品
+ */
+export const ListProductsQueryParams = zod.object({
+  "search": zod.coerce.string().optional(),
+  "brand": zod.coerce.string().optional(),
+  "category": zod.coerce.string().optional(),
+  "isActive": zod.coerce.string().optional()
+})
+
+export const ListProductsResponseItem = zod.object({
+  "id": zod.number(),
+  "productNumber": zod.string().nullish(),
+  "brand": zod.string().nullish(),
+  "category": zod.string().nullish(),
+  "name": zod.string(),
+  "model": zod.string().nullish(),
+  "spec": zod.string().nullish(),
+  "unit": zod.string().nullish(),
+  "imageUrl": zod.string().nullish(),
+  "isActive": zod.boolean(),
+  "costPrice": zod.string().nullish(),
+  "retailPrice": zod.string().nullish(),
+  "wholesalePrice": zod.string().nullish(),
+  "minPrice": zod.string().nullish(),
+  "taxIncluded": zod.boolean(),
+  "stockQty": zod.number(),
+  "safetyStock": zod.number().nullish(),
+  "warehouseLocation": zod.string().nullish(),
+  "coolingCapacity": zod.string().nullish(),
+  "heatingCapacity": zod.string().nullish(),
+  "cspf": zod.string().nullish(),
+  "energyEfficiency": zod.string().nullish(),
+  "voltage": zod.string().nullish(),
+  "refrigerant": zod.string().nullish(),
+  "warrantyMonths": zod.number().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+export const ListProductsResponse = zod.array(ListProductsResponseItem)
+
+
+/**
+ * @summary 新增商品
+ */
+
+
+
+export const CreateProductBody = zod.object({
+  "brand": zod.string().optional(),
+  "category": zod.string().optional(),
+  "name": zod.string().min(1),
+  "model": zod.string().optional(),
+  "spec": zod.string().optional(),
+  "unit": zod.string().optional(),
+  "imageUrl": zod.string().optional(),
+  "isActive": zod.boolean().optional(),
+  "costPrice": zod.number().nullish(),
+  "retailPrice": zod.number().nullish(),
+  "wholesalePrice": zod.number().nullish(),
+  "minPrice": zod.number().nullish(),
+  "taxIncluded": zod.boolean().optional(),
+  "stockQty": zod.number().optional(),
+  "safetyStock": zod.number().nullish(),
+  "warehouseLocation": zod.string().optional(),
+  "coolingCapacity": zod.string().optional(),
+  "heatingCapacity": zod.string().optional(),
+  "cspf": zod.string().optional(),
+  "energyEfficiency": zod.string().optional(),
+  "voltage": zod.string().optional(),
+  "refrigerant": zod.string().optional(),
+  "warrantyMonths": zod.number().nullish(),
+  "notes": zod.string().optional()
+})
+
+export const CreateProductResponse = zod.object({
+  "id": zod.number(),
+  "productNumber": zod.string().nullish(),
+  "brand": zod.string().nullish(),
+  "category": zod.string().nullish(),
+  "name": zod.string(),
+  "model": zod.string().nullish(),
+  "spec": zod.string().nullish(),
+  "unit": zod.string().nullish(),
+  "imageUrl": zod.string().nullish(),
+  "isActive": zod.boolean(),
+  "costPrice": zod.string().nullish(),
+  "retailPrice": zod.string().nullish(),
+  "wholesalePrice": zod.string().nullish(),
+  "minPrice": zod.string().nullish(),
+  "taxIncluded": zod.boolean(),
+  "stockQty": zod.number(),
+  "safetyStock": zod.number().nullish(),
+  "warehouseLocation": zod.string().nullish(),
+  "coolingCapacity": zod.string().nullish(),
+  "heatingCapacity": zod.string().nullish(),
+  "cspf": zod.string().nullish(),
+  "energyEfficiency": zod.string().nullish(),
+  "voltage": zod.string().nullish(),
+  "refrigerant": zod.string().nullish(),
+  "warrantyMonths": zod.number().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary 取得商品
+ */
+export const GetProductParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetProductResponse = zod.object({
+  "id": zod.number(),
+  "productNumber": zod.string().nullish(),
+  "brand": zod.string().nullish(),
+  "category": zod.string().nullish(),
+  "name": zod.string(),
+  "model": zod.string().nullish(),
+  "spec": zod.string().nullish(),
+  "unit": zod.string().nullish(),
+  "imageUrl": zod.string().nullish(),
+  "isActive": zod.boolean(),
+  "costPrice": zod.string().nullish(),
+  "retailPrice": zod.string().nullish(),
+  "wholesalePrice": zod.string().nullish(),
+  "minPrice": zod.string().nullish(),
+  "taxIncluded": zod.boolean(),
+  "stockQty": zod.number(),
+  "safetyStock": zod.number().nullish(),
+  "warehouseLocation": zod.string().nullish(),
+  "coolingCapacity": zod.string().nullish(),
+  "heatingCapacity": zod.string().nullish(),
+  "cspf": zod.string().nullish(),
+  "energyEfficiency": zod.string().nullish(),
+  "voltage": zod.string().nullish(),
+  "refrigerant": zod.string().nullish(),
+  "warrantyMonths": zod.number().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary 更新商品
+ */
+export const UpdateProductParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+
+
+export const UpdateProductBody = zod.object({
+  "brand": zod.string().optional(),
+  "category": zod.string().optional(),
+  "name": zod.string().min(1).optional(),
+  "model": zod.string().optional(),
+  "spec": zod.string().optional(),
+  "unit": zod.string().optional(),
+  "imageUrl": zod.string().optional(),
+  "isActive": zod.boolean().optional(),
+  "costPrice": zod.number().nullish(),
+  "retailPrice": zod.number().nullish(),
+  "wholesalePrice": zod.number().nullish(),
+  "minPrice": zod.number().nullish(),
+  "taxIncluded": zod.boolean().optional(),
+  "stockQty": zod.number().optional(),
+  "safetyStock": zod.number().nullish(),
+  "warehouseLocation": zod.string().optional(),
+  "coolingCapacity": zod.string().optional(),
+  "heatingCapacity": zod.string().optional(),
+  "cspf": zod.string().optional(),
+  "energyEfficiency": zod.string().optional(),
+  "voltage": zod.string().optional(),
+  "refrigerant": zod.string().optional(),
+  "warrantyMonths": zod.number().nullish(),
+  "notes": zod.string().optional()
+})
+
+export const UpdateProductResponse = zod.object({
+  "id": zod.number(),
+  "productNumber": zod.string().nullish(),
+  "brand": zod.string().nullish(),
+  "category": zod.string().nullish(),
+  "name": zod.string(),
+  "model": zod.string().nullish(),
+  "spec": zod.string().nullish(),
+  "unit": zod.string().nullish(),
+  "imageUrl": zod.string().nullish(),
+  "isActive": zod.boolean(),
+  "costPrice": zod.string().nullish(),
+  "retailPrice": zod.string().nullish(),
+  "wholesalePrice": zod.string().nullish(),
+  "minPrice": zod.string().nullish(),
+  "taxIncluded": zod.boolean(),
+  "stockQty": zod.number(),
+  "safetyStock": zod.number().nullish(),
+  "warehouseLocation": zod.string().nullish(),
+  "coolingCapacity": zod.string().nullish(),
+  "heatingCapacity": zod.string().nullish(),
+  "cspf": zod.string().nullish(),
+  "energyEfficiency": zod.string().nullish(),
+  "voltage": zod.string().nullish(),
+  "refrigerant": zod.string().nullish(),
+  "warrantyMonths": zod.number().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary 刪除商品
+ */
+export const DeleteProductParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteProductResponse = zod.void()
+
+
+/**
+ * @summary 列出批發客戶
+ */
+export const ListWholesaleCustomersQueryParams = zod.object({
+  "search": zod.coerce.string().optional()
+})
+
+export const ListWholesaleCustomersResponseItem = zod.object({
+  "id": zod.number(),
+  "companyName": zod.string(),
+  "contactPerson": zod.string().nullish(),
+  "mobile": zod.string().nullish(),
+  "telephone": zod.string().nullish(),
+  "taxId": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "paymentTerms": zod.string().nullish(),
+  "creditLimit": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+export const ListWholesaleCustomersResponse = zod.array(ListWholesaleCustomersResponseItem)
+
+
+/**
+ * @summary 新增批發客戶
+ */
+
+
+
+export const CreateWholesaleCustomerBody = zod.object({
+  "companyName": zod.string().min(1),
+  "contactPerson": zod.string().optional(),
+  "mobile": zod.string().optional(),
+  "telephone": zod.string().optional(),
+  "taxId": zod.string().optional(),
+  "address": zod.string().optional(),
+  "email": zod.string().optional(),
+  "paymentTerms": zod.string().optional(),
+  "creditLimit": zod.number().nullish(),
+  "notes": zod.string().optional()
+})
+
+export const CreateWholesaleCustomerResponse = zod.object({
+  "id": zod.number(),
+  "companyName": zod.string(),
+  "contactPerson": zod.string().nullish(),
+  "mobile": zod.string().nullish(),
+  "telephone": zod.string().nullish(),
+  "taxId": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "paymentTerms": zod.string().nullish(),
+  "creditLimit": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary 取得批發客戶
+ */
+export const GetWholesaleCustomerParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetWholesaleCustomerResponse = zod.object({
+  "id": zod.number(),
+  "companyName": zod.string(),
+  "contactPerson": zod.string().nullish(),
+  "mobile": zod.string().nullish(),
+  "telephone": zod.string().nullish(),
+  "taxId": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "paymentTerms": zod.string().nullish(),
+  "creditLimit": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary 更新批發客戶
+ */
+export const UpdateWholesaleCustomerParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+
+
+export const UpdateWholesaleCustomerBody = zod.object({
+  "companyName": zod.string().min(1),
+  "contactPerson": zod.string().optional(),
+  "mobile": zod.string().optional(),
+  "telephone": zod.string().optional(),
+  "taxId": zod.string().optional(),
+  "address": zod.string().optional(),
+  "email": zod.string().optional(),
+  "paymentTerms": zod.string().optional(),
+  "creditLimit": zod.number().nullish(),
+  "notes": zod.string().optional()
+})
+
+export const UpdateWholesaleCustomerResponse = zod.object({
+  "id": zod.number(),
+  "companyName": zod.string(),
+  "contactPerson": zod.string().nullish(),
+  "mobile": zod.string().nullish(),
+  "telephone": zod.string().nullish(),
+  "taxId": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "paymentTerms": zod.string().nullish(),
+  "creditLimit": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary 刪除批發客戶
+ */
+export const DeleteWholesaleCustomerParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteWholesaleCustomerResponse = zod.void()
+
+
+/**
+ * @summary 列出批發報價單
+ */
+export const ListWholesaleQuotesQueryParams = zod.object({
+  "search": zod.coerce.string().optional(),
+  "status": zod.coerce.string().optional(),
+  "customerId": zod.coerce.number().optional()
+})
+
+export const ListWholesaleQuotesResponseItem = zod.object({
+  "id": zod.number(),
+  "quoteNumber": zod.string().nullish(),
+  "customerId": zod.number().nullish(),
+  "customerName": zod.string().nullish(),
+  "quoteDate": zod.string(),
+  "expiryDate": zod.string().nullish(),
+  "salesperson": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "subtotal": zod.string(),
+  "taxRate": zod.string(),
+  "taxAmount": zod.string(),
+  "shippingFee": zod.string(),
+  "total": zod.string(),
+  "status": zod.string(),
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "quoteId": zod.number(),
+  "productId": zod.number().nullish(),
+  "productName": zod.string(),
+  "brand": zod.string().nullish(),
+  "model": zod.string().nullish(),
+  "unit": zod.string().nullish(),
+  "qty": zod.number(),
+  "unitPrice": zod.string(),
+  "discount": zod.string(),
+  "amount": zod.string(),
+  "sortOrder": zod.number()
+})).optional(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+export const ListWholesaleQuotesResponse = zod.array(ListWholesaleQuotesResponseItem)
+
+
+/**
+ * @summary 新增批發報價單
+ */
+
+
+
+export const CreateWholesaleQuoteBody = zod.object({
+  "customerId": zod.number().nullish(),
+  "customerName": zod.string().optional(),
+  "quoteDate": zod.string(),
+  "expiryDate": zod.string().optional(),
+  "salesperson": zod.string().optional(),
+  "notes": zod.string().optional(),
+  "taxRate": zod.number().optional(),
+  "shippingFee": zod.number().optional(),
+  "status": zod.string().optional(),
+  "items": zod.array(zod.object({
+  "productId": zod.number().nullish(),
+  "productName": zod.string(),
+  "brand": zod.string().optional(),
+  "model": zod.string().optional(),
+  "unit": zod.string().optional(),
+  "qty": zod.number().min(1),
+  "unitPrice": zod.number(),
+  "discount": zod.number().optional(),
+  "amount": zod.number().optional(),
+  "sortOrder": zod.number().optional()
+}))
+})
+
+export const CreateWholesaleQuoteResponse = zod.object({
+  "id": zod.number(),
+  "quoteNumber": zod.string().nullish(),
+  "customerId": zod.number().nullish(),
+  "customerName": zod.string().nullish(),
+  "quoteDate": zod.string(),
+  "expiryDate": zod.string().nullish(),
+  "salesperson": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "subtotal": zod.string(),
+  "taxRate": zod.string(),
+  "taxAmount": zod.string(),
+  "shippingFee": zod.string(),
+  "total": zod.string(),
+  "status": zod.string(),
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "quoteId": zod.number(),
+  "productId": zod.number().nullish(),
+  "productName": zod.string(),
+  "brand": zod.string().nullish(),
+  "model": zod.string().nullish(),
+  "unit": zod.string().nullish(),
+  "qty": zod.number(),
+  "unitPrice": zod.string(),
+  "discount": zod.string(),
+  "amount": zod.string(),
+  "sortOrder": zod.number()
+})).optional(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary 取得批發報價單
+ */
+export const GetWholesaleQuoteParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetWholesaleQuoteResponse = zod.object({
+  "id": zod.number(),
+  "quoteNumber": zod.string().nullish(),
+  "customerId": zod.number().nullish(),
+  "customerName": zod.string().nullish(),
+  "quoteDate": zod.string(),
+  "expiryDate": zod.string().nullish(),
+  "salesperson": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "subtotal": zod.string(),
+  "taxRate": zod.string(),
+  "taxAmount": zod.string(),
+  "shippingFee": zod.string(),
+  "total": zod.string(),
+  "status": zod.string(),
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "quoteId": zod.number(),
+  "productId": zod.number().nullish(),
+  "productName": zod.string(),
+  "brand": zod.string().nullish(),
+  "model": zod.string().nullish(),
+  "unit": zod.string().nullish(),
+  "qty": zod.number(),
+  "unitPrice": zod.string(),
+  "discount": zod.string(),
+  "amount": zod.string(),
+  "sortOrder": zod.number()
+})).optional(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary 更新批發報價單
+ */
+export const UpdateWholesaleQuoteParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+
+
+export const UpdateWholesaleQuoteBody = zod.object({
+  "customerId": zod.number().nullish(),
+  "customerName": zod.string().optional(),
+  "quoteDate": zod.string(),
+  "expiryDate": zod.string().optional(),
+  "salesperson": zod.string().optional(),
+  "notes": zod.string().optional(),
+  "taxRate": zod.number().optional(),
+  "shippingFee": zod.number().optional(),
+  "status": zod.string().optional(),
+  "items": zod.array(zod.object({
+  "productId": zod.number().nullish(),
+  "productName": zod.string(),
+  "brand": zod.string().optional(),
+  "model": zod.string().optional(),
+  "unit": zod.string().optional(),
+  "qty": zod.number().min(1),
+  "unitPrice": zod.number(),
+  "discount": zod.number().optional(),
+  "amount": zod.number().optional(),
+  "sortOrder": zod.number().optional()
+}))
+})
+
+export const UpdateWholesaleQuoteResponse = zod.object({
+  "id": zod.number(),
+  "quoteNumber": zod.string().nullish(),
+  "customerId": zod.number().nullish(),
+  "customerName": zod.string().nullish(),
+  "quoteDate": zod.string(),
+  "expiryDate": zod.string().nullish(),
+  "salesperson": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "subtotal": zod.string(),
+  "taxRate": zod.string(),
+  "taxAmount": zod.string(),
+  "shippingFee": zod.string(),
+  "total": zod.string(),
+  "status": zod.string(),
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "quoteId": zod.number(),
+  "productId": zod.number().nullish(),
+  "productName": zod.string(),
+  "brand": zod.string().nullish(),
+  "model": zod.string().nullish(),
+  "unit": zod.string().nullish(),
+  "qty": zod.number(),
+  "unitPrice": zod.string(),
+  "discount": zod.string(),
+  "amount": zod.string(),
+  "sortOrder": zod.number()
+})).optional(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary 刪除批發報價單
+ */
+export const DeleteWholesaleQuoteParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteWholesaleQuoteResponse = zod.void()
+
+
+/**
+ * @summary 將報價單轉為訂單
+ */
+export const ConvertWholesaleQuoteParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const ConvertWholesaleQuoteResponse = zod.object({
+  "id": zod.number(),
+  "orderNumber": zod.string().nullish(),
+  "quoteId": zod.number().nullish(),
+  "quoteNumber": zod.string().nullish(),
+  "customerId": zod.number().nullish(),
+  "customerName": zod.string().nullish(),
+  "orderDate": zod.string(),
+  "expectedDelivery": zod.string().nullish(),
+  "salesperson": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "subtotal": zod.string(),
+  "taxRate": zod.string(),
+  "taxAmount": zod.string(),
+  "shippingFee": zod.string(),
+  "total": zod.string(),
+  "status": zod.string(),
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "orderId": zod.number(),
+  "productId": zod.number().nullish(),
+  "productName": zod.string(),
+  "brand": zod.string().nullish(),
+  "model": zod.string().nullish(),
+  "unit": zod.string().nullish(),
+  "qty": zod.number(),
+  "unitPrice": zod.string(),
+  "discount": zod.string(),
+  "amount": zod.string(),
+  "sortOrder": zod.number()
+})).optional(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary 列出批發訂單
+ */
+export const ListWholesaleOrdersQueryParams = zod.object({
+  "search": zod.coerce.string().optional(),
+  "status": zod.coerce.string().optional(),
+  "customerId": zod.coerce.number().optional()
+})
+
+export const ListWholesaleOrdersResponseItem = zod.object({
+  "id": zod.number(),
+  "orderNumber": zod.string().nullish(),
+  "quoteId": zod.number().nullish(),
+  "quoteNumber": zod.string().nullish(),
+  "customerId": zod.number().nullish(),
+  "customerName": zod.string().nullish(),
+  "orderDate": zod.string(),
+  "expectedDelivery": zod.string().nullish(),
+  "salesperson": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "subtotal": zod.string(),
+  "taxRate": zod.string(),
+  "taxAmount": zod.string(),
+  "shippingFee": zod.string(),
+  "total": zod.string(),
+  "status": zod.string(),
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "orderId": zod.number(),
+  "productId": zod.number().nullish(),
+  "productName": zod.string(),
+  "brand": zod.string().nullish(),
+  "model": zod.string().nullish(),
+  "unit": zod.string().nullish(),
+  "qty": zod.number(),
+  "unitPrice": zod.string(),
+  "discount": zod.string(),
+  "amount": zod.string(),
+  "sortOrder": zod.number()
+})).optional(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+export const ListWholesaleOrdersResponse = zod.array(ListWholesaleOrdersResponseItem)
+
+
+/**
+ * @summary 新增批發訂單
+ */
+
+
+
+export const CreateWholesaleOrderBody = zod.object({
+  "quoteId": zod.number().nullish(),
+  "quoteNumber": zod.string().optional(),
+  "customerId": zod.number().nullish(),
+  "customerName": zod.string().optional(),
+  "orderDate": zod.string(),
+  "expectedDelivery": zod.string().optional(),
+  "salesperson": zod.string().optional(),
+  "notes": zod.string().optional(),
+  "taxRate": zod.number().optional(),
+  "shippingFee": zod.number().optional(),
+  "status": zod.string().optional(),
+  "items": zod.array(zod.object({
+  "productId": zod.number().nullish(),
+  "productName": zod.string(),
+  "brand": zod.string().optional(),
+  "model": zod.string().optional(),
+  "unit": zod.string().optional(),
+  "qty": zod.number().min(1),
+  "unitPrice": zod.number(),
+  "discount": zod.number().optional(),
+  "amount": zod.number().optional(),
+  "sortOrder": zod.number().optional()
+}))
+})
+
+export const CreateWholesaleOrderResponse = zod.object({
+  "id": zod.number(),
+  "orderNumber": zod.string().nullish(),
+  "quoteId": zod.number().nullish(),
+  "quoteNumber": zod.string().nullish(),
+  "customerId": zod.number().nullish(),
+  "customerName": zod.string().nullish(),
+  "orderDate": zod.string(),
+  "expectedDelivery": zod.string().nullish(),
+  "salesperson": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "subtotal": zod.string(),
+  "taxRate": zod.string(),
+  "taxAmount": zod.string(),
+  "shippingFee": zod.string(),
+  "total": zod.string(),
+  "status": zod.string(),
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "orderId": zod.number(),
+  "productId": zod.number().nullish(),
+  "productName": zod.string(),
+  "brand": zod.string().nullish(),
+  "model": zod.string().nullish(),
+  "unit": zod.string().nullish(),
+  "qty": zod.number(),
+  "unitPrice": zod.string(),
+  "discount": zod.string(),
+  "amount": zod.string(),
+  "sortOrder": zod.number()
+})).optional(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary 取得批發訂單
+ */
+export const GetWholesaleOrderParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetWholesaleOrderResponse = zod.object({
+  "id": zod.number(),
+  "orderNumber": zod.string().nullish(),
+  "quoteId": zod.number().nullish(),
+  "quoteNumber": zod.string().nullish(),
+  "customerId": zod.number().nullish(),
+  "customerName": zod.string().nullish(),
+  "orderDate": zod.string(),
+  "expectedDelivery": zod.string().nullish(),
+  "salesperson": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "subtotal": zod.string(),
+  "taxRate": zod.string(),
+  "taxAmount": zod.string(),
+  "shippingFee": zod.string(),
+  "total": zod.string(),
+  "status": zod.string(),
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "orderId": zod.number(),
+  "productId": zod.number().nullish(),
+  "productName": zod.string(),
+  "brand": zod.string().nullish(),
+  "model": zod.string().nullish(),
+  "unit": zod.string().nullish(),
+  "qty": zod.number(),
+  "unitPrice": zod.string(),
+  "discount": zod.string(),
+  "amount": zod.string(),
+  "sortOrder": zod.number()
+})).optional(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary 更新批發訂單
+ */
+export const UpdateWholesaleOrderParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+
+
+
+export const UpdateWholesaleOrderBody = zod.object({
+  "quoteId": zod.number().nullish(),
+  "quoteNumber": zod.string().optional(),
+  "customerId": zod.number().nullish(),
+  "customerName": zod.string().optional(),
+  "orderDate": zod.string(),
+  "expectedDelivery": zod.string().optional(),
+  "salesperson": zod.string().optional(),
+  "notes": zod.string().optional(),
+  "taxRate": zod.number().optional(),
+  "shippingFee": zod.number().optional(),
+  "status": zod.string().optional(),
+  "items": zod.array(zod.object({
+  "productId": zod.number().nullish(),
+  "productName": zod.string(),
+  "brand": zod.string().optional(),
+  "model": zod.string().optional(),
+  "unit": zod.string().optional(),
+  "qty": zod.number().min(1),
+  "unitPrice": zod.number(),
+  "discount": zod.number().optional(),
+  "amount": zod.number().optional(),
+  "sortOrder": zod.number().optional()
+}))
+})
+
+export const UpdateWholesaleOrderResponse = zod.object({
+  "id": zod.number(),
+  "orderNumber": zod.string().nullish(),
+  "quoteId": zod.number().nullish(),
+  "quoteNumber": zod.string().nullish(),
+  "customerId": zod.number().nullish(),
+  "customerName": zod.string().nullish(),
+  "orderDate": zod.string(),
+  "expectedDelivery": zod.string().nullish(),
+  "salesperson": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "subtotal": zod.string(),
+  "taxRate": zod.string(),
+  "taxAmount": zod.string(),
+  "shippingFee": zod.string(),
+  "total": zod.string(),
+  "status": zod.string(),
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "orderId": zod.number(),
+  "productId": zod.number().nullish(),
+  "productName": zod.string(),
+  "brand": zod.string().nullish(),
+  "model": zod.string().nullish(),
+  "unit": zod.string().nullish(),
+  "qty": zod.number(),
+  "unitPrice": zod.string(),
+  "discount": zod.string(),
+  "amount": zod.string(),
+  "sortOrder": zod.number()
+})).optional(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary 刪除批發訂單
+ */
+export const DeleteWholesaleOrderParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteWholesaleOrderResponse = zod.void()
+
+
+/**
+ * @summary 列出批發應收款
+ */
+export const ListWholesaleReceivablesQueryParams = zod.object({
+  "orderId": zod.coerce.number().optional(),
+  "status": zod.coerce.string().optional()
+})
+
+export const ListWholesaleReceivablesResponseItem = zod.object({
+  "id": zod.number(),
+  "orderId": zod.number().nullish(),
+  "orderNumber": zod.string().nullish(),
+  "customerId": zod.number().nullish(),
+  "customerName": zod.string().nullish(),
+  "totalAmount": zod.string(),
+  "receivedAmount": zod.string(),
+  "dueDate": zod.string().nullish(),
+  "paidDate": zod.string().nullish(),
+  "paymentStatus": zod.string(),
+  "paymentMethod": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+export const ListWholesaleReceivablesResponse = zod.array(ListWholesaleReceivablesResponseItem)
+
+
+/**
+ * @summary 更新批發應收款
+ */
+export const UpdateWholesaleReceivableParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateWholesaleReceivableBody = zod.object({
+  "receivedAmount": zod.number().optional(),
+  "dueDate": zod.string().optional(),
+  "paidDate": zod.string().optional(),
+  "paymentStatus": zod.string().optional(),
+  "paymentMethod": zod.string().optional(),
+  "notes": zod.string().optional()
+})
+
+export const UpdateWholesaleReceivableResponse = zod.object({
+  "id": zod.number(),
+  "orderId": zod.number().nullish(),
+  "orderNumber": zod.string().nullish(),
+  "customerId": zod.number().nullish(),
+  "customerName": zod.string().nullish(),
+  "totalAmount": zod.string(),
+  "receivedAmount": zod.string(),
+  "dueDate": zod.string().nullish(),
+  "paidDate": zod.string().nullish(),
+  "paymentStatus": zod.string(),
+  "paymentMethod": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
