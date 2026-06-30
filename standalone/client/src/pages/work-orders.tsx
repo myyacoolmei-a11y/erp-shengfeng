@@ -535,7 +535,7 @@ export default function WorkOrders() {
   const { data: quotes } = useListQuotes({ includeOld: "true" } as any);
 
   // Technician options: employees whose position contains "技師" and are active
-  const technicianOptions = (employees ?? []).filter(e => e.position?.includes("技師") && e.status === "在職");
+  const technicianOptions = (employees ?? []).filter(e => e.position?.includes("技師") && e.status !== "離職");
 
   const createMutation = useCreateWorkOrder({
     mutation: {
