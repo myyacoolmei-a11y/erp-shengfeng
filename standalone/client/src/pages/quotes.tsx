@@ -528,7 +528,20 @@ export default function Quotes() {
   const createMutation = useCreateQuote({ mutation: { onSuccess: () => { invQuotes(); setShowCreate(false); toast({ title: "報價單已新增" }); } } });
   const updateMutation = useUpdateQuote({ mutation: { onSuccess: () => { invQuotes(); setEditItem(null); toast({ title: "報價單已更新" }); } } });
   const deleteMutation = useDeleteQuote({ mutation: { onSuccess: () => { invQuotes(); setDeleteId(null); toast({ title: "報價單已刪除" }); } } });
-  const createWoMutation = useCreateWorkOrder({ mutation: { onSuccess: () => { qc.invalidateQueries({ queryKey: getListWorkOrdersQueryKey() }); setConvertItem(null); toast({ title: "派工單已建立" }); } } });
+  const createWoMutation = useCreateWorkOrder({
+    mutation: {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getListWorkOrdersQueryKey() });
+        qc.invalidateQueries({ queryKey: getListQuotesQueryKey() });
+        setConvertItem(null);
+        toast({ title: "派工單建立成功" });
+      },
+      onError: (err: any) => {
+        const msg = err?.response?.data?.error ?? err?.message ?? "建立失敗，請稍後再試";
+        toast({ title: "建立派工單失敗", description: msg, variant: "destructive" });
+      },
+    },
+  });
 
   function handleCustomerChange(v: string) {
     const cid = parseInt(v, 10);
@@ -555,6 +568,10 @@ export default function Quotes() {
   function handleConvert(e: React.FormEvent) {
     e.preventDefault();
     if (!convertItem) return;
+    if (!woForm.customerId || woForm.customerId <= 0) {
+      toast({ title: "請先選擇客戶", description: "建立派工單需要指定客戶", variant: "destructive" });
+      return;
+    }
     const payload = buildPayload(woForm);
     createWoMutation.mutate({ data: payload });
   }
@@ -815,7 +832,7 @@ export default function Quotes() {
                 customers={customers ?? []}
                 technicianOptions={technicianOptions}
                 showQuoteSelector={false}
-                customerDisabled={true}
+                customerDisabled={!!(convertItem?.customerId)}
               />
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setConvertItem(null)}>取消</Button>
