@@ -22,7 +22,6 @@ const ChangePasswordBody = z.object({
 
 export async function seedDefaultUser(): Promise<void> {
   try {
-    // Only seed when the users table is completely empty (first-run bootstrap)
     const [anyUser] = await db.select({ id: usersTable.id }).from(usersTable).limit(1);
     if (anyUser) return;
 
@@ -32,6 +31,7 @@ export async function seedDefaultUser(): Promise<void> {
       passwordHash,
       displayName: "系統管理員",
       role: "super_admin",
+      roles: ["super_admin"],
       isActive: true,
       mustChangePassword: true,
     });
@@ -44,7 +44,6 @@ export async function seedDefaultUser(): Promise<void> {
 /**
  * One-time startup migration: if no super_admin exists yet, upgrade the
  * "admin" account (the original seeded account) to super_admin.
- * This handles existing deployments that were seeded before the role was added.
  */
 export async function ensureSuperAdmin(): Promise<void> {
   try {
@@ -63,12 +62,33 @@ export async function ensureSuperAdmin(): Promise<void> {
     if (adminUser) {
       await db
         .update(usersTable)
-        .set({ role: "super_admin" })
+        .set({ role: "super_admin", roles: ["super_admin"] })
         .where(eq(usersTable.id, adminUser.id));
       logger.info('啟動遷移：帳號 "admin" 已升級為系統管理員（super_admin）');
     }
   } catch (err) {
     logger.error({ err }, "無法執行 super_admin 升級遷移");
+  }
+}
+
+/**
+ * One-time startup migration: for users with an empty roles array,
+ * auto-populate roles from the primary role column (backward compatibility).
+ */
+export async function migrateUserRoles(): Promise<void> {
+  try {
+    const users = await db
+      .select({ id: usersTable.id, role: usersTable.role, roles: usersTable.roles })
+      .from(usersTable);
+    const toMigrate = users.filter((u) => !u.roles || u.roles.length === 0);
+    for (const u of toMigrate) {
+      await db.update(usersTable).set({ roles: [u.role] }).where(eq(usersTable.id, u.id));
+    }
+    if (toMigrate.length > 0) {
+      logger.info(`角色遷移完成：已為 ${toMigrate.length} 位使用者自動填入 roles 陣列`);
+    }
+  } catch (err) {
+    logger.error({ err }, "角色遷移失敗");
   }
 }
 
@@ -92,11 +112,14 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     return;
   }
 
+  const userRoles = user.roles?.length ? user.roles : [user.role];
+
   const token = signToken({
     id: user.id,
     username: user.username,
     displayName: user.displayName,
     role: user.role,
+    roles: userRoles,
     mustChangePassword: user.mustChangePassword,
   });
 
@@ -107,6 +130,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
       username: user.username,
       displayName: user.displayName,
       role: user.role,
+      roles: userRoles,
       mustChangePassword: user.mustChangePassword,
     },
   });
@@ -117,7 +141,11 @@ router.post("/auth/logout", (_req, res): void => {
 });
 
 router.get("/auth/me", authenticate, (req, res): void => {
-  res.json(req.user);
+  const u = req.user!;
+  res.json({
+    ...u,
+    roles: u.roles?.length ? u.roles : [u.role],
+  });
 });
 
 router.patch("/auth/password", authenticate, async (req, res): Promise<void> => {
@@ -147,11 +175,14 @@ router.patch("/auth/password", authenticate, async (req, res): Promise<void> => 
     .set({ passwordHash: newHash, mustChangePassword: false })
     .where(eq(usersTable.id, userId));
 
+  const userRoles = user.roles?.length ? user.roles : [user.role];
+
   const newToken = signToken({
     id: user.id,
     username: user.username,
     displayName: user.displayName,
     role: user.role,
+    roles: userRoles,
     mustChangePassword: false,
   });
 
@@ -162,6 +193,7 @@ router.patch("/auth/password", authenticate, async (req, res): Promise<void> => 
       username: user.username,
       displayName: user.displayName,
       role: user.role,
+      roles: userRoles,
       mustChangePassword: false,
     },
   });

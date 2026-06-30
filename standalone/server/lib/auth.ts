@@ -7,6 +7,7 @@ export interface JwtPayload {
   username: string;
   displayName: string;
   role: string;
+  roles: string[];
   mustChangePassword: boolean;
 }
 
@@ -59,13 +60,19 @@ export function authenticate(req: Request, res: Response, next: NextFunction): v
   next();
 }
 
-export function requireRole(...roles: string[]) {
+/** Effective roles: use the roles array when populated; fall back to primary role for old tokens */
+export function effectiveRoles(user: JwtPayload): string[] {
+  return user.roles?.length ? user.roles : [user.role];
+}
+
+export function requireRole(...allowedRoles: string[]) {
   return (req: Request, res: Response, next: NextFunction): void => {
     if (!req.user) {
       res.status(401).json({ error: "請先登入" });
       return;
     }
-    if (!roles.includes(req.user.role)) {
+    const userRoles = effectiveRoles(req.user);
+    if (!allowedRoles.some((r) => userRoles.includes(r))) {
       res.status(403).json({ error: "您沒有權限執行此操作" });
       return;
     }

@@ -38,7 +38,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { UserPlus, Pencil, Trash2, KeyRound, Loader2, UserCheck, UserX, ShieldAlert } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth, type UserRole } from "@/contexts/auth-context";
+import { useAuth, hasRole, type UserRole } from "@/contexts/auth-context";
 import { ROLE_LABELS } from "@/lib/role-labels";
 
 interface UserItem {
@@ -46,22 +46,23 @@ interface UserItem {
   username: string;
   displayName: string;
   role: string;
+  roles: string[];
   isActive: boolean;
   createdAt: string;
 }
 
 const ALL_ROLES_FOR_OWNER: { value: UserRole; label: string }[] = [
-  { value: "owner", label: "老闆" },
-  { value: "admin", label: "行政管理" },
-  { value: "sales", label: "業務" },
-  { value: "engineer", label: "工程師" },
-  { value: "technician", label: "技術員" },
-  { value: "accountant", label: "會計" },
-  { value: "distributor", label: "批發商" },
+  { value: "owner", label: ROLE_LABELS.owner },
+  { value: "admin", label: ROLE_LABELS.admin },
+  { value: "sales", label: ROLE_LABELS.sales },
+  { value: "engineer", label: ROLE_LABELS.engineer },
+  { value: "technician", label: ROLE_LABELS.technician },
+  { value: "accountant", label: ROLE_LABELS.accountant },
+  { value: "distributor", label: ROLE_LABELS.distributor },
 ];
 
 const ALL_ROLES_FOR_SUPER_ADMIN: { value: UserRole; label: string }[] = [
-  { value: "super_admin", label: "系統管理員" },
+  { value: "super_admin", label: ROLE_LABELS.super_admin },
   ...ALL_ROLES_FOR_OWNER,
 ];
 
@@ -90,16 +91,59 @@ function authFetch(url: string, options: RequestInit = {}) {
   });
 }
 
-const EMPTY_CREATE = { username: "", password: "", displayName: "", role: "technician" as UserRole };
-const EMPTY_EDIT = { displayName: "", username: "", role: "technician" as UserRole, isActive: true };
+function effectiveUserRoles(u: UserItem): string[] {
+  return u.roles?.length ? u.roles : [u.role];
+}
+
+const EMPTY_CREATE = { username: "", password: "", displayName: "", roles: ["technician"] as UserRole[] };
+const EMPTY_EDIT = { displayName: "", username: "", roles: ["technician"] as UserRole[], isActive: true };
+
+/** Multi-select role checkboxes */
+function RoleCheckboxes({
+  selected,
+  available,
+  onChange,
+}: {
+  selected: UserRole[];
+  available: { value: UserRole; label: string }[];
+  onChange: (roles: UserRole[]) => void;
+}) {
+  function toggle(role: UserRole, checked: boolean) {
+    if (checked) {
+      onChange([...selected, role]);
+    } else {
+      onChange(selected.filter((r) => r !== role));
+    }
+  }
+
+  return (
+    <div className="border rounded-md p-3 space-y-2 max-h-52 overflow-y-auto">
+      {available.map((opt) => {
+        const checked = selected.includes(opt.value);
+        return (
+          <label key={opt.value} className="flex items-center gap-2.5 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={checked}
+              onChange={(e) => toggle(opt.value, e.target.checked)}
+              className="h-4 w-4 rounded border-input accent-primary"
+            />
+            <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${ROLE_COLORS[opt.value] ?? "bg-gray-100 text-gray-700 border border-gray-200"}`}>
+              {opt.label}
+            </span>
+          </label>
+        );
+      })}
+    </div>
+  );
+}
 
 export default function UsersPage() {
   const { toast } = useToast();
   const { user: me } = useAuth();
   const qc = useQueryClient();
 
-  const iAmSuperAdmin = me?.role === "super_admin";
-
+  const iAmSuperAdmin = hasRole(me, "super_admin");
   const availableRoles = iAmSuperAdmin ? ALL_ROLES_FOR_SUPER_ADMIN : ALL_ROLES_FOR_OWNER;
 
   const [createOpen, setCreateOpen] = useState(false);
@@ -203,7 +247,8 @@ export default function UsersPage() {
 
   function openEdit(u: UserItem) {
     setEditTarget(u);
-    setEditForm({ displayName: u.displayName, username: u.username, role: u.role as UserRole, isActive: u.isActive });
+    const roles = effectiveUserRoles(u) as UserRole[];
+    setEditForm({ displayName: u.displayName, username: u.username, roles, isActive: u.isActive });
     setEditError(null);
   }
 
@@ -212,7 +257,7 @@ export default function UsersPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">用戶管理</h1>
-          <p className="text-sm text-muted-foreground mt-1">管理系統使用者帳號與角色權限</p>
+          <p className="text-sm text-muted-foreground mt-1">管理系統使用者帳號與多角色權限</p>
         </div>
         <Button onClick={() => { setCreateForm(EMPTY_CREATE); setCreateError(null); setCreateOpen(true); }}>
           <UserPlus className="mr-2 h-4 w-4" />
@@ -222,17 +267,17 @@ export default function UsersPage() {
 
       {/* ── Role permission summary ── */}
       <div className="rounded-md border bg-muted/30 p-4">
-        <p className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wide">角色權限說明</p>
+        <p className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wide">角色權限說明（可多選，權限取聯集）</p>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-1.5 text-xs">
           {[
             { role: "super_admin", desc: "系統核心設定，帳號不可被刪除或停用，僅本人可修改密碼" },
-            { role: "owner", desc: "所有業務功能完整存取，可管理一般使用者（不含系統管理員）" },
-            { role: "admin", desc: "客戶、報價、派工、保固、收款（不含用戶管理）" },
-            { role: "sales", desc: "客戶管理、報價單（不可刪除）" },
-            { role: "engineer", desc: "派工單、進度、保養（不含財務）" },
-            { role: "technician", desc: "派工單、保養（不含報價/收款/財務）" },
-            { role: "accountant", desc: "應收帳款、收款、客戶（唯讀）" },
-            { role: "distributor", desc: "僅限自己的報價單/訂單" },
+            { role: "owner", desc: "老闆/老闆娘：所有業務完整存取，可管理員工與用戶" },
+            { role: "admin", desc: "行政：客戶、報價、派工、保固、基本收款（不含用戶管理）" },
+            { role: "sales", desc: "業務：客戶管理、報價單（不可刪除）" },
+            { role: "engineer", desc: "工程師/師傅：派工單、進度、保養（不含財務）" },
+            { role: "technician", desc: "技師：派工單、保養（不含報價/收款/財務）" },
+            { role: "accountant", desc: "會計：應收帳款、收款、客戶（唯讀）" },
+            { role: "distributor", desc: "配合廠商：僅限自己的報價單/訂單" },
           ].map(({ role, desc }) => (
             <div key={role} className="flex items-start gap-1.5">
               <span className={`shrink-0 text-xs px-1.5 py-0.5 rounded font-medium ${ROLE_COLORS[role]}`}>
@@ -267,19 +312,9 @@ export default function UsersPage() {
             <TableBody>
               {users.map((u) => {
                 const isSelf = me?.id === u.id;
-                const isTargetSuperAdmin = u.role === "super_admin";
+                const uRoles = effectiveUserRoles(u);
+                const isTargetSuperAdmin = uRoles.includes("super_admin");
 
-                /**
-                 * Three-way branch for the action cell — no shared variables
-                 * that could accidentally mix paths:
-                 *
-                 * 1. Target IS super_admin AND it's someone else
-                 *    → "受保護" label, zero buttons, no dialogs reachable
-                 * 2. Target IS super_admin AND it's self (only super_admin can reach this)
-                 *    → edit button only (no reset-password, no delete)
-                 * 3. Target is NOT super_admin
-                 *    → normal buttons (edit, reset-password, delete if not self)
-                 */
                 const renderActions = () => {
                   if (isTargetSuperAdmin && !isSelf) {
                     return (
@@ -332,9 +367,13 @@ export default function UsersPage() {
                     </TableCell>
                     <TableCell className="text-muted-foreground font-mono text-sm">{u.username}</TableCell>
                     <TableCell>
-                      <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${ROLE_COLORS[u.role] ?? "bg-gray-100 text-gray-700"}`}>
-                        {ROLE_LABELS[u.role as UserRole] ?? u.role}
-                      </span>
+                      <div className="flex flex-wrap gap-1">
+                        {uRoles.map((r) => (
+                          <span key={r} className={`text-xs px-1.5 py-0.5 rounded font-medium ${ROLE_COLORS[r] ?? "bg-gray-100 text-gray-700 border border-gray-200"}`}>
+                            {ROLE_LABELS[r as UserRole] ?? r}
+                          </span>
+                        ))}
+                      </div>
                     </TableCell>
                     <TableCell>
                       {u.isActive ? (
@@ -369,7 +408,12 @@ export default function UsersPage() {
             <DialogDescription>建立新的系統使用者帳號，首次登入將強制變更密碼</DialogDescription>
           </DialogHeader>
           <form
-            onSubmit={(e) => { e.preventDefault(); setCreateError(null); createMutation.mutate(createForm); }}
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (createForm.roles.length === 0) { setCreateError("至少選擇一個角色"); return; }
+              setCreateError(null);
+              createMutation.mutate(createForm);
+            }}
             className="space-y-4"
           >
             <div className="space-y-2">
@@ -391,15 +435,12 @@ export default function UsersPage() {
                 placeholder="至少 6 位" required minLength={6} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="c-role">角色</Label>
-              <Select value={createForm.role} onValueChange={(v) => setCreateForm({ ...createForm, role: v as UserRole })}>
-                <SelectTrigger id="c-role"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {availableRoles.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>角色（可多選，至少選一個）</Label>
+              <RoleCheckboxes
+                selected={createForm.roles}
+                available={availableRoles}
+                onChange={(roles) => setCreateForm({ ...createForm, roles })}
+              />
             </div>
             {createError && (
               <p className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-md">{createError}</p>
@@ -424,6 +465,7 @@ export default function UsersPage() {
           <form
             onSubmit={(e) => {
               e.preventDefault();
+              if (editForm.roles.length === 0) { setEditError("至少選擇一個角色"); return; }
               setEditError(null);
               if (editTarget) editMutation.mutate({ id: editTarget.id, body: editForm });
             }}
@@ -441,27 +483,22 @@ export default function UsersPage() {
                 onChange={(e) => setEditForm({ ...editForm, username: e.target.value })}
                 required />
             </div>
-            {/* Role: disabled when editing own super_admin account (cannot downgrade self) */}
             <div className="space-y-2">
-              <Label htmlFor="e-role">角色</Label>
-              {editTarget?.role === "super_admin" ? (
+              <Label>角色（可多選，至少選一個）</Label>
+              {effectiveUserRoles(editTarget ?? { role: "", roles: [] } as unknown as UserItem).includes("super_admin") ? (
                 <div className="flex items-center gap-2 rounded-md border bg-muted px-3 py-2 text-sm text-muted-foreground">
                   <ShieldAlert className="h-4 w-4 shrink-0" />
                   系統管理員（角色不可變更）
                 </div>
               ) : (
-                <Select value={editForm.role} onValueChange={(v) => setEditForm({ ...editForm, role: v as UserRole })}>
-                  <SelectTrigger id="e-role"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {availableRoles.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <RoleCheckboxes
+                  selected={editForm.roles}
+                  available={availableRoles}
+                  onChange={(roles) => setEditForm({ ...editForm, roles })}
+                />
               )}
             </div>
-            {/* Status: hidden when editing own super_admin account (cannot disable self) */}
-            {editTarget?.role !== "super_admin" && (
+            {editTarget && !effectiveUserRoles(editTarget).includes("super_admin") && (
               <div className="space-y-2">
                 <Label htmlFor="e-status">狀態</Label>
                 <Select
@@ -542,7 +579,8 @@ export default function UsersPage() {
               onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
               disabled={deleteMutation.isPending}
             >
-              {deleteMutation.isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />刪除中...</> : "確認刪除"}
+              {deleteMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              確認刪除
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

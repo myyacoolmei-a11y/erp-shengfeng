@@ -1,9 +1,9 @@
 import { Router, type IRouter } from "express";
 import bcrypt from "bcryptjs";
-import { eq, and, ne } from "drizzle-orm";
+import { eq, and, ne, sql } from "drizzle-orm";
 import { z } from "zod/v4";
 import { db, usersTable } from "@workspace/db";
-import { requireRole } from "../lib/auth";
+import { requireRole, effectiveRoles } from "../lib/auth";
 
 const router: IRouter = Router();
 
@@ -22,13 +22,13 @@ const CreateUserBody = z.object({
   username: z.string().min(1, "帳號不可為空"),
   password: z.string().min(6, "密碼至少 6 位"),
   displayName: z.string().min(1, "姓名不可為空"),
-  role: z.enum(ALL_ROLES),
+  roles: z.array(z.enum(ALL_ROLES)).min(1, "至少選擇一個角色"),
 });
 
 const UpdateUserBody = z.object({
   displayName: z.string().min(1).optional(),
   username: z.string().min(1).optional(),
-  role: z.enum(ALL_ROLES).optional(),
+  roles: z.array(z.enum(ALL_ROLES)).min(1).optional(),
   isActive: z.boolean().optional(),
 });
 
@@ -41,6 +41,7 @@ const userPublicFields = {
   username: usersTable.username,
   displayName: usersTable.displayName,
   role: usersTable.role,
+  roles: usersTable.roles,
   isActive: usersTable.isActive,
   createdAt: usersTable.createdAt,
 };
@@ -50,12 +51,6 @@ function parseId(raw: unknown): number | null {
   return isNaN(id) ? null : id;
 }
 
-/**
- * GET /users
- * Both super_admin and owner see all users (including super_admin accounts).
- * The frontend hides action buttons for super_admin rows when the caller is not super_admin,
- * and the mutation endpoints enforce 403 for any unauthorized operation.
- */
 router.get("/users", requireRole("super_admin", "owner"), async (_req, res): Promise<void> => {
   const users = await db
     .select(userPublicFields)
@@ -64,12 +59,9 @@ router.get("/users", requireRole("super_admin", "owner"), async (_req, res): Pro
   res.json(users);
 });
 
-/**
- * POST /users
- * owner cannot create a super_admin account.
- */
 router.post("/users", requireRole("super_admin", "owner"), async (req, res): Promise<void> => {
-  const callerRole = req.user!.role;
+  const callerRoles = effectiveRoles(req.user!);
+  const callerIsSuperAdmin = callerRoles.includes("super_admin");
 
   const parsed = CreateUserBody.safeParse(req.body);
   if (!parsed.success) {
@@ -77,12 +69,13 @@ router.post("/users", requireRole("super_admin", "owner"), async (req, res): Pro
     return;
   }
 
-  if (callerRole !== "super_admin" && parsed.data.role === "super_admin") {
+  if (!callerIsSuperAdmin && parsed.data.roles.includes("super_admin")) {
     res.status(403).json({ error: "您沒有權限建立系統管理員帳號" });
     return;
   }
 
-  const { password, ...rest } = parsed.data;
+  const { password, roles, ...rest } = parsed.data;
+  const primaryRole = roles[0];
 
   const [existing] = await db
     .select({ id: usersTable.id })
@@ -96,33 +89,29 @@ router.post("/users", requireRole("super_admin", "owner"), async (req, res): Pro
   const passwordHash = await bcrypt.hash(password, 10);
   const [user] = await db
     .insert(usersTable)
-    .values({ ...rest, passwordHash, mustChangePassword: true })
+    .values({ ...rest, passwordHash, role: primaryRole, roles, mustChangePassword: true })
     .returning(userPublicFields);
   res.status(201).json(user);
 });
 
-/**
- * PATCH /users/:id
- * Rules for super_admin targets:
- *   • Only the super_admin themselves can edit their own account.
- *   • Role and isActive fields are stripped — super_admin cannot be downgraded or disabled.
- * Rules for everyone:
- *   • owner cannot set any account's role to super_admin.
- */
 router.patch("/users/:id", requireRole("super_admin", "owner"), async (req, res): Promise<void> => {
   const id = parseId(req.params.id);
   if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
 
   const callerId = req.user!.id;
-  const callerRole = req.user!.role;
+  const callerRoles = effectiveRoles(req.user!);
+  const callerIsSuperAdmin = callerRoles.includes("super_admin");
 
   const [target] = await db
-    .select({ id: usersTable.id, role: usersTable.role })
+    .select({ id: usersTable.id, role: usersTable.role, roles: usersTable.roles })
     .from(usersTable)
     .where(eq(usersTable.id, id));
   if (!target) { res.status(404).json({ error: "找不到使用者" }); return; }
 
-  if (target.role === "super_admin" && callerId !== id) {
+  const targetIsSuperAdmin =
+    (target.roles?.length ? target.roles : [target.role]).includes("super_admin");
+
+  if (targetIsSuperAdmin && callerId !== id) {
     res.status(403).json({ error: "系統管理員帳號只能由本人修改" });
     return;
   }
@@ -133,16 +122,21 @@ router.patch("/users/:id", requireRole("super_admin", "owner"), async (req, res)
     return;
   }
 
-  const data: Partial<typeof parsed.data> = { ...parsed.data };
+  const data: { displayName?: string; username?: string; role?: string; roles?: string[]; isActive?: boolean } = { ...parsed.data };
 
-  if (target.role === "super_admin") {
+  if (targetIsSuperAdmin) {
+    delete data.roles;
     delete data.role;
     delete data.isActive;
   }
 
-  if (callerRole !== "super_admin" && data.role === "super_admin") {
+  if (!callerIsSuperAdmin && data.roles?.includes("super_admin")) {
     res.status(403).json({ error: "您沒有權限設定系統管理員角色" });
     return;
+  }
+
+  if (data.roles?.length) {
+    data.role = data.roles[0];
   }
 
   if (data.username) {
@@ -165,11 +159,6 @@ router.patch("/users/:id", requireRole("super_admin", "owner"), async (req, res)
   res.json(user);
 });
 
-/**
- * POST /users/:id/reset-password
- * super_admin passwords can NEVER be reset via this endpoint.
- * They must use PATCH /auth/password (self-service with current password).
- */
 router.post("/users/:id/reset-password", requireRole("super_admin", "owner"), async (req, res): Promise<void> => {
   const id = parseId(req.params.id);
   if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
@@ -181,12 +170,14 @@ router.post("/users/:id/reset-password", requireRole("super_admin", "owner"), as
   }
 
   const [existing] = await db
-    .select({ id: usersTable.id, role: usersTable.role })
+    .select({ id: usersTable.id, role: usersTable.role, roles: usersTable.roles })
     .from(usersTable)
     .where(eq(usersTable.id, id));
   if (!existing) { res.status(404).json({ error: "找不到使用者" }); return; }
 
-  if (existing.role === "super_admin") {
+  const targetIsSuperAdmin =
+    (existing.roles?.length ? existing.roles : [existing.role]).includes("super_admin");
+  if (targetIsSuperAdmin) {
     res.status(403).json({ error: "系統管理員密碼只能由本人透過「修改密碼」功能自行變更" });
     return;
   }
@@ -200,10 +191,6 @@ router.post("/users/:id/reset-password", requireRole("super_admin", "owner"), as
   res.json({ ok: true });
 });
 
-/**
- * DELETE /users/:id
- * super_admin accounts cannot be deleted by anyone.
- */
 router.delete("/users/:id", requireRole("super_admin", "owner"), async (req, res): Promise<void> => {
   const id = parseId(req.params.id);
   if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
@@ -215,23 +202,25 @@ router.delete("/users/:id", requireRole("super_admin", "owner"), async (req, res
   }
 
   const [target] = await db
-    .select()
+    .select({ id: usersTable.id, role: usersTable.role, roles: usersTable.roles })
     .from(usersTable)
     .where(eq(usersTable.id, id));
   if (!target) { res.status(404).json({ error: "找不到使用者" }); return; }
 
-  if (target.role === "super_admin") {
+  const targetRoles = target.roles?.length ? target.roles : [target.role];
+
+  if (targetRoles.includes("super_admin")) {
     res.status(403).json({ error: "系統管理員帳號不可被刪除" });
     return;
   }
 
-  if (target.role === "owner") {
+  if (targetRoles.includes("owner")) {
     const [otherOwner] = await db
       .select({ id: usersTable.id })
       .from(usersTable)
       .where(
         and(
-          eq(usersTable.role, "owner"),
+          sql`('owner' = ANY(${usersTable.roles}) OR ${usersTable.role} = 'owner')`,
           eq(usersTable.isActive, true),
           ne(usersTable.id, id),
         )

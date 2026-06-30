@@ -3,7 +3,7 @@ import { Switch, Route, Router as WouterRouter, Redirect, useLocation } from "wo
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { AuthProvider, useAuth, type UserRole } from "@/contexts/auth-context";
+import { AuthProvider, useAuth, hasRole, effectiveRoles, type UserRole, type AuthUser } from "@/contexts/auth-context";
 import { Layout } from "@/components/layout";
 import LoginPage from "@/pages/login";
 import ChangePasswordPage from "@/pages/change-password";
@@ -64,28 +64,21 @@ function RoleGuard({
 }) {
   const { user } = useAuth();
   if (!user) return <Redirect to="/login" />;
-  if (!roles.includes(user.role)) return <Redirect to={defaultPathForRole(user.role)} />;
+  if (!hasRole(user, ...roles)) return <Redirect to={defaultPathForRole(user)} />;
   return <>{children}</>;
 }
 
-/** Default landing path per role */
-function defaultPathForRole(role: UserRole): string {
-  switch (role) {
-    case "super_admin":
-      return "/users";
-    case "engineer":
-      return "/engineer-dashboard";
-    case "technician":
-      return "/work-orders";
-    case "sales":
-      return "/customers";
-    case "accountant":
-      return "/receivables";
-    case "distributor":
-      return "/quotes";
-    default:
-      return "/";
-  }
+/** Default landing path based on user's roles — checks in priority order */
+function defaultPathForRole(user: AuthUser): string {
+  const roles = effectiveRoles(user);
+  if (roles.includes("super_admin")) return "/users";
+  if (roles.includes("owner") || roles.includes("admin")) return "/";
+  if (roles.includes("accountant")) return "/receivables";
+  if (roles.includes("sales")) return "/customers";
+  if (roles.includes("engineer")) return "/engineer-dashboard";
+  if (roles.includes("technician")) return "/work-orders";
+  if (roles.includes("distributor")) return "/quotes";
+  return "/";
 }
 
 function AppRoutes() {
@@ -109,7 +102,7 @@ function AppRoutes() {
   }
 
   if (isAuthenticated && location === "/login") {
-    return <Redirect to={defaultPathForRole(user!.role)} />;
+    return <Redirect to={defaultPathForRole(user!)} />;
   }
 
   return (

@@ -22,8 +22,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { Badge } from "@/components/ui/badge";
-import { useAuth, type UserRole } from "@/contexts/auth-context";
+import { useAuth, effectiveRoles, type UserRole } from "@/contexts/auth-context";
 import { ROLE_LABELS } from "@/lib/role-labels";
 
 interface NavItem {
@@ -128,17 +127,12 @@ function NavContent() {
   const isWholesalePath = location.startsWith("/wholesale");
   const [wholesaleOpen, setWholesaleOpen] = useState(isWholesalePath);
 
-  const showWholesale = user && WHOLESALE_ROLES.includes(user.role);
-  const visibleItems = NAV_ITEMS.filter((item) => user && item.roles.includes(user.role));
-
-  // Split items into before/after wholesale group
-  const beforeWholesale = visibleItems.filter(
-    (item) => !["/inventory", "/warranties", "/employees", "/users"].includes(item.href)
-      && item.href !== "/wholesale"
-  ).filter((item) =>
-    !["/warranties", "/employees", "/users", "/inventory"].includes(item.href)
+  const userRoles = effectiveRoles(user);
+  const showWholesale = WHOLESALE_ROLES.some((r) => userRoles.includes(r));
+  const visibleItems = NAV_ITEMS.filter((item) =>
+    item.roles.some((r) => userRoles.includes(r))
   );
-  // Actually render all items normally but inject the wholesale group between products and inventory
+
   const topItems = visibleItems.filter(
     (item) => !(["/inventory", "/warranties", "/employees", "/users"].includes(item.href))
   );
@@ -237,9 +231,13 @@ function NavContent() {
             </div>
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium truncate">{user.displayName}</p>
-              <span className={`inline-block text-xs mt-0.5 px-1.5 py-0.5 rounded border font-medium ${ROLE_COLORS[user.role]}`}>
-                {ROLE_LABELS[user.role]}
-              </span>
+              <div className="flex flex-wrap gap-1 mt-0.5">
+                {userRoles.map((r) => (
+                  <span key={r} className={`inline-block text-xs px-1.5 py-0.5 rounded border font-medium ${ROLE_COLORS[r as UserRole]}`}>
+                    {ROLE_LABELS[r as UserRole] ?? r}
+                  </span>
+                ))}
+              </div>
             </div>
           </div>
           <Button
@@ -260,6 +258,7 @@ function NavContent() {
 export function Layout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const { user } = useAuth();
+  const userRoles = effectiveRoles(user);
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -287,10 +286,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </div>
           </Link>
           {user && (
-            <div className="ml-auto flex items-center gap-2">
-              <span className={`text-xs px-1.5 py-0.5 rounded border font-medium ${ROLE_COLORS[user.role]}`}>
-                {ROLE_LABELS[user.role]}
-              </span>
+            <div className="ml-auto flex items-center gap-1 flex-wrap justify-end">
+              {userRoles.slice(0, 2).map((r) => (
+                <span key={r} className={`text-xs px-1.5 py-0.5 rounded border font-medium ${ROLE_COLORS[r as UserRole]}`}>
+                  {ROLE_LABELS[r as UserRole] ?? r}
+                </span>
+              ))}
+              {userRoles.length > 2 && (
+                <span className="text-xs text-muted-foreground">+{userRoles.length - 2}</span>
+              )}
             </div>
           )}
         </header>

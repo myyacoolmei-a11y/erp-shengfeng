@@ -16,7 +16,21 @@ export interface AuthUser {
   username: string;
   displayName: string;
   role: UserRole;
+  roles: UserRole[];
   mustChangePassword: boolean;
+}
+
+/** Returns effective roles — falls back to [role] when roles array is empty (old tokens) */
+export function effectiveRoles(user: AuthUser | null): UserRole[] {
+  if (!user) return [];
+  return user.roles?.length ? user.roles : [user.role];
+}
+
+/** True when user has at least one of the given roles */
+export function hasRole(user: AuthUser | null, ...roles: UserRole[]): boolean {
+  if (!user) return false;
+  const eff = effectiveRoles(user);
+  return roles.some((r) => eff.includes(r));
 }
 
 interface AuthContextType {
@@ -127,4 +141,3 @@ export function useAuth() {
   if (!ctx) throw new Error("useAuth must be used within AuthProvider");
   return ctx;
 }
-

@@ -1,3 +1,3 @@
 - [JWT auth setup](jwt-auth.md) — api-server needs zod as direct dep (not just via @workspace/api-zod) for esbuild to resolve zod/v4 in route files
 - [AR receivables pattern](ar-receivables.md) — duplicate work-order protection done via API 409 (not DB unique constraint); paymentStatus recomputed on each POST /receivables/:id/payment; pendingARRef pattern for work-order completion modal.
-- [RBAC 7-role matrix](rbac-roles.md) — owner/admin/sales/engineer/technician/accountant/distributor; each route file uses READ/WRITE/DELETE_ROLES constants; defaultPathForRole in App.tsx routes non-dashboard roles to their first accessible page.
+- [RBAC multi-role system](rbac-roles.md) — users now carry a roles[] array (union permissions); hasRole()/effectiveRoles() in auth-context; requireRole() checks union; DB has both role (primary) and roles text[] columns; migrateUserRoles() auto-populates on startup.

@@ -1,6 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
-import { seedDefaultUser } from "./routes/auth";
+import { seedDefaultUser, ensureSuperAdmin, migrateUserRoles } from "./routes/auth";
 
 const rawPort = process.env["PORT"];
 
@@ -25,4 +25,6 @@ app.listen(port, async (err) => {
   logger.info({ port }, "Server listening");
 
   await seedDefaultUser();
+  await ensureSuperAdmin();
+  await migrateUserRoles();
 });
