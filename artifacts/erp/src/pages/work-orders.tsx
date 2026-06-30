@@ -602,7 +602,8 @@ export default function WorkOrders() {
 
     setForm({
       quoteId: o.quoteId ?? undefined,
-      customerId: o.customerId,
+      customerId: o.customerId ?? 0,
+      customerName: o.customerName ?? "",
       title: o.title ?? "",
       status: o.status,
       contactPerson: o.contactPerson ?? "",
@@ -786,7 +787,7 @@ export default function WorkOrders() {
 
                   {/* Progress panel */}
                   {expandedId === o.id && (
-                    <ProgressPanel workOrderId={o.id} customerId={o.customerId} workOrderTitle={o.workOrderNumber || o.title} />
+                    <ProgressPanel workOrderId={o.id} customerId={o.customerId ?? 0} workOrderTitle={o.workOrderNumber || o.title} />
                   )}
                 </div>
               );

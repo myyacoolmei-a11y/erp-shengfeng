@@ -1818,10 +1818,10 @@ components:
 
     WorkOrder:
       type: object
-      required: [id, customerId, title, status, createdAt, updatedAt]
+      required: [id, title, status, createdAt, updatedAt]
       properties:
         id: { type: integer }
-        customerId: { type: integer }
+        customerId: { type: ["integer", "null"] }
         customerName: { type: ["string", "null"] }
         quoteId: { type: ["integer", "null"] }
         workOrderNumber: { type: ["string", "null"] }
@@ -1852,9 +1852,10 @@ components:
 
     WorkOrderInput:
       type: object
-      required: [customerId, title, status]
+      required: [title, status]
       properties:
-        customerId: { type: integer }
+        customerId: { type: ["integer", "null"] }
+        customerName: { type: string }
         quoteId: { type: integer }
         title: { type: string, minLength: 1 }
         status: { type: string }
@@ -1882,6 +1883,8 @@ components:
     WorkOrderUpdate:
       type: object
       properties:
+        customerId: { type: ["integer", "null"] }
+        customerName: { type: string }
         title: { type: string }
         status: { type: string }
         contactPerson: { type: string }

@@ -212,7 +212,8 @@ export interface EmployeeUpdate {
 
 export interface WorkOrder {
   id: number;
-  customerId: number;
+  /** @nullable */
+  customerId?: number | null;
   /** @nullable */
   customerName?: string | null;
   /** @nullable */
@@ -266,7 +267,9 @@ export interface WorkOrder {
 }
 
 export interface WorkOrderInput {
-  customerId: number;
+  /** @nullable */
+  customerId?: number | null;
+  customerName?: string;
   quoteId?: number;
   /** @minLength 1 */
   title: string;
@@ -294,6 +297,9 @@ export interface WorkOrderInput {
 }
 
 export interface WorkOrderUpdate {
+  /** @nullable */
+  customerId?: number | null;
+  customerName?: string;
   title?: string;
   status?: string;
   contactPerson?: string;

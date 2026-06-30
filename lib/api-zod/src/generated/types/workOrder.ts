@@ -8,7 +8,8 @@
 
 export interface WorkOrder {
   id: number;
-  customerId: number;
+  /** @nullable */
+  customerId?: number | null;
   /** @nullable */
   customerName?: string | null;
   /** @nullable */

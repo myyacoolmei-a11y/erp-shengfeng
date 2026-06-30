@@ -711,7 +711,7 @@ export const ListWorkOrdersQueryParams = zod.object({
 
 export const ListWorkOrdersResponseItem = zod.object({
   "id": zod.number(),
-  "customerId": zod.number(),
+  "customerId": zod.number().nullish(),
   "customerName": zod.string().nullish(),
   "quoteId": zod.number().nullish(),
   "workOrderNumber": zod.string().nullish(),
@@ -750,7 +750,8 @@ export const ListWorkOrdersResponse = zod.array(ListWorkOrdersResponseItem)
 
 
 export const CreateWorkOrderBody = zod.object({
-  "customerId": zod.number(),
+  "customerId": zod.number().nullish(),
+  "customerName": zod.string().optional(),
   "quoteId": zod.number().optional(),
   "title": zod.string().min(1),
   "status": zod.string(),
@@ -778,7 +779,7 @@ export const CreateWorkOrderBody = zod.object({
 
 export const CreateWorkOrderResponse = zod.object({
   "id": zod.number(),
-  "customerId": zod.number(),
+  "customerId": zod.number().nullish(),
   "customerName": zod.string().nullish(),
   "quoteId": zod.number().nullish(),
   "workOrderNumber": zod.string().nullish(),
@@ -818,7 +819,7 @@ export const GetWorkOrderParams = zod.object({
 
 export const GetWorkOrderResponse = zod.object({
   "id": zod.number(),
-  "customerId": zod.number(),
+  "customerId": zod.number().nullish(),
   "customerName": zod.string().nullish(),
   "quoteId": zod.number().nullish(),
   "workOrderNumber": zod.string().nullish(),
@@ -857,6 +858,8 @@ export const UpdateWorkOrderParams = zod.object({
 })
 
 export const UpdateWorkOrderBody = zod.object({
+  "customerId": zod.number().nullish(),
+  "customerName": zod.string().optional(),
   "title": zod.string().optional(),
   "status": zod.string().optional(),
   "contactPerson": zod.string().optional(),
@@ -883,7 +886,7 @@ export const UpdateWorkOrderBody = zod.object({
 
 export const UpdateWorkOrderResponse = zod.object({
   "id": zod.number(),
-  "customerId": zod.number(),
+  "customerId": zod.number().nullish(),
   "customerName": zod.string().nullish(),
   "quoteId": zod.number().nullish(),
   "workOrderNumber": zod.string().nullish(),

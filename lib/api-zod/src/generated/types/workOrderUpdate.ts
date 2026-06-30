@@ -7,6 +7,9 @@
  */
 
 export interface WorkOrderUpdate {
+  /** @nullable */
+  customerId?: number | null;
+  customerName?: string;
   title?: string;
   status?: string;
   contactPerson?: string;

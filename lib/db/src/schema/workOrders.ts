@@ -6,7 +6,8 @@ import { quotesTable } from "./quotes";
 
 export const workOrdersTable = pgTable("work_orders", {
   id: serial("id").primaryKey(),
-  customerId: integer("customer_id").notNull().references(() => customersTable.id, { onDelete: "cascade" }),
+  customerId: integer("customer_id").references(() => customersTable.id, { onDelete: "set null" }),
+  customerName: text("customer_name"),
   quoteId: integer("quote_id").references(() => quotesTable.id, { onDelete: "set null" }),
   workOrderNumber: text("work_order_number"),
   title: text("title").notNull(),

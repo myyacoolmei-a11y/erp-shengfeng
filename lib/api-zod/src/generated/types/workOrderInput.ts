@@ -7,7 +7,9 @@
  */
 
 export interface WorkOrderInput {
-  customerId: number;
+  /** @nullable */
+  customerId?: number | null;
+  customerName?: string;
   quoteId?: number;
   /** @minLength 1 */
   title: string;

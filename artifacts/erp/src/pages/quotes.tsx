@@ -568,8 +568,8 @@ export default function Quotes() {
   function handleConvert(e: React.FormEvent) {
     e.preventDefault();
     if (!convertItem) return;
-    if (!woForm.customerId || woForm.customerId <= 0) {
-      toast({ title: "請先選擇客戶", description: "建立派工單需要指定客戶", variant: "destructive" });
+    if (!(woForm.customerId > 0) && !woForm.customerName.trim()) {
+      toast({ title: "請填寫客戶資訊", description: "請選擇現有客戶或輸入臨時客戶名稱", variant: "destructive" });
       return;
     }
     const payload = buildPayload(woForm);
@@ -650,6 +650,7 @@ export default function Quotes() {
                           ...makeEmpty(),
                           quoteId: q.id,
                           customerId: q.customerId ?? 0,
+                          customerName: q.customerId ? "" : (q.customerName ?? ""),
                           title: q.title ?? "",
                           contactPerson: q.contactPerson ?? "",
                           mobilePhone: q.customerPhone ?? "",
