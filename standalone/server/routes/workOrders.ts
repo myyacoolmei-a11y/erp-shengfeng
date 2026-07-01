@@ -133,7 +133,6 @@ router.get("/work-orders/:id", requireRole(...WO_READ_ROLES), async (req, res): 
 
   res.json(formatOrder(order));
 });
-
 router.patch("/work-orders/:id", requireRole(...WO_WRITE_ROLES), async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
@@ -146,7 +145,7 @@ router.patch("/work-orders/:id", requireRole(...WO_WRITE_ROLES), async (req, res
   if (!order) { res.status(404).json({ error: "找不到派工單" }); return; }
 
   res.json(formatOrder(order));
-
+});
 router.delete("/work-orders/:id", requireRole(...WO_DELETE_ROLES), async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
