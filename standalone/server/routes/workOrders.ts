@@ -113,6 +113,7 @@ router.post("/work-orders", requireRole(...WO_WRITE_ROLES), async (req, res): Pr
 
   res.status(201).json(formatOrder(updated));
 });
+
 router.get("/work-orders/:id", requireRole(...WO_READ_ROLES), async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
@@ -133,6 +134,7 @@ router.get("/work-orders/:id", requireRole(...WO_READ_ROLES), async (req, res): 
 
   res.json(formatOrder(order));
 });
+
 router.patch("/work-orders/:id", requireRole(...WO_WRITE_ROLES), async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
