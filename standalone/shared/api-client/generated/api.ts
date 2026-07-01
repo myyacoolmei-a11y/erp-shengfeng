@@ -28,6 +28,10 @@ import type {
   ChangePasswordInput,
   CreateUserInput,
   Customer,
+  CustomerAddress,
+  CustomerAddressInput,
+  CustomerAddressUpdate,
+  CustomerDuplicateCheckInput,
   CustomerInput,
   CustomerUpdate,
   DashboardSummary,
@@ -1064,6 +1068,369 @@ export const useDeleteCustomer = <TError = ErrorType<void>,
         TContext
       > => {
       return useMutation(getDeleteCustomerMutationOptions(options));
+    }
+
+export const getCheckCustomerDuplicateUrl = () => {
+
+
+
+
+  return `/api/customers/check-duplicate`
+}
+
+/**
+ * @summary 檢查是否有重複客戶（依手機/市話/統編）
+ */
+export const checkCustomerDuplicate = async (customerDuplicateCheckInput: CustomerDuplicateCheckInput, options?: RequestInit): Promise<Customer[]> => {
+
+  return customFetch<Customer[]>(getCheckCustomerDuplicateUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(customerDuplicateCheckInput)
+  }
+);}
+
+
+
+
+export const getCheckCustomerDuplicateMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof checkCustomerDuplicate>>, TError,{data: BodyType<CustomerDuplicateCheckInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof checkCustomerDuplicate>>, TError,{data: BodyType<CustomerDuplicateCheckInput>}, TContext> => {
+
+const mutationKey = ['checkCustomerDuplicate'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof checkCustomerDuplicate>>, {data: BodyType<CustomerDuplicateCheckInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  checkCustomerDuplicate(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CheckCustomerDuplicateMutationResult = NonNullable<Awaited<ReturnType<typeof checkCustomerDuplicate>>>
+    export type CheckCustomerDuplicateMutationBody = BodyType<CustomerDuplicateCheckInput>
+    export type CheckCustomerDuplicateMutationError = ErrorType<unknown>
+
+    /**
+ * @summary 檢查是否有重複客戶（依手機/市話/統編）
+ */
+export const useCheckCustomerDuplicate = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof checkCustomerDuplicate>>, TError,{data: BodyType<CustomerDuplicateCheckInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof checkCustomerDuplicate>>,
+        TError,
+        {data: BodyType<CustomerDuplicateCheckInput>},
+        TContext
+      > => {
+      return useMutation(getCheckCustomerDuplicateMutationOptions(options));
+    }
+
+export const getListCustomerAddressesUrl = (customerId: number,) => {
+
+
+
+
+  return `/api/customers/${customerId}/addresses`
+}
+
+/**
+ * @summary 取得客戶地址列表
+ */
+export const listCustomerAddresses = async (customerId: number, options?: RequestInit): Promise<CustomerAddress[]> => {
+
+  return customFetch<CustomerAddress[]>(getListCustomerAddressesUrl(customerId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListCustomerAddressesQueryKey = (customerId: number,) => {
+    return [
+    `/api/customers/${customerId}/addresses`
+    ] as const;
+    }
+
+
+export const getListCustomerAddressesQueryOptions = <TData = Awaited<ReturnType<typeof listCustomerAddresses>>, TError = ErrorType<unknown>>(customerId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCustomerAddresses>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListCustomerAddressesQueryKey(customerId);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listCustomerAddresses>>> = ({ signal }) => listCustomerAddresses(customerId, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: customerId !== null && customerId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listCustomerAddresses>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListCustomerAddressesQueryResult = NonNullable<Awaited<ReturnType<typeof listCustomerAddresses>>>
+export type ListCustomerAddressesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary 取得客戶地址列表
+ */
+
+export function useListCustomerAddresses<TData = Awaited<ReturnType<typeof listCustomerAddresses>>, TError = ErrorType<unknown>>(
+ customerId: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listCustomerAddresses>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListCustomerAddressesQueryOptions(customerId,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getCreateCustomerAddressUrl = (customerId: number,) => {
+
+
+
+
+  return `/api/customers/${customerId}/addresses`
+}
+
+/**
+ * @summary 新增客戶地址
+ */
+export const createCustomerAddress = async (customerId: number,
+    customerAddressInput: CustomerAddressInput, options?: RequestInit): Promise<CustomerAddress> => {
+
+  return customFetch<CustomerAddress>(getCreateCustomerAddressUrl(customerId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(customerAddressInput)
+  }
+);}
+
+
+
+
+export const getCreateCustomerAddressMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createCustomerAddress>>, TError,{customerId: number;data: BodyType<CustomerAddressInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createCustomerAddress>>, TError,{customerId: number;data: BodyType<CustomerAddressInput>}, TContext> => {
+
+const mutationKey = ['createCustomerAddress'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createCustomerAddress>>, {customerId: number;data: BodyType<CustomerAddressInput>}> = (props) => {
+          const {customerId,data} = props ?? {};
+
+          return  createCustomerAddress(customerId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateCustomerAddressMutationResult = NonNullable<Awaited<ReturnType<typeof createCustomerAddress>>>
+    export type CreateCustomerAddressMutationBody = BodyType<CustomerAddressInput>
+    export type CreateCustomerAddressMutationError = ErrorType<unknown>
+
+    /**
+ * @summary 新增客戶地址
+ */
+export const useCreateCustomerAddress = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createCustomerAddress>>, TError,{customerId: number;data: BodyType<CustomerAddressInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createCustomerAddress>>,
+        TError,
+        {customerId: number;data: BodyType<CustomerAddressInput>},
+        TContext
+      > => {
+      return useMutation(getCreateCustomerAddressMutationOptions(options));
+    }
+
+export const getUpdateCustomerAddressUrl = (customerId: number,
+    addressId: number,) => {
+
+
+
+
+  return `/api/customers/${customerId}/addresses/${addressId}`
+}
+
+/**
+ * @summary 更新客戶地址
+ */
+export const updateCustomerAddress = async (customerId: number,
+    addressId: number,
+    customerAddressUpdate: CustomerAddressUpdate, options?: RequestInit): Promise<CustomerAddress> => {
+
+  return customFetch<CustomerAddress>(getUpdateCustomerAddressUrl(customerId,addressId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(customerAddressUpdate)
+  }
+);}
+
+
+
+
+export const getUpdateCustomerAddressMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCustomerAddress>>, TError,{customerId: number;addressId: number;data: BodyType<CustomerAddressUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateCustomerAddress>>, TError,{customerId: number;addressId: number;data: BodyType<CustomerAddressUpdate>}, TContext> => {
+
+const mutationKey = ['updateCustomerAddress'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateCustomerAddress>>, {customerId: number;addressId: number;data: BodyType<CustomerAddressUpdate>}> = (props) => {
+          const {customerId,addressId,data} = props ?? {};
+
+          return  updateCustomerAddress(customerId,addressId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateCustomerAddressMutationResult = NonNullable<Awaited<ReturnType<typeof updateCustomerAddress>>>
+    export type UpdateCustomerAddressMutationBody = BodyType<CustomerAddressUpdate>
+    export type UpdateCustomerAddressMutationError = ErrorType<unknown>
+
+    /**
+ * @summary 更新客戶地址
+ */
+export const useUpdateCustomerAddress = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateCustomerAddress>>, TError,{customerId: number;addressId: number;data: BodyType<CustomerAddressUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateCustomerAddress>>,
+        TError,
+        {customerId: number;addressId: number;data: BodyType<CustomerAddressUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateCustomerAddressMutationOptions(options));
+    }
+
+export const getDeleteCustomerAddressUrl = (customerId: number,
+    addressId: number,) => {
+
+
+
+
+  return `/api/customers/${customerId}/addresses/${addressId}`
+}
+
+/**
+ * @summary 刪除客戶地址
+ */
+export const deleteCustomerAddress = async (customerId: number,
+    addressId: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteCustomerAddressUrl(customerId,addressId),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteCustomerAddressMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteCustomerAddress>>, TError,{customerId: number;addressId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteCustomerAddress>>, TError,{customerId: number;addressId: number}, TContext> => {
+
+const mutationKey = ['deleteCustomerAddress'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteCustomerAddress>>, {customerId: number;addressId: number}> = (props) => {
+          const {customerId,addressId} = props ?? {};
+
+          return  deleteCustomerAddress(customerId,addressId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteCustomerAddressMutationResult = NonNullable<Awaited<ReturnType<typeof deleteCustomerAddress>>>
+
+    export type DeleteCustomerAddressMutationError = ErrorType<unknown>
+
+    /**
+ * @summary 刪除客戶地址
+ */
+export const useDeleteCustomerAddress = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteCustomerAddress>>, TError,{customerId: number;addressId: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteCustomerAddress>>,
+        TError,
+        {customerId: number;addressId: number},
+        TContext
+      > => {
+      return useMutation(getDeleteCustomerAddressMutationOptions(options));
     }
 
 export const getListAcUnitsUrl = (customerId: number,) => {

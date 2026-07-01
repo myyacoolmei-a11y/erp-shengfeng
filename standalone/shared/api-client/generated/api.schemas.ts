@@ -12,10 +12,22 @@ export interface HealthStatus {
 export interface Customer {
   id: number;
   name: string;
-  phone: string;
-  address: string;
+  /** @nullable */
+  contactPerson?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  /** @nullable */
+  mobile?: string | null;
+  /** @nullable */
+  address?: string | null;
   /** @nullable */
   email?: string | null;
+  /** @nullable */
+  taxId?: string | null;
+  /** @nullable */
+  source?: string | null;
+  /** @nullable */
+  status?: string | null;
   /** @nullable */
   discountScheme?: string | null;
   /** @nullable */
@@ -27,11 +39,14 @@ export interface Customer {
 export interface CustomerInput {
   /** @minLength 1 */
   name: string;
-  /** @minLength 1 */
-  phone: string;
-  /** @minLength 1 */
-  address: string;
+  contactPerson?: string;
+  phone?: string;
+  mobile?: string;
+  address?: string;
   email?: string;
+  taxId?: string;
+  source?: string;
+  status?: string;
   discountScheme?: string;
   notes?: string;
 }
@@ -39,11 +54,45 @@ export interface CustomerInput {
 export interface CustomerUpdate {
   /** @minLength 1 */
   name?: string;
+  contactPerson?: string;
   phone?: string;
+  mobile?: string;
   address?: string;
   email?: string;
+  taxId?: string;
+  source?: string;
+  status?: string;
   discountScheme?: string;
   notes?: string;
+}
+
+export interface CustomerAddress {
+  id: number;
+  customerId: number;
+  label: string;
+  address: string;
+  isDefault: boolean;
+  createdAt: string;
+}
+
+export interface CustomerAddressInput {
+  /** @minLength 1 */
+  label: string;
+  /** @minLength 1 */
+  address: string;
+  isDefault?: boolean;
+}
+
+export interface CustomerAddressUpdate {
+  label?: string;
+  address?: string;
+  isDefault?: boolean;
+}
+
+export interface CustomerDuplicateCheckInput {
+  phone?: string;
+  mobile?: string;
+  taxId?: string;
 }
 
 export interface AcUnit {
@@ -212,7 +261,8 @@ export interface EmployeeUpdate {
 
 export interface WorkOrder {
   id: number;
-  customerId: number;
+  /** @nullable */
+  customerId?: number | null;
   /** @nullable */
   customerName?: string | null;
   /** @nullable */
@@ -266,7 +316,9 @@ export interface WorkOrder {
 }
 
 export interface WorkOrderInput {
-  customerId: number;
+  /** @nullable */
+  customerId?: number | null;
+  customerName?: string;
   quoteId?: number;
   /** @minLength 1 */
   title: string;
@@ -294,6 +346,9 @@ export interface WorkOrderInput {
 }
 
 export interface WorkOrderUpdate {
+  /** @nullable */
+  customerId?: number | null;
+  customerName?: string;
   title?: string;
   status?: string;
   contactPerson?: string;
