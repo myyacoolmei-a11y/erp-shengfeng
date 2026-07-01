@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { db, workOrdersTable, progressTable, customersTable } from "@workspace/db";
 import { CreateWorkOrderBody, UpdateWorkOrderBody, CreateProgressBody } from "@workspace/api-zod";
 import { requireRole } from "../lib/auth";
@@ -19,7 +19,7 @@ function isoStr(v: unknown): string | null {
 const WO_SELECT = {
   id: workOrdersTable.id,
   customerId: workOrdersTable.customerId,
-  customerName: customersTable.name,
+  customerName: sql<string>`COALESCE(${customersTable.name}, ${workOrdersTable.customerName})`,
   quoteId: workOrdersTable.quoteId,
   workOrderNumber: workOrdersTable.workOrderNumber,
   title: workOrdersTable.title,
@@ -111,8 +111,7 @@ router.post("/work-orders", requireRole(...WO_WRITE_ROLES), async (req, res): Pr
     .where(eq(workOrdersTable.id, order.id))
     .returning();
 
-  res.status(201).json(formatOrder({ ...updated, customerName: null }));
-});
+  res.status(201).json(formatOrder(updated));
 
 router.get("/work-orders/:id", requireRole(...WO_READ_ROLES), async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
@@ -146,8 +145,7 @@ router.patch("/work-orders/:id", requireRole(...WO_WRITE_ROLES), async (req, res
   const [order] = await db.update(workOrdersTable).set(sanitizeWOData(parsed.data)).where(eq(workOrdersTable.id, id)).returning();
   if (!order) { res.status(404).json({ error: "找不到派工單" }); return; }
 
-  res.json(formatOrder({ ...order, customerName: null }));
-});
+  res.json(formatOrder(order));
 
 router.delete("/work-orders/:id", requireRole(...WO_DELETE_ROLES), async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
