@@ -680,6 +680,7 @@ export default function Quotes() {
               <div className="space-y-1.5">
                 <Label>客戶</Label>
                 <CustomerSelector
+                  allowTemp={true}
                   value={
                     form.customerId > 0 ? {
                       type: "linked", customerId: form.customerId,
