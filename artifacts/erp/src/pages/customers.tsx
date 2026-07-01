@@ -144,8 +144,8 @@ export default function Customers() {
   function openEdit(c: Customer) {
     setEditForm({
       name: c.name,
-      phone: c.phone,
-      address: c.address,
+      phone: c.phone ?? "",
+      address: c.address ?? "",
       email: c.email ?? "",
       discountScheme: c.discountScheme ?? "",
       notes: c.notes ?? "",

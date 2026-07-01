@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useSearch, useLocation } from "wouter";
 import {
   useListPayments, useCreatePayment, useDeletePayment,
-  useListCustomers, useListQuotes, useListWorkOrders,
+  useListQuotes, useListWorkOrders,
   getListPaymentsQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -14,6 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { CustomerSelector, type CustomerSelectorValue } from "@/components/customer-selector";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Plus, Trash2, TrendingUp } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -41,9 +42,9 @@ export default function Payments() {
   const [showCreate, setShowCreate] = useState(false);
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<number>(filterCustomerId ?? 0);
+  const [formCustomer, setFormCustomer] = useState<CustomerSelectorValue | null>(null);
 
   const { data: payments, isLoading } = useListPayments(filterCustomerId ? { customerId: filterCustomerId } : {});
-  const { data: customers } = useListCustomers({});
   const { data: quotes } = useListQuotes(selectedCustomer ? { customerId: selectedCustomer } : {});
   const { data: workOrders } = useListWorkOrders(selectedCustomer ? { customerId: selectedCustomer } : {});
 
@@ -141,7 +142,7 @@ export default function Payments() {
         <Card><CardContent className="py-12 text-center"><p className="text-muted-foreground">尚無收款紀錄</p></CardContent></Card>
       )}
 
-      <Dialog open={showCreate} onOpenChange={open => { if (!open) { setShowCreate(false); setSelectedCustomer(0); } }}>
+      <Dialog open={showCreate} onOpenChange={open => { if (!open) { setShowCreate(false); setSelectedCustomer(0); setFormCustomer(null); } }}>
         <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>新增收款紀錄</DialogTitle></DialogHeader>
           <form onSubmit={e => {
@@ -153,14 +154,16 @@ export default function Payments() {
           }} className="space-y-3">
             <div className="space-y-1.5">
               <Label>客戶 *</Label>
-              <Select value={String(form.customerId || "")} onValueChange={v => {
-                const cid = parseInt(v);
-                setForm(f => ({ ...f, customerId: cid, quoteId: undefined, workOrderId: undefined }));
-                setSelectedCustomer(cid);
-              }}>
-                <SelectTrigger><SelectValue placeholder="選擇客戶" /></SelectTrigger>
-                <SelectContent>{customers?.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}</SelectContent>
-              </Select>
+              <CustomerSelector
+                value={formCustomer}
+                onChange={v => {
+                  setFormCustomer(v);
+                  const cid = v?.customerId ?? 0;
+                  setForm(f => ({ ...f, customerId: cid, quoteId: undefined, workOrderId: undefined }));
+                  setSelectedCustomer(cid);
+                }}
+                allowTemp={false}
+              />
             </div>
 
             {selectedCustomer > 0 && quotes && quotes.length > 0 && (

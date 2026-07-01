@@ -18,6 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { WorkOrderFormFields, makeEmpty, buildPayload, type WOForm } from "@/components/work-order-form";
+import { CustomerSelector, type CustomerSelectorValue } from "@/components/customer-selector";
 
 // ── Constants ──────────────────────────────────────────────────────────────
 const CATEGORIES = ["裝新機", "保養", "維修", "移機", "拆機", "冷媒工程", "配管工程", "其他"];
@@ -543,17 +544,6 @@ export default function Quotes() {
     },
   });
 
-  function handleCustomerChange(v: string) {
-    const cid = parseInt(v, 10);
-    const c = customers?.find(x => x.id === cid);
-    setForm(f => ({
-      ...f, customerId: cid,
-      customerName: c ? c.name : f.customerName,
-      address: c ? (c.address || f.address) : f.address,
-      customerPhone: c ? (c.phone || f.customerPhone) : f.customerPhone,
-    }));
-  }
-
   function handleCopy(q: any) {
     setForm({ ...quoteToForm(q), title: `${q.title}（複製）`, status: "草稿" });
     setShowCreate(true);
@@ -687,27 +677,38 @@ export default function Quotes() {
             {/* Section: 客戶資訊 */}
             <div className="space-y-3">
               <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground border-b pb-1">客戶資訊</h3>
+              <div className="space-y-1.5">
+                <Label>客戶</Label>
+                <CustomerSelector
+                  value={
+                    form.customerId > 0 ? {
+                      type: "linked", customerId: form.customerId,
+                      name: form.customerName || `客戶 #${form.customerId}`,
+                      contactPerson: form.contactPerson, phone: form.customerPhone,
+                      mobile: "", address: form.address, taxId: "",
+                    } : form.customerName ? {
+                      type: "temp", customerId: null, name: form.customerName,
+                      contactPerson: form.contactPerson, phone: form.customerPhone,
+                      mobile: "", address: form.address, taxId: "",
+                    } : null
+                  }
+                  onChange={v => setForm(f => ({
+                    ...f,
+                    customerId: v?.customerId ?? 0,
+                    customerName: v?.name ?? "",
+                    contactPerson: v?.contactPerson ?? "",
+                    customerPhone: v?.phone ?? "",
+                    address: v?.address ?? "",
+                  }))}
+                />
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label>選擇客戶</Label>
-                  <Select value={String(form.customerId)} onValueChange={handleCustomerChange}>
-                    <SelectTrigger><SelectValue placeholder="選擇既有客戶（可不選）" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="0">（不選擇）</SelectItem>
-                      {customers?.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label>客戶姓名</Label>
-                  <Input value={form.customerName} onChange={e => setForm(f => ({ ...f, customerName: e.target.value }))} placeholder="輸入或自動帶入" />
-                </div>
                 <div className="space-y-1.5">
                   <Label>聯絡電話</Label>
                   <Input value={form.customerPhone} onChange={e => setForm(f => ({ ...f, customerPhone: e.target.value }))} placeholder="自動帶入或手動填寫" />
                 </div>
                 <div className="space-y-1.5">
-                  <Label>聯絡人 <span className="text-muted-foreground text-xs">（選填）</span></Label>
+                  <Label>聯絡人</Label>
                   <Input value={form.contactPerson} onChange={e => setForm(f => ({ ...f, contactPerson: e.target.value }))} placeholder="聯絡人姓名" />
                 </div>
               </div>

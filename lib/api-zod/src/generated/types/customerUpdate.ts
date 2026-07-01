@@ -9,9 +9,14 @@
 export interface CustomerUpdate {
   /** @minLength 1 */
   name?: string;
+  contactPerson?: string;
   phone?: string;
+  mobile?: string;
   address?: string;
   email?: string;
+  taxId?: string;
+  source?: string;
+  status?: string;
   discountScheme?: string;
   notes?: string;
 }

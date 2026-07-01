@@ -270,8 +270,8 @@ export default function CustomerDetail() {
   function startEdit() {
     setEditForm({
       name: customer!.name,
-      phone: customer!.phone,
-      address: customer!.address,
+      phone: customer!.phone ?? "",
+      address: customer!.address ?? "",
       email: customer!.email ?? "",
       discountScheme: customer!.discountScheme ?? "",
       notes: customer!.notes ?? "",

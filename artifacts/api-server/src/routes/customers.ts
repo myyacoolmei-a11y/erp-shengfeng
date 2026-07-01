@@ -13,6 +13,29 @@ const READ_ROLES = ["super_admin", "owner", "admin", "sales", "accountant"];
 const WRITE_ROLES = ["super_admin", "owner", "admin", "sales"];
 const DELETE_ROLES = ["super_admin", "owner", "admin"];
 
+// NOTE: check-duplicate must come before /:id so Express doesn't capture "check-duplicate" as an id
+router.post("/customers/check-duplicate", requireRole(...READ_ROLES), async (req, res): Promise<void> => {
+  const { phone, mobile, taxId } = req.body as { phone?: string; mobile?: string; taxId?: string };
+  const conditions = [];
+
+  if (phone?.trim()) conditions.push(ilike(customersTable.phone, `%${phone.trim()}%`));
+  if (mobile?.trim()) conditions.push(ilike(customersTable.mobile, `%${mobile.trim()}%`));
+  if (taxId?.trim()) conditions.push(ilike(customersTable.taxId, `%${taxId.trim()}%`));
+
+  if (conditions.length === 0) {
+    res.json([]);
+    return;
+  }
+
+  const matches = await db
+    .select()
+    .from(customersTable)
+    .where(or(...conditions))
+    .orderBy(desc(customersTable.createdAt));
+
+  res.json(matches);
+});
+
 router.get("/customers", requireRole(...READ_ROLES), async (req, res): Promise<void> => {
   const { search, includeOld } = req.query as { search?: string; includeOld?: string };
   const conditions = [];
@@ -21,9 +44,12 @@ router.get("/customers", requireRole(...READ_ROLES), async (req, res): Promise<v
     conditions.push(
       or(
         ilike(customersTable.name, `%${search}%`),
+        ilike(customersTable.contactPerson, `%${search}%`),
         ilike(customersTable.phone, `%${search}%`),
+        ilike(customersTable.mobile, `%${search}%`),
         ilike(customersTable.address, `%${search}%`),
         ilike(customersTable.email, `%${search}%`),
+        ilike(customersTable.taxId, `%${search}%`),
       )
     );
   }

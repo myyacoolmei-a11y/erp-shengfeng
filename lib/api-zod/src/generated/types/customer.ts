@@ -9,10 +9,22 @@
 export interface Customer {
   id: number;
   name: string;
-  phone: string;
-  address: string;
+  /** @nullable */
+  contactPerson?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  /** @nullable */
+  mobile?: string | null;
+  /** @nullable */
+  address?: string | null;
   /** @nullable */
   email?: string | null;
+  /** @nullable */
+  taxId?: string | null;
+  /** @nullable */
+  source?: string | null;
+  /** @nullable */
+  status?: string | null;
   /** @nullable */
   discountScheme?: string | null;
   /** @nullable */

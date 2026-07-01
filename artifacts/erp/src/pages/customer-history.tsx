@@ -314,8 +314,8 @@ export default function CustomerHistory() {
     if (!customer) return;
     setEditForm({
       name: customer.name,
-      phone: customer.phone,
-      address: customer.address,
+      phone: customer.phone ?? "",
+      address: customer.address ?? "",
       email: customer.email ?? "",
       discountScheme: customer.discountScheme ?? "",
       notes: customer.notes ?? "",

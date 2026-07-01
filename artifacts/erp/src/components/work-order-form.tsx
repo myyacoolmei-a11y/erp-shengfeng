@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -6,14 +6,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { MapPin, ChevronsUpDown, Check, Plus } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { useCreateCustomer, getListCustomersQueryKey } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
-import { useToast } from "@/hooks/use-toast";
+import { MapPin } from "lucide-react";
+import { CustomerSelector, type CustomerSelectorValue } from "@/components/customer-selector";
 
 export const WO_STATUSES = ["待施工", "已完成"];
 export const WO_PROJECT_TYPES = ["新裝", "維修", "保養", "遷機", "清洗", "保固服務"];
@@ -88,229 +82,11 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
   );
 }
 
-interface NewCustForm {
-  name: string;
-  phone: string;
-  address: string;
-}
-
-interface CustomerPickerProps {
-  form: WOForm;
-  setForm: React.Dispatch<React.SetStateAction<WOForm>>;
-  customers: any[];
-}
-
-function CustomerPicker({ form, setForm, customers }: CustomerPickerProps) {
-  const { toast } = useToast();
-  const qc = useQueryClient();
-  const [mode, setMode] = useState<"existing" | "temp">(
-    () => (form.customerId <= 0 && form.customerName) ? "temp" : "existing"
-  );
-  const [popOpen, setPopOpen] = useState(false);
-  const [newCustOpen, setNewCustOpen] = useState(false);
-  const [newCust, setNewCust] = useState<NewCustForm>({ name: "", phone: "", address: "" });
-
-  const createCustMutation = useCreateCustomer({
-    mutation: {
-      onSuccess: (created) => {
-        qc.invalidateQueries({ queryKey: getListCustomersQueryKey() });
-        setForm(f => ({
-          ...f,
-          customerId: created.id,
-          customerName: "",
-          mobilePhone: f.mobilePhone || (created as any).phone || "",
-          installAddress: f.installAddress || (created as any).address || "",
-        }));
-        setNewCustOpen(false);
-        setNewCust({ name: "", phone: "", address: "" });
-        toast({ title: "客戶已建立並自動選取" });
-      },
-      onError: (err: any) => {
-        const msg = err?.response?.data?.error ?? err?.message ?? "建立失敗";
-        toast({ title: "建立客戶失敗", description: msg, variant: "destructive" });
-      },
-    },
-  });
-
-  const selectedCustomer = customers.find(c => c.id === form.customerId);
-
-  function handleSelect(c: any) {
-    setForm(f => ({
-      ...f,
-      customerId: c.id,
-      customerName: "",
-      mobilePhone: f.mobilePhone || c.phone || "",
-      installAddress: f.installAddress || c.address || "",
-    }));
-    setPopOpen(false);
-  }
-
-  function handleModeSwitch(m: "existing" | "temp") {
-    setMode(m);
-    if (m === "temp") {
-      setForm(f => ({ ...f, customerId: 0 }));
-    } else {
-      setForm(f => ({ ...f, customerName: "" }));
-    }
-  }
-
-  function handleCreateCust() {
-    if (!newCust.name.trim()) return;
-    createCustMutation.mutate({
-      data: {
-        name: newCust.name.trim(),
-        phone: newCust.phone || undefined,
-        address: newCust.address || undefined,
-      } as any,
-    });
-  }
-
-  return (
-    <div className="space-y-2">
-      <div className="flex items-center">
-        <button
-          type="button"
-          onClick={() => handleModeSwitch("existing")}
-          className={cn(
-            "text-xs px-3 py-1.5 border rounded-l transition-colors",
-            mode === "existing"
-              ? "bg-primary text-primary-foreground border-primary"
-              : "bg-background border-border hover:bg-muted"
-          )}
-        >
-          選擇現有客戶
-        </button>
-        <button
-          type="button"
-          onClick={() => handleModeSwitch("temp")}
-          className={cn(
-            "text-xs px-3 py-1.5 border border-l-0 rounded-r transition-colors",
-            mode === "temp"
-              ? "bg-primary text-primary-foreground border-primary"
-              : "bg-background border-border hover:bg-muted"
-          )}
-        >
-          臨時客戶
-        </button>
-      </div>
-
-      {mode === "existing" ? (
-        <div className="flex gap-2">
-          <Popover open={popOpen} onOpenChange={setPopOpen}>
-            <PopoverTrigger asChild>
-              <Button
-                type="button"
-                variant="outline"
-                role="combobox"
-                aria-expanded={popOpen}
-                className="flex-1 justify-between font-normal min-w-0"
-              >
-                <span className="truncate">
-                  {selectedCustomer ? selectedCustomer.name : "搜尋並選擇客戶…"}
-                </span>
-                <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-72 p-0" align="start">
-              <Command>
-                <CommandInput placeholder="搜尋名稱、電話、地址…" />
-                <CommandList>
-                  <CommandEmpty>找不到符合的客戶</CommandEmpty>
-                  <CommandGroup>
-                    {customers.map(c => (
-                      <CommandItem
-                        key={c.id}
-                        value={`${c.name} ${c.phone ?? ""} ${c.address ?? ""}`}
-                        onSelect={() => handleSelect(c)}
-                      >
-                        <Check className={cn("mr-2 h-4 w-4 shrink-0", form.customerId === c.id ? "opacity-100" : "opacity-0")} />
-                        <div className="min-w-0">
-                          <div className="font-medium truncate">{c.name}</div>
-                          {(c.phone || c.address) && (
-                            <div className="text-xs text-muted-foreground truncate">
-                              {[c.phone, c.address].filter(Boolean).join(" · ")}
-                            </div>
-                          )}
-                        </div>
-                      </CommandItem>
-                    ))}
-                  </CommandGroup>
-                </CommandList>
-              </Command>
-            </PopoverContent>
-          </Popover>
-
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="shrink-0"
-            onClick={() => setNewCustOpen(true)}
-          >
-            <Plus className="h-3.5 w-3.5 mr-1" />新增
-          </Button>
-        </div>
-      ) : (
-        <div className="space-y-1">
-          <Input
-            placeholder="輸入客戶姓名或公司名稱（無需建立正式資料）"
-            value={form.customerName}
-            onChange={e => setForm(f => ({ ...f, customerName: e.target.value, customerId: 0 }))}
-          />
-          <p className="text-xs text-muted-foreground">案件完成後可於客戶管理中補建正式資料</p>
-        </div>
-      )}
-
-      <Dialog open={newCustOpen} onOpenChange={setNewCustOpen}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>新增客戶</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <div className="space-y-1.5">
-              <Label>客戶名稱 *</Label>
-              <Input
-                autoFocus
-                placeholder="姓名或公司名稱"
-                value={newCust.name}
-                onChange={e => setNewCust(f => ({ ...f, name: e.target.value }))}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>電話 <span className="text-muted-foreground text-xs">（選填）</span></Label>
-              <Input
-                placeholder="0912-345-678"
-                value={newCust.phone}
-                onChange={e => setNewCust(f => ({ ...f, phone: e.target.value }))}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>地址 <span className="text-muted-foreground text-xs">（選填）</span></Label>
-              <Input
-                placeholder="施工地址"
-                value={newCust.address}
-                onChange={e => setNewCust(f => ({ ...f, address: e.target.value }))}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setNewCustOpen(false)}>取消</Button>
-            <Button
-              type="button"
-              disabled={!newCust.name.trim() || createCustMutation.isPending}
-              onClick={handleCreateCust}
-            >
-              {createCustMutation.isPending ? "建立中…" : "建立並選取"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
-}
 
 interface WorkOrderFormFieldsProps {
   form: WOForm;
   setForm: React.Dispatch<React.SetStateAction<WOForm>>;
-  customers: any[];
+  customers?: any[];
   technicianOptions: any[];
   quotes?: any[];
   showQuoteSelector?: boolean;
@@ -320,12 +96,57 @@ interface WorkOrderFormFieldsProps {
 export function WorkOrderFormFields({
   form,
   setForm,
-  customers,
+  customers = [],
   technicianOptions,
   quotes = [],
   showQuoteSelector = true,
   customerDisabled = false,
 }: WorkOrderFormFieldsProps) {
+
+  const selectorValue: CustomerSelectorValue | null = useMemo(() => {
+    if (form.customerId > 0) {
+      const c = customers.find((x: any) => x.id === form.customerId);
+      return {
+        type: "linked",
+        customerId: form.customerId,
+        name: c?.name ?? `客戶 #${form.customerId}`,
+        contactPerson: form.contactPerson || c?.contactPerson || "",
+        phone: form.telephone || c?.phone || "",
+        mobile: form.mobilePhone || c?.mobile || "",
+        address: form.installAddress || c?.address || "",
+        taxId: c?.taxId || "",
+      };
+    }
+    if (form.customerName) {
+      return {
+        type: "temp",
+        customerId: null,
+        name: form.customerName,
+        contactPerson: form.contactPerson,
+        phone: form.telephone,
+        mobile: form.mobilePhone,
+        address: form.installAddress,
+        taxId: "",
+      };
+    }
+    return null;
+  }, [form, customers]);
+
+  function handleSelectorChange(v: CustomerSelectorValue | null) {
+    if (!v) {
+      setForm(f => ({ ...f, customerId: 0, customerName: "" }));
+      return;
+    }
+    setForm(f => ({
+      ...f,
+      customerId: v.customerId ?? 0,
+      customerName: v.type === "temp" ? v.name : "",
+      contactPerson: f.contactPerson || v.contactPerson || "",
+      mobilePhone: f.mobilePhone || v.mobile || "",
+      telephone: f.telephone || v.phone || "",
+      installAddress: f.installAddress || v.address || "",
+    }));
+  }
 
   function handleQuoteChange(v: string) {
     if (!v || v === "__none__") {
@@ -335,7 +156,7 @@ export function WorkOrderFormFields({
     const qid = parseInt(v);
     const quote = quotes.find(q => q.id === qid);
     if (!quote) return;
-    const cust = customers.find(c => c.id === (quote.customerId ?? 0));
+    const cust = customers.find((c: any) => c.id === (quote.customerId ?? 0));
     setForm(f => ({
       ...f,
       quoteId: qid,
@@ -355,10 +176,6 @@ export function WorkOrderFormFields({
         : [...f.technicians, name],
     }));
   }
-
-  const lockedCustomer = customerDisabled
-    ? customers.find(c => c.id === form.customerId)
-    : null;
 
   return (
     <div className="space-y-4">
@@ -397,19 +214,15 @@ export function WorkOrderFormFields({
         <Label>
           客戶{!customerDisabled && <span className="text-destructive ml-0.5">*</span>}
         </Label>
-        {customerDisabled ? (
-          <div className="flex items-center gap-2 rounded-md border bg-muted/30 px-3 py-2 text-sm">
-            <span className="font-medium">
-              {lockedCustomer?.name ?? `客戶 #${form.customerId}`}
-            </span>
-            {lockedCustomer?.phone && (
-              <span className="text-muted-foreground text-xs">{lockedCustomer.phone}</span>
-            )}
-            <span className="ml-auto text-xs text-muted-foreground">來自報價單</span>
-          </div>
-        ) : (
-          <CustomerPicker form={form} setForm={setForm} customers={customers} />
-        )}
+        <CustomerSelector
+          value={selectorValue}
+          onChange={handleSelectorChange}
+          disabled={customerDisabled}
+          allowTemp={true}
+          showAddressPicker={true}
+          onAddressSelect={(_, address) => setForm(f => ({ ...f, installAddress: address }))}
+          selectedAddressId={null}
+        />
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

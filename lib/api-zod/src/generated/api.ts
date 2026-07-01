@@ -166,9 +166,14 @@ export const ListCustomersQueryParams = zod.object({
 export const ListCustomersResponseItem = zod.object({
   "id": zod.number(),
   "name": zod.string(),
-  "phone": zod.string(),
-  "address": zod.string(),
+  "contactPerson": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "mobile": zod.string().nullish(),
+  "address": zod.string().nullish(),
   "email": zod.string().nullish(),
+  "taxId": zod.string().nullish(),
+  "source": zod.string().nullish(),
+  "status": zod.string().nullish(),
   "discountScheme": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "createdAt": zod.string(),
@@ -183,13 +188,16 @@ export const ListCustomersResponse = zod.array(ListCustomersResponseItem)
 
 
 
-
-
 export const CreateCustomerBody = zod.object({
   "name": zod.string().min(1),
-  "phone": zod.string().min(1),
-  "address": zod.string().min(1),
+  "contactPerson": zod.string().optional(),
+  "phone": zod.string().optional(),
+  "mobile": zod.string().optional(),
+  "address": zod.string().optional(),
   "email": zod.string().optional(),
+  "taxId": zod.string().optional(),
+  "source": zod.string().optional(),
+  "status": zod.string().optional(),
   "discountScheme": zod.string().optional(),
   "notes": zod.string().optional()
 })
@@ -197,9 +205,14 @@ export const CreateCustomerBody = zod.object({
 export const CreateCustomerResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
-  "phone": zod.string(),
-  "address": zod.string(),
+  "contactPerson": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "mobile": zod.string().nullish(),
+  "address": zod.string().nullish(),
   "email": zod.string().nullish(),
+  "taxId": zod.string().nullish(),
+  "source": zod.string().nullish(),
+  "status": zod.string().nullish(),
   "discountScheme": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "createdAt": zod.string(),
@@ -217,9 +230,14 @@ export const GetCustomerParams = zod.object({
 export const GetCustomerResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
-  "phone": zod.string(),
-  "address": zod.string(),
+  "contactPerson": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "mobile": zod.string().nullish(),
+  "address": zod.string().nullish(),
   "email": zod.string().nullish(),
+  "taxId": zod.string().nullish(),
+  "source": zod.string().nullish(),
+  "status": zod.string().nullish(),
   "discountScheme": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "createdAt": zod.string(),
@@ -239,9 +257,14 @@ export const UpdateCustomerParams = zod.object({
 
 export const UpdateCustomerBody = zod.object({
   "name": zod.string().min(1).optional(),
+  "contactPerson": zod.string().optional(),
   "phone": zod.string().optional(),
+  "mobile": zod.string().optional(),
   "address": zod.string().optional(),
   "email": zod.string().optional(),
+  "taxId": zod.string().optional(),
+  "source": zod.string().optional(),
+  "status": zod.string().optional(),
   "discountScheme": zod.string().optional(),
   "notes": zod.string().optional()
 })
@@ -249,9 +272,14 @@ export const UpdateCustomerBody = zod.object({
 export const UpdateCustomerResponse = zod.object({
   "id": zod.number(),
   "name": zod.string(),
-  "phone": zod.string(),
-  "address": zod.string(),
+  "contactPerson": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "mobile": zod.string().nullish(),
+  "address": zod.string().nullish(),
   "email": zod.string().nullish(),
+  "taxId": zod.string().nullish(),
+  "source": zod.string().nullish(),
+  "status": zod.string().nullish(),
   "discountScheme": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "createdAt": zod.string(),
@@ -267,6 +295,114 @@ export const DeleteCustomerParams = zod.object({
 })
 
 export const DeleteCustomerResponse = zod.void()
+
+
+/**
+ * @summary 檢查是否有重複客戶（依手機/市話/統編）
+ */
+export const CheckCustomerDuplicateBody = zod.object({
+  "phone": zod.string().optional(),
+  "mobile": zod.string().optional(),
+  "taxId": zod.string().optional()
+})
+
+export const CheckCustomerDuplicateResponseItem = zod.object({
+  "id": zod.number(),
+  "name": zod.string(),
+  "contactPerson": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "mobile": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "email": zod.string().nullish(),
+  "taxId": zod.string().nullish(),
+  "source": zod.string().nullish(),
+  "status": zod.string().nullish(),
+  "discountScheme": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+export const CheckCustomerDuplicateResponse = zod.array(CheckCustomerDuplicateResponseItem)
+
+
+/**
+ * @summary 取得客戶地址列表
+ */
+export const ListCustomerAddressesParams = zod.object({
+  "customerId": zod.coerce.number()
+})
+
+export const ListCustomerAddressesResponseItem = zod.object({
+  "id": zod.number(),
+  "customerId": zod.number(),
+  "label": zod.string(),
+  "address": zod.string(),
+  "isDefault": zod.boolean(),
+  "createdAt": zod.string()
+})
+export const ListCustomerAddressesResponse = zod.array(ListCustomerAddressesResponseItem)
+
+
+/**
+ * @summary 新增客戶地址
+ */
+export const CreateCustomerAddressParams = zod.object({
+  "customerId": zod.coerce.number()
+})
+
+
+
+
+
+export const CreateCustomerAddressBody = zod.object({
+  "label": zod.string().min(1),
+  "address": zod.string().min(1),
+  "isDefault": zod.boolean().optional()
+})
+
+export const CreateCustomerAddressResponse = zod.object({
+  "id": zod.number(),
+  "customerId": zod.number(),
+  "label": zod.string(),
+  "address": zod.string(),
+  "isDefault": zod.boolean(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary 更新客戶地址
+ */
+export const UpdateCustomerAddressParams = zod.object({
+  "customerId": zod.coerce.number(),
+  "addressId": zod.coerce.number()
+})
+
+export const UpdateCustomerAddressBody = zod.object({
+  "label": zod.string().optional(),
+  "address": zod.string().optional(),
+  "isDefault": zod.boolean().optional()
+})
+
+export const UpdateCustomerAddressResponse = zod.object({
+  "id": zod.number(),
+  "customerId": zod.number(),
+  "label": zod.string(),
+  "address": zod.string(),
+  "isDefault": zod.boolean(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary 刪除客戶地址
+ */
+export const DeleteCustomerAddressParams = zod.object({
+  "customerId": zod.coerce.number(),
+  "addressId": zod.coerce.number()
+})
+
+export const DeleteCustomerAddressResponse = zod.void()
 
 
 /**
@@ -1549,9 +1685,14 @@ export const GetDashboardSummaryResponse = zod.object({
   "recentCustomers": zod.array(zod.object({
   "id": zod.number(),
   "name": zod.string(),
-  "phone": zod.string(),
-  "address": zod.string(),
+  "contactPerson": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "mobile": zod.string().nullish(),
+  "address": zod.string().nullish(),
   "email": zod.string().nullish(),
+  "taxId": zod.string().nullish(),
+  "source": zod.string().nullish(),
+  "status": zod.string().nullish(),
   "discountScheme": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "createdAt": zod.string(),

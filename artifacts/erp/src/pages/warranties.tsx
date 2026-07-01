@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useSearch, useLocation } from "wouter";
-import { useListWarranties, useCreateWarranty, useDeleteWarranty, useListCustomers, getListWarrantiesQueryKey } from "@workspace/api-client-react";
+import { useListWarranties, useCreateWarranty, useDeleteWarranty, getListWarrantiesQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { CustomerSelector, type CustomerSelectorValue } from "@/components/customer-selector";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Plus, Trash2, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -37,12 +37,12 @@ export default function Warranties() {
   const [deleteId, setDeleteId] = useState<number | null>(null);
 
   const { data: warranties, isLoading } = useListWarranties(filterCustomerId ? { customerId: filterCustomerId } : {});
-  const { data: customers } = useListCustomers({});
   const createMutation = useCreateWarranty({ mutation: { onSuccess: () => { queryClient.invalidateQueries({ queryKey: getListWarrantiesQueryKey() }); setShowCreate(false); toast({ title: "保固資料已新增" }); } } });
   const deleteMutation = useDeleteWarranty({ mutation: { onSuccess: () => { queryClient.invalidateQueries({ queryKey: getListWarrantiesQueryKey() }); setDeleteId(null); toast({ title: "保固資料已刪除" }); } } });
 
   const emptyForm = { customerId: 0, startDate: "", endDate: "", description: "", notes: "" };
   const [form, setForm] = useState(emptyForm);
+  const [formCustomer, setFormCustomer] = useState<CustomerSelectorValue | null>(null);
 
   return (
     <div className="space-y-4">
@@ -92,16 +92,17 @@ export default function Warranties() {
         <Card><CardContent className="py-12 text-center"><p className="text-muted-foreground">尚無保固資料</p></CardContent></Card>
       )}
 
-      <Dialog open={showCreate} onOpenChange={setShowCreate}>
+      <Dialog open={showCreate} onOpenChange={open => { setShowCreate(open); if (!open) { setFormCustomer(null); setForm(emptyForm); } }}>
         <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>新增保固資料</DialogTitle></DialogHeader>
           <form onSubmit={e => { e.preventDefault(); createMutation.mutate({ data: form }); }} className="space-y-3">
             <div className="space-y-1.5">
               <Label>客戶 *</Label>
-              <Select value={String(form.customerId)} onValueChange={v => setForm(f => ({ ...f, customerId: parseInt(v) }))}>
-                <SelectTrigger><SelectValue placeholder="選擇客戶" /></SelectTrigger>
-                <SelectContent>{customers?.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}</SelectContent>
-              </Select>
+              <CustomerSelector
+                value={formCustomer}
+                onChange={v => { setFormCustomer(v); setForm(f => ({ ...f, customerId: v?.customerId ?? 0 })); }}
+                allowTemp={false}
+              />
             </div>
             <div className="space-y-1.5"><Label>說明</Label><Input value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="保固內容說明..." /></div>
             <div className="grid grid-cols-2 gap-3">

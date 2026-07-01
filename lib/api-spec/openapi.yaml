@@ -296,6 +296,113 @@ paths:
         "404":
           description: 找不到客戶
 
+  /customers/check-duplicate:
+    post:
+      operationId: checkCustomerDuplicate
+      tags: [customers]
+      summary: 檢查是否有重複客戶（依手機/市話/統編）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerDuplicateCheckInput"
+      responses:
+        "200":
+          description: 符合的客戶列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Customer"
+
+  /customers/{customerId}/addresses:
+    get:
+      operationId: listCustomerAddresses
+      tags: [customers]
+      summary: 取得客戶地址列表
+      parameters:
+        - name: customerId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: 地址列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CustomerAddress"
+    post:
+      operationId: createCustomerAddress
+      tags: [customers]
+      summary: 新增客戶地址
+      parameters:
+        - name: customerId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerAddressInput"
+      responses:
+        "201":
+          description: 新增成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerAddress"
+
+  /customers/{customerId}/addresses/{addressId}:
+    patch:
+      operationId: updateCustomerAddress
+      tags: [customers]
+      summary: 更新客戶地址
+      parameters:
+        - name: customerId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: addressId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerAddressUpdate"
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerAddress"
+    delete:
+      operationId: deleteCustomerAddress
+      tags: [customers]
+      summary: 刪除客戶地址
+      parameters:
+        - name: customerId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: addressId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "204":
+          description: 刪除成功
+
   /customers/{customerId}/ac-units:
     get:
       operationId: listAcUnits
@@ -1614,13 +1721,18 @@ components:
 
     Customer:
       type: object
-      required: [id, name, phone, address, createdAt, updatedAt]
+      required: [id, name, createdAt, updatedAt]
       properties:
         id: { type: integer }
         name: { type: string }
-        phone: { type: string }
-        address: { type: string }
+        contactPerson: { type: ["string", "null"] }
+        phone: { type: ["string", "null"] }
+        mobile: { type: ["string", "null"] }
+        address: { type: ["string", "null"] }
         email: { type: ["string", "null"] }
+        taxId: { type: ["string", "null"] }
+        source: { type: ["string", "null"] }
+        status: { type: ["string", "null"] }
         discountScheme: { type: ["string", "null"] }
         notes: { type: ["string", "null"] }
         createdAt: { type: string }
@@ -1628,12 +1740,17 @@ components:
 
     CustomerInput:
       type: object
-      required: [name, phone, address]
+      required: [name]
       properties:
         name: { type: string, minLength: 1 }
-        phone: { type: string, minLength: 1 }
-        address: { type: string, minLength: 1 }
+        contactPerson: { type: string }
+        phone: { type: string }
+        mobile: { type: string }
+        address: { type: string }
         email: { type: string }
+        taxId: { type: string }
+        source: { type: string }
+        status: { type: string }
         discountScheme: { type: string }
         notes: { type: string }
 
@@ -1641,11 +1758,49 @@ components:
       type: object
       properties:
         name: { type: string, minLength: 1 }
+        contactPerson: { type: string }
         phone: { type: string }
+        mobile: { type: string }
         address: { type: string }
         email: { type: string }
+        taxId: { type: string }
+        source: { type: string }
+        status: { type: string }
         discountScheme: { type: string }
         notes: { type: string }
+
+    CustomerAddress:
+      type: object
+      required: [id, customerId, label, address, isDefault, createdAt]
+      properties:
+        id: { type: integer }
+        customerId: { type: integer }
+        label: { type: string }
+        address: { type: string }
+        isDefault: { type: boolean }
+        createdAt: { type: string }
+
+    CustomerAddressInput:
+      type: object
+      required: [label, address]
+      properties:
+        label: { type: string, minLength: 1 }
+        address: { type: string, minLength: 1 }
+        isDefault: { type: boolean }
+
+    CustomerAddressUpdate:
+      type: object
+      properties:
+        label: { type: string }
+        address: { type: string }
+        isDefault: { type: boolean }
+
+    CustomerDuplicateCheckInput:
+      type: object
+      properties:
+        phone: { type: string }
+        mobile: { type: string }
+        taxId: { type: string }
 
     AcUnit:
       type: object

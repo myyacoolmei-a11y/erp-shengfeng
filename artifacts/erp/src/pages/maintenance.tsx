@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useSearch, useLocation } from "wouter";
-import { useListMaintenanceReminders, useCreateMaintenanceReminder, useUpdateMaintenanceReminder, useDeleteMaintenanceReminder, useListCustomers, getListMaintenanceRemindersQueryKey } from "@workspace/api-client-react";
+import { useListMaintenanceReminders, useCreateMaintenanceReminder, useUpdateMaintenanceReminder, useDeleteMaintenanceReminder, getListMaintenanceRemindersQueryKey } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { CustomerSelector, type CustomerSelectorValue } from "@/components/customer-selector";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Plus, Trash2, CheckCircle, Clock, AlertTriangle, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -37,13 +37,13 @@ export default function Maintenance() {
   if (statusFilter !== "全部") params.status = statusFilter;
   if (upcomingOnly) params.upcoming = "true";
   const { data: reminders, isLoading } = useListMaintenanceReminders(params);
-  const { data: customers } = useListCustomers({});
   const createMutation = useCreateMaintenanceReminder({ mutation: { onSuccess: () => { queryClient.invalidateQueries({ queryKey: getListMaintenanceRemindersQueryKey() }); setShowCreate(false); toast({ title: "保養提醒已新增" }); } } });
   const updateMutation = useUpdateMaintenanceReminder({ mutation: { onSuccess: () => { queryClient.invalidateQueries({ queryKey: getListMaintenanceRemindersQueryKey() }); toast({ title: "狀態已更新" }); } } });
   const deleteMutation = useDeleteMaintenanceReminder({ mutation: { onSuccess: () => { queryClient.invalidateQueries({ queryKey: getListMaintenanceRemindersQueryKey() }); setDeleteId(null); toast({ title: "保養提醒已刪除" }); } } });
 
   const emptyForm = { customerId: 0, reminderDate: "", description: "", status: "待處理", notes: "" };
   const [form, setForm] = useState(emptyForm);
+  const [formCustomer, setFormCustomer] = useState<CustomerSelectorValue | null>(null);
 
   return (
     <div className="space-y-4">
@@ -110,16 +110,17 @@ export default function Maintenance() {
         <Card><CardContent className="py-12 text-center"><p className="text-muted-foreground">尚無保養提醒</p></CardContent></Card>
       )}
 
-      <Dialog open={showCreate} onOpenChange={setShowCreate}>
+      <Dialog open={showCreate} onOpenChange={open => { setShowCreate(open); if (!open) { setFormCustomer(null); setForm(emptyForm); } }}>
         <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>新增保養提醒</DialogTitle></DialogHeader>
           <form onSubmit={e => { e.preventDefault(); createMutation.mutate({ data: form }); }} className="space-y-3">
             <div className="space-y-1.5">
               <Label>客戶 *</Label>
-              <Select value={String(form.customerId)} onValueChange={v => setForm(f => ({ ...f, customerId: parseInt(v) }))}>
-                <SelectTrigger><SelectValue placeholder="選擇客戶" /></SelectTrigger>
-                <SelectContent>{customers?.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}</SelectContent>
-              </Select>
+              <CustomerSelector
+                value={formCustomer}
+                onChange={v => { setFormCustomer(v); setForm(f => ({ ...f, customerId: v?.customerId ?? 0 })); }}
+                allowTemp={false}
+              />
             </div>
             <div className="space-y-1.5"><Label>提醒日期 *</Label><Input required type="date" value={form.reminderDate} onChange={e => setForm(f => ({ ...f, reminderDate: e.target.value }))} /></div>
             <div className="space-y-1.5"><Label>說明 *</Label><Input required value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="例：年度冷氣清洗保養" /></div>

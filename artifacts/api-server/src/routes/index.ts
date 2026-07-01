@@ -3,6 +3,7 @@ import healthRouter from "./health";
 import authRouter from "./auth";
 import usersRouter from "./users";
 import customersRouter from "./customers";
+import customerAddressesRouter from "./customerAddresses";
 import acUnitsRouter from "./acUnits";
 import employeesRouter from "./employees";
 import quotesRouter from "./quotes";
@@ -28,6 +29,7 @@ router.use(authenticate);
 
 router.use(usersRouter);
 router.use(customersRouter);
+router.use(customerAddressesRouter);
 router.use(acUnitsRouter);
 router.use(employeesRouter);
 router.use(quotesRouter);
