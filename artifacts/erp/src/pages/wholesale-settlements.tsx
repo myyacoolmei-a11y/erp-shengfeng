@@ -13,7 +13,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Search, CreditCard, FileText, CalendarDays, Printer } from "lucide-react";
+import { Search, CreditCard, FileText, CalendarDays, Printer, MessageCircle } from "lucide-react";
 import { useAuth } from "@/contexts/auth-context";
 
 function fmtMoney(n: number | string | null | undefined) {
@@ -44,11 +44,102 @@ interface DetailItem {
   productName: string;
   brand: string | null;
   model: string | null;
+  spec: string | null;
   unit: string | null;
   qty: number;
   unitPrice: string | null;
   amount: string | null;
   notes: string | null;
+}
+
+function buildInvoiceBody(
+  customerName: string,
+  fromDate: string,
+  toDate: string,
+  flat: DetailItem[],
+  subtotal: number,
+  taxRate: number,
+  taxAmount: number,
+  total: number
+): string {
+  const rows = flat.map((it) => `
+    <tr>
+      <td style="border:1px solid #000;padding:5px;font-size:12px">${fmtDate(it.orderDate)}</td>
+      <td style="border:1px solid #000;padding:5px;font-size:12px">${it.orderNumber ?? "—"}</td>
+      <td style="border:1px solid #000;padding:5px;font-size:12px">${it.productName}</td>
+      <td style="border:1px solid #000;padding:5px;font-size:12px">${it.model ?? ""}</td>
+      <td style="border:1px solid #000;padding:5px;font-size:12px">${it.spec ?? ""}</td>
+      <td style="border:1px solid #000;padding:5px;font-size:12px;text-align:center">${it.qty}${it.unit ? " " + it.unit : ""}</td>
+      <td style="border:1px solid #000;padding:5px;font-size:12px;text-align:right">${fmtMoney(it.unitPrice)}</td>
+      <td style="border:1px solid #000;padding:5px;font-size:12px;text-align:right">${fmtMoney(it.amount)}</td>
+      <td style="border:1px solid #000;padding:5px;font-size:12px">${it.notes ?? ""}</td>
+    </tr>
+  `).join("");
+
+  return `
+    <div style="font-family:'Microsoft JhengHei','Heiti TC',sans-serif;padding:20px;max-width:720px;margin:0 auto;color:#000">
+      <div style="text-align:center;margin-bottom:24px">
+        <h1 style="font-size:20px;margin-bottom:4px;letter-spacing:2px">晟風工程有限公司</h1>
+        <p style="font-size:11px;color:#333;margin:0">冷氣工程 / 批發請款單</p>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;margin-bottom:16px;font-size:12px">
+        <div>
+          <p style="margin:2px 0"><strong>客戶：</strong>${customerName}</p>
+          <p style="margin:2px 0"><strong>日期區間：</strong>${fromDate} — ${toDate}</p>
+        </div>
+        <div style="text-align:right">
+          <p style="margin:2px 0"><strong>匯款資訊</strong></p>
+          <p style="margin:2px 0">國泰世華銀行</p>
+          <p style="margin:2px 0">代號 013 / 帳號 047035012164</p>
+          <p style="margin:2px 0">戶名：晟風工程行 洪宇風</p>
+        </div>
+      </div>
+
+      <table style="width:100%;border-collapse:collapse;margin-bottom:16px">
+        <thead>
+          <tr style="background:#f0f0f0">
+            <th style="border:1px solid #000;padding:5px;font-size:12px;text-align:left;width:70px">出貨日</th>
+            <th style="border:1px solid #000;padding:5px;font-size:12px;text-align:left;width:80px">出貨單號</th>
+            <th style="border:1px solid #000;padding:5px;font-size:12px;text-align:left">商品</th>
+            <th style="border:1px solid #000;padding:5px;font-size:12px;text-align:left;width:80px">型號</th>
+            <th style="border:1px solid #000;padding:5px;font-size:12px;text-align:left;width:80px">規格</th>
+            <th style="border:1px solid #000;padding:5px;font-size:12px;text-align:center;width:50px">數量</th>
+            <th style="border:1px solid #000;padding:5px;font-size:12px;text-align:right;width:70px">單價</th>
+            <th style="border:1px solid #000;padding:5px;font-size:12px;text-align:right;width:70px">金額</th>
+            <th style="border:1px solid #000;padding:5px;font-size:12px;text-align:left;width:80px">備註</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows}
+        </tbody>
+      </table>
+
+      <div style="display:flex;justify-content:flex-end;margin-bottom:20px">
+        <div style="width:220px;font-size:12px">
+          <div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #ddd">
+            <span>小計</span><span>${fmtMoney(subtotal)}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #ddd">
+            <span>稅額 (${taxRate}%)</span><span>${fmtMoney(taxAmount)}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;padding:4px 0;font-weight:bold;font-size:14px">
+            <span>總金額</span><span>${fmtMoney(total)}</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;margin-top:40px;font-size:12px">
+        <div>
+          <p style="margin-bottom:4px"><strong>客戶簽收</strong></p>
+          <div style="border-bottom:1px solid #000;width:160px;height:24px"></div>
+        </div>
+        <div style="text-align:right">
+          <p>請款單日期：${todayStr()}</p>
+        </div>
+      </div>
+    </div>
+  `;
 }
 
 export default function WholesaleSettlements() {
@@ -94,7 +185,16 @@ export default function WholesaleSettlements() {
     if (!detailData) return [];
     const result: DetailItem[] = [];
     for (const order of detailData) {
-      const items = order.items ?? [];
+      const items = (order.items ?? []) as Array<{
+        productName?: string;
+        brand?: string | null;
+        model?: string | null;
+        spec?: string | null;
+        unit?: string | null;
+        qty?: number;
+        unitPrice?: string | null;
+        amount?: string | null;
+      }>;
       if (items.length === 0) {
         result.push({
           orderId: order.id,
@@ -103,6 +203,7 @@ export default function WholesaleSettlements() {
           productName: "—",
           brand: null,
           model: null,
+          spec: null,
           unit: null,
           qty: 0,
           unitPrice: null,
@@ -118,6 +219,7 @@ export default function WholesaleSettlements() {
             productName: it.productName ?? "",
             brand: it.brand ?? null,
             model: it.model ?? null,
+            spec: it.spec ?? null,
             unit: it.unit ?? null,
             qty: it.qty ?? 0,
             unitPrice: it.unitPrice ?? null,
@@ -132,26 +234,15 @@ export default function WholesaleSettlements() {
 
   function printInvoice() {
     if (!detailCustomer || !detailData) return;
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) return;
-
     const flat = flatItems();
     const subtotal = flat.reduce((sum, it) => sum + parseFloat(it.amount ?? "0"), 0);
     const taxRate = detailData[0]?.taxRate ? parseFloat(detailData[0].taxRate) : 0;
     const taxAmount = Math.round(subtotal * taxRate / 100 * 100) / 100;
     const total = subtotal + taxAmount;
 
-    const rows = flat.map((it) => `
-      <tr>
-        <td style="border:1px solid #000;padding:5px;font-size:12px">${fmtDate(it.orderDate)}</td>
-        <td style="border:1px solid #000;padding:5px;font-size:12px">${it.orderNumber ?? "—"}</td>
-        <td style="border:1px solid #000;padding:5px;font-size:12px">${it.productName}</td>
-        <td style="border:1px solid #000;padding:5px;font-size:12px">${it.model ?? ""}</td>
-        <td style="border:1px solid #000;padding:5px;font-size:12px;text-align:center">${it.qty}${it.unit ? " " + it.unit : ""}</td>
-        <td style="border:1px solid #000;padding:5px;font-size:12px;text-align:right">${fmtMoney(it.unitPrice)}</td>
-        <td style="border:1px solid #000;padding:5px;font-size:12px;text-align:right">${fmtMoney(it.amount)}</td>
-      </tr>
-    `).join("");
+    const body = buildInvoiceBody(detailCustomer.name, fromDate, toDate, flat, subtotal, taxRate, taxAmount, total);
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
 
     printWindow.document.write(`
       <html>
@@ -164,71 +255,54 @@ export default function WholesaleSettlements() {
           }
         </style>
       </head>
-      <body style="font-family:'Microsoft JhengHei','Heiti TC',sans-serif;padding:20px;max-width:720px;margin:0 auto;color:#000">
-        <div style="text-align:center;margin-bottom:24px">
-          <h1 style="font-size:20px;margin-bottom:4px;letter-spacing:2px">晟風工程有限公司</h1>
-          <p style="font-size:11px;color:#333;margin:0">冷氣工程 / 批發請款單</p>
-        </div>
-
-        <div style="display:flex;justify-content:space-between;margin-bottom:16px;font-size:12px">
-          <div>
-            <p style="margin:2px 0"><strong>客戶：</strong>${detailCustomer.name}</p>
-            <p style="margin:2px 0"><strong>日期區間：</strong>${fromDate} — ${toDate}</p>
-          </div>
-          <div style="text-align:right">
-            <p style="margin:2px 0"><strong>匯款資訊</strong></p>
-            <p style="margin:2px 0">國泰世華銀行</p>
-            <p style="margin:2px 0">代號 013 / 帳號 047035012164</p>
-            <p style="margin:2px 0">戶名：晟風工程行 洪宇風</p>
-          </div>
-        </div>
-
-        <table style="width:100%;border-collapse:collapse;margin-bottom:16px">
-          <thead>
-            <tr style="background:#f0f0f0">
-              <th style="border:1px solid #000;padding:5px;font-size:12px;text-align:left;width:80px">出貨日</th>
-              <th style="border:1px solid #000;padding:5px;font-size:12px;text-align:left;width:90px">出貨單號</th>
-              <th style="border:1px solid #000;padding:5px;font-size:12px;text-align:left">商品</th>
-              <th style="border:1px solid #000;padding:5px;font-size:12px;text-align:left;width:90px">型號</th>
-              <th style="border:1px solid #000;padding:5px;font-size:12px;text-align:center;width:50px">數量</th>
-              <th style="border:1px solid #000;padding:5px;font-size:12px;text-align:right;width:80px">單價</th>
-              <th style="border:1px solid #000;padding:5px;font-size:12px;text-align:right;width:80px">金額</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${rows}
-          </tbody>
-        </table>
-
-        <div style="display:flex;justify-content:flex-end;margin-bottom:20px">
-          <div style="width:220px;font-size:12px">
-            <div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #ddd">
-              <span>小計</span><span>${fmtMoney(subtotal)}</span>
-            </div>
-            <div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #ddd">
-              <span>稅額 (${taxRate}%)</span><span>${fmtMoney(taxAmount)}</span>
-            </div>
-            <div style="display:flex;justify-content:space-between;padding:4px 0;font-weight:bold;font-size:14px">
-              <span>總金額</span><span>${fmtMoney(total)}</span>
-            </div>
-          </div>
-        </div>
-
-        <div style="display:flex;justify-content:space-between;margin-top:40px;font-size:12px">
-          <div>
-            <p style="margin-bottom:4px"><strong>客戶簽收</strong></p>
-            <div style="border-bottom:1px solid #000;width:160px;height:24px"></div>
-          </div>
-          <div style="text-align:right">
-            <p>請款單日期：${todayStr()}</p>
-          </div>
-        </div>
-
-        <script>window.print();</script>
-      </body>
+      <body>${body}<script>window.print();</script></body>
       </html>
     `);
     printWindow.document.close();
+  }
+
+  async function sendLinePDF() {
+    if (!detailCustomer || !detailData) return;
+
+    const message = "您好，附件為晟風工程本期批發材料請款單，請協助確認，如有問題請與我們聯繫，謝謝。";
+    const lineUrl = `https://line.me/R/msg/text/?${encodeURIComponent(message)}`;
+
+    try {
+      const flat = flatItems();
+      const subtotal = flat.reduce((sum, it) => sum + parseFloat(it.amount ?? "0"), 0);
+      const taxRate = detailData[0]?.taxRate ? parseFloat(detailData[0].taxRate) : 0;
+      const taxAmount = Math.round(subtotal * taxRate / 100 * 100) / 100;
+      const total = subtotal + taxAmount;
+
+      const body = buildInvoiceBody(detailCustomer.name, fromDate, toDate, flat, subtotal, taxRate, taxAmount, total);
+
+      const div = document.createElement("div");
+      div.innerHTML = body;
+      div.style.position = "absolute";
+      div.style.left = "-9999px";
+      div.style.width = "720px";
+      document.body.appendChild(div);
+
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
+      const html2pdf = await import("html2pdf.js").then((m: any) => m.default || m);
+
+      const opt = {
+        margin: [10, 10, 10, 10],
+        filename: `請款單_${detailCustomer.name}_${fromDate}.pdf`,
+        image: { type: "jpeg", quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+      };
+
+      await html2pdf().set(opt).from(div).save();
+      document.body.removeChild(div);
+    } catch (err) {
+      console.error("PDF generation failed:", err);
+    }
+
+    // Always open LINE text share (whether PDF succeeded or not)
+    window.open(lineUrl, "_blank");
   }
 
   return (
@@ -313,7 +387,7 @@ export default function WholesaleSettlements() {
       )}
 
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
-        <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-5xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{detailCustomer?.name} — 出貨明細</DialogTitle>
           </DialogHeader>
@@ -331,9 +405,11 @@ export default function WholesaleSettlements() {
                     <th className="py-2 pr-3">出貨單號</th>
                     <th className="py-2 pr-3">商品</th>
                     <th className="py-2 pr-3">型號</th>
+                    <th className="py-2 pr-3">規格</th>
                     <th className="py-2 pr-3 text-right">數量</th>
                     <th className="py-2 pr-3 text-right">單價</th>
-                    <th className="py-2 text-right">金額</th>
+                    <th className="py-2 pr-3 text-right">金額</th>
+                    <th className="py-2 text-left">備註</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -343,9 +419,11 @@ export default function WholesaleSettlements() {
                       <td className="py-2 pr-3">{it.orderNumber ?? "—"}</td>
                       <td className="py-2 pr-3">{it.productName}</td>
                       <td className="py-2 pr-3">{it.model ?? "—"}</td>
+                      <td className="py-2 pr-3">{it.spec ?? "—"}</td>
                       <td className="py-2 pr-3 text-right">{it.qty}{it.unit ? ` ${it.unit}` : ""}</td>
                       <td className="py-2 pr-3 text-right">{fmtMoney(it.unitPrice)}</td>
                       <td className="py-2 text-right">{fmtMoney(it.amount)}</td>
+                      <td className="py-2 text-left">{it.notes ?? "—"}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -354,7 +432,12 @@ export default function WholesaleSettlements() {
           )}
           <div className="flex justify-end gap-2 pt-2">
             <Button variant="outline" size="sm" onClick={closeDetail}>關閉</Button>
-            <Button size="sm" onClick={printInvoice}><Printer className="h-4 w-4 mr-1" />列印請款單</Button>
+            <Button size="sm" variant="secondary" onClick={sendLinePDF}>
+              <MessageCircle className="h-4 w-4 mr-1" />LINE 傳送 PDF
+            </Button>
+            <Button size="sm" onClick={printInvoice}>
+              <Printer className="h-4 w-4 mr-1" />列印請款單
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
