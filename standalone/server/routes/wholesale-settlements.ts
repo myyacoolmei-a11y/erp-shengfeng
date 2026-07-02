@@ -25,7 +25,6 @@ router.get("/wholesale/settlements/summary", requireRole(...ROLES), async (req, 
     gte(wholesaleOrdersTable.orderDate, from),
     lte(wholesaleOrdersTable.orderDate, to),
     inArray(wholesaleOrdersTable.status, ACTIVE_STATUSES),
-    sql`${wholesaleOrdersTable.customerId} IS NOT NULL`,
   ];
 
   const rows = await db
@@ -97,11 +96,16 @@ router.get("/wholesale/settlements/:customerId", requireRole(...ROLES), async (r
   }
 
   const conditions = [
-    eq(wholesaleOrdersTable.customerId, customerId),
     gte(wholesaleOrdersTable.orderDate, from),
     lte(wholesaleOrdersTable.orderDate, to),
     inArray(wholesaleOrdersTable.status, ACTIVE_STATUSES),
   ];
+
+  if (customerId === 0) {
+    conditions.push(sql`${wholesaleOrdersTable.customerId} IS NULL`);
+  } else {
+    conditions.push(eq(wholesaleOrdersTable.customerId, customerId));
+  }
 
   const rows = await db
     .select()
