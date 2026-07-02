@@ -107,7 +107,7 @@ const WHOLESALE_SUB_ITEMS = [
   { href: "/wholesale/customers", label: "批發客戶", icon: Building2 },
   { href: "/wholesale/products", label: "批發商品", icon: Archive },
   { href: "/wholesale/orders", label: "批發出貨單", icon: ReceiptText },
-  { href: "/wholesale/settlements", label: "月結 / 應收", icon: CreditCard },
+  { href: "/wholesale/settlements", label: "批發月結 / 應收", icon: CreditCard },
 ];
 
 const ROLE_COLORS: Record<UserRole, string> = {
