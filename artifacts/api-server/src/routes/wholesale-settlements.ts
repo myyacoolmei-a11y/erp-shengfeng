@@ -25,6 +25,7 @@ router.get("/wholesale/settlements/summary", requireRole(...ROLES), async (req, 
     gte(wholesaleOrdersTable.orderDate, from),
     lte(wholesaleOrdersTable.orderDate, to),
     inArray(wholesaleOrdersTable.status, ACTIVE_STATUSES),
+    sql`${wholesaleOrdersTable.customerId} IS NOT NULL`,
   ];
 
   const rows = await db
