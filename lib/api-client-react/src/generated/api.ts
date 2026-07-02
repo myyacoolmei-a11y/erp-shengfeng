@@ -51,6 +51,8 @@ import type {
   ListWholesaleOrdersParams,
   ListWholesaleQuotesParams,
   ListWholesaleReceivablesParams,
+  ListWholesaleSettlementDetailParams,
+  ListWholesaleSettlementSummaryParams,
   ListWorkOrdersParams,
   LoginInput,
   MaintenanceReminder,
@@ -84,6 +86,7 @@ import type {
   WholesaleQuote,
   WholesaleQuoteInput,
   WholesaleReceivable,
+  WholesaleSettlementSummary,
   WorkOrder,
   WorkOrderInput,
   WorkOrderUpdate
@@ -6334,4 +6337,177 @@ export const useUpdateWholesaleReceivable = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getUpdateWholesaleReceivableMutationOptions(options));
     }
+
+export const getListWholesaleSettlementSummaryUrl = (params: ListWholesaleSettlementSummaryParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/wholesale/settlements/summary?${stringifiedParams}` : `/api/wholesale/settlements/summary`
+}
+
+/**
+ * @summary 批發月結總覽 — 按客戶統計訂單金額
+ */
+export const listWholesaleSettlementSummary = async (params: ListWholesaleSettlementSummaryParams, options?: RequestInit): Promise<WholesaleSettlementSummary[]> => {
+
+  return customFetch<WholesaleSettlementSummary[]>(getListWholesaleSettlementSummaryUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListWholesaleSettlementSummaryQueryKey = (params?: ListWholesaleSettlementSummaryParams,) => {
+    return [
+    `/api/wholesale/settlements/summary`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListWholesaleSettlementSummaryQueryOptions = <TData = Awaited<ReturnType<typeof listWholesaleSettlementSummary>>, TError = ErrorType<unknown>>(params: ListWholesaleSettlementSummaryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listWholesaleSettlementSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListWholesaleSettlementSummaryQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listWholesaleSettlementSummary>>> = ({ signal }) => listWholesaleSettlementSummary(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listWholesaleSettlementSummary>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListWholesaleSettlementSummaryQueryResult = NonNullable<Awaited<ReturnType<typeof listWholesaleSettlementSummary>>>
+export type ListWholesaleSettlementSummaryQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary 批發月結總覽 — 按客戶統計訂單金額
+ */
+
+export function useListWholesaleSettlementSummary<TData = Awaited<ReturnType<typeof listWholesaleSettlementSummary>>, TError = ErrorType<unknown>>(
+ params: ListWholesaleSettlementSummaryParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listWholesaleSettlementSummary>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListWholesaleSettlementSummaryQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListWholesaleSettlementDetailUrl = (customerId: number,
+    params: ListWholesaleSettlementDetailParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/wholesale/settlements/${customerId}?${stringifiedParams}` : `/api/wholesale/settlements/${customerId}`
+}
+
+/**
+ * @summary 單一客戶月結明細 — 訂單列表
+ */
+export const listWholesaleSettlementDetail = async (customerId: number,
+    params: ListWholesaleSettlementDetailParams, options?: RequestInit): Promise<WholesaleOrder[]> => {
+
+  return customFetch<WholesaleOrder[]>(getListWholesaleSettlementDetailUrl(customerId,params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListWholesaleSettlementDetailQueryKey = (customerId: number,
+    params?: ListWholesaleSettlementDetailParams,) => {
+    return [
+    `/api/wholesale/settlements/${customerId}`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListWholesaleSettlementDetailQueryOptions = <TData = Awaited<ReturnType<typeof listWholesaleSettlementDetail>>, TError = ErrorType<unknown>>(customerId: number,
+    params: ListWholesaleSettlementDetailParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listWholesaleSettlementDetail>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListWholesaleSettlementDetailQueryKey(customerId,params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listWholesaleSettlementDetail>>> = ({ signal }) => listWholesaleSettlementDetail(customerId,params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: customerId !== null && customerId !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listWholesaleSettlementDetail>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListWholesaleSettlementDetailQueryResult = NonNullable<Awaited<ReturnType<typeof listWholesaleSettlementDetail>>>
+export type ListWholesaleSettlementDetailQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary 單一客戶月結明細 — 訂單列表
+ */
+
+export function useListWholesaleSettlementDetail<TData = Awaited<ReturnType<typeof listWholesaleSettlementDetail>>, TError = ErrorType<unknown>>(
+ customerId: number,
+    params: ListWholesaleSettlementDetailParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listWholesaleSettlementDetail>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListWholesaleSettlementDetailQueryOptions(customerId,params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
 

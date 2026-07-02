@@ -1022,6 +1022,15 @@ export interface UpdateWholesaleReceivableInput {
   notes?: string;
 }
 
+export interface WholesaleSettlementSummary {
+  customerId: number;
+  customerName: string;
+  orderCount: number;
+  totalAmount: number;
+  receivableAmount?: number;
+  receivedAmount?: number;
+}
+
 export type ListCustomersParams = {
 /**
  * 搜尋關鍵字（姓名、電話、地址）
@@ -1097,5 +1106,15 @@ customerId?: number;
 export type ListWholesaleReceivablesParams = {
 orderId?: number;
 status?: string;
+};
+
+export type ListWholesaleSettlementSummaryParams = {
+from: string;
+to: string;
+};
+
+export type ListWholesaleSettlementDetailParams = {
+from: string;
+to: string;
 };
 

@@ -1703,6 +1703,58 @@ paths:
               schema:
                 $ref: "#/components/schemas/WholesaleReceivable"
 
+  /wholesale/settlements/summary:
+    get:
+      operationId: listWholesaleSettlementSummary
+      tags: [wholesale-settlements]
+      summary: 批發月結總覽 — 按客戶統計訂單金額
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema: { type: string }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: 客戶月結總覽
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WholesaleSettlementSummary"
+
+  /wholesale/settlements/{customerId}:
+    get:
+      operationId: listWholesaleSettlementDetail
+      tags: [wholesale-settlements]
+      summary: 單一客戶月結明細 — 訂單列表
+      parameters:
+        - name: customerId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: from
+          in: query
+          required: true
+          schema: { type: string }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: 客戶訂單明細
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WholesaleOrder"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -2654,3 +2706,14 @@ components:
         paymentStatus: { type: string }
         paymentMethod: { type: string }
         notes: { type: string }
+
+    WholesaleSettlementSummary:
+      type: object
+      required: [customerId, customerName, orderCount, totalAmount]
+      properties:
+        customerId: { type: integer }
+        customerName: { type: string }
+        orderCount: { type: integer }
+        totalAmount: { type: number }
+        receivableAmount: { type: number }
+        receivedAmount: { type: number }

@@ -2632,3 +2632,71 @@ export const UpdateWholesaleReceivableResponse = zod.object({
 })
 
 
+/**
+ * @summary 批發月結總覽 — 按客戶統計訂單金額
+ */
+export const ListWholesaleSettlementSummaryQueryParams = zod.object({
+  "from": zod.coerce.string(),
+  "to": zod.coerce.string()
+})
+
+export const ListWholesaleSettlementSummaryResponseItem = zod.object({
+  "customerId": zod.number(),
+  "customerName": zod.string(),
+  "orderCount": zod.number(),
+  "totalAmount": zod.number(),
+  "receivableAmount": zod.number().optional(),
+  "receivedAmount": zod.number().optional()
+})
+export const ListWholesaleSettlementSummaryResponse = zod.array(ListWholesaleSettlementSummaryResponseItem)
+
+
+/**
+ * @summary 單一客戶月結明細 — 訂單列表
+ */
+export const ListWholesaleSettlementDetailParams = zod.object({
+  "customerId": zod.coerce.number()
+})
+
+export const ListWholesaleSettlementDetailQueryParams = zod.object({
+  "from": zod.coerce.string(),
+  "to": zod.coerce.string()
+})
+
+export const ListWholesaleSettlementDetailResponseItem = zod.object({
+  "id": zod.number(),
+  "orderNumber": zod.string().nullish(),
+  "quoteId": zod.number().nullish(),
+  "quoteNumber": zod.string().nullish(),
+  "customerId": zod.number().nullish(),
+  "customerName": zod.string().nullish(),
+  "orderDate": zod.string(),
+  "expectedDelivery": zod.string().nullish(),
+  "salesperson": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "subtotal": zod.string(),
+  "taxRate": zod.string(),
+  "taxAmount": zod.string(),
+  "shippingFee": zod.string(),
+  "total": zod.string(),
+  "status": zod.string(),
+  "items": zod.array(zod.object({
+  "id": zod.number(),
+  "orderId": zod.number(),
+  "productId": zod.number().nullish(),
+  "productName": zod.string(),
+  "brand": zod.string().nullish(),
+  "model": zod.string().nullish(),
+  "unit": zod.string().nullish(),
+  "qty": zod.number(),
+  "unitPrice": zod.string(),
+  "discount": zod.string(),
+  "amount": zod.string(),
+  "sortOrder": zod.number()
+})).optional(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+export const ListWholesaleSettlementDetailResponse = zod.array(ListWholesaleSettlementDetailResponseItem)
+
+
