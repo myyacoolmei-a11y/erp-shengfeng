@@ -107,7 +107,7 @@ const WHOLESALE_SUB_ITEMS = [
   { href: "/wholesale/customers", label: "批發客戶", icon: Building2 },
   { href: "/wholesale/products", label: "批發商品", icon: Archive },
   { href: "/wholesale/orders", label: "批發出貨單", icon: ReceiptText },
-  { href: "/wholesale/settlements", label: "批發月結 / 應收", icon: CreditCard },
+  { href: "/wholesale/settlements", label: "月結 / 應收", icon: CreditCard },
 ];
 
 const ROLE_COLORS: Record<UserRole, string> = {
@@ -165,7 +165,7 @@ function NavContent() {
             <img src="/logo.png" alt="晟風空調" className="h-12 w-12 rounded-full object-cover shrink-0" />
             <div>
               <h1 className="text-base font-bold tracking-tight text-primary leading-tight">晟風工程</h1>
-              <p className="text-xs text-muted-foreground tracking-wider">ERP 系統</p>
+              <p className="text-xs text-muted-foreground tracking-wider">ERP 系統 <span className="text-[10px] text-gray-400 ml-1">v-wholesale-20260703</span></p>
             </div>
           </div>
         </Link>

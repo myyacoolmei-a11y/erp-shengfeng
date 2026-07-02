@@ -165,7 +165,7 @@ function NavContent() {
             <img src="/logo.png" alt="晟風空調" className="h-12 w-12 rounded-full object-cover shrink-0" />
             <div>
               <h1 className="text-base font-bold tracking-tight text-primary leading-tight">晟風工程</h1>
-              <p className="text-xs text-muted-foreground tracking-wider">ERP 系統</p>
+              <p className="text-xs text-muted-foreground tracking-wider">ERP 系統 <span className="text-[10px] text-gray-400 ml-1">v-wholesale-20260703</span></p>
             </div>
           </div>
         </Link>
