@@ -101,7 +101,7 @@ const NAV_ITEMS: NavItem[] = [
   },
 ];
 
-const WHOLESALE_ROLES: UserRole[] = ["super_admin", "owner", "admin", "sales"];
+const WHOLESALE_ROLES: UserRole[] = ["super_admin", "owner", "admin", "sales", "accountant"];
 
 const WHOLESALE_SUB_ITEMS = [
   { href: "/wholesale/customers", label: "批發客戶", icon: Building2 },
