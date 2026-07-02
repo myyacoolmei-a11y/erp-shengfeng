@@ -106,8 +106,7 @@ const WHOLESALE_ROLES: UserRole[] = ["super_admin", "owner", "admin", "sales"];
 const WHOLESALE_SUB_ITEMS = [
   { href: "/wholesale/customers", label: "批發客戶", icon: Building2 },
   { href: "/wholesale/products", label: "批發商品", icon: Archive },
-  { href: "/wholesale/quotes", label: "批發報價", icon: ClipboardList },
-  { href: "/wholesale/orders", label: "批發訂單", icon: ReceiptText },
+  { href: "/wholesale/orders", label: "批發出貨單", icon: ReceiptText },
   { href: "/wholesale/settlements", label: "月結 / 應收", icon: CreditCard },
 ];
 

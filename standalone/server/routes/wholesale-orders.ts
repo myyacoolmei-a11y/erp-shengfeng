@@ -137,7 +137,7 @@ router.post("/wholesale/orders", requireRole(...ROLES), async (req, res): Promis
     await db.insert(wholesaleOrderItemsTable).values(computed.map((item, idx) => orderItemRow(item, order.id, idx)));
   }
   const [final] = await db.select().from(wholesaleOrdersTable).where(eq(wholesaleOrdersTable.id, order.id));
-  if (final && (parsed.data.status === "已確認")) {
+  if (final && (parsed.data.status === "已出貨")) {
     await maybeCreateReceivable(final);
   }
   const result = await getOrderWithItems(order.id);
@@ -172,7 +172,7 @@ router.patch("/wholesale/orders/:id", requireRole(...ROLES), async (req, res): P
   if (computed.length) {
     await db.insert(wholesaleOrderItemsTable).values(computed.map((item, idx) => orderItemRow(item, id, idx)));
   }
-  if (parsed.data.status === "已確認") {
+  if (parsed.data.status === "已出貨") {
     const [updatedOrder] = await db.select().from(wholesaleOrdersTable).where(eq(wholesaleOrdersTable.id, id));
     if (updatedOrder) await maybeCreateReceivable(updatedOrder);
   }

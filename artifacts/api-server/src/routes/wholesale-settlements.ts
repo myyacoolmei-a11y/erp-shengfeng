@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and, gte, lte, sql, desc, inArray } from "drizzle-orm";
-import { db, wholesaleOrdersTable, wholesaleReceivablesTable, wholesaleCustomersTable } from "@workspace/db";
+import { db, wholesaleOrdersTable, wholesaleOrderItemsTable, wholesaleReceivablesTable } from "@workspace/db";
 import { requireRole } from "../lib/auth";
 
 const router: IRouter = Router();
@@ -10,15 +10,14 @@ function parseId(raw: string | string[]): number {
   return parseInt(Array.isArray(raw) ? raw[0] : raw, 10);
 }
 
-const ACTIVE_STATUSES = ["已確認", "備貨中", "部分出貨", "已出貨", "已完成"];
+const ACTIVE_STATUSES = ["\u5df2\u51fa\u8ca8"];
 
 // GET /wholesale/settlements/summary?from=YYYY-MM-DD&to=YYYY-MM-DD
-// 按客戶統計日期區間的訂單總金額
 router.get("/wholesale/settlements/summary", requireRole(...ROLES), async (req, res): Promise<void> => {
   const from = typeof req.query.from === "string" ? req.query.from : undefined;
   const to = typeof req.query.to === "string" ? req.query.to : undefined;
   if (!from || !to) {
-    res.status(400).json({ error: "需要 from 和 to 參數" });
+    res.status(400).json({ error: "\u9700\u8981 from \u548c to \u53c3\u6578" });
     return;
   }
 
@@ -28,7 +27,6 @@ router.get("/wholesale/settlements/summary", requireRole(...ROLES), async (req, 
     inArray(wholesaleOrdersTable.status, ACTIVE_STATUSES),
   ];
 
-  // Group by customer
   const rows = await db
     .select({
       customerId: wholesaleOrdersTable.customerId,
@@ -41,7 +39,6 @@ router.get("/wholesale/settlements/summary", requireRole(...ROLES), async (req, 
     .groupBy(wholesaleOrdersTable.customerId, wholesaleOrdersTable.customerName)
     .orderBy(desc(sql`sum(${wholesaleOrdersTable.total})`));
 
-  // Fetch all receivables in date range for the same customers
   const customerIds = rows.map((r) => r.customerId).filter(Boolean) as number[];
   let receivableMap = new Map<number, { totalAmount: number; receivedAmount: number }>();
 
@@ -74,7 +71,7 @@ router.get("/wholesale/settlements/summary", requireRole(...ROLES), async (req, 
     const rec = receivableMap.get(cid) ?? { totalAmount: 0, receivedAmount: 0 };
     return {
       customerId: cid,
-      customerName: r.customerName ?? "未知客戶",
+      customerName: r.customerName ?? "\u672a\u77e5\u5ba2\u6236",
       orderCount: r.orderCount,
       totalAmount: r.totalAmount,
       receivableAmount: rec.totalAmount - rec.receivedAmount,
@@ -86,7 +83,7 @@ router.get("/wholesale/settlements/summary", requireRole(...ROLES), async (req, 
 });
 
 // GET /wholesale/settlements/:customerId?from=&to=
-// 單一客戶的訂單明細
+// Returns orders WITH items for item-level detail
 router.get("/wholesale/settlements/:customerId", requireRole(...ROLES), async (req, res): Promise<void> => {
   const customerId = parseId(req.params.customerId);
   if (isNaN(customerId)) { res.status(400).json({ error: "Invalid customerId" }); return; }
@@ -94,7 +91,7 @@ router.get("/wholesale/settlements/:customerId", requireRole(...ROLES), async (r
   const from = typeof req.query.from === "string" ? req.query.from : undefined;
   const to = typeof req.query.to === "string" ? req.query.to : undefined;
   if (!from || !to) {
-    res.status(400).json({ error: "需要 from 和 to 參數" });
+    res.status(400).json({ error: "\u9700\u8981 from \u548c to \u53c3\u6578" });
     return;
   }
 
@@ -111,7 +108,19 @@ router.get("/wholesale/settlements/:customerId", requireRole(...ROLES), async (r
     .where(and(...conditions))
     .orderBy(desc(wholesaleOrdersTable.orderDate));
 
-  res.json(rows.map((r) => ({ ...r, items: [] })));
+  // Fetch items for each order
+  const ordersWithItems = await Promise.all(
+    rows.map(async (order) => {
+      const items = await db
+        .select()
+        .from(wholesaleOrderItemsTable)
+        .where(eq(wholesaleOrderItemsTable.orderId, order.id))
+        .orderBy(wholesaleOrderItemsTable.sortOrder);
+      return { ...order, items };
+    })
+  );
+
+  res.json(ordersWithItems);
 });
 
 export default router;

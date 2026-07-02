@@ -24,7 +24,6 @@ import Employees from "@/pages/employees";
 import Products from "@/pages/products";
 import WholesaleCustomers from "@/pages/wholesale-customers";
 import WholesaleProducts from "@/pages/wholesale-products";
-import WholesaleQuotes from "@/pages/wholesale-quotes";
 import WholesaleOrders from "@/pages/wholesale-orders";
 import WholesaleSettlements from "@/pages/wholesale-settlements";
 
@@ -185,11 +184,6 @@ function AppRoutes() {
             <Route path="/wholesale/products">
               <RoleGuard roles={["super_admin", "owner", "admin", "sales"]}>
                 <WholesaleProducts />
-              </RoleGuard>
-            </Route>
-            <Route path="/wholesale/quotes">
-              <RoleGuard roles={["super_admin", "owner", "admin", "sales"]}>
-                <WholesaleQuotes />
               </RoleGuard>
             </Route>
             <Route path="/wholesale/orders">

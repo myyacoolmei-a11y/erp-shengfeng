@@ -22,15 +22,10 @@ import { Plus, Pencil, Trash2, Search, ShoppingCart, X, CreditCard } from "lucid
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
 
-const ORDER_STATUSES = ["草稿", "已確認", "備貨中", "部分出貨", "已出貨", "已完成", "已取消"];
+const ORDER_STATUSES = ["備貨中", "已出貨"];
 const STATUS_COLORS: Record<string, string> = {
-  "草稿": "bg-gray-100 text-gray-700",
-  "已確認": "bg-blue-100 text-blue-700",
   "備貨中": "bg-amber-100 text-amber-700",
-  "部分出貨": "bg-orange-100 text-orange-700",
   "已出貨": "bg-indigo-100 text-indigo-700",
-  "已完成": "bg-green-100 text-green-700",
-  "已取消": "bg-red-100 text-red-700",
 };
 
 interface OItem {
@@ -64,7 +59,7 @@ interface OForm {
 function emptyForm(): OForm {
   return {
     customerId: null, customerName: "", orderDate: new Date().toISOString().split("T")[0],
-    expectedDelivery: "", salesperson: "", notes: "", taxRate: 0, shippingFee: 0, status: "草稿", items: [],
+    expectedDelivery: "", salesperson: "", notes: "", taxRate: 0, shippingFee: 0, status: "備貨中", items: [],
   };
 }
 
@@ -78,7 +73,7 @@ function fromData(d: any): OForm {
     notes: d.notes ?? "",
     taxRate: parseFloat(d.taxRate ?? "0"),
     shippingFee: parseFloat(d.shippingFee ?? "0"),
-    status: d.status ?? "草稿",
+    status: d.status ?? "備貨中",
     items: (d.items ?? []).map((it: any) => ({
       productId: it.productId ?? null,
       productName: it.productName ?? "",
