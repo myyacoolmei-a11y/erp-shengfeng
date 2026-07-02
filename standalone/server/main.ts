@@ -20,12 +20,13 @@ if (Number.isNaN(port) || port <= 0) {
 // dist/server/main.mjs, so "../public" correctly points to dist/public.
 const publicDir = path.join(__dirname, "../public");
 
-// Serve Vite-built assets
-app.use(express.static(publicDir, { maxAge: "1y", immutable: true }));
+// Serve Vite-built assets (fallthrough so unmatched paths hit SPA catch-all below)
+app.use(express.static(publicDir, { maxAge: "1y", immutable: true, fallthrough: true }));
 
 // SPA catch-all: every non-API request returns index.html so that
 // client-side routing (Wouter) works on hard refresh / direct URL access.
-app.use((_req, res) => {
+app.use((req, res, next) => {
+  if (req.path.startsWith("/api")) return next();
   res.sendFile(path.join(publicDir, "index.html"));
 });
 
