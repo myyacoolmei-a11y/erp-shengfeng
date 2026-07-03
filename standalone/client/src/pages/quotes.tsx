@@ -6,7 +6,7 @@ import {
   getListQuotesQueryKey, getListWorkOrdersQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { X, Plus, Pencil, Trash2, Printer, Wrench, Copy, Share2 } from "lucide-react";
+import { X, Plus, Pencil, Trash2, Printer, Wrench, Copy, Share2, Download, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -155,8 +155,8 @@ function quoteToForm(q: any): QuoteForm {
   };
 }
 
-// ── Print ──────────────────────────────────────────────────────────────────
-async function printQuote(quote: any, autoprint = true) {
+// ── Shared PDF generator ───────────────────────────────────────────────────
+async function generateQuotationPdf(quote: any): Promise<{ blob: Blob; quoteNo: string; html: string }> {
   const items: any[] = quote.items ?? [];
   const d = quote.createdAt ? new Date(quote.createdAt) : new Date();
   const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
@@ -204,7 +204,7 @@ async function printQuote(quote: any, autoprint = true) {
     <tr><td>${items.length + i + 1}</td><td></td><td></td><td class="tl"></td><td></td><td></td><td></td><td></td><td></td></tr>`).join("");
 
   const notesHtml = (quote.notes ?? "").split(/\n/).filter((l: string) => l.trim()).slice(0, 5)
-    .map((l: string, i: number) => `<div style="display:flex;gap:2mm;padding:0.8mm 0;font-size:8pt;line-height:1.4"><span style="color:#9ACD32;font-weight:700;min-width:4mm">${i + 1}.</span><span>${esc(l.replace(/^\d+[.)、．]\s*/, ""))}</span></div>`).join("")
+    .map((l: string, i: number) => `<div style="display:flex;gap:2mm;padding:0.8mm 0;font-size:8pt;line-height:1.4"><span style="color:#9ACD32;font-weight:700;min-width:4mm">${i + 1}.</span><span>${esc(l.replace(/^\d+[.)\u3001\uff0e]\s*/, ""))}</span></div>`).join("")
     || ["報價單有效期限為 30 日，逾期請重新確認。","施工前請支付 50% 訂金，完工驗收後付清尾款。","施工費已含基本配管耗材，特殊工程另計。","不含配電工程，如需配電請另行報價。"]
       .map((l, i) => `<div style="display:flex;gap:2mm;padding:0.8mm 0;font-size:8pt;line-height:1.4"><span style="color:#9ACD32;font-weight:700;min-width:4mm">${i + 1}.</span><span>${l}</span></div>`).join("");
 
@@ -360,20 +360,132 @@ tbody tr:last-child td{border-bottom:1.5px solid #9ACD32}
   const html2pdf = await import("html2pdf.js").then((m: any) => m.default || m);
   const opt = {
     margin: [10, 10, 10, 10],
-    filename: `報價單_${quoteNo}.pdf`,
     image: { type: "jpeg", quality: 0.98 },
     html2canvas: { scale: 2, useCORS: true },
     jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
   };
-  await html2pdf().set(opt).from(div).save();
+  const blob: Blob = await html2pdf().set(opt).from(div).output("blob");
   document.body.removeChild(div);
+  return { blob, quoteNo, html };
 }
 
-// ── LINE Share (報價單) — 分享 PDF ──────────────────────────────────
-async function shareQuoteViaLine(quote: any) {
-  await printQuote(quote);
-  const lineUrl = `https://line.me/R/msg/text/?${encodeURIComponent("您好，附件為晟風工程報價單，請查收，謝謝。")}`;
-  window.open(lineUrl, "_blank");
+// ── PDF Preview Dialog ─────────────────────────────────────────────────────
+function PdfPreviewDialog({
+  open, onClose, pdfUrl, filename,
+}: {
+  open: boolean; onClose: () => void; pdfUrl: string; filename: string;
+}) {
+  const downloadPdf = () => {
+    const a = document.createElement("a");
+    a.href = pdfUrl;
+    a.download = filename;
+    a.click();
+  };
+  const sharePdf = async () => {
+    try {
+      const res = await fetch(pdfUrl);
+      const blob = await res.blob();
+      const file = new File([blob], filename, { type: "application/pdf" });
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file], title: "晟風工程報價單" });
+      } else {
+        alert("此裝置不支援直接分享 PDF");
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+  const printPdf = () => {
+    const win = window.open(pdfUrl, "_blank");
+    if (win) {
+      win.focus();
+      setTimeout(() => { try { win.print(); } catch (_) {} }, 800);
+    }
+  };
+  return (
+    <Dialog open={open} onOpenChange={v => !v && onClose()}>
+      <DialogContent className="max-w-4xl max-h-[92dvh] p-0 flex flex-col">
+        <DialogHeader className="px-4 pt-4 pb-0">
+          <DialogTitle className="flex items-center gap-2 text-base">
+            <FileText className="h-5 w-5 text-primary" />{filename}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="flex-1 overflow-hidden px-4 py-2 min-h-[300px]">
+          <iframe
+            src={pdfUrl}
+            className="w-full h-full rounded border min-h-[60vh]"
+            title={filename}
+          />
+        </div>
+        <DialogFooter className="px-4 py-3 gap-2 flex-wrap">
+          <Button variant="outline" size="sm" onClick={onClose}>關閉</Button>
+          <Button variant="secondary" size="sm" onClick={sharePdf}>
+            <Share2 className="h-4 w-4 mr-1" />分享
+          </Button>
+          <Button variant="secondary" size="sm" onClick={downloadPdf}>
+            <Download className="h-4 w-4 mr-1" />下載 PDF
+          </Button>
+          <Button size="sm" onClick={printPdf}>
+            <Printer className="h-4 w-4 mr-1" />列印
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ── Print / PDF ──────────────────────────────────────────────────────────────
+async function printQuote(
+  quote: any,
+  setPdfPreview: (v: { url: string; filename: string } | null) => void,
+  toast: any,
+) {
+  toast({ title: "PDF 產生中", description: "請稍候…" });
+  try {
+    const { blob, quoteNo } = await generateQuotationPdf(quote);
+    const url = URL.createObjectURL(blob);
+    const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+    if (isMobile) {
+      setPdfPreview({ url, filename: `報價單_${quoteNo}.pdf` });
+      toast({ title: "已開啟 PDF 預覽", description: "可下載、分享或列印" });
+    } else {
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `報價單_${quoteNo}.pdf`;
+      a.click();
+      toast({ title: "已下載 PDF", description: `報價單_${quoteNo}.pdf` });
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+    }
+  } catch (e) {
+    toast({ title: "PDF 產生失敗", description: String(e), variant: "destructive" });
+  }
+}
+
+// ── LINE Share (報價單) — 分享 PDF ───────────────────────────────────
+async function shareQuoteViaLine(
+  quote: any,
+  setPdfPreview: (v: { url: string; filename: string } | null) => void,
+  toast: any,
+) {
+  toast({ title: "PDF 產生中", description: "請稍候…" });
+  try {
+    const { blob, quoteNo } = await generateQuotationPdf(quote);
+    const file = new File([blob], `報價單_${quoteNo}.pdf`, { type: "application/pdf" });
+    if (navigator.canShare?.({ files: [file] })) {
+      await navigator.share({ files: [file], title: "晟風工程報價單" });
+      toast({ title: "已開啟分享", description: "請選擇 LINE 或其他 App" });
+    } else {
+      const url = URL.createObjectURL(blob);
+      setPdfPreview({ url, filename: `報價單_${quoteNo}.pdf` });
+      toast({ title: "此裝置不支援直接分享", description: "已開啟 PDF 預覽，請手動分享" });
+    }
+  } catch (e: any) {
+    if (e?.name === "AbortError") {
+      toast({ title: "分享取消", description: "使用者取消了分享" });
+    } else {
+      toast({ title: "分享失敗", description: String(e), variant: "destructive" });
+    }
+  }
 }
 
 // ── ItemCard ───────────────────────────────────────────────────────────────
@@ -469,33 +581,37 @@ function ItemCard({ item, index, onChange, onDelete }: {
   );
 }
 
-// ── Main Component ─────────────────────────────────────────────────────────
-export default function Quotes() {
-  const { toast } = useToast();
+// ── Page ─────────────────────────────────────────────────────────────────────
+export default function QuotesPage() {
+  const [search] = useSearch();
+  const navigate = useLocation()[1];
   const qc = useQueryClient();
-  const search = useSearch();
-  const [, navigate] = useLocation();
-  const urlParams = new URLSearchParams(search);
-  const filterCustomerId = parseInt(urlParams.get("customerId") ?? "0", 10) || null;
-  const filterCustomerName = urlParams.get("customerName") ?? "";
+  const { toast } = useToast();
 
-  const [statusFilter, setStatusFilter] = useState("全部");
   const [showCreate, setShowCreate] = useState(false);
   const [editItem, setEditItem] = useState<any>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [convertItem, setConvertItem] = useState<any>(null);
-  const [woForm, setWoForm] = useState<WOForm>(makeEmpty());
   const [form, setForm] = useState<QuoteForm>(emptyForm());
+  const [woForm, setWoForm] = useState<WOForm>(makeEmpty());
 
-  const { data: quotes, isLoading } = useListQuotes({
-    ...(filterCustomerId ? { customerId: filterCustomerId } : {}),
-    ...(statusFilter !== "全部" ? { status: statusFilter } : {}),
+  const [statusFilter, setStatusFilter] = useState("全部");
+  const [pdfPreview, setPdfPreview] = useState<{ url: string; filename: string } | null>(null);
+
+  const searchParams = new URLSearchParams(search);
+  const filterCustomerName = searchParams.get("customer") || "";
+
+  const { data: quotes, isLoading } = useListQuotes();
+  const { data: customers } = useListCustomers();
+  const { data: employees } = useListEmployees();
+  const salesReps = employees?.filter((e: any) => e.role === "業務") ?? [];
+  const technicianOptions = employees?.filter((e: any) => e.role === "技師").map((e: any) => ({ value: String(e.id), label: e.name })) ?? [];
+
+  const filtered = (quotes ?? []).filter((q: any) => {
+    if (statusFilter !== "全部" && q.status !== statusFilter) return false;
+    if (filterCustomerName && !q.customerName?.toLowerCase().includes(filterCustomerName.toLowerCase())) return false;
+    return true;
   });
-  const { data: customers } = useListCustomers({ includeOld: "true" });
-  const { data: allSalesReps } = useListEmployees({ position: "業務" });
-  const salesReps = (allSalesReps ?? []).filter(e => e.status !== "離職");
-  const { data: allEmployees } = useListEmployees({});
-  const technicianOptions = (allEmployees ?? []).filter(e => e.position?.includes("技師") && e.status !== "離職");
 
   const invQuotes = () => qc.invalidateQueries({ queryKey: getListQuotesQueryKey() });
   const createMutation = useCreateQuote({ mutation: { onSuccess: () => { invQuotes(); setShowCreate(false); toast({ title: "報價單已新增" }); } } });
@@ -602,8 +718,8 @@ export default function Quotes() {
                     {q.address && <div className="text-xs text-muted-foreground truncate max-w-sm mt-0.5">{q.address}</div>}
                   </div>
                   <div className="flex gap-0.5 flex-shrink-0">
-                    <Button variant="ghost" size="icon" className="h-7 w-7" title="列印/PDF" onClick={() => printQuote(q, true)}><Printer className="h-3.5 w-3.5" /></Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-green-600 hover:text-green-700" title="LINE 分享" onClick={() => shareQuoteViaLine(q)}><Share2 className="h-3.5 w-3.5" /></Button>
+                    <Button variant="ghost" size="icon" className="h-7 w-7" title="列印/PDF" onClick={() => printQuote(q, setPdfPreview, toast)}><Printer className="h-3.5 w-3.5" /></Button>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-green-600 hover:text-green-700" title="LINE 分享" onClick={() => shareQuoteViaLine(q, setPdfPreview, toast)}><Share2 className="h-3.5 w-3.5" /></Button>
                     <Button variant="ghost" size="icon" className="h-7 w-7" title="複製" onClick={() => handleCopy(q)}><Copy className="h-3.5 w-3.5" /></Button>
                     {(q.status === "已接受" || q.status === "已送出") && (
                       <Button variant="ghost" size="icon" className="h-7 w-7 text-blue-600" title="轉為派工單" onClick={() => {
@@ -828,6 +944,16 @@ export default function Quotes() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* PDF Preview */}
+      {pdfPreview && (
+        <PdfPreviewDialog
+          open={!!pdfPreview}
+          onClose={() => setPdfPreview(null)}
+          pdfUrl={pdfPreview.url}
+          filename={pdfPreview.filename}
+        />
+      )}
     </div>
   );
 }
