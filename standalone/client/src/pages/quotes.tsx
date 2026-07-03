@@ -156,7 +156,7 @@ function quoteToForm(q: any): QuoteForm {
 }
 
 // ── Print ──────────────────────────────────────────────────────────────────
-function printQuote(quote: any, autoprint = true) {
+async function printQuote(quote: any, autoprint = true) {
   const items: any[] = quote.items ?? [];
   const d = quote.createdAt ? new Date(quote.createdAt) : new Date();
   const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
@@ -213,7 +213,6 @@ function printQuote(quote: any, autoprint = true) {
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;font-size:8.5pt;color:#111;background:#fff}
 @page{size:A4;margin:10mm}
-@media print{body{-webkit-print-color-adjust:exact;print-color-adjust:exact}.np{display:none!important}}
 .doc{max-width:190mm;margin:0 auto;padding-bottom:16mm}
 .hdr{display:flex;justify-content:space-between;align-items:flex-end;padding-bottom:3mm;border-bottom:2.5px solid #9ACD32;margin-bottom:3mm}
 .hdr-l{display:flex;align-items:center;gap:3mm}
@@ -261,10 +260,7 @@ tbody tr:last-child td{border-bottom:1.5px solid #9ACD32}
 .pf-logo{width:8mm;height:8mm;border-radius:50%;object-fit:cover;border:1px solid #9ACD32}
 .pf-info{font-size:6.5pt;color:#666;line-height:1.5}
 .pf-r{font-size:6.5pt;color:#aaa;text-align:right;line-height:1.6}
-.pbtn{position:fixed;top:8mm;right:8mm;background:#9ACD32;color:#111;border:none;padding:5px 16px;font-size:9.5pt;font-weight:700;cursor:pointer;border-radius:2px;z-index:100;letter-spacing:1px}
-.pbtn:hover{background:#7db220}
 </style></head><body>
-<button class="pbtn np" onclick="window.print()">列印 / PDF</button>
 <div class="doc">
 <div class="hdr">
   <div class="hdr-l">
@@ -354,54 +350,30 @@ tbody tr:last-child td{border-bottom:1.5px solid #9ACD32}
 </div>
 </body></html>`;
 
-  // Blob URL approach — works on mobile Safari/Chrome (no blank-window popup needed)
-  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const w = window.open(url, "_blank");
-  if (!w) {
-    // Popup blocked (iOS Safari) — force via anchor click
-    const a = document.createElement("a");
-    a.href = url;
-    a.target = "_blank";
-    a.rel = "noopener noreferrer";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-  }
-  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  const div = document.createElement("div");
+  div.innerHTML = html;
+  div.style.position = "absolute";
+  div.style.left = "-9999px";
+  div.style.width = "720px";
+  document.body.appendChild(div);
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  const html2pdf = await import("html2pdf.js").then((m: any) => m.default || m);
+  const opt = {
+    margin: [10, 10, 10, 10],
+    filename: `報價單_${quoteNo}.pdf`,
+    image: { type: "jpeg", quality: 0.98 },
+    html2canvas: { scale: 2, useCORS: true },
+    jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+  };
+  await html2pdf().set(opt).from(div).save();
+  document.body.removeChild(div);
 }
 
-// ── LINE Share (報價單) ────────────────────────────────────────────────────
-function shareQuoteViaLine(quote: any) {
-  const items = (quote.items ?? []) as any[];
-  const d = quote.createdAt ? new Date(quote.createdAt) : new Date();
-  const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
-  const quoteNo = `Q-${ymd}-${String(quote.id).padStart(4, "0")}`;
-  const qRaw = items.length > 0
-    ? items.reduce((s: number, i: any) => s + Number(i.subtotal ?? 0), 0)
-    : Number(quote.finalAmount ?? quote.amount ?? 0);
-  const qDisc = Number(quote.discountAmount ?? 0);
-  const { total } = calcTax(Math.max(0, qRaw - qDisc), quote.taxType ?? "未稅");
-  const validUntil = new Date(d.getTime() + 30 * 86400000).toLocaleDateString("zh-TW");
-
-  const lines = [
-    "【晟風工程 報價通知】",
-    "",
-    `報價單號：${quoteNo}`,
-    `工程名稱：${quote.title || "—"}`,
-    `客戶：${quote.customerName || "—"}`,
-    quote.contactPerson ? `聯絡人：${quote.contactPerson}` : "",
-    quote.customerPhone ? `聯絡電話：${quote.customerPhone}` : "",
-    quote.address ? `施工地址：${quote.address}` : "",
-    "",
-    `含稅總金額：NT$ ${total.toLocaleString()}`,
-    `報價有效期限：${validUntil}`,
-    "",
-    "如有任何問題請與我們聯繫，謝謝！",
-    "晟風工程有限公司  Tel：0955-980-738",
-  ].filter(l => l !== "").join("\n").replace(/\n{3,}/g, "\n\n");
-
-  window.open(`https://line.me/R/msg/text?${encodeURIComponent(lines)}`, "_blank");
+// ── LINE Share (報價單) — 分享 PDF ──────────────────────────────────
+async function shareQuoteViaLine(quote: any) {
+  await printQuote(quote);
+  const lineUrl = `https://line.me/R/msg/text/?${encodeURIComponent("您好，附件為晟風工程報價單，請查收，謝謝。")}`;
+  window.open(lineUrl, "_blank");
 }
 
 // ── ItemCard ───────────────────────────────────────────────────────────────
