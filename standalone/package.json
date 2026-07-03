@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "build": "node build.mjs",
-    "start": "npm run db:push && node dist/server/index.mjs",
+    "start": "node dist/server/index.mjs",
     "dev": "tsx server/index.ts",
     "db:push": "drizzle-kit push --config drizzle.config.ts",
     "db:studio": "drizzle-kit studio --config drizzle.config.ts",
