@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import { db, workOrdersTable, progressTable, customersTable } from "@workspace/db";
 import { CreateWorkOrderBody, UpdateWorkOrderBody, CreateProgressBody } from "@workspace/api-zod";
 import { requireRole } from "../lib/auth";
@@ -19,7 +19,8 @@ function isoStr(v: unknown): string | null {
 const WO_SELECT = {
   id: workOrdersTable.id,
   customerId: workOrdersTable.customerId,
-  customerName: sql<string>`COALESCE(${customersTable.name}, ${workOrdersTable.customerName})`,
+  storedCustomerName: workOrdersTable.customerName,
+  linkedCustomerName: customersTable.name,
   quoteId: workOrdersTable.quoteId,
   workOrderNumber: workOrdersTable.workOrderNumber,
   title: workOrdersTable.title,
@@ -49,7 +50,13 @@ const WO_SELECT = {
 };
 
 function formatOrder(o: Record<string, unknown>) {
-  return { ...o, createdAt: isoStr(o.createdAt), updatedAt: isoStr(o.updatedAt) };
+  const { storedCustomerName, linkedCustomerName, ...rest } = o as any;
+  return {
+    ...rest,
+    customerName: (linkedCustomerName as string | null) ?? (storedCustomerName as string | null) ?? null,
+    createdAt: isoStr(o.createdAt),
+    updatedAt: isoStr(o.updatedAt),
+  };
 }
 
 /** Convert empty strings to undefined for date/string columns that can't be empty */
@@ -111,7 +118,7 @@ router.post("/work-orders", requireRole(...WO_WRITE_ROLES), async (req, res): Pr
     .where(eq(workOrdersTable.id, order.id))
     .returning();
 
-  res.status(201).json(formatOrder(updated));
+  res.status(201).json(formatOrder({ ...updated, linkedCustomerName: null }));
 });
 
 router.get("/work-orders/:id", requireRole(...WO_READ_ROLES), async (req, res): Promise<void> => {
@@ -146,8 +153,9 @@ router.patch("/work-orders/:id", requireRole(...WO_WRITE_ROLES), async (req, res
   const [order] = await db.update(workOrdersTable).set(sanitizeWOData(parsed.data)).where(eq(workOrdersTable.id, id)).returning();
   if (!order) { res.status(404).json({ error: "找不到派工單" }); return; }
 
-  res.json(formatOrder(order));
+  res.json(formatOrder({ ...order, linkedCustomerName: null }));
 });
+
 router.delete("/work-orders/:id", requireRole(...WO_DELETE_ROLES), async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);

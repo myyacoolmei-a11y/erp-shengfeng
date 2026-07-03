@@ -1,0 +1,2719 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: 晟風工程 ERP API
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: auth
+    description: 驗證與授權
+  - name: users
+    description: 使用者管理
+  - name: customers
+    description: 客戶資料
+  - name: acUnits
+    description: 冷氣設備
+  - name: quotes
+    description: 報價單
+  - name: workOrders
+    description: 派工單
+  - name: progress
+    description: 工程進度
+  - name: payments
+    description: 收款紀錄
+  - name: warranties
+    description: 保固資料
+  - name: maintenance
+    description: 保養提醒
+  - name: receivables
+    description: 應收帳款
+  - name: dashboard
+    description: 儀表板
+  - name: employees
+    description: 員工管理
+  - name: products
+    description: 商品管理
+  - name: wholesale-customers
+    description: 批發客戶
+  - name: wholesale-quotes
+    description: 批發報價單
+  - name: wholesale-orders
+    description: 批發訂單
+  - name: wholesale-receivables
+    description: 批發應收款
+
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+
+  /auth/login:
+    post:
+      operationId: login
+      tags: [auth]
+      summary: 登入
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginInput"
+      responses:
+        "200":
+          description: 登入成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: 帳號或密碼錯誤
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: 登出
+      responses:
+        "200":
+          description: 登出成功
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: 取得目前登入使用者
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: 目前登入使用者資訊
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthUser"
+
+  /auth/password:
+    patch:
+      operationId: changePassword
+      tags: [auth]
+      summary: 修改密碼
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordInput"
+      responses:
+        "200":
+          description: 密碼修改成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: 目前密碼錯誤或格式不符
+
+  /users:
+    get:
+      operationId: listUsers
+      tags: [users]
+      summary: 列出所有使用者（老闆專用）
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: 使用者清單
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/UserItem"
+    post:
+      operationId: createUser
+      tags: [users]
+      summary: 新增使用者（老闆專用）
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserInput"
+      responses:
+        "201":
+          description: 使用者已建立
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserItem"
+
+  /users/{id}:
+    patch:
+      operationId: updateUser
+      tags: [users]
+      summary: 更新使用者（老闆專用）
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateUserInput"
+      responses:
+        "200":
+          description: 使用者已更新
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserItem"
+
+  /customers:
+    get:
+      operationId: listCustomers
+      tags: [customers]
+      summary: 列出所有客戶
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: 搜尋關鍵字（姓名、電話、地址）
+        - name: includeOld
+          in: query
+          schema:
+            type: string
+          description: 是否包含兩年前的客戶 (true/false)
+      responses:
+        "200":
+          description: 客戶列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Customer"
+    post:
+      operationId: createCustomer
+      tags: [customers]
+      summary: 新增客戶
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerInput"
+      responses:
+        "201":
+          description: 新增成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Customer"
+
+  /customers/{id}:
+    get:
+      operationId: getCustomer
+      tags: [customers]
+      summary: 取得客戶詳細資料
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: 客戶資料
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Customer"
+        "404":
+          description: 找不到客戶
+    patch:
+      operationId: updateCustomer
+      tags: [customers]
+      summary: 更新客戶資料
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerUpdate"
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Customer"
+        "404":
+          description: 找不到客戶
+    delete:
+      operationId: deleteCustomer
+      tags: [customers]
+      summary: 刪除客戶
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: 刪除成功
+        "404":
+          description: 找不到客戶
+
+  /customers/check-duplicate:
+    post:
+      operationId: checkCustomerDuplicate
+      tags: [customers]
+      summary: 檢查是否有重複客戶（依手機/市話/統編）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerDuplicateCheckInput"
+      responses:
+        "200":
+          description: 符合的客戶列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Customer"
+
+  /customers/{customerId}/addresses:
+    get:
+      operationId: listCustomerAddresses
+      tags: [customers]
+      summary: 取得客戶地址列表
+      parameters:
+        - name: customerId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: 地址列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/CustomerAddress"
+    post:
+      operationId: createCustomerAddress
+      tags: [customers]
+      summary: 新增客戶地址
+      parameters:
+        - name: customerId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerAddressInput"
+      responses:
+        "201":
+          description: 新增成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerAddress"
+
+  /customers/{customerId}/addresses/{addressId}:
+    patch:
+      operationId: updateCustomerAddress
+      tags: [customers]
+      summary: 更新客戶地址
+      parameters:
+        - name: customerId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: addressId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CustomerAddressUpdate"
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CustomerAddress"
+    delete:
+      operationId: deleteCustomerAddress
+      tags: [customers]
+      summary: 刪除客戶地址
+      parameters:
+        - name: customerId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: addressId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "204":
+          description: 刪除成功
+
+  /customers/{customerId}/ac-units:
+    get:
+      operationId: listAcUnits
+      tags: [acUnits]
+      summary: 取得客戶的冷氣設備列表
+      parameters:
+        - name: customerId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: 冷氣設備列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AcUnit"
+    post:
+      operationId: createAcUnit
+      tags: [acUnits]
+      summary: 新增冷氣設備
+      parameters:
+        - name: customerId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AcUnitInput"
+      responses:
+        "201":
+          description: 新增成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AcUnit"
+
+  /ac-units/{id}:
+    patch:
+      operationId: updateAcUnit
+      tags: [acUnits]
+      summary: 更新冷氣設備
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AcUnitUpdate"
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AcUnit"
+    delete:
+      operationId: deleteAcUnit
+      tags: [acUnits]
+      summary: 刪除冷氣設備
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: 刪除成功
+
+  /employees:
+    get:
+      operationId: listEmployees
+      tags: [employees]
+      summary: 列出所有員工
+      parameters:
+        - name: position
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 員工列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Employee"
+    post:
+      operationId: createEmployee
+      tags: [employees]
+      summary: 新增員工
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmployeeInput"
+      responses:
+        "201":
+          description: 新增成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Employee"
+
+  /employees/{id}:
+    get:
+      operationId: getEmployee
+      tags: [employees]
+      summary: 取得員工詳細資料
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: 員工資料
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Employee"
+        "404":
+          description: 找不到員工
+    patch:
+      operationId: updateEmployee
+      tags: [employees]
+      summary: 更新員工
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmployeeUpdate"
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Employee"
+        "404":
+          description: 找不到員工
+    delete:
+      operationId: deleteEmployee
+      tags: [employees]
+      summary: 刪除員工
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: 刪除成功
+
+  /quotes:
+    get:
+      operationId: listQuotes
+      tags: [quotes]
+      summary: 列出所有報價單
+      parameters:
+        - name: customerId
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 報價單列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Quote"
+    post:
+      operationId: createQuote
+      tags: [quotes]
+      summary: 新增報價單
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuoteInput"
+      responses:
+        "201":
+          description: 新增成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Quote"
+
+  /quotes/{id}:
+    get:
+      operationId: getQuote
+      tags: [quotes]
+      summary: 取得報價單詳細資料
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: 報價單資料
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Quote"
+        "404":
+          description: 找不到報價單
+    patch:
+      operationId: updateQuote
+      tags: [quotes]
+      summary: 更新報價單
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuoteUpdate"
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Quote"
+        "404":
+          description: 找不到報價單
+    delete:
+      operationId: deleteQuote
+      tags: [quotes]
+      summary: 刪除報價單
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: 刪除成功
+
+  /work-orders:
+    get:
+      operationId: listWorkOrders
+      tags: [workOrders]
+      summary: 列出所有派工單
+      parameters:
+        - name: customerId
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 派工單列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WorkOrder"
+    post:
+      operationId: createWorkOrder
+      tags: [workOrders]
+      summary: 新增派工單
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkOrderInput"
+      responses:
+        "201":
+          description: 新增成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkOrder"
+
+  /work-orders/{id}:
+    get:
+      operationId: getWorkOrder
+      tags: [workOrders]
+      summary: 取得派工單詳細資料
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: 派工單資料
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkOrder"
+        "404":
+          description: 找不到派工單
+    patch:
+      operationId: updateWorkOrder
+      tags: [workOrders]
+      summary: 更新派工單
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WorkOrderUpdate"
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkOrder"
+        "404":
+          description: 找不到派工單
+    delete:
+      operationId: deleteWorkOrder
+      tags: [workOrders]
+      summary: 刪除派工單
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: 刪除成功
+
+  /work-orders/{workOrderId}/progress:
+    get:
+      operationId: listProgress
+      tags: [progress]
+      summary: 取得派工單的工程進度
+      parameters:
+        - name: workOrderId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: 工程進度列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Progress"
+    post:
+      operationId: createProgress
+      tags: [progress]
+      summary: 新增工程進度紀錄
+      parameters:
+        - name: workOrderId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProgressInput"
+      responses:
+        "201":
+          description: 新增成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Progress"
+
+  /payments:
+    get:
+      operationId: listPayments
+      tags: [payments]
+      summary: 列出所有收款紀錄
+      parameters:
+        - name: customerId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: 收款紀錄列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Payment"
+    post:
+      operationId: createPayment
+      tags: [payments]
+      summary: 新增收款紀錄
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaymentInput"
+      responses:
+        "201":
+          description: 新增成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payment"
+
+  /payments/{id}:
+    get:
+      operationId: getPayment
+      tags: [payments]
+      summary: 取得收款紀錄
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: 收款紀錄
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payment"
+        "404":
+          description: 找不到收款紀錄
+    patch:
+      operationId: updatePayment
+      tags: [payments]
+      summary: 更新收款紀錄
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaymentUpdate"
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payment"
+    delete:
+      operationId: deletePayment
+      tags: [payments]
+      summary: 刪除收款紀錄
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: 刪除成功
+
+  /warranties:
+    get:
+      operationId: listWarranties
+      tags: [warranties]
+      summary: 列出所有保固資料
+      parameters:
+        - name: customerId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: 保固列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Warranty"
+    post:
+      operationId: createWarranty
+      tags: [warranties]
+      summary: 新增保固資料
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WarrantyInput"
+      responses:
+        "201":
+          description: 新增成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Warranty"
+
+  /warranties/{id}:
+    get:
+      operationId: getWarranty
+      tags: [warranties]
+      summary: 取得保固資料
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: 保固資料
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Warranty"
+        "404":
+          description: 找不到保固資料
+    patch:
+      operationId: updateWarranty
+      tags: [warranties]
+      summary: 更新保固資料
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WarrantyUpdate"
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Warranty"
+    delete:
+      operationId: deleteWarranty
+      tags: [warranties]
+      summary: 刪除保固資料
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: 刪除成功
+
+  /maintenance-reminders:
+    get:
+      operationId: listMaintenanceReminders
+      tags: [maintenance]
+      summary: 列出保養提醒
+      parameters:
+        - name: customerId
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: upcoming
+          in: query
+          schema:
+            type: string
+          description: 是否只顯示即將到期的提醒 (true/false)
+      responses:
+        "200":
+          description: 保養提醒列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MaintenanceReminder"
+    post:
+      operationId: createMaintenanceReminder
+      tags: [maintenance]
+      summary: 新增保養提醒
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MaintenanceReminderInput"
+      responses:
+        "201":
+          description: 新增成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MaintenanceReminder"
+
+  /maintenance-reminders/{id}:
+    get:
+      operationId: getMaintenanceReminder
+      tags: [maintenance]
+      summary: 取得保養提醒
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: 保養提醒
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MaintenanceReminder"
+        "404":
+          description: 找不到保養提醒
+    patch:
+      operationId: updateMaintenanceReminder
+      tags: [maintenance]
+      summary: 更新保養提醒
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MaintenanceReminderUpdate"
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MaintenanceReminder"
+    delete:
+      operationId: deleteMaintenanceReminder
+      tags: [maintenance]
+      summary: 刪除保養提醒
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: 刪除成功
+
+  /receivables:
+    get:
+      operationId: listReceivables
+      tags: [receivables]
+      summary: 列出所有應收帳款
+      parameters:
+        - name: customerId
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: workOrderId
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: 應收帳款列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Receivable"
+    post:
+      operationId: createReceivable
+      tags: [receivables]
+      summary: 新增應收帳款
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReceivableInput"
+      responses:
+        "201":
+          description: 新增成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Receivable"
+
+  /receivables/{id}:
+    get:
+      operationId: getReceivable
+      tags: [receivables]
+      summary: 取得應收帳款
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: 應收帳款
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Receivable"
+        "404":
+          description: 找不到應收帳款
+    patch:
+      operationId: updateReceivable
+      tags: [receivables]
+      summary: 更新應收帳款
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ReceivableUpdate"
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Receivable"
+    delete:
+      operationId: deleteReceivable
+      tags: [receivables]
+      summary: 刪除應收帳款
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: 刪除成功
+
+  /receivables/{id}/payment:
+    post:
+      operationId: recordReceivablePayment
+      tags: [receivables]
+      summary: 記錄收款
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecordPaymentInput"
+      responses:
+        "200":
+          description: 收款記錄成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Receivable"
+
+  /dashboard/summary:
+    get:
+      operationId: getDashboardSummary
+      tags: [dashboard]
+      summary: 取得儀表板統計摘要
+      responses:
+        "200":
+          description: 統計摘要
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardSummary"
+
+  /products:
+    get:
+      operationId: listProducts
+      tags: [products]
+      summary: 列出商品
+      parameters:
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: brand
+          in: query
+          schema: { type: string }
+        - name: category
+          in: query
+          schema: { type: string }
+        - name: isActive
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: 商品列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Product"
+    post:
+      operationId: createProduct
+      tags: [products]
+      summary: 新增商品
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductInput"
+      responses:
+        "201":
+          description: 新增成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+
+  /products/{id}:
+    get:
+      operationId: getProduct
+      tags: [products]
+      summary: 取得商品
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: 商品資料
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "404":
+          description: 找不到商品
+    patch:
+      operationId: updateProduct
+      tags: [products]
+      summary: 更新商品
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProductInput"
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "404":
+          description: 找不到商品
+    delete:
+      operationId: deleteProduct
+      tags: [products]
+      summary: 刪除商品
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "204":
+          description: 刪除成功
+        "404":
+          description: 找不到商品
+
+  /wholesale/customers:
+    get:
+      operationId: listWholesaleCustomers
+      tags: [wholesale-customers]
+      summary: 列出批發客戶
+      parameters:
+        - name: search
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: 批發客戶列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WholesaleCustomer"
+    post:
+      operationId: createWholesaleCustomer
+      tags: [wholesale-customers]
+      summary: 新增批發客戶
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WholesaleCustomerInput"
+      responses:
+        "201":
+          description: 新增成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WholesaleCustomer"
+
+  /wholesale/customers/{id}:
+    get:
+      operationId: getWholesaleCustomer
+      tags: [wholesale-customers]
+      summary: 取得批發客戶
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: 批發客戶資料
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WholesaleCustomer"
+    patch:
+      operationId: updateWholesaleCustomer
+      tags: [wholesale-customers]
+      summary: 更新批發客戶
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WholesaleCustomerInput"
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WholesaleCustomer"
+    delete:
+      operationId: deleteWholesaleCustomer
+      tags: [wholesale-customers]
+      summary: 刪除批發客戶
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "204":
+          description: 刪除成功
+
+  /wholesale/quotes:
+    get:
+      operationId: listWholesaleQuotes
+      tags: [wholesale-quotes]
+      summary: 列出批發報價單
+      parameters:
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: customerId
+          in: query
+          schema: { type: integer }
+      responses:
+        "200":
+          description: 批發報價單列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WholesaleQuote"
+    post:
+      operationId: createWholesaleQuote
+      tags: [wholesale-quotes]
+      summary: 新增批發報價單
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WholesaleQuoteInput"
+      responses:
+        "201":
+          description: 新增成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WholesaleQuote"
+
+  /wholesale/quotes/{id}:
+    get:
+      operationId: getWholesaleQuote
+      tags: [wholesale-quotes]
+      summary: 取得批發報價單
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: 批發報價單資料
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WholesaleQuote"
+    patch:
+      operationId: updateWholesaleQuote
+      tags: [wholesale-quotes]
+      summary: 更新批發報價單
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WholesaleQuoteInput"
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WholesaleQuote"
+    delete:
+      operationId: deleteWholesaleQuote
+      tags: [wholesale-quotes]
+      summary: 刪除批發報價單
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "204":
+          description: 刪除成功
+
+  /wholesale/quotes/{id}/convert:
+    post:
+      operationId: convertWholesaleQuote
+      tags: [wholesale-quotes]
+      summary: 將報價單轉為訂單
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "201":
+          description: 訂單建立成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WholesaleOrder"
+
+  /wholesale/orders:
+    get:
+      operationId: listWholesaleOrders
+      tags: [wholesale-orders]
+      summary: 列出批發訂單
+      parameters:
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: customerId
+          in: query
+          schema: { type: integer }
+      responses:
+        "200":
+          description: 批發訂單列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WholesaleOrder"
+    post:
+      operationId: createWholesaleOrder
+      tags: [wholesale-orders]
+      summary: 新增批發訂單
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WholesaleOrderInput"
+      responses:
+        "201":
+          description: 新增成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WholesaleOrder"
+
+  /wholesale/orders/{id}:
+    get:
+      operationId: getWholesaleOrder
+      tags: [wholesale-orders]
+      summary: 取得批發訂單
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: 批發訂單資料
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WholesaleOrder"
+    patch:
+      operationId: updateWholesaleOrder
+      tags: [wholesale-orders]
+      summary: 更新批發訂單
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/WholesaleOrderInput"
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WholesaleOrder"
+    delete:
+      operationId: deleteWholesaleOrder
+      tags: [wholesale-orders]
+      summary: 刪除批發訂單
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "204":
+          description: 刪除成功
+
+  /wholesale/receivables:
+    get:
+      operationId: listWholesaleReceivables
+      tags: [wholesale-receivables]
+      summary: 列出批發應收款
+      parameters:
+        - name: orderId
+          in: query
+          schema: { type: integer }
+        - name: status
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: 批發應收款列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WholesaleReceivable"
+
+  /wholesale/receivables/{id}:
+    patch:
+      operationId: updateWholesaleReceivable
+      tags: [wholesale-receivables]
+      summary: 更新批發應收款
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateWholesaleReceivableInput"
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WholesaleReceivable"
+
+  /wholesale/settlements/summary:
+    get:
+      operationId: listWholesaleSettlementSummary
+      tags: [wholesale-settlements]
+      summary: 批發月結總覽 — 按客戶統計訂單金額
+      parameters:
+        - name: from
+          in: query
+          required: true
+          schema: { type: string }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: 客戶月結總覽
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WholesaleSettlementSummary"
+
+  /wholesale/settlements/{customerId}:
+    get:
+      operationId: listWholesaleSettlementDetail
+      tags: [wholesale-settlements]
+      summary: 單一客戶月結明細 — 訂單列表
+      parameters:
+        - name: customerId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: from
+          in: query
+          required: true
+          schema: { type: string }
+        - name: to
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: 客戶訂單明細
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WholesaleOrder"
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+
+    Customer:
+      type: object
+      required: [id, name, createdAt, updatedAt]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        contactPerson: { type: ["string", "null"] }
+        phone: { type: ["string", "null"] }
+        mobile: { type: ["string", "null"] }
+        address: { type: ["string", "null"] }
+        email: { type: ["string", "null"] }
+        taxId: { type: ["string", "null"] }
+        source: { type: ["string", "null"] }
+        status: { type: ["string", "null"] }
+        discountScheme: { type: ["string", "null"] }
+        notes: { type: ["string", "null"] }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+
+    CustomerInput:
+      type: object
+      required: [name]
+      properties:
+        name: { type: string, minLength: 1 }
+        contactPerson: { type: string }
+        phone: { type: string }
+        mobile: { type: string }
+        address: { type: string }
+        email: { type: string }
+        taxId: { type: string }
+        source: { type: string }
+        status: { type: string }
+        discountScheme: { type: string }
+        notes: { type: string }
+
+    CustomerUpdate:
+      type: object
+      properties:
+        name: { type: string, minLength: 1 }
+        contactPerson: { type: string }
+        phone: { type: string }
+        mobile: { type: string }
+        address: { type: string }
+        email: { type: string }
+        taxId: { type: string }
+        source: { type: string }
+        status: { type: string }
+        discountScheme: { type: string }
+        notes: { type: string }
+
+    CustomerAddress:
+      type: object
+      required: [id, customerId, label, address, isDefault, createdAt]
+      properties:
+        id: { type: integer }
+        customerId: { type: integer }
+        label: { type: string }
+        address: { type: string }
+        isDefault: { type: boolean }
+        createdAt: { type: string }
+
+    CustomerAddressInput:
+      type: object
+      required: [label, address]
+      properties:
+        label: { type: string, minLength: 1 }
+        address: { type: string, minLength: 1 }
+        isDefault: { type: boolean }
+
+    CustomerAddressUpdate:
+      type: object
+      properties:
+        label: { type: string }
+        address: { type: string }
+        isDefault: { type: boolean }
+
+    CustomerDuplicateCheckInput:
+      type: object
+      properties:
+        phone: { type: string }
+        mobile: { type: string }
+        taxId: { type: string }
+
+    AcUnit:
+      type: object
+      required: [id, customerId, brand, model, createdAt, updatedAt]
+      properties:
+        id: { type: integer }
+        customerId: { type: integer }
+        brand: { type: string }
+        model: { type: string }
+        serialNumber: { type: ["string", "null"] }
+        purchaseDate: { type: ["string", "null"] }
+        installationDate: { type: ["string", "null"] }
+        notes: { type: ["string", "null"] }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+
+    AcUnitInput:
+      type: object
+      required: [brand, model]
+      properties:
+        brand: { type: string, minLength: 1 }
+        model: { type: string, minLength: 1 }
+        serialNumber: { type: string }
+        purchaseDate: { type: string }
+        installationDate: { type: string }
+        notes: { type: string }
+
+    AcUnitUpdate:
+      type: object
+      properties:
+        brand: { type: string }
+        model: { type: string }
+        serialNumber: { type: string }
+        purchaseDate: { type: string }
+        installationDate: { type: string }
+        notes: { type: string }
+
+    QuoteItemInput:
+      type: object
+      required: [category, itemName, quantity, unit, unitPrice]
+      properties:
+        category: { type: string }
+        itemName: { type: string }
+        brand: { type: string }
+        quantity: { type: number }
+        unit: { type: string }
+        unitPrice: { type: number }
+        notes: { type: string }
+        sortOrder: { type: integer }
+
+    QuoteItem:
+      type: object
+      required: [id, quoteId, category, itemName, quantity, unit, unitPrice, subtotal, sortOrder]
+      properties:
+        id: { type: integer }
+        quoteId: { type: integer }
+        category: { type: string }
+        itemName: { type: string }
+        brand: { type: ["string", "null"] }
+        quantity: { type: number }
+        unit: { type: string }
+        unitPrice: { type: number }
+        subtotal: { type: number }
+        notes: { type: ["string", "null"] }
+        sortOrder: { type: integer }
+
+    Quote:
+      type: object
+      required: [id, title, amount, status, taxType, createdAt, updatedAt]
+      properties:
+        id: { type: integer }
+        customerId: { type: ["integer", "null"] }
+        customerName: { type: ["string", "null"] }
+        contactPerson: { type: ["string", "null"] }
+        title: { type: string }
+        description: { type: ["string", "null"] }
+        amount: { type: number }
+        discountAmount: { type: ["number", "null"] }
+        finalAmount: { type: ["number", "null"] }
+        status: { type: string }
+        notes: { type: ["string", "null"] }
+        address: { type: ["string", "null"] }
+        customerPhone: { type: ["string", "null"] }
+        taxType: { type: string }
+        salesRepId: { type: ["integer", "null"] }
+        salesRepName: { type: ["string", "null"] }
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuoteItem"
+        createdAt: { type: string }
+        updatedAt: { type: string }
+
+    QuoteInput:
+      type: object
+      required: [title, status]
+      properties:
+        customerId: { type: integer }
+        customerName: { type: string }
+        contactPerson: { type: string }
+        title: { type: string, minLength: 1 }
+        description: { type: string }
+        amount: { type: number }
+        discountAmount: { type: number }
+        finalAmount: { type: number }
+        status: { type: string }
+        notes: { type: string }
+        address: { type: string }
+        customerPhone: { type: string }
+        taxType: { type: string }
+        salesRepId: { type: integer }
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuoteItemInput"
+
+    QuoteUpdate:
+      type: object
+      properties:
+        customerId: { type: integer }
+        customerName: { type: string }
+        contactPerson: { type: string }
+        title: { type: string }
+        description: { type: string }
+        amount: { type: number }
+        discountAmount: { type: number }
+        finalAmount: { type: number }
+        status: { type: string }
+        notes: { type: string }
+        address: { type: string }
+        customerPhone: { type: string }
+        taxType: { type: string }
+        salesRepId: { type: integer }
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/QuoteItemInput"
+
+    Employee:
+      type: object
+      required: [id, name, position, status, createdAt, updatedAt]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        phone: { type: ["string", "null"] }
+        position: { type: string }
+        status: { type: string }
+        notes: { type: ["string", "null"] }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+
+    EmployeeInput:
+      type: object
+      required: [name, position, status]
+      properties:
+        name: { type: string, minLength: 1 }
+        phone: { type: string }
+        position: { type: string }
+        status: { type: string }
+        notes: { type: string }
+
+    EmployeeUpdate:
+      type: object
+      properties:
+        name: { type: string }
+        phone: { type: string }
+        position: { type: string }
+        status: { type: string }
+        notes: { type: string }
+
+    WorkOrder:
+      type: object
+      required: [id, title, status, createdAt, updatedAt]
+      properties:
+        id: { type: integer }
+        customerId: { type: ["integer", "null"] }
+        customerName: { type: ["string", "null"] }
+        quoteId: { type: ["integer", "null"] }
+        workOrderNumber: { type: ["string", "null"] }
+        title: { type: string }
+        status: { type: string }
+        contactPerson: { type: ["string", "null"] }
+        mobilePhone: { type: ["string", "null"] }
+        telephone: { type: ["string", "null"] }
+        installAddress: { type: ["string", "null"] }
+        scheduledDate: { type: ["string", "null"] }
+        scheduledTime: { type: ["string", "null"] }
+        completedDate: { type: ["string", "null"] }
+        assignedTo: { type: ["string", "null"] }
+        assistantTo: { type: ["string", "null"] }
+        projectType: { type: ["string", "null"] }
+        acBrand: { type: ["string", "null"] }
+        modelNumber: { type: ["string", "null"] }
+        quantity: { type: ["integer", "null"] }
+        indoorUnits: { type: ["integer", "null"] }
+        outdoorUnits: { type: ["integer", "null"] }
+        floorLevel: { type: ["string", "null"] }
+        hasElevator: { type: ["string", "null"] }
+        description: { type: ["string", "null"] }
+        notes: { type: ["string", "null"] }
+        technicians: { type: ["string", "null"] }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+
+    WorkOrderInput:
+      type: object
+      required: [title, status]
+      properties:
+        customerId: { type: ["integer", "null"] }
+        customerName: { type: string }
+        quoteId: { type: integer }
+        title: { type: string, minLength: 1 }
+        status: { type: string }
+        contactPerson: { type: string }
+        mobilePhone: { type: string }
+        telephone: { type: string }
+        installAddress: { type: string }
+        scheduledDate: { type: string }
+        scheduledTime: { type: string }
+        completedDate: { type: string }
+        assignedTo: { type: string }
+        assistantTo: { type: string }
+        projectType: { type: string }
+        acBrand: { type: string }
+        modelNumber: { type: string }
+        quantity: { type: integer }
+        indoorUnits: { type: integer }
+        outdoorUnits: { type: integer }
+        floorLevel: { type: string }
+        hasElevator: { type: string }
+        description: { type: string }
+        notes: { type: string }
+        technicians: { type: string }
+
+    WorkOrderUpdate:
+      type: object
+      properties:
+        customerId: { type: ["integer", "null"] }
+        customerName: { type: string }
+        title: { type: string }
+        status: { type: string }
+        contactPerson: { type: string }
+        mobilePhone: { type: string }
+        telephone: { type: string }
+        installAddress: { type: string }
+        scheduledDate: { type: string }
+        scheduledTime: { type: string }
+        completedDate: { type: string }
+        assignedTo: { type: string }
+        assistantTo: { type: string }
+        projectType: { type: string }
+        acBrand: { type: string }
+        modelNumber: { type: string }
+        quantity: { type: integer }
+        indoorUnits: { type: integer }
+        outdoorUnits: { type: integer }
+        floorLevel: { type: string }
+        hasElevator: { type: string }
+        description: { type: string }
+        notes: { type: string }
+        technicians: { type: string }
+
+    Progress:
+      type: object
+      required: [id, workOrderId, description, createdAt]
+      properties:
+        id: { type: integer }
+        workOrderId: { type: integer }
+        description: { type: string }
+        recordedBy: { type: ["string", "null"] }
+        createdAt: { type: string }
+
+    ProgressInput:
+      type: object
+      required: [description]
+      properties:
+        description: { type: string, minLength: 1 }
+        recordedBy: { type: string }
+
+    Payment:
+      type: object
+      required: [id, customerId, amount, paymentDate, createdAt]
+      properties:
+        id: { type: integer }
+        customerId: { type: integer }
+        customerName: { type: ["string", "null"] }
+        quoteId: { type: ["integer", "null"] }
+        workOrderId: { type: ["integer", "null"] }
+        amount: { type: number }
+        paymentDate: { type: string }
+        paymentMethod: { type: ["string", "null"] }
+        notes: { type: ["string", "null"] }
+        createdAt: { type: string }
+
+    PaymentInput:
+      type: object
+      required: [customerId, amount, paymentDate]
+      properties:
+        customerId: { type: integer }
+        quoteId: { type: integer }
+        workOrderId: { type: integer }
+        amount: { type: number }
+        paymentDate: { type: string }
+        paymentMethod: { type: string }
+        notes: { type: string }
+
+    PaymentUpdate:
+      type: object
+      properties:
+        amount: { type: number }
+        paymentDate: { type: string }
+        paymentMethod: { type: string }
+        notes: { type: string }
+
+    Warranty:
+      type: object
+      required: [id, customerId, startDate, endDate, createdAt]
+      properties:
+        id: { type: integer }
+        customerId: { type: integer }
+        customerName: { type: ["string", "null"] }
+        acUnitId: { type: ["integer", "null"] }
+        startDate: { type: string }
+        endDate: { type: string }
+        description: { type: ["string", "null"] }
+        notes: { type: ["string", "null"] }
+        createdAt: { type: string }
+
+    WarrantyInput:
+      type: object
+      required: [customerId, startDate, endDate]
+      properties:
+        customerId: { type: integer }
+        acUnitId: { type: integer }
+        startDate: { type: string }
+        endDate: { type: string }
+        description: { type: string }
+        notes: { type: string }
+
+    WarrantyUpdate:
+      type: object
+      properties:
+        startDate: { type: string }
+        endDate: { type: string }
+        description: { type: string }
+        notes: { type: string }
+
+    MaintenanceReminder:
+      type: object
+      required: [id, customerId, reminderDate, description, status, createdAt]
+      properties:
+        id: { type: integer }
+        customerId: { type: integer }
+        customerName: { type: ["string", "null"] }
+        acUnitId: { type: ["integer", "null"] }
+        reminderDate: { type: string }
+        description: { type: string }
+        status: { type: string }
+        notes: { type: ["string", "null"] }
+        createdAt: { type: string }
+
+    MaintenanceReminderInput:
+      type: object
+      required: [customerId, reminderDate, description, status]
+      properties:
+        customerId: { type: integer }
+        acUnitId: { type: integer }
+        reminderDate: { type: string }
+        description: { type: string, minLength: 1 }
+        status: { type: string }
+        notes: { type: string }
+
+    MaintenanceReminderUpdate:
+      type: object
+      properties:
+        reminderDate: { type: string }
+        description: { type: string }
+        status: { type: string }
+        notes: { type: string }
+
+    Receivable:
+      type: object
+      required: [id, customerId, totalAmount, receivedAmount, paymentStatus, invoiceStatus, createdAt, updatedAt]
+      properties:
+        id: { type: integer }
+        customerId: { type: integer }
+        customerName: { type: ["string", "null"] }
+        workOrderId: { type: ["integer", "null"] }
+        workOrderNumber: { type: ["string", "null"] }
+        projectName: { type: ["string", "null"] }
+        projectType: { type: ["string", "null"] }
+        completionDate: { type: ["string", "null"] }
+        totalAmount: { type: number }
+        receivedAmount: { type: number }
+        paymentStatus: { type: string }
+        expectedPaymentDate: { type: ["string", "null"] }
+        actualPaymentDate: { type: ["string", "null"] }
+        paymentMethod: { type: ["string", "null"] }
+        notes: { type: ["string", "null"] }
+        invoiceStatus: { type: string }
+        invoiceType: { type: ["string", "null"] }
+        taxId: { type: ["string", "null"] }
+        invoiceTitle: { type: ["string", "null"] }
+        invoiceNumber: { type: ["string", "null"] }
+        invoiceDate: { type: ["string", "null"] }
+        invoiceNotes: { type: ["string", "null"] }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+
+    ReceivableInput:
+      type: object
+      required: [customerId, totalAmount]
+      properties:
+        customerId: { type: integer }
+        workOrderId: { type: integer }
+        workOrderNumber: { type: string }
+        projectName: { type: string }
+        projectType: { type: string }
+        completionDate: { type: string }
+        totalAmount: { type: number }
+        expectedPaymentDate: { type: string }
+        paymentMethod: { type: string }
+        notes: { type: string }
+        invoiceStatus: { type: string }
+        invoiceType: { type: string }
+        taxId: { type: string }
+        invoiceTitle: { type: string }
+        invoiceNumber: { type: string }
+        invoiceDate: { type: string }
+        invoiceNotes: { type: string }
+
+    ReceivableUpdate:
+      type: object
+      properties:
+        totalAmount: { type: number }
+        expectedPaymentDate: { type: string }
+        actualPaymentDate: { type: string }
+        paymentMethod: { type: string }
+        notes: { type: string }
+        invoiceStatus: { type: string }
+        invoiceType: { type: string }
+        taxId: { type: string }
+        invoiceTitle: { type: string }
+        invoiceNumber: { type: string }
+        invoiceDate: { type: string }
+        invoiceNotes: { type: string }
+
+    RecordPaymentInput:
+      type: object
+      required: [amount, paymentDate]
+      properties:
+        amount: { type: number }
+        paymentDate: { type: string }
+        paymentMethod: { type: string }
+        notes: { type: string }
+
+    LoginInput:
+      type: object
+      required: [username, password]
+      properties:
+        username: { type: string, minLength: 1 }
+        password: { type: string, minLength: 1 }
+
+    AuthUser:
+      type: object
+      required: [id, username, displayName, role, mustChangePassword]
+      properties:
+        id: { type: integer }
+        username: { type: string }
+        displayName: { type: string }
+        role: { type: string }
+        mustChangePassword: { type: boolean }
+
+    AuthResponse:
+      type: object
+      required: [token, user]
+      properties:
+        token: { type: string }
+        user:
+          $ref: "#/components/schemas/AuthUser"
+
+    ChangePasswordInput:
+      type: object
+      required: [currentPassword, newPassword]
+      properties:
+        currentPassword: { type: string, minLength: 1 }
+        newPassword: { type: string, minLength: 6 }
+
+    UserItem:
+      type: object
+      required: [id, username, displayName, role, isActive, mustChangePassword, createdAt]
+      properties:
+        id: { type: integer }
+        username: { type: string }
+        displayName: { type: string }
+        role: { type: string }
+        isActive: { type: boolean }
+        mustChangePassword: { type: boolean }
+        createdAt: { type: string }
+
+    CreateUserInput:
+      type: object
+      required: [username, password, displayName, role]
+      properties:
+        username: { type: string, minLength: 1 }
+        password: { type: string, minLength: 6 }
+        displayName: { type: string, minLength: 1 }
+        role:
+          type: string
+          enum: [owner, admin, technician, accountant]
+        mustChangePassword: { type: boolean }
+
+    UpdateUserInput:
+      type: object
+      properties:
+        displayName: { type: string }
+        role:
+          type: string
+          enum: [owner, admin, technician, accountant]
+        isActive: { type: boolean }
+        password: { type: string, minLength: 6 }
+
+    DashboardSummary:
+      type: object
+      required: [totalCustomers, totalQuotes, totalWorkOrders, pendingWorkOrders, totalPaymentsAmount, upcomingMaintenanceCount, expiringWarrantiesCount]
+      properties:
+        totalCustomers: { type: integer }
+        totalQuotes: { type: integer }
+        totalWorkOrders: { type: integer }
+        pendingWorkOrders: { type: integer }
+        inProgressWorkOrders: { type: integer }
+        completedWorkOrders: { type: integer }
+        totalPaymentsAmount: { type: number }
+        upcomingMaintenanceCount: { type: integer }
+        expiringWarrantiesCount: { type: integer }
+        totalReceivables: { type: number }
+        totalUnpaid: { type: number }
+        overdueAmount: { type: number }
+        paidThisMonthAR: { type: number }
+        invoiceNotIssuedCount: { type: integer }
+        todayWorkOrderCount: { type: integer }
+        todayPaymentsAmount: { type: number }
+        todayMaintenanceCount: { type: integer }
+        monthlyQuoteAmount: { type: number }
+        monthlyWonAmount: { type: number }
+        monthlyPaidAmount: { type: number }
+        todayDueCount: { type: integer }
+        todayWorkOrders:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              workOrderNumber: { type: ["string", "null"] }
+              customerName: { type: ["string", "null"] }
+              scheduledTime: { type: ["string", "null"] }
+              technicians: { type: ["string", "null"] }
+              installAddress: { type: ["string", "null"] }
+        recentCustomers:
+          type: array
+          items:
+            $ref: "#/components/schemas/Customer"
+
+    Product:
+      type: object
+      required: [id, name, isActive, taxIncluded, stockQty, createdAt, updatedAt]
+      properties:
+        id: { type: integer }
+        productNumber: { type: ["string", "null"] }
+        brand: { type: ["string", "null"] }
+        category: { type: ["string", "null"] }
+        name: { type: string }
+        model: { type: ["string", "null"] }
+        spec: { type: ["string", "null"] }
+        unit: { type: ["string", "null"] }
+        imageUrl: { type: ["string", "null"] }
+        isActive: { type: boolean }
+        costPrice: { type: ["string", "null"] }
+        retailPrice: { type: ["string", "null"] }
+        wholesalePrice: { type: ["string", "null"] }
+        minPrice: { type: ["string", "null"] }
+        taxIncluded: { type: boolean }
+        stockQty: { type: integer }
+        safetyStock: { type: ["integer", "null"] }
+        warehouseLocation: { type: ["string", "null"] }
+        coolingCapacity: { type: ["string", "null"] }
+        heatingCapacity: { type: ["string", "null"] }
+        cspf: { type: ["string", "null"] }
+        energyEfficiency: { type: ["string", "null"] }
+        voltage: { type: ["string", "null"] }
+        refrigerant: { type: ["string", "null"] }
+        warrantyMonths: { type: ["integer", "null"] }
+        notes: { type: ["string", "null"] }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+
+    ProductInput:
+      type: object
+      required: [name]
+      properties:
+        brand: { type: string }
+        category: { type: string }
+        name: { type: string, minLength: 1 }
+        model: { type: string }
+        spec: { type: string }
+        unit: { type: string }
+        imageUrl: { type: string }
+        isActive: { type: boolean }
+        costPrice: { type: ["number", "null"] }
+        retailPrice: { type: ["number", "null"] }
+        wholesalePrice: { type: ["number", "null"] }
+        minPrice: { type: ["number", "null"] }
+        taxIncluded: { type: boolean }
+        stockQty: { type: integer }
+        safetyStock: { type: ["integer", "null"] }
+        warehouseLocation: { type: string }
+        coolingCapacity: { type: string }
+        heatingCapacity: { type: string }
+        cspf: { type: string }
+        energyEfficiency: { type: string }
+        voltage: { type: string }
+        refrigerant: { type: string }
+        warrantyMonths: { type: ["integer", "null"] }
+        notes: { type: string }
+
+    UpdateProductInput:
+      type: object
+      properties:
+        brand: { type: string }
+        category: { type: string }
+        name: { type: string, minLength: 1 }
+        model: { type: string }
+        spec: { type: string }
+        unit: { type: string }
+        imageUrl: { type: string }
+        isActive: { type: boolean }
+        costPrice: { type: ["number", "null"] }
+        retailPrice: { type: ["number", "null"] }
+        wholesalePrice: { type: ["number", "null"] }
+        minPrice: { type: ["number", "null"] }
+        taxIncluded: { type: boolean }
+        stockQty: { type: integer }
+        safetyStock: { type: ["integer", "null"] }
+        warehouseLocation: { type: string }
+        coolingCapacity: { type: string }
+        heatingCapacity: { type: string }
+        cspf: { type: string }
+        energyEfficiency: { type: string }
+        voltage: { type: string }
+        refrigerant: { type: string }
+        warrantyMonths: { type: ["integer", "null"] }
+        notes: { type: string }
+
+    WholesaleCustomer:
+      type: object
+      required: [id, companyName, createdAt, updatedAt]
+      properties:
+        id: { type: integer }
+        companyName: { type: string }
+        contactPerson: { type: ["string", "null"] }
+        mobile: { type: ["string", "null"] }
+        telephone: { type: ["string", "null"] }
+        taxId: { type: ["string", "null"] }
+        address: { type: ["string", "null"] }
+        email: { type: ["string", "null"] }
+        paymentTerms: { type: ["string", "null"] }
+        creditLimit: { type: ["string", "null"] }
+        notes: { type: ["string", "null"] }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+
+    WholesaleCustomerInput:
+      type: object
+      required: [companyName]
+      properties:
+        companyName: { type: string, minLength: 1 }
+        contactPerson: { type: string }
+        mobile: { type: string }
+        telephone: { type: string }
+        taxId: { type: string }
+        address: { type: string }
+        email: { type: string }
+        paymentTerms: { type: string }
+        creditLimit: { type: ["number", "null"] }
+        notes: { type: string }
+
+    WholesaleQuoteItemInput:
+      type: object
+      required: [productName, qty, unitPrice]
+      properties:
+        productId: { type: ["integer", "null"] }
+        productName: { type: string }
+        brand: { type: string }
+        model: { type: string }
+        unit: { type: string }
+        qty: { type: integer, minimum: 1 }
+        unitPrice: { type: number }
+        discount: { type: number }
+        amount: { type: number }
+        sortOrder: { type: integer }
+
+    WholesaleQuoteItem:
+      type: object
+      required: [id, quoteId, productName, qty, unitPrice, discount, amount, sortOrder]
+      properties:
+        id: { type: integer }
+        quoteId: { type: integer }
+        productId: { type: ["integer", "null"] }
+        productName: { type: string }
+        brand: { type: ["string", "null"] }
+        model: { type: ["string", "null"] }
+        unit: { type: ["string", "null"] }
+        qty: { type: integer }
+        unitPrice: { type: string }
+        discount: { type: string }
+        amount: { type: string }
+        sortOrder: { type: integer }
+
+    WholesaleQuote:
+      type: object
+      required: [id, quoteDate, status, subtotal, taxRate, taxAmount, shippingFee, total, createdAt, updatedAt]
+      properties:
+        id: { type: integer }
+        quoteNumber: { type: ["string", "null"] }
+        customerId: { type: ["integer", "null"] }
+        customerName: { type: ["string", "null"] }
+        quoteDate: { type: string }
+        expiryDate: { type: ["string", "null"] }
+        salesperson: { type: ["string", "null"] }
+        notes: { type: ["string", "null"] }
+        subtotal: { type: string }
+        taxRate: { type: string }
+        taxAmount: { type: string }
+        shippingFee: { type: string }
+        total: { type: string }
+        status: { type: string }
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/WholesaleQuoteItem"
+        createdAt: { type: string }
+        updatedAt: { type: string }
+
+    WholesaleQuoteInput:
+      type: object
+      required: [quoteDate, items]
+      properties:
+        customerId: { type: ["integer", "null"] }
+        customerName: { type: string }
+        quoteDate: { type: string }
+        expiryDate: { type: string }
+        salesperson: { type: string }
+        notes: { type: string }
+        taxRate: { type: number }
+        shippingFee: { type: number }
+        status: { type: string }
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/WholesaleQuoteItemInput"
+
+    WholesaleOrderItem:
+      type: object
+      required: [id, orderId, productName, qty, unitPrice, discount, amount, sortOrder]
+      properties:
+        id: { type: integer }
+        orderId: { type: integer }
+        productId: { type: ["integer", "null"] }
+        productName: { type: string }
+        brand: { type: ["string", "null"] }
+        model: { type: ["string", "null"] }
+        unit: { type: ["string", "null"] }
+        qty: { type: integer }
+        unitPrice: { type: string }
+        discount: { type: string }
+        amount: { type: string }
+        sortOrder: { type: integer }
+
+    WholesaleOrder:
+      type: object
+      required: [id, orderDate, status, subtotal, taxRate, taxAmount, shippingFee, total, createdAt, updatedAt]
+      properties:
+        id: { type: integer }
+        orderNumber: { type: ["string", "null"] }
+        quoteId: { type: ["integer", "null"] }
+        quoteNumber: { type: ["string", "null"] }
+        customerId: { type: ["integer", "null"] }
+        customerName: { type: ["string", "null"] }
+        orderDate: { type: string }
+        expectedDelivery: { type: ["string", "null"] }
+        salesperson: { type: ["string", "null"] }
+        notes: { type: ["string", "null"] }
+        subtotal: { type: string }
+        taxRate: { type: string }
+        taxAmount: { type: string }
+        shippingFee: { type: string }
+        total: { type: string }
+        status: { type: string }
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/WholesaleOrderItem"
+        createdAt: { type: string }
+        updatedAt: { type: string }
+
+    WholesaleOrderInput:
+      type: object
+      required: [orderDate, items]
+      properties:
+        quoteId: { type: ["integer", "null"] }
+        quoteNumber: { type: string }
+        customerId: { type: ["integer", "null"] }
+        customerName: { type: string }
+        orderDate: { type: string }
+        expectedDelivery: { type: string }
+        salesperson: { type: string }
+        notes: { type: string }
+        taxRate: { type: number }
+        shippingFee: { type: number }
+        status: { type: string }
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/WholesaleQuoteItemInput"
+
+    WholesaleReceivable:
+      type: object
+      required: [id, totalAmount, receivedAmount, paymentStatus, createdAt, updatedAt]
+      properties:
+        id: { type: integer }
+        orderId: { type: ["integer", "null"] }
+        orderNumber: { type: ["string", "null"] }
+        customerId: { type: ["integer", "null"] }
+        customerName: { type: ["string", "null"] }
+        totalAmount: { type: string }
+        receivedAmount: { type: string }
+        dueDate: { type: ["string", "null"] }
+        paidDate: { type: ["string", "null"] }
+        paymentStatus: { type: string }
+        paymentMethod: { type: ["string", "null"] }
+        notes: { type: ["string", "null"] }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+
+    UpdateWholesaleReceivableInput:
+      type: object
+      properties:
+        receivedAmount: { type: number }
+        dueDate: { type: string }
+        paidDate: { type: string }
+        paymentStatus: { type: string }
+        paymentMethod: { type: string }
+        notes: { type: string }
+
+    WholesaleSettlementSummary:
+      type: object
+      required: [customerId, customerName, orderCount, totalAmount]
+      properties:
+        customerId: { type: integer }
+        customerName: { type: string }
+        orderCount: { type: integer }
+        totalAmount: { type: number }
+        receivableAmount: { type: number }
+        receivedAmount: { type: number }

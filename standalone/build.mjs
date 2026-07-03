@@ -26,7 +26,7 @@ async function buildServer() {
   await rm(distDir, { recursive: true, force: true });
 
   await esbuild({
-    entryPoints: [path.resolve(__dirname, "server/main.ts")],
+    entryPoints: [path.resolve(__dirname, "server/index.ts")],
     platform: "node",
     bundle: true,
     format: "esm",
