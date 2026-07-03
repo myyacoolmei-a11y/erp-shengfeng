@@ -61,7 +61,7 @@ app.use(
 );
 
 // SPA fallback — always return fresh index.html
-app.get("*", (req, res) => {
+app.use((req, res) => {
   res.setHeader(
     "Cache-Control",
     "no-store, no-cache, must-revalidate, proxy-revalidate",
