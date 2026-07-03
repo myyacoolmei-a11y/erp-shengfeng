@@ -352,19 +352,40 @@ tbody tr:last-child td{border-bottom:1.5px solid #9ACD32}
 
   const div = document.createElement("div");
   div.innerHTML = html;
-  div.style.position = "absolute";
-  div.style.left = "-9999px";
+  div.style.position = "fixed";
+  div.style.top = "0";
+  div.style.left = "0";
   div.style.width = "720px";
+  div.style.visibility = "hidden";
+  div.style.zIndex = "-1";
   document.body.appendChild(div);
-  await new Promise((resolve) => setTimeout(resolve, 300));
+
+  // Ensure fonts + layout are ready before capture
+  await document.fonts.ready;
+  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+  if (div.offsetWidth <= 0 || div.offsetHeight <= 0) {
+    document.body.removeChild(div);
+    console.error("[generateQuotationPdf] DOM render failed: offsetWidth=", div.offsetWidth, "offsetHeight=", div.offsetHeight);
+    throw new Error("PDF 生成失敗：DOM 尚未完整 render，元素尺寸為 0");
+  }
+
   const html2pdf = await import("html2pdf.js").then((m: any) => m.default || m);
   const opt = {
     margin: [10, 10, 10, 10],
     image: { type: "jpeg", quality: 0.98 },
-    html2canvas: { scale: 2, useCORS: true },
+    html2canvas: { scale: 2, useCORS: true, logging: false },
     jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
   };
-  const blob: Blob = await html2pdf().set(opt).from(div).output("blob");
+
+  const worker = html2pdf().set(opt).from(div);
+  const canvas = await worker.output("canvas");
+  if (!canvas || canvas.width <= 0 || canvas.height <= 0) {
+    document.body.removeChild(div);
+    console.error("[generateQuotationPdf] Canvas blank: width=", canvas?.width, "height=", canvas?.height);
+    throw new Error("PDF 生成失敗：Canvas 空白，可能是濾渲或 DOM 未渲染");
+  }
+  const blob: Blob = await worker.output("blob");
   document.body.removeChild(div);
   return { blob, quoteNo, html };
 }
