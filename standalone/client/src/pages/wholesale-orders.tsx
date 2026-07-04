@@ -221,6 +221,7 @@ export default function WholesaleOrders() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold">批發訂單</h1>
+          <p className="text-sm font-bold text-red-600 mt-1">BUILD TEST 2026-07-03 20:40</p>
           <p className="text-sm text-muted-foreground">共 {list.length} 筆</p>
         </div>
         {canWrite && <Button onClick={openCreate} className="shrink-0"><Plus className="h-4 w-4 mr-1" />新增訂單</Button>}

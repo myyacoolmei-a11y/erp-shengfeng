@@ -7,7 +7,17 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const publicDir = path.resolve(__dirname, "../dist/public");
+// Production build: server runs from dist/server/ so public is at ../public
+// Dev mode (tsx): server runs from server/ so public is at ../dist/public
+const publicDir = (() => {
+  const prodPath = path.resolve(__dirname, "../public");
+  const devPath = path.resolve(__dirname, "../dist/public");
+  try {
+    return require("fs").statSync(prodPath).isDirectory() ? prodPath : devPath;
+  } catch {
+    return devPath;
+  }
+})();
 
 const app: Express = express();
 
