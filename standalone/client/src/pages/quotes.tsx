@@ -181,14 +181,14 @@ async function printQuote(
       html,
       docNo: quoteNo,
       filename: `報價單_${quoteNo}.pdf`,
-      title: "景風工程報價單",
+      title: "晟風工程報價單",
       action: "download",
       setPdfPreview,
       toast,
       pageFormat: "a4",
     });
   } else {
-    openPrintWindow(html, `景風工程報價單 — ${quoteNo}`);
+    openPrintWindow(html, `晟風工程報價單 — ${quoteNo}`);
   }
 }
 

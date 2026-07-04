@@ -252,14 +252,14 @@ export default function WholesaleSettlements() {
         html,
         docNo,
         filename: `請款單_${docNo}.pdf`,
-        title: "景風工程批發請款單",
+        title: "晟風工程批發請款單",
         action: "download",
         setPdfPreview,
         toast: toast as any,
         pageFormat: "a4",
       });
     } else {
-      openPrintWindow(html, `景風工程批發請款單 — ${docNo}`);
+      openPrintWindow(html, `晟風工程批發請款單 — ${docNo}`);
     }
   }
 

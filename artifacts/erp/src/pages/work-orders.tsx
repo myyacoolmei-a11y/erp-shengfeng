@@ -83,14 +83,14 @@ async function printWorkOrderPDF(
       html,
       docNo: woNum,
       filename: `派工單_${woNum}.pdf`,
-      title: "景風工程派工單",
+      title: "晟風工程派工單",
       action: "download",
       setPdfPreview,
       toast,
       pageFormat: "custom-240x140-landscape",
     });
   } else {
-    openPrintWindow(html, `景風工程派工單 — ${woNum}`);
+    openPrintWindow(html, `晟風工程派工單 — ${woNum}`);
   }
 }
 
@@ -105,7 +105,7 @@ async function shareWorkOrderViaLine(
     html,
     docNo: woNum,
     filename: `派工單_${woNum}.pdf`,
-    title: "景風工程派工單",
+    title: "晟風工程派工單",
     action: "share",
     setPdfPreview,
     toast,

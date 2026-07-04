@@ -78,14 +78,14 @@ async function printOrder(
       html,
       docNo: orderNo,
       filename: `出貨單_${orderNo}.pdf`,
-      title: "景風工程出貨單",
+      title: "晟風工程出貨單",
       action: "download",
       setPdfPreview,
       toast,
       pageFormat: "custom-240x140-landscape",
     });
   } else {
-    openPrintWindow(html, `景風工程出貨單 — ${orderNo}`);
+    openPrintWindow(html, `晟風工程出貨單 — ${orderNo}`);
   }
 }
 
