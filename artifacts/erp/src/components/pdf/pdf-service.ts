@@ -1,5 +1,5 @@
-// PDF V4 Shared Service
-// Off-screen render engine + shared actions (preview / print / download / share to LINE)
+// PDF V5 Shared Service
+// Off-screen iframe render + style injection for mobile PDF generation
 // All templates are fixed 1-page; no auto page break needed
 
 export interface PdfBlobResult {
@@ -22,59 +22,81 @@ export async function generatePdfBlobFromHtml(
   pageFormat: PageFormat = "a4",
 ): Promise<PdfBlobResult> {
   const cfg = PAGE_CONFIG[pageFormat];
-
   const iframe = document.createElement("iframe");
   iframe.style.cssText = `position:fixed;top:0;left:0;width:${cfg.renderWidth}px;height:1200px;opacity:0;pointer-events:none;touch-action:none;overflow:hidden;border:none;`;
   document.body.appendChild(iframe);
 
-  const doc = iframe.contentDocument || iframe.contentWindow!.document;
-  doc.open();
-  doc.write(html);
-  doc.close();
+  let tempStyles: HTMLStyleElement[] = [];
+  try {
+    const doc = iframe.contentDocument || iframe.contentWindow!.document;
+    doc.open();
+    doc.write(html);
+    doc.close();
 
-  const body = doc.body;
+    const body = doc.body;
+    await doc.fonts.ready;
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
-  await doc.fonts.ready;
-  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const images = Array.from(body.querySelectorAll("img"));
+    await Promise.all(
+      images.map(
+        (img) =>
+          new Promise<void>((resolve) => {
+            if ((img as HTMLImageElement).complete) resolve();
+            else {
+              img.addEventListener("load", () => resolve(), { once: true });
+              img.addEventListener("error", () => resolve(), { once: true });
+            }
+          }),
+      ),
+    );
 
-  const images = Array.from(body.querySelectorAll("img"));
-  await Promise.all(
-    images.map(
-      (img) =>
-        new Promise<void>((resolve) => {
-          if ((img as HTMLImageElement).complete) resolve();
-          else {
-            img.addEventListener("load", () => resolve(), { once: true });
-            img.addEventListener("error", () => resolve(), { once: true });
-          }
-        }),
-    ),
-  );
+    if (body.offsetWidth <= 0 || body.offsetHeight <= 0) {
+      console.error("[PDF V5] iframe render failed:", body.offsetWidth, body.offsetHeight);
+      throw new Error("PDF \u751f\u6210\u5931\u6557\uff1aDOM \u5c1a\u672a\u5b8c\u6574 render");
+    }
 
-  if (body.offsetWidth <= 0 || body.offsetHeight <= 0) {
-    document.body.removeChild(iframe);
-    console.error("[PDF V4] iframe render failed:", body.offsetWidth, body.offsetHeight);
-    throw new Error("PDF \u751f\u6210\u5931\u6557\uff1aDOM \u5c1a\u672a\u5b8c\u6574 render");
+    const pageEl = body.querySelector(".page") as HTMLElement | null;
+    if (!pageEl) {
+      throw new Error("PDF \u751f\u6210\u5931\u6557\uff1a\u627e\u4e0d\u5230 .page \u5217\u5370\u5bb9\u5668");
+    }
+    pageEl.dataset.templateType = pageFormat;
+    console.log("PDF capture target:", pageEl.className, pageEl.dataset.templateType);
+
+    // html2pdf.js deep-clones the element into the main document; CSS from the iframe <head> is lost.
+    // Inject all iframe styles into the main document so the clone renders correctly.
+    const iframeStyles = Array.from(doc.querySelectorAll("style"));
+    iframeStyles.forEach((styleEl) => {
+      const newStyle = document.createElement("style");
+      newStyle.textContent = styleEl.textContent || "";
+      newStyle.dataset.pdfTempStyle = "1";
+      document.head.appendChild(newStyle);
+      tempStyles.push(newStyle);
+    });
+
+    const html2pdf = await import("html2pdf.js").then((m: any) => m.default || m);
+    const opt = {
+      margin: cfg.margin,
+      image: { type: "jpeg", quality: 0.98 },
+      html2canvas: { scale: cfg.scale, useCORS: true, logging: false, windowWidth: cfg.renderWidth },
+      jsPDF: { unit: "mm", format: cfg.format, orientation: cfg.orientation },
+    };
+
+    const worker = html2pdf().set(opt).from(pageEl);
+    await worker.toPdf();
+    const pdf = worker.prop.pdf;
+    const blob: Blob = pdf.output("blob");
+
+    if (!blob || blob.size === 0) {
+      throw new Error("PDF \u751f\u6210\u5931\u6557\uff1a\u7522\u751f\u7684 PDF \u6a94\u6848\u70ba\u7a7a");
+    }
+    return { blob, docNo, html };
+  } finally {
+    tempStyles.forEach((el) => el.remove());
+    if (document.body.contains(iframe)) {
+      document.body.removeChild(iframe);
+    }
   }
-
-  const html2pdf = await import("html2pdf.js").then((m: any) => m.default || m);
-  const opt = {
-    margin: cfg.margin,
-    image: { type: "jpeg", quality: 0.98 },
-    html2canvas: { scale: cfg.scale, useCORS: true, logging: false, windowWidth: cfg.renderWidth },
-    jsPDF: { unit: "mm", format: cfg.format, orientation: cfg.orientation },
-  };
-
-  const worker = html2pdf().set(opt).from(body);
-  await worker.toPdf();
-  const pdf = worker.prop.pdf;
-  const blob: Blob = pdf.output("blob");
-  document.body.removeChild(iframe);
-
-  if (!blob || blob.size === 0) {
-    throw new Error("PDF \u751f\u6210\u5931\u6557\uff1a\u7522\u751f\u7684 PDF \u6a94\u6848\u70ba\u7a7a");
-  }
-  return { blob, docNo, html };
 }
 
 /** Download PDF blob as file */
