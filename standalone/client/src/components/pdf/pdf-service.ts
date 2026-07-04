@@ -10,9 +10,9 @@ export interface PdfBlobResult {
 
 export type PageFormat = "a4" | "custom-240x140-landscape";
 
-const PAGE_CONFIG: Record<PageFormat, { format: string | number[]; orientation: "portrait" | "landscape"; margin: number[]; scale: number }> = {
-  "a4": { format: "a4", orientation: "portrait", margin: [8, 8, 8, 8], scale: 2 },
-  "custom-240x140-landscape": { format: [240, 140] as any, orientation: "landscape", margin: [0, 0, 0, 0], scale: 2 },
+const PAGE_CONFIG: Record<PageFormat, { format: string | number[]; orientation: "portrait" | "landscape"; margin: number[]; scale: number; renderWidth: number }> = {
+  "a4": { format: "a4", orientation: "portrait", margin: [8, 8, 8, 8], scale: 2, renderWidth: 720 },
+  "custom-240x140-landscape": { format: [240, 140] as any, orientation: "landscape", margin: [0, 0, 0, 0], scale: 2, renderWidth: 960 },
 };
 
 /** Generate PDF blob from HTML string using off-screen iframe render */
@@ -24,7 +24,7 @@ export async function generatePdfBlobFromHtml(
   const cfg = PAGE_CONFIG[pageFormat];
 
   const iframe = document.createElement("iframe");
-  iframe.style.cssText = "position:fixed;top:0;left:-9999px;width:720px;height:1200px;opacity:0;pointer-events:none;z-index:-1;border:none;";
+  iframe.style.cssText = `position:fixed;top:0;left:0;width:${cfg.renderWidth}px;height:1200px;opacity:0;pointer-events:none;touch-action:none;overflow:hidden;border:none;`;
   document.body.appendChild(iframe);
 
   const doc = iframe.contentDocument || iframe.contentWindow!.document;
@@ -61,7 +61,7 @@ export async function generatePdfBlobFromHtml(
   const opt = {
     margin: cfg.margin,
     image: { type: "jpeg", quality: 0.98 },
-    html2canvas: { scale: cfg.scale, useCORS: true, logging: false },
+    html2canvas: { scale: cfg.scale, useCORS: true, logging: false, windowWidth: cfg.renderWidth },
     jsPDF: { unit: "mm", format: cfg.format, orientation: cfg.orientation },
   };
 
