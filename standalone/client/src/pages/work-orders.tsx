@@ -24,6 +24,9 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
 import { WO_STATUSES, makeEmpty, type WOForm, buildPayload, WorkOrderFormFields } from "@/components/work-order-form";
+import { PdfPreviewDialog } from "@/components/pdf/pdf-preview-dialog";
+import { handlePdfAction, isMobileDevice } from "@/components/pdf/pdf-service";
+import { buildWorkOrderHtml } from "@/components/pdf/pdf-templates";
 
 const STATUSES = WO_STATUSES;
 
@@ -67,328 +70,44 @@ function getTechDisplay(order: any): string {
   return "—";
 }
 
-// ─── Full A4 work order ──────────────────────────────────────────────────────
-function printWorkOrder(order: any) {
+// ─── PDF V2 helpers ──────────────────────────────────────────────────────
+async function printWorkOrderPDF(
+  order: any,
+  setPdfPreview: (v: { url: string; filename: string } | null) => void,
+  toast: any,
+) {
   const woNum = order.workOrderNumber || `#${order.id}`;
-  const erpUrl = `${window.location.origin}/work-orders`;
-  const qr = qrUrl(`${erpUrl}?wo=${encodeURIComponent(woNum)}`);
-  const logoUrl = `${window.location.origin}/logo.png`;
-  const techDisplay = getTechDisplay(order);
-  const html = `<!DOCTYPE html>
-<html lang="zh-TW"><head><meta charset="UTF-8"><title>派工單 ${woNum}</title>
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Microsoft JhengHei',Arial,sans-serif;font-size:11pt;color:#111;background:#fff}
-.page{padding:12mm 16mm;position:relative;min-height:267mm}
-.hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid #222;padding-bottom:4mm;margin-bottom:4mm}
-.co-name{font-size:20pt;font-weight:700}.co-sub{font-size:8.5pt;color:#555;margin-top:2px}
-.wo-right{text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:2mm}
-.wo-num{font-size:14pt;font-weight:700}.wo-meta{font-size:9pt;color:#555}
-h2{font-size:10pt;font-weight:700;background:#f3f3f3;padding:1.5mm 4mm;margin:3.5mm 0 2.5mm;border-left:3px solid #444}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:2mm 10mm;margin:0 0 2mm}
-.field{display:flex;gap:3mm;align-items:baseline}
-.lbl{font-size:8pt;color:#666;min-width:50px;flex-shrink:0}.val{font-size:10pt;font-weight:500}
-.full{grid-column:1/-1}
-.box{border:1px solid #ccc;border-radius:2px;padding:2mm 3mm;min-height:14mm;font-size:10pt;white-space:pre-wrap;line-height:1.5}
-.sigs{margin-top:10mm;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8mm}
-.sig{text-align:center;border-top:1px solid #555;padding-top:2mm;font-size:8pt;color:#555;padding-bottom:6mm}
-@media print{@page{size:A4;margin:0}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
-</style></head><body>
-<div class="page">
-  ${stampHtml(order.status)}
-  <div class="hdr">
-    <div style="display:flex;align-items:center;gap:4mm">
-      <img src="${logoUrl}" style="width:14mm;height:14mm;border-radius:50%;object-fit:cover;border:1.5px solid #16a34a" alt="">
-      <div>
-        <div class="co-name">晟風工程</div>
-        <div class="co-sub">冷氣空調工程專業服務</div>
-      </div>
-    </div>
-    <div class="wo-right">
-      <img src="${qr}" width="80" height="80" alt="QR" style="border:1px solid #e5e7eb;border-radius:2px">
-      <div>
-        <div class="wo-num">派工單 ${woNum}</div>
-        <div class="wo-meta">狀態：${order.status}　列印：${new Date().toLocaleDateString('zh-TW')}</div>
-        <div class="wo-meta">工程類型：${order.projectType || '—'}</div>
-      </div>
-    </div>
-  </div>
-
-  <h2>客戶資訊</h2>
-  <div class="grid">
-    <div class="field"><span class="lbl">客戶名稱</span><span class="val">${esc(order.customerName || '—')}</span></div>
-    <div class="field"><span class="lbl">聯絡人</span><span class="val">${esc(order.contactPerson || '—')}</span></div>
-    <div class="field"><span class="lbl">行動電話</span><span class="val">${esc(order.mobilePhone || '—')}</span></div>
-    <div class="field"><span class="lbl">聯絡電話</span><span class="val">${esc(order.telephone || '—')}</span></div>
-    <div class="field full"><span class="lbl">施工地址</span><span class="val">${esc(order.installAddress || '—')}</span></div>
-    ${order.installAddress ? `<div class="field full"><span class="lbl">地圖連結</span><span class="val" style="font-size:8pt">https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.installAddress)}</span></div>` : ''}
-  </div>
-
-  <h2>施工資訊</h2>
-  <div class="grid">
-    <div class="field"><span class="lbl">施工日期</span><span class="val">${esc(order.scheduledDate || '—')}</span></div>
-    <div class="field"><span class="lbl">施工時間</span><span class="val">${esc(order.scheduledTime || '—')}</span></div>
-    <div class="field"><span class="lbl">完成日期</span><span class="val">${esc(order.completedDate || '—')}</span></div>
-    <div class="field"><span class="lbl">狀態</span><span class="val">${esc(order.status)}</span></div>
-    <div class="field full"><span class="lbl">施工技師</span><span class="val">${esc(techDisplay)}</span></div>
-  </div>
-
-  <h2>設備資訊</h2>
-  <div class="grid">
-    <div class="field"><span class="lbl">冷氣品牌</span><span class="val">${esc(order.acBrand || '—')}</span></div>
-    <div class="field"><span class="lbl">型號</span><span class="val">${esc(order.modelNumber || '—')}</span></div>
-    <div class="field"><span class="lbl">數量</span><span class="val">${order.quantity != null ? order.quantity + ' 台' : '—'}</span></div>
-    <div class="field"><span class="lbl">室內機</span><span class="val">${order.indoorUnits != null ? order.indoorUnits + ' 台' : '—'}</span></div>
-    <div class="field"><span class="lbl">室外機</span><span class="val">${order.outdoorUnits != null ? order.outdoorUnits + ' 台' : '—'}</span></div>
-    <div class="field"><span class="lbl">樓層</span><span class="val">${esc(order.floorLevel || '—')}</span></div>
-    <div class="field"><span class="lbl">電梯</span><span class="val">${esc(order.hasElevator || '—')}</span></div>
-  </div>
-
-  <h2>施工內容</h2>
-  <div class="box">${esc(order.description || '（無）')}</div>
-
-  <h2>施工備註</h2>
-  <div class="box">${esc(order.notes || '（無）')}</div>
-
-  <div class="sigs">
-    <div class="sig">客戶簽名</div>
-    <div class="sig">技師簽名</div>
-    <div class="sig">公司經手人</div>
-  </div>
-</div>
-<script>window.onload=function(){window.print();}</script>
-</body></html>`;
-  const w = window.open("", "_blank", "width=820,height=1160");
-  if (w) { w.document.write(html); w.document.close(); }
+  const html = buildWorkOrderHtml(order);
+  const action = isMobileDevice() ? "preview" : "download";
+  await handlePdfAction({
+    html,
+    docNo: woNum,
+    filename: `派工單_${woNum}.pdf`,
+    title: "晨風工程派工單",
+    lineText: `派工單：${woNum} / 客戶：${order.customerName || ""} / 地址：${order.installAddress || ""}`,
+    action,
+    setPdfPreview,
+    toast,
+  });
 }
 
-// ─── A4 Two-Copy Dispatch Form ───────────────────────────────────────────────
-function printTwoCopyDispatch(order: any) {
+async function shareWorkOrderViaLine(
+  order: any,
+  setPdfPreview: (v: { url: string; filename: string } | null) => void,
+  toast: any,
+) {
   const woNum = order.workOrderNumber || `#${order.id}`;
-  const erpUrl = `${window.location.origin}/work-orders`;
-  const qr = qrUrl(`${erpUrl}?wo=${encodeURIComponent(woNum)}`);
-  const logoUrl = `${window.location.origin}/logo.png`;
-  const printDate = new Date().toLocaleDateString("zh-TW");
-  const stamp = stampHtml(order.status);
-  const techDisplay = getTechDisplay(order);
-  const mapsLink = order.installAddress
-    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(order.installAddress)}`
-    : "";
-
-  function copyHtml(label: string) {
-    return `
-<div class="copy" style="position:relative">
-  ${stamp}
-  <div class="hdr">
-    <div class="co" style="display:flex;align-items:center;gap:3mm">
-      <img src="${logoUrl}" style="width:11mm;height:11mm;border-radius:50%;object-fit:cover;border:1.5px solid #16a34a;flex-shrink:0" alt="">
-      <div>
-        <div class="co-name">晟風工程</div>
-        <div class="co-sub">冷氣空調工程專業服務</div>
-      </div>
-    </div>
-    <div class="mid">
-      <div class="title">派 工 單</div>
-      <div class="copy-label">${label}</div>
-    </div>
-    <div class="qr-block">
-      <img src="${qr}" width="64" height="64" alt="QR">
-      <div class="qr-label">${woNum}</div>
-    </div>
-  </div>
-
-  <div class="row2">
-    <div class="meta">列印日期：${printDate}</div>
-    <div class="meta">工程類型：${esc(order.projectType || '—')}</div>
-    <div class="meta">狀態：${esc(order.status)}</div>
-  </div>
-
-  <div class="grid">
-    <div class="field"><span class="lbl">客戶名稱</span><span class="val">${esc(order.customerName || '—')}</span></div>
-    <div class="field"><span class="lbl">聯絡人</span><span class="val">${esc(order.contactPerson || '—')}</span></div>
-    <div class="field"><span class="lbl">行動電話</span><span class="val">${esc(order.mobilePhone || '—')}</span></div>
-    <div class="field"><span class="lbl">聯絡電話</span><span class="val">${esc(order.telephone || '—')}</span></div>
-    <div class="field full"><span class="lbl">施工地址</span><span class="val">${esc(order.installAddress || '—')}</span></div>
-    ${mapsLink ? `<div class="field full"><span class="lbl">地圖</span><span class="val sm">${mapsLink}</span></div>` : ""}
-    <div class="field"><span class="lbl">施工日期</span><span class="val">${esc(order.scheduledDate || '—')}</span></div>
-    <div class="field"><span class="lbl">施工時間</span><span class="val">${esc(order.scheduledTime || '—')}</span></div>
-    <div class="field full"><span class="lbl">施工技師</span><span class="val">${esc(techDisplay)}</span></div>
-    <div class="field"><span class="lbl">冷氣品牌</span><span class="val">${esc(order.acBrand || '—')}</span></div>
-    <div class="field"><span class="lbl">型號</span><span class="val">${esc(order.modelNumber || '—')}</span></div>
-    <div class="field"><span class="lbl">數量</span><span class="val">${order.quantity != null ? order.quantity + " 台" : "—"}</span></div>
-    <div class="field"><span class="lbl">室內機</span><span class="val">${order.indoorUnits != null ? order.indoorUnits + " 台" : "—"}</span></div>
-    <div class="field"><span class="lbl">室外機</span><span class="val">${order.outdoorUnits != null ? order.outdoorUnits + " 台" : "—"}</span></div>
-    <div class="field"><span class="lbl">樓層</span><span class="val">${esc(order.floorLevel || '—')}</span></div>
-    <div class="field"><span class="lbl">電梯</span><span class="val">${esc(order.hasElevator || '—')}</span></div>
-  </div>
-
-  <div class="desc-row">
-    <div class="desc-block">
-      <div class="desc-lbl">施工內容</div>
-      <div class="desc-val">${esc(order.description || '（無）')}</div>
-    </div>
-    <div class="desc-block">
-      <div class="desc-lbl">施工備註</div>
-      <div class="desc-val">${esc(order.notes || '（無）')}</div>
-    </div>
-  </div>
-
-  <div class="sigs">
-    <div class="sig">客戶簽名</div>
-    <div class="sig">技師簽名</div>
-    <div class="sig">公司經手人</div>
-  </div>
-</div>`;
-  }
-
-  const html = `<!DOCTYPE html>
-<html lang="zh-TW"><head><meta charset="UTF-8"><title>派工單（上下聯）${woNum}</title>
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
-html,body{height:100%;font-family:'Microsoft JhengHei',Arial,sans-serif;font-size:9pt;color:#111;background:#fff}
-.copy{height:135mm;padding:5mm 12mm 3mm;overflow:hidden;position:relative}
-.hdr{display:flex;align-items:flex-start;justify-content:space-between;border-bottom:1.5px solid #222;padding-bottom:3mm;margin-bottom:2.5mm}
-.co-name{font-size:16pt;font-weight:700}.co-sub{font-size:7.5pt;color:#555;margin-top:1px}
-.mid{text-align:center;flex:1}
-.title{font-size:15pt;font-weight:800;letter-spacing:4px;margin-top:2mm}
-.copy-label{font-size:8pt;color:#555;margin-top:1px;letter-spacing:1px;border:1px solid #888;display:inline-block;padding:0.5mm 3mm;border-radius:2px}
-.qr-block{text-align:center}.qr-label{font-size:7pt;color:#555;margin-top:1px;font-family:monospace}
-.row2{display:flex;gap:6mm;font-size:8pt;color:#555;margin-bottom:2mm}
-.meta{white-space:nowrap}
-.grid{display:grid;grid-template-columns:1fr 1fr;gap:1.5mm 8mm;margin:0 0 1.5mm}
-.field{display:flex;gap:2mm;align-items:baseline}
-.lbl{font-size:7.5pt;color:#666;min-width:46px;flex-shrink:0}.val{font-size:9pt;font-weight:600}
-.val.sm{font-size:7pt;font-weight:400;word-break:break-all}
-.full{grid-column:1/-1}
-.desc-row{display:grid;grid-template-columns:1fr 1fr;gap:3mm;margin:1.5mm 0}
-.desc-block{border:1px solid #ccc;border-radius:2px;padding:1.5mm 2mm}
-.desc-lbl{font-size:7.5pt;color:#666;margin-bottom:1mm;font-weight:700}
-.desc-val{font-size:8.5pt;white-space:pre-wrap;min-height:8mm;line-height:1.4}
-.sigs{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4mm;margin-top:3mm}
-.sig{text-align:center;border-top:1px solid #555;padding-top:1.5mm;font-size:7.5pt;color:#555;padding-bottom:5mm}
-.cut{height:0;border-top:2px dashed #888;margin:0 6mm;position:relative;display:flex;align-items:center;justify-content:center}
-.cut-label{position:absolute;background:#fff;padding:0 3mm;font-size:7pt;color:#888;letter-spacing:1px}
-@media print{
-  @page{size:A4 portrait;margin:0}
-  body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
-}
-</style></head><body>
-${copyHtml("公司留底")}
-<div class="cut"><span class="cut-label">✂ 沿此線裁切</span></div>
-${copyHtml("師傅留底 / 現場簽收")}
-<script>window.onload=function(){window.print();}</script>
-</body></html>`;
-  const w = window.open("", "_blank", "width=820,height=1160");
-  if (w) { w.document.write(html); w.document.close(); }
-}
-
-// ─── Dot-Matrix Triple-Copy (點陣三聯單) ─────────────────────────────────────
-function printDotMatrixTriplicate(order: any) {
-  const woNum = order.workOrderNumber || `#${order.id}`;
-  const printDate = new Date().toLocaleDateString("zh-TW");
-  const techDisplay = getTechDisplay(order);
-
-  function triRow(label: string, value: string) {
-    return `<tr><td class="lbl">${label}</td><td class="val">${value || "—"}</td></tr>`;
-  }
-
-  function copyHtml(label: string) {
-    return `
-<div class="copy">
-  <div class="copy-hdr">
-    <div class="co-title">晟風工程 派工單</div>
-    <div class="copy-badge">${label}</div>
-  </div>
-  <div class="wo-num">${woNum}　　列印：${printDate}　　狀態：${order.status}</div>
-  <table class="data-table">
-    <tbody>
-      ${triRow("客戶名稱", order.customerName || "")}
-      ${triRow("聯絡人", order.contactPerson || "")}
-      ${triRow("行動電話", order.mobilePhone || "")}
-      ${triRow("聯絡電話", order.telephone || "")}
-      ${triRow("施工地址", order.installAddress || "")}
-      ${triRow("施工日期", order.scheduledDate || "")}
-      ${triRow("施工時間", order.scheduledTime || "")}
-      ${triRow("施工技師", techDisplay)}
-      ${triRow("工程類型", order.projectType || "")}
-      ${triRow("冷氣品牌", order.acBrand || "")}
-      ${order.modelNumber ? triRow("型號", order.modelNumber) : ""}
-      ${order.quantity != null ? triRow("數量", order.quantity + " 台") : ""}
-      ${triRow("施工內容", (order.description || "").replace(/\n/g, " "))}
-      ${triRow("施工備註", (order.notes || "").replace(/\n/g, " "))}
-    </tbody>
-  </table>
-  <div class="sig-row">
-    <div class="sig-box">客戶簽名</div>
-    <div class="sig-box">技師簽名</div>
-    <div class="sig-box">主管核章</div>
-  </div>
-</div>`;
-  }
-
-  const html = `<!DOCTYPE html>
-<html lang="zh-TW"><head><meta charset="UTF-8"><title>派工單三聯單 ${woNum}</title>
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Courier New',Courier,monospace;font-size:9pt;color:#000;background:#fff}
-.copy{padding:3mm 5mm;border-bottom:2px dashed #555;page-break-inside:avoid;min-height:85mm;position:relative}
-.copy:last-child{border-bottom:none}
-.copy-hdr{display:flex;align-items:center;justify-content:space-between;border-bottom:2px solid #000;padding-bottom:1.5mm;margin-bottom:2mm}
-.co-title{font-size:13pt;font-weight:900;letter-spacing:1px}
-.copy-badge{font-size:9pt;font-weight:700;border:2px solid #000;padding:0.5mm 3mm}
-.wo-num{font-size:8pt;margin-bottom:2mm;letter-spacing:0.5px}
-.data-table{width:100%;border-collapse:collapse}
-.data-table td{font-size:8.5pt;padding:0.8mm 1mm;border-bottom:1px solid #ccc;vertical-align:top}
-.lbl{width:55px;font-weight:700;white-space:nowrap;color:#333}
-.val{word-break:break-all}
-.sig-row{display:flex;gap:5mm;margin-top:3mm}
-.sig-box{flex:1;text-align:center;border-top:1px solid #000;padding-top:1.5mm;font-size:8pt;padding-bottom:8mm}
-@media print{
-  @page{size:A4 portrait;margin:8mm 10mm}
-  body{-webkit-print-color-adjust:exact;print-color-adjust:exact}
-  .copy{page-break-inside:avoid}
-}
-</style></head><body>
-${copyHtml("客戶聯")}
-${copyHtml("公司聯")}
-${copyHtml("師傅聯")}
-<script>window.onload=function(){window.print();}</script>
-</body></html>`;
-  const w = window.open("", "_blank", "width=760,height=1100");
-  if (w) { w.document.write(html); w.document.close(); }
-}
-
-// ─── LINE Share ─────────────────────────────────────────────────────────────
-function shareViaLine(order: any) {
-  const woNum = order.workOrderNumber || `#${order.id}`;
-  const techDisplay = getTechDisplay(order);
-  const addr = order.installAddress || "";
-  const mapsUrl = addr
-    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}`
-    : "";
-  const workContent =
-    order.description || order.workContent || order.content ||
-    order.workDescription || order.serviceContent || "";
-  const notesContent = order.notes || order.remark || "";
-  const lines = [
-    "【晟風工程 派工通知】",
-    "",
-    `派工單號：${woNum}`,
-    `客戶：${order.customerName || "—"}`,
-    `聯絡人：${order.contactPerson || "—"}`,
-    `行動電話：${order.mobilePhone || "—"}`,
-    `施工地址：${addr || "—"}`,
-    mapsUrl ? `地圖導航：${mapsUrl}` : "",
-    "",
-    `施工日期：${order.scheduledDate || "—"}`,
-    `施工時間：${order.scheduledTime || "—"}`,
-    `施工技師：${techDisplay}`,
-    "",
-    `施工內容：\n${workContent || "—"}`,
-    "",
-    notesContent ? `備註：\n${notesContent}` : "",
-  ].filter(l => l !== "").join("\n").replace(/\n{3,}/g, "\n\n").trim();
-  window.open(`https://line.me/R/msg/text?${encodeURIComponent(lines)}`, "_blank");
+  const html = buildWorkOrderHtml(order);
+  await handlePdfAction({
+    html,
+    docNo: woNum,
+    filename: `派工單_${woNum}.pdf`,
+    title: "晨風工程派工單",
+    lineText: `派工單：${woNum} / 客戶：${order.customerName || ""} / 地址：${order.installAddress || ""}`,
+    action: "share",
+    setPdfPreview,
+    toast,
+  });
 }
 
 // ─── Progress + Quick Payment Panel ────────────────────────────────────────
@@ -524,6 +243,7 @@ export default function WorkOrders() {
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [form, setForm] = useState<WOForm>(makeEmpty());
   const [arModal, setArModal] = useState<{ order: any; amount: string } | null>(null);
+  const [pdfPreview, setPdfPreview] = useState<{ url: string; filename: string } | null>(null);
   const pendingARRef = useRef<any>(null);
 
   const { data: orders, isLoading } = useListWorkOrders({
@@ -748,18 +468,12 @@ export default function WorkOrders() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => printDotMatrixTriplicate(o)}>
-                            <FileText className="h-3.5 w-3.5 mr-2" />點陣三聯單
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => printTwoCopyDispatch(o)}>
-                            <FileText className="h-3.5 w-3.5 mr-2" />A4 上下聯派工單
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => printWorkOrder(o)}>
-                            <Printer className="h-3.5 w-3.5 mr-2" />A4 完整派工單
+                          <DropdownMenuItem onClick={() => printWorkOrderPDF(o, setPdfPreview, toast)}>
+                            <Printer className="h-3.5 w-3.5 mr-2" />列印派工單
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-green-600 hover:text-green-700" title="LINE 分享" onClick={() => shareViaLine(o)}>
+                      <Button variant="ghost" size="icon" className="h-7 w-7 text-green-600 hover:text-green-700" title="LINE 分享" onClick={() => shareWorkOrderViaLine(o, setPdfPreview, toast)}>
                         <Share2 className="h-3.5 w-3.5" />
                       </Button>
                       {o.installAddress && (
@@ -897,6 +611,20 @@ export default function WorkOrders() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <PdfPreviewDialog
+        open={!!pdfPreview}
+        pdfUrl={pdfPreview?.url ?? ""}
+        filename={pdfPreview?.filename ?? ""}
+        onClose={() => setPdfPreview(null)}
+        onDownload={() => {
+          if (!pdfPreview) return;
+          const a = document.createElement("a");
+          a.href = pdfPreview.url;
+          a.download = pdfPreview.filename;
+          a.click();
+        }}
+      />
     </div>
   );
 }

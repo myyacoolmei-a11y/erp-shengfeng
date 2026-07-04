@@ -19,6 +19,15 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { WorkOrderFormFields, makeEmpty, buildPayload, type WOForm } from "@/components/work-order-form";
 import { CustomerSelector, type CustomerSelectorValue } from "@/components/customer-selector";
+import { PdfPreviewDialog } from "@/components/pdf/pdf-preview-dialog";
+import {
+  handlePdfAction,
+  downloadPdf,
+  printPdf,
+  sharePdf,
+  isMobileDevice,
+} from "@/components/pdf/pdf-service";
+import { buildQuotationHtml } from "@/components/pdf/pdf-templates";
 
 // ── Constants ──────────────────────────────────────────────────────────────
 const CATEGORIES = ["裝新機", "保養", "維修", "移機", "拆機", "冷媒工程", "配管工程", "其他"];
@@ -155,358 +164,50 @@ function quoteToForm(q: any): QuoteForm {
   };
 }
 
-// ── Shared PDF generator ───────────────────────────────────────────────────
-async function generateQuotationPdf(quote: any): Promise<{ blob: Blob; quoteNo: string; html: string }> {
-  const items: any[] = quote.items ?? [];
+// ── Shared PDF V2 helpers ────────────────────────────────────────────────
+function getQuoteNo(quote: any): string {
   const d = quote.createdAt ? new Date(quote.createdAt) : new Date();
   const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
-  const quoteNo = `Q-${ymd}-${String(quote.id).padStart(4, "0")}`;
-  const quoteDate = d.toLocaleDateString("zh-TW");
-  const validDate = new Date(d.getTime() + 30 * 86400000).toLocaleDateString("zh-TW");
-  const printDate = new Date().toLocaleDateString("zh-TW");
-  const logoUrl = `${window.location.origin}/logo.png`;
-  const esc = (s: any) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  const fmt = (n: number) => `NT$ ${Math.round(n).toLocaleString()}`;
-  const taxType = quote.taxType || "未稅";
-
-  const rawTotal = items.length > 0
-    ? items.reduce((s: number, i: any) => s + Number(i.subtotal || 0), 0)
-    : Number(quote.finalAmount ?? quote.amount ?? 0);
-  const discAmt = Number(quote.discountAmount ?? 0);
-  const subtotal = Math.max(0, rawTotal - discAmt);
-  const { preTax, taxAmt, total } = calcTax(subtotal, taxType);
-
-  const statusStyles: Record<string, string> = {
-    "草稿": "background:#e5e7eb;color:#374151",
-    "已送出": "background:#dbeafe;color:#1d4ed8",
-    "已接受": "background:#dcfce7;color:#15803d",
-    "已拒絕": "background:#fee2e2;color:#dc2626",
-    "已完成": "background:#d1fae5;color:#065f46",
-  };
-  const statusBadge = `<span style="font-size:8pt;font-weight:700;padding:1mm 3mm;border-radius:1mm;${statusStyles[quote.status] ?? ""}">${quote.status ?? ""}</span>`;
-
-  const itemRows = items.length > 0
-    ? items.map((item: any, i: number) => `
-      <tr>
-        <td>${i + 1}</td>
-        <td>${esc(item.category)}</td>
-        <td>${esc(item.brand || "—")}</td>
-        <td class="tl">${esc(item.itemName)}</td>
-        <td>${Number(item.quantity)}</td>
-        <td>${esc(item.unit)}</td>
-        <td style="text-align:right">${fmt(Number(item.unitPrice))}</td>
-        <td style="text-align:right;font-weight:600">${fmt(Number(item.subtotal))}</td>
-        <td class="tl">${esc(item.notes || "")}</td>
-      </tr>`).join("")
-    : `<tr><td>1</td><td>工程</td><td>—</td><td class="tl">${esc(quote.title)}</td><td>1</td><td>式</td><td style="text-align:right">${fmt(rawTotal)}</td><td style="text-align:right;font-weight:600">${fmt(rawTotal)}</td><td></td></tr>`;
-
-  const padRows = Array.from({ length: Math.max(0, 4 - items.length) }, (_, i) => `
-    <tr><td>${items.length + i + 1}</td><td></td><td></td><td class="tl"></td><td></td><td></td><td></td><td></td><td></td></tr>`).join("");
-
-  const notesHtml = (quote.notes ?? "").split(/\n/).filter((l: string) => l.trim()).slice(0, 5)
-    .map((l: string, i: number) => `<div style="display:flex;gap:2mm;padding:0.8mm 0;font-size:8pt;line-height:1.4"><span style="color:#9ACD32;font-weight:700;min-width:4mm">${i + 1}.</span><span>${esc(l.replace(/^\d+[.)\u3001\uff0e]\s*/, ""))}</span></div>`).join("")
-    || ["報價單有效期限為 30 日，逾期請重新確認。","施工前請支付 50% 訂金，完工驗收後付清尾款。","施工費已含基本配管耗材，特殊工程另計。","不含配電工程，如需配電請另行報價。"]
-      .map((l, i) => `<div style="display:flex;gap:2mm;padding:0.8mm 0;font-size:8pt;line-height:1.4"><span style="color:#9ACD32;font-weight:700;min-width:4mm">${i + 1}.</span><span>${l}</span></div>`).join("");
-
-  const html = `<!DOCTYPE html><html lang="zh-TW"><head><meta charset="UTF-8"><title>報價單 ${quoteNo}</title>
-<style>
-*{margin:0;padding:0;box-sizing:border-box}
-body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;font-size:8.5pt;color:#111;background:#fff}
-@page{size:A4;margin:10mm}
-.doc{max-width:190mm;margin:0 auto;padding-bottom:16mm}
-.hdr{display:flex;justify-content:space-between;align-items:flex-end;padding-bottom:3mm;border-bottom:2.5px solid #9ACD32;margin-bottom:3mm}
-.hdr-l{display:flex;align-items:center;gap:3mm}
-.hdr-logo{width:14mm;height:14mm;border-radius:50%;object-fit:cover;border:2px solid #9ACD32}
-.co-name{font-size:15pt;font-weight:900}
-.co-sub{font-size:7pt;color:#666;margin-top:1mm}
-.co-info{font-size:6.5pt;color:#888;margin-top:1mm;line-height:1.5}
-.doc-r{text-align:right}
-.doc-label{font-size:20pt;font-weight:900;color:#9ACD32;letter-spacing:8px;line-height:1}
-.doc-en{font-size:8pt;color:#aaa;letter-spacing:2px}
-.doc-no{font-size:9pt;font-weight:700;font-family:monospace;margin-top:2mm}
-.doc-dates{font-size:7.5pt;color:#555;line-height:1.7;margin-top:1mm}
-.sec{margin-bottom:3mm}
-.stitle{font-size:7pt;font-weight:700;background:#111;color:#9ACD32;padding:1mm 3mm;letter-spacing:2px;margin-bottom:1.5mm;display:flex;align-items:center;justify-content:space-between}
-.ci-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:0.8mm 4mm}
-.ci-r{display:flex;align-items:baseline;gap:1.5mm;padding:0.8mm 0;border-bottom:1px dotted #e0e0e0}
-.ci-l{font-size:6.5pt;color:#888;min-width:14mm;flex-shrink:0}
-.ci-v{font-size:8pt;font-weight:600;flex:1}
-.ci-wide{grid-column:span 2}
-table{width:100%;border-collapse:collapse;font-size:7.5pt}
-thead th{background:#111;color:#9ACD32;padding:1.5mm 1.5mm;text-align:center;font-weight:700;font-size:7pt;border-right:1px solid #333;white-space:nowrap}
-thead th:last-child{border-right:none}
-tbody tr:nth-child(even){background:#f7f7f7}
-tbody td{padding:1.5mm 1.5mm;text-align:center;border-bottom:1px solid #ebebeb;vertical-align:middle}
-tbody td.tl{text-align:left}
-tbody tr:last-child td{border-bottom:1.5px solid #9ACD32}
-.row{display:flex;gap:3mm}
-.mid-r{flex:1;border:1px solid #e0e0e0;border-left:3px solid #9ACD32;padding:2mm 2.5mm;font-size:8pt;white-space:pre-wrap;line-height:1.5;color:#333;background:#fafafa;min-height:20mm}
-.bot-l{flex:1}
-.bot-r{flex:0 0 70mm}
-.amt-box{border:2px solid #9ACD32;border-radius:1mm;overflow:hidden}
-.amt-r{display:flex;justify-content:space-between;padding:1.5mm 4mm;border-bottom:1px solid #ebebeb;font-size:8pt}
-.amt-r .lbl{color:#777}
-.amt-r .val{font-weight:600}
-.amt-total{background:#111;padding:3mm 4mm;display:flex;justify-content:space-between;align-items:center}
-.amt-total .lbl{color:#9ACD32;font-size:9.5pt;font-weight:900;letter-spacing:1px}
-.amt-total .val{color:#fff;font-size:14pt;font-weight:900;font-family:monospace}
-.sig-row{display:grid;grid-template-columns:repeat(3,1fr);gap:3mm;margin-top:1mm}
-.sig-box{border:1px solid #ccc;border-radius:1mm;padding:1.5mm;min-height:22mm;display:flex;flex-direction:column}
-.sig-sp{flex:1}
-.sig-lbl{font-size:7pt;color:#555;border-top:1px solid #aaa;padding-top:1mm;text-align:center}
-.sig-dt{font-size:6.5pt;color:#bbb;text-align:center;margin-top:0.5mm}
-.pf{border-top:2px solid #9ACD32;padding-top:2mm;margin-top:3mm;display:flex;justify-content:space-between;align-items:center}
-.pf-l{display:flex;align-items:center;gap:2mm}
-.pf-logo{width:8mm;height:8mm;border-radius:50%;object-fit:cover;border:1px solid #9ACD32}
-.pf-info{font-size:6.5pt;color:#666;line-height:1.5}
-.pf-r{font-size:6.5pt;color:#aaa;text-align:right;line-height:1.6}
-</style></head><body>
-<div class="doc">
-<div class="hdr">
-  <div class="hdr-l">
-    <img src="${logoUrl}" class="hdr-logo" alt="">
-    <div>
-      <div class="co-name">晟風工程有限公司</div>
-      <div class="co-sub">冷氣安裝｜保養｜維修｜設計</div>
-      <div class="co-info">統編：93388506　Tel：0955-980-738<br>cfac07151025@gmail.com　彰化縣花壇鄉花南路212號</div>
-    </div>
-  </div>
-  <div class="doc-r">
-    <div class="doc-label">報價單</div>
-    <div class="doc-en">QUOTATION</div>
-    <div class="doc-no">${quoteNo}&nbsp;&nbsp;${statusBadge}</div>
-    <div class="doc-dates">報價日期：${quoteDate}　有效期限：${validDate}<br>列印日期：${printDate}</div>
-  </div>
-</div>
-
-<div class="sec">
-  <div class="stitle">▌ 客戶資訊　Client Information</div>
-  <div class="ci-grid">
-    <div class="ci-r"><span class="ci-l">客戶名稱</span><span class="ci-v">${esc(quote.customerName) || "　"}</span></div>
-    <div class="ci-r"><span class="ci-l">聯絡人</span><span class="ci-v">${esc(quote.contactPerson) || "　"}</span></div>
-    <div class="ci-r"><span class="ci-l">聯絡電話</span><span class="ci-v">${esc(quote.customerPhone) || "　"}</span></div>
-    <div class="ci-r"><span class="ci-l">負責業務</span><span class="ci-v">${esc(quote.salesRepName) || "　"}</span></div>
-    <div class="ci-r"><span class="ci-l">工程名稱</span><span class="ci-v">${esc(quote.title) || "　"}</span></div>
-    <div class="ci-r"><span class="ci-l">稅別</span><span class="ci-v">${esc(taxType)}</span></div>
-    <div class="ci-r ci-wide"><span class="ci-l">施工地址</span><span class="ci-v">${esc(quote.address) || "　"}</span></div>
-    <div class="ci-r"><span class="ci-l">付款條件</span><span class="ci-v">　</span></div>
-  </div>
-</div>
-
-<div class="sec">
-  <div class="stitle">▌ 工程設備明細　Equipment Schedule</div>
-  <table>
-    <thead><tr>
-      <th style="width:6mm">項次</th><th style="width:16mm">類別</th>
-      <th style="width:14mm">品牌</th><th>品項</th>
-      <th style="width:9mm">數量</th><th style="width:9mm">單位</th>
-      <th style="width:22mm">單價</th><th style="width:22mm">小計</th>
-      <th style="width:18mm">備註</th>
-    </tr></thead>
-    <tbody>${itemRows}${padRows}</tbody>
-  </table>
-</div>
-
-<div class="row sec">
-  <div style="flex:0 0 54%">
-    <div class="stitle">▌ 備註說明　Notes &amp; Remarks</div>
-    <div class="mid-r" style="min-height:${quote.description ? "auto" : "24mm"};margin-left:0;border-left:3px solid #9ACD32">${esc(quote.description) || "施工方式：\n施工天數：\n注意事項："}</div>
-  </div>
-  <div style="flex:1">
-    <div class="stitle">▌ 注意事項　Terms &amp; Conditions</div>
-    ${notesHtml}
-  </div>
-</div>
-
-<div class="row sec">
-  <div class="bot-l"></div>
-  <div class="bot-r">
-    <div class="amt-box">
-      <div class="amt-r"><span class="lbl">項目小計</span><span class="val">${fmt(rawTotal)}</span></div>
-      ${discAmt > 0 ? `<div class="amt-r"><span class="lbl">折扣</span><span class="val" style="color:#dc2626">－ ${fmt(discAmt)}</span></div>` : ""}
-      <div class="amt-r"><span class="lbl">未稅小計</span><span class="val">${fmt(preTax)}</span></div>
-      <div class="amt-r"><span class="lbl">稅額 5%</span><span class="val">${fmt(taxAmt)}</span></div>
-      <div class="amt-total"><span class="lbl">含稅總計</span><span class="val">${fmt(total)}</span></div>
-    </div>
-  </div>
-</div>
-
-<div class="sec">
-  <div class="stitle">▌ 確認簽署　Authorization</div>
-  <div class="sig-row">
-    <div class="sig-box"><div class="sig-sp"></div><div class="sig-lbl">客戶簽名</div><div class="sig-dt">日期：＿＿＿＿＿＿</div></div>
-    <div class="sig-box"><div class="sig-sp"></div><div class="sig-lbl">業務簽名</div><div class="sig-dt">日期：＿＿＿＿＿＿</div></div>
-    <div class="sig-box"><div class="sig-sp"></div><div class="sig-lbl">公　司　章</div><div class="sig-dt">&nbsp;</div></div>
-  </div>
-</div>
-</div>
-
-<div class="pf">
-  <div class="pf-l">
-    <img src="${logoUrl}" class="pf-logo" alt="">
-    <div class="pf-info"><b>晟風工程有限公司</b>　統編：93388506<br>Tel：0955-980-738　彰化縣花壇鄉花南路212號</div>
-  </div>
-  <div class="pf-r">Generated by 晟風工程 ERP<br>列印：${printDate}</div>
-</div>
-</body></html>`;
-
-  const div = document.createElement("div");
-  div.innerHTML = html;
-  div.style.position = "fixed";
-  div.style.top = "0";
-  div.style.left = "0";
-  div.style.width = "720px";
-  div.style.visibility = "hidden";
-  div.style.zIndex = "-1";
-  document.body.appendChild(div);
-
-  // Ensure fonts + layout are ready before capture
-  await document.fonts.ready;
-  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-
-  if (div.offsetWidth <= 0 || div.offsetHeight <= 0) {
-    document.body.removeChild(div);
-    console.error("[generateQuotationPdf] DOM render failed: offsetWidth=", div.offsetWidth, "offsetHeight=", div.offsetHeight);
-    throw new Error("PDF 生成失敗：DOM 尚未完整 render，元素尺寸為 0");
-  }
-
-  const html2pdf = await import("html2pdf.js").then((m: any) => m.default || m);
-  const opt = {
-    margin: [10, 10, 10, 10],
-    image: { type: "jpeg", quality: 0.98 },
-    html2canvas: { scale: 2, useCORS: true, logging: false },
-    jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-  };
-
-  const worker = html2pdf().set(opt).from(div);
-  const canvas = await worker.output("canvas");
-  if (!canvas || canvas.width <= 0 || canvas.height <= 0) {
-    document.body.removeChild(div);
-    console.error("[generateQuotationPdf] Canvas blank: width=", canvas?.width, "height=", canvas?.height);
-    throw new Error("PDF 生成失敗：Canvas 空白，可能是濾渲或 DOM 未渲染");
-  }
-  const blob: Blob = await worker.output("blob");
-  document.body.removeChild(div);
-  return { blob, quoteNo, html };
+  return `Q-${ymd}-${String(quote.id).padStart(4, "0")}`;
 }
 
-// ── PDF Preview Dialog ─────────────────────────────────────────────────────
-function PdfPreviewDialog({
-  open, onClose, pdfUrl, filename,
-}: {
-  open: boolean; onClose: () => void; pdfUrl: string; filename: string;
-}) {
-  const downloadPdf = () => {
-    const a = document.createElement("a");
-    a.href = pdfUrl;
-    a.download = filename;
-    a.click();
-  };
-  const sharePdf = async () => {
-    try {
-      const res = await fetch(pdfUrl);
-      const blob = await res.blob();
-      const file = new File([blob], filename, { type: "application/pdf" });
-      if (navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ files: [file], title: "晟風工程報價單" });
-      } else {
-        alert("此裝置不支援直接分享 PDF");
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  };
-  const printPdf = () => {
-    const win = window.open(pdfUrl, "_blank");
-    if (win) {
-      win.focus();
-      setTimeout(() => { try { win.print(); } catch (_) {} }, 800);
-    }
-  };
-  return (
-    <Dialog open={open} onOpenChange={v => !v && onClose()}>
-      <DialogContent className="max-w-4xl max-h-[92dvh] p-0 flex flex-col">
-        <DialogHeader className="px-4 pt-4 pb-0">
-          <DialogTitle className="flex items-center gap-2 text-base">
-            <FileText className="h-5 w-5 text-primary" />{filename}
-          </DialogTitle>
-        </DialogHeader>
-        <div className="flex-1 overflow-hidden px-4 py-2 min-h-[300px]">
-          <iframe
-            src={pdfUrl}
-            className="w-full h-full rounded border min-h-[60vh]"
-            title={filename}
-          />
-        </div>
-        <DialogFooter className="px-4 py-3 gap-2 flex-wrap">
-          <Button variant="outline" size="sm" onClick={onClose}>關閉</Button>
-          <Button variant="secondary" size="sm" onClick={sharePdf}>
-            <Share2 className="h-4 w-4 mr-1" />分享
-          </Button>
-          <Button variant="secondary" size="sm" onClick={downloadPdf}>
-            <Download className="h-4 w-4 mr-1" />下載 PDF
-          </Button>
-          <Button size="sm" onClick={printPdf}>
-            <Printer className="h-4 w-4 mr-1" />列印
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// ── Print / PDF ──────────────────────────────────────────────────────────────
 async function printQuote(
   quote: any,
   setPdfPreview: (v: { url: string; filename: string } | null) => void,
   toast: any,
 ) {
-  toast({ title: "PDF 產生中", description: "請稍候…" });
-  try {
-    const { blob, quoteNo } = await generateQuotationPdf(quote);
-    const url = URL.createObjectURL(blob);
-    const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
-    if (isMobile) {
-      setPdfPreview({ url, filename: `報價單_${quoteNo}.pdf` });
-      toast({ title: "已開啟 PDF 預覽", description: "可下載、分享或列印" });
-    } else {
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `報價單_${quoteNo}.pdf`;
-      a.click();
-      toast({ title: "已下載 PDF", description: `報價單_${quoteNo}.pdf` });
-      setTimeout(() => URL.revokeObjectURL(url), 30000);
-    }
-  } catch (e) {
-    toast({ title: "PDF 產生失敗", description: String(e), variant: "destructive" });
-  }
+  const quoteNo = getQuoteNo(quote);
+  const html = buildQuotationHtml(quote);
+  const action = isMobileDevice() ? "preview" : "download";
+  await handlePdfAction({
+    html,
+    docNo: quoteNo,
+    filename: `報價單_${quoteNo}.pdf`,
+    title: "晟風工程報價單",
+    lineText: `報價單：${quote.title || ""} / 總計：${quote.finalAmount || quote.amount || 0}`,
+    action,
+    setPdfPreview,
+    toast,
+  });
 }
 
-// ── LINE Share (報價單) — 分享 PDF ───────────────────────────────────
 async function shareQuoteViaLine(
   quote: any,
   setPdfPreview: (v: { url: string; filename: string } | null) => void,
   toast: any,
 ) {
-  toast({ title: "PDF 產生中", description: "請稍候…" });
-  try {
-    const { blob, quoteNo } = await generateQuotationPdf(quote);
-    const file = new File([blob], `報價單_${quoteNo}.pdf`, { type: "application/pdf" });
-    if (navigator.canShare?.({ files: [file] })) {
-      await navigator.share({ files: [file], title: "晟風工程報價單" });
-      toast({ title: "已開啟分享", description: "請選擇 LINE 或其他 App" });
-    } else {
-      const url = URL.createObjectURL(blob);
-      setPdfPreview({ url, filename: `報價單_${quoteNo}.pdf` });
-      toast({ title: "此裝置不支援直接分享", description: "已開啟 PDF 預覽，請手動分享" });
-    }
-  } catch (e: any) {
-    if (e?.name === "AbortError") {
-      toast({ title: "分享取消", description: "使用者取消了分享" });
-    } else {
-      toast({ title: "分享失敗", description: String(e), variant: "destructive" });
-    }
-  }
+  const quoteNo = getQuoteNo(quote);
+  const html = buildQuotationHtml(quote);
+  await handlePdfAction({
+    html,
+    docNo: quoteNo,
+    filename: `報價單_${quoteNo}.pdf`,
+    title: "晟風工程報價單",
+    lineText: `報價單：${quote.title || ""} / 總計：${quote.finalAmount || quote.amount || 0}`,
+    action: "share",
+    setPdfPreview,
+    toast,
+  });
 }
 
 // ── ItemCard ───────────────────────────────────────────────────────────────

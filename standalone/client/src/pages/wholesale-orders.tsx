@@ -18,9 +18,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Pencil, Trash2, Search, ShoppingCart, X, CreditCard } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, ShoppingCart, X, CreditCard, Printer, Share2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
+import { PdfPreviewDialog } from "@/components/pdf/pdf-preview-dialog";
+import { handlePdfAction, isMobileDevice } from "@/components/pdf/pdf-service";
+import { buildWholesaleOrderHtml } from "@/components/pdf/pdf-templates";
 
 const ORDER_STATUSES = ["備貨中", "已出貨"];
 const STATUS_COLORS: Record<string, string> = {
@@ -61,6 +64,45 @@ function emptyForm(): OForm {
     customerId: null, customerName: "", orderDate: new Date().toISOString().split("T")[0],
     expectedDelivery: "", salesperson: "", notes: "", taxRate: 0, shippingFee: 0, status: "備貨中", items: [],
   };
+}
+
+async function printOrder(
+  order: any,
+  setPdfPreview: (v: { url: string; filename: string } | null) => void,
+  toast: any,
+) {
+  const orderNo = order.orderNumber || `WO-${String(order.id).padStart(4, "0")}`;
+  const html = buildWholesaleOrderHtml(order);
+  const action = isMobileDevice() ? "preview" : "download";
+  await handlePdfAction({
+    html,
+    docNo: orderNo,
+    filename: `出貨單_${orderNo}.pdf`,
+    title: "晟風工程出貨單",
+    lineText: `出貨單：${order.customerName || ""} / 總計：${order.total || 0}`,
+    action,
+    setPdfPreview,
+    toast,
+  });
+}
+
+async function shareOrderViaLine(
+  order: any,
+  setPdfPreview: (v: { url: string; filename: string } | null) => void,
+  toast: any,
+) {
+  const orderNo = order.orderNumber || `WO-${String(order.id).padStart(4, "0")}`;
+  const html = buildWholesaleOrderHtml(order);
+  await handlePdfAction({
+    html,
+    docNo: orderNo,
+    filename: `出貨單_${orderNo}.pdf`,
+    title: "晟風工程出貨單",
+    lineText: `出貨單：${order.customerName || ""} / 總計：${order.total || 0}`,
+    action: "share",
+    setPdfPreview,
+    toast,
+  });
 }
 
 function fromData(d: any): OForm {
@@ -110,6 +152,7 @@ export default function WholesaleOrders() {
   const [editId, setEditId] = useState<number | null>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [receivableOrderId, setReceivableOrderId] = useState<number | null>(null);
+  const [pdfPreview, setPdfPreview] = useState<{ url: string; filename: string } | null>(null);
   const [form, setForm] = useState<OForm>(emptyForm());
 
   const { data: orders, isLoading } = useListWholesaleOrders({
@@ -233,6 +276,8 @@ export default function WholesaleOrders() {
                         <CreditCard className="h-3 w-3" />應收款
                       </Button>
                       <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-destructive hover:text-destructive" onClick={() => setDeleteId(o.id)}><Trash2 className="h-3 w-3" />刪除</Button>
+                      <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" title="列印出貨單" onClick={() => printOrder(o, setPdfPreview, toast)}><Printer className="h-3 w-3" />列印</Button>
+                      <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-green-600 hover:text-green-700" title="LINE 分享出貨單" onClick={() => shareOrderViaLine(o, setPdfPreview, toast)}><Share2 className="h-3 w-3" />LINE</Button>
                     </div>
                   )}
                 </div>
@@ -440,6 +485,20 @@ export default function WholesaleOrders() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <PdfPreviewDialog
+        open={!!pdfPreview}
+        pdfUrl={pdfPreview?.url ?? ""}
+        filename={pdfPreview?.filename ?? ""}
+        onClose={() => setPdfPreview(null)}
+        onDownload={() => {
+          if (!pdfPreview) return;
+          const a = document.createElement("a");
+          a.href = pdfPreview.url;
+          a.download = pdfPreview.filename;
+          a.click();
+        }}
+      />
     </div>
   );
 }

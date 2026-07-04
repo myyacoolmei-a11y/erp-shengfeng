@@ -14,7 +14,11 @@ import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Search, CreditCard, FileText, CalendarDays, Printer, MessageCircle } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
+import { PdfPreviewDialog } from "@/components/pdf/pdf-preview-dialog";
+import { handlePdfAction, isMobileDevice } from "@/components/pdf/pdf-service";
+import { buildWholesaleSettlementHtml } from "@/components/pdf/pdf-templates";
 
 function fmtMoney(n: number | string | null | undefined) {
   if (n == null) return "—";
@@ -144,12 +148,14 @@ function buildInvoiceBody(
 
 export default function WholesaleSettlements() {
   const { user } = useAuth();
+  const { toast } = useToast();
 
   const [fromDate, setFromDate] = useState(firstDayOfMonthStr());
   const [toDate, setToDate] = useState(todayStr());
   const [search, setSearch] = useState("");
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailCustomer, setDetailCustomer] = useState<{ id: number; name: string } | null>(null);
+  const [pdfPreview, setPdfPreview] = useState<{ url: string; filename: string } | null>(null);
 
   const { data: summary, isLoading } = useListWholesaleSettlementSummary(
     { from: fromDate, to: toDate },
@@ -232,77 +238,47 @@ export default function WholesaleSettlements() {
     return result;
   }
 
-  function printInvoice() {
+  async function printInvoice() {
     if (!detailCustomer || !detailData) return;
     const flat = flatItems();
     const subtotal = flat.reduce((sum, it) => sum + parseFloat(it.amount ?? "0"), 0);
     const taxRate = detailData[0]?.taxRate ? parseFloat(detailData[0].taxRate) : 0;
     const taxAmount = Math.round(subtotal * taxRate / 100 * 100) / 100;
     const total = subtotal + taxAmount;
-
-    const body = buildInvoiceBody(detailCustomer.name, fromDate, toDate, flat, subtotal, taxRate, taxAmount, total);
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) return;
-
-    printWindow.document.write(`
-      <html>
-      <head>
-        <title>請款單 — ${detailCustomer.name}</title>
-        <style>
-          @media print {
-            body { margin: 0; padding: 20px; }
-            .no-print { display: none !important; }
-          }
-        </style>
-      </head>
-      <body>${body}<script>window.print();</script></body>
-      </html>
-    `);
-    printWindow.document.close();
+    const docNo = `${detailCustomer.name}_${fromDate}`;
+    const html = buildWholesaleSettlementHtml(detailCustomer.name, fromDate, toDate, flat, subtotal, taxRate, taxAmount, total, 0, total);
+    const action = isMobileDevice() ? "preview" : "download";
+    await handlePdfAction({
+      html,
+      docNo,
+      filename: `請款單_${docNo}.pdf`,
+      title: "晟風工程批發請款單",
+      lineText: `批發請款單：${detailCustomer.name} / 區間：${fromDate} ~ ${toDate} / 總計：${total}`,
+      action,
+      setPdfPreview,
+      toast: toast as any,
+    });
   }
 
   async function sendLinePDF() {
     if (!detailCustomer || !detailData) return;
-
-    const message = "您好，附件為晟風工程本期批發材料請款單，請協助確認，如有問題請與我們聯繫，謝謝。";
-    const lineUrl = `https://line.me/R/msg/text/?${encodeURIComponent(message)}`;
-
-    try {
-      const flat = flatItems();
-      const subtotal = flat.reduce((sum, it) => sum + parseFloat(it.amount ?? "0"), 0);
-      const taxRate = detailData[0]?.taxRate ? parseFloat(detailData[0].taxRate) : 0;
-      const taxAmount = Math.round(subtotal * taxRate / 100 * 100) / 100;
-      const total = subtotal + taxAmount;
-
-      const body = buildInvoiceBody(detailCustomer.name, fromDate, toDate, flat, subtotal, taxRate, taxAmount, total);
-
-      const div = document.createElement("div");
-      div.innerHTML = body;
-      div.style.position = "absolute";
-      div.style.left = "-9999px";
-      div.style.width = "720px";
-      document.body.appendChild(div);
-
-      await new Promise((resolve) => setTimeout(resolve, 300));
-
-      const html2pdf = await import("html2pdf.js").then((m: any) => m.default || m);
-
-      const opt = {
-        margin: [10, 10, 10, 10],
-        filename: `請款單_${detailCustomer.name}_${fromDate}.pdf`,
-        image: { type: "jpeg", quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true },
-        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-      };
-
-      await html2pdf().set(opt).from(div).save();
-      document.body.removeChild(div);
-    } catch (err) {
-      console.error("PDF generation failed:", err);
-    }
-
-    // Always open LINE text share (whether PDF succeeded or not)
-    window.open(lineUrl, "_blank");
+    const flat = flatItems();
+    const subtotal = flat.reduce((sum, it) => sum + parseFloat(it.amount ?? "0"), 0);
+    const taxRate = detailData[0]?.taxRate ? parseFloat(detailData[0].taxRate) : 0;
+    const taxAmount = Math.round(subtotal * taxRate / 100 * 100) / 100;
+    const total = subtotal + taxAmount;
+    const docNo = `${detailCustomer.name}_${fromDate}`;
+    const html = buildWholesaleSettlementHtml(detailCustomer.name, fromDate, toDate, flat, subtotal, taxRate, taxAmount, total, 0, total);
+    await handlePdfAction({
+      html,
+      docNo,
+      filename: `請款單_${docNo}.pdf`,
+      title: "晟風工程批發請款單",
+      lineText: `批發請款單：${detailCustomer.name} / 區間：${fromDate} ~ ${toDate} / 總計：${total}`,
+      action: "share",
+      setPdfPreview,
+      toast: toast as any,
+    });
   }
 
   return (
@@ -441,6 +417,20 @@ export default function WholesaleSettlements() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <PdfPreviewDialog
+        open={!!pdfPreview}
+        pdfUrl={pdfPreview?.url ?? ""}
+        filename={pdfPreview?.filename ?? ""}
+        onClose={() => setPdfPreview(null)}
+        onDownload={() => {
+          if (!pdfPreview) return;
+          const a = document.createElement("a");
+          a.href = pdfPreview.url;
+          a.download = pdfPreview.filename;
+          a.click();
+        }}
+      />
     </div>
   );
 }
