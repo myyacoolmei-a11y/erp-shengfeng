@@ -22,12 +22,10 @@ import { CustomerSelector, type CustomerSelectorValue } from "@/components/custo
 import { PdfPreviewDialog } from "@/components/pdf/pdf-preview-dialog";
 import {
   handlePdfAction,
-  downloadPdf,
-  printPdf,
-  sharePdf,
   isMobileDevice,
+  openPrintWindow,
 } from "@/components/pdf/pdf-service";
-import { buildQuotationHtml } from "@/components/pdf/pdf-templates";
+import { buildQuotationHtml } from "@/components/pdf/templates/QuotationTemplate";
 
 // ── Constants ──────────────────────────────────────────────────────────────
 const CATEGORIES = ["裝新機", "保養", "維修", "移機", "拆機", "冷媒工程", "配管工程", "其他"];
@@ -178,17 +176,20 @@ async function printQuote(
 ) {
   const quoteNo = getQuoteNo(quote);
   const html = buildQuotationHtml(quote);
-  const action = isMobileDevice() ? "preview" : "download";
-  await handlePdfAction({
-    html,
-    docNo: quoteNo,
-    filename: `報價單_${quoteNo}.pdf`,
-    title: "晟風工程報價單",
-    lineText: `報價單：${quote.title || ""} / 總計：${quote.finalAmount || quote.amount || 0}`,
-    action,
-    setPdfPreview,
-    toast,
-  });
+  if (isMobileDevice()) {
+    await handlePdfAction({
+      html,
+      docNo: quoteNo,
+      filename: `報價單_${quoteNo}.pdf`,
+      title: "景風工程報價單",
+      action: "download",
+      setPdfPreview,
+      toast,
+      pageFormat: "a4",
+    });
+  } else {
+    openPrintWindow(html, `景風工程報價單 — ${quoteNo}`);
+  }
 }
 
 async function shareQuoteViaLine(
@@ -203,10 +204,10 @@ async function shareQuoteViaLine(
     docNo: quoteNo,
     filename: `報價單_${quoteNo}.pdf`,
     title: "晟風工程報價單",
-    lineText: `報價單：${quote.title || ""} / 總計：${quote.finalAmount || quote.amount || 0}`,
     action: "share",
     setPdfPreview,
     toast,
+    pageFormat: "a4",
   });
 }
 

@@ -17,8 +17,8 @@ import { Search, CreditCard, FileText, CalendarDays, Printer, MessageCircle } fr
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
 import { PdfPreviewDialog } from "@/components/pdf/pdf-preview-dialog";
-import { handlePdfAction, isMobileDevice } from "@/components/pdf/pdf-service";
-import { buildWholesaleSettlementHtml } from "@/components/pdf/pdf-templates";
+import { handlePdfAction, isMobileDevice, openPrintWindow } from "@/components/pdf/pdf-service";
+import { buildStatementHtml } from "@/components/pdf/templates/StatementTemplate";
 
 function fmtMoney(n: number | string | null | undefined) {
   if (n == null) return "—";
@@ -246,18 +246,21 @@ export default function WholesaleSettlements() {
     const taxAmount = Math.round(subtotal * taxRate / 100 * 100) / 100;
     const total = subtotal + taxAmount;
     const docNo = `${detailCustomer.name}_${fromDate}`;
-    const html = buildWholesaleSettlementHtml(detailCustomer.name, fromDate, toDate, flat, subtotal, taxRate, taxAmount, total, 0, total);
-    const action = isMobileDevice() ? "preview" : "download";
-    await handlePdfAction({
-      html,
-      docNo,
-      filename: `請款單_${docNo}.pdf`,
-      title: "晟風工程批發請款單",
-      lineText: `批發請款單：${detailCustomer.name} / 區間：${fromDate} ~ ${toDate} / 總計：${total}`,
-      action,
-      setPdfPreview,
-      toast: toast as any,
-    });
+    const html = buildStatementHtml(detailCustomer.name, fromDate, toDate, flat, subtotal, taxRate, taxAmount, total, 0, total);
+    if (isMobileDevice()) {
+      await handlePdfAction({
+        html,
+        docNo,
+        filename: `請款單_${docNo}.pdf`,
+        title: "景風工程批發請款單",
+        action: "download",
+        setPdfPreview,
+        toast: toast as any,
+        pageFormat: "a4",
+      });
+    } else {
+      openPrintWindow(html, `景風工程批發請款單 — ${docNo}`);
+    }
   }
 
   async function sendLinePDF() {
@@ -268,16 +271,16 @@ export default function WholesaleSettlements() {
     const taxAmount = Math.round(subtotal * taxRate / 100 * 100) / 100;
     const total = subtotal + taxAmount;
     const docNo = `${detailCustomer.name}_${fromDate}`;
-    const html = buildWholesaleSettlementHtml(detailCustomer.name, fromDate, toDate, flat, subtotal, taxRate, taxAmount, total, 0, total);
+    const html = buildStatementHtml(detailCustomer.name, fromDate, toDate, flat, subtotal, taxRate, taxAmount, total, 0, total);
     await handlePdfAction({
       html,
       docNo,
       filename: `請款單_${docNo}.pdf`,
       title: "晟風工程批發請款單",
-      lineText: `批發請款單：${detailCustomer.name} / 區間：${fromDate} ~ ${toDate} / 總計：${total}`,
       action: "share",
       setPdfPreview,
       toast: toast as any,
+      pageFormat: "a4",
     });
   }
 

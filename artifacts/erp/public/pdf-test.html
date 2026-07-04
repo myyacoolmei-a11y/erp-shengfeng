@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDF V5 測試 — 4 種文件模板</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Microsoft JhengHei',sans-serif;background:#1a1a2e;color:#fff;padding:20px}
+h1{text-align:center;margin-bottom:8px;font-size:18pt}
+.sub{text-align:center;color:#aaa;font-size:11pt;margin-bottom:25px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;max-width:1400px;margin:0 auto}
+@media(max-width:900px){.grid{grid-template-columns:1fr}}
+.card{background:#16213e;border-radius:8px;padding:15px}
+.card h2{font-size:14pt;margin-bottom:6px;color:#9ACD32}
+.card .size{font-size:10pt;color:#888;margin-bottom:10px}
+iframe{width:100%;border:1px solid #333;border-radius:4px;background:#fff}
+.actions{display:flex;gap:8px;margin-top:10px}
+button{padding:6px 12px;border:none;border-radius:4px;background:#9ACD32;color:#111;font-weight:700;cursor:pointer;font-size:10pt}
+button:hover{background:#7FB800}
+.note{font-size:9pt;color:#aaa;text-align:center;margin-top:20px;padding:15px;border-top:1px solid #333;max-width:900px;margin:20px auto 0}
+</style>
+</head>
+<body>
+<h1>PDF V5 測試 — 4 種文件模板</h1>
+<p class="sub">報價單、派工單、出貨單、請款單 — 小Logo、固定表格、正確紙張尺寸</p>
+<div class="grid">
+  <div class="card">
+    <h2>1. 報價單 Quotation</h2>
+    <div class="size">A4 Portrait (210×297mm) / 正式工程文件風格</div>
+    <iframe id="q-frame" style="height:420px"></iframe>
+    <div class="actions">
+      <button onclick="printFrame('q-frame')">列印預覽</button>
+    </div>
+  </div>
+  <div class="card">
+    <h2>2. 派工單 Work Order</h2>
+    <div class="size">24cm×14cm Landscape / 工程現場單據</div>
+    <iframe id="w-frame" style="height:240px"></iframe>
+    <div class="actions">
+      <button onclick="printFrame('w-frame')">列印預覽</button>
+    </div>
+  </div>
+  <div class="card">
+    <h2>3. 出貨單 Delivery Note</h2>
+    <div class="size">24cm×14cm Landscape / 出貨單據風格</div>
+    <iframe id="d-frame" style="height:240px"></iframe>
+    <div class="actions">
+      <button onclick="printFrame('d-frame')">列印預覽</button>
+    </div>
+  </div>
+  <div class="card">
+    <h2>4. 請款單 Payment Request</h2>
+    <div class="size">A4 Portrait (210×297mm) / 正式工程文件風格</div>
+    <iframe id="s-frame" style="height:420px"></iframe>
+    <div class="actions">
+      <button onclick="printFrame('s-frame')">列印預覽</button>
+    </div>
+  </div>
+</div>
+<p class="note">
+說明：此頁面顯示 HTML 模板預覽。實際 PDF 產生需在 ERP 系統內部使用 html2canvas 轉換。<br>
+Logo 尺寸固定 55px×55px，表格使用 table-layout: fixed，列不被切斷。<br>
+電腦列印開預覽對話框，手機按分享直接產生 PDF 透過 navigator.share 傳送到 LINE。
+</p>
+
+<script>
+const COLORS = { primary:"#9ACD32", primaryDark:"#7FB800", black:"#111111", darkGray:"#333333", midGray:"#555555", lightGray:"#888888", borderGray:"#e0e0e0", bgLight:"#f7f7f7", white:"#ffffff", red:"#dc2626", green:"#15803d" };
+const COMPANY = { name:"景風工程有限公司", shortName:"景風工程", subTitle:"冷氣安裝｜保養｜維修｜設計", taxId:"統編：93388506", phone:"Tel：0955-980-738", email:"cfac07151025@gmail.com", address:"彰化縣花壇鄉花南路212號", bankCode:"銀行代碼：013", bankAccount:"047035012164", bankName:"國泰世華銀行", bankAccountName:"戶名：景風工程衋 洪宇風" };
+const logoUrl = () => `${location.origin}/logo.png`;
+function esc(s){ return String(s??"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+function fmtMoney(n){ if(n==null) return "—"; const num=typeof n==="number"?n:parseFloat(String(n)); if(isNaN(num)) return "—"; return `NT$ ${Math.round(num).toLocaleString()}`; }
+function fmtDate(d){ if(!d) return "—"; return d; }
+function today(){ return new Date().toLocaleDateString("zh-TW"); }
+
+function buildQuotationHtml(quote){
+  const items = quote.items ?? [];
+  const d = quote.createdAt ? new Date(quote.createdAt) : new Date();
+  const ymd = `${d.getFullYear()}${String(d.getMonth()+1).padStart(2,"0")}${String(d.getDate()).padStart(2,"0")}`;
+  const quoteNo = `Q-${ymd}-${String(quote.id).padStart(4,"0")}`;
+  const quoteDate = d.toLocaleDateString("zh-TW");
+  const validDate = new Date(d.getTime()+30*86400000).toLocaleDateString("zh-TW");
+  const printDate = new Date().toLocaleDateString("zh-TW");
+  const taxType = quote.taxType || "未稅";
+  const rawTotal = items.length > 0 ? items.reduce((s,i) => s + Number(i.subtotal || 0), 0) : Number(quote.finalAmount ?? quote.amount ?? 0);
+  const discAmt = Number(quote.discountAmount ?? 0);
+  const subtotal = Math.max(0, rawTotal - discAmt);
+  const preTax = taxType === "含稅" ? subtotal / 1.05 : subtotal;
+  const taxAmt = subtotal - preTax;
+  const total = preTax + taxAmt;
+  const maxRows = 10;
+  const displayItems = items.slice(0, maxRows);
+  const itemRows = displayItems.length > 0 ? displayItems.map((item,i) => `
+    <tr><td class="tac">${i+1}</td><td class="tac">${esc(item.category)}</td><td class="tac">${esc(item.brand||"—")}</td>
+      <td class="tal">${esc(item.itemName)}</td><td class="tac">${Number(item.quantity)}</td><td class="tac">${esc(item.unit)}</td>
+      <td class="tar">${fmtMoney(Number(item.unitPrice))}</td><td class="tar fw7">${fmtMoney(Number(item.subtotal))}</td>
+      <td class="tal small">${esc(item.notes||"")}</td></tr>`).join("") :
+    `<tr><td class="tac">1</td><td class="tac">工程</td><td class="tac">—</td>
+      <td class="tal">${esc(quote.title)}</td><td class="tac">1</td><td class="tac">式</td>
+      <td class="tar">${fmtMoney(rawTotal)}</td><td class="tar fw7">${fmtMoney(rawTotal)}</td><td class="tal small"></td></tr>`;
+  const padCount = Math.max(0, maxRows - displayItems.length - (items.length===0?1:0));
+  const padRows = Array.from({length:padCount},()=>`<tr><td class="tac">&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>`).join("");
+  const notesList = (quote.notes??"").split(/\n/).filter(l=>l.trim()).slice(0,3).map(l=>`<div class="note-line">${esc(l)}</div>`).join("") || `<div class="note-line muted">報價單有效期限30日，施工前請支付50%訂金，完工驗收後付清尾款。</div>`;
+
+  return `<!DOCTYPE html><html lang="zh-TW"><head><meta charset="UTF-8"><title>報價單 ${quoteNo}</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;font-size:10pt;color:${COLORS.black};background:#fff}
+@page{size:A4 portrait;margin:12mm}
+.page{width:186mm;min-height:273mm;padding:0;position:relative}
+.hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2.5px solid ${COLORS.black};padding-bottom:4mm;margin-bottom:3mm}
+.co{display:flex;align-items:center;gap:3mm}
+.co-logo{width:55px;height:55px;max-width:55px;max-height:55px;object-fit:contain;flex-shrink:0;border:1px solid ${COLORS.borderGray};border-radius:3px}
+.co-name{font-size:13pt;font-weight:700;letter-spacing:0.5px}
+.co-sub{font-size:7.5pt;color:${COLORS.midGray};margin-top:1px}
+.co-info{font-size:7pt;color:${COLORS.lightGray};margin-top:2px;line-height:1.6}
+.doc-r{text-align:right}
+.doc-label{font-size:16pt;font-weight:700;color:${COLORS.primary};letter-spacing:4px}
+.doc-en{font-size:7pt;color:#aaa;letter-spacing:1px}
+.doc-no{font-size:9pt;font-weight:700;font-family:monospace;margin-top:2px}
+.doc-dates{font-size:7.5pt;color:${COLORS.midGray};line-height:1.6;margin-top:1px}
+.sec{margin-bottom:2.5mm}
+.stitle{font-size:7.5pt;font-weight:700;background:${COLORS.black};color:${COLORS.primary};padding:1mm 2.5mm;letter-spacing:2px;margin-bottom:1.5mm;display:inline-block}
+table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:8.5pt}
+.head-row{background:${COLORS.black};color:${COLORS.primary}}
+.head-row th{border:1px solid ${COLORS.black};padding:2px 3px;font-size:7.5pt;font-weight:700;text-align:center}
+tbody td{border:1px solid ${COLORS.black};padding:2px 3px;vertical-align:top;font-size:8.5pt}
+tr{page-break-inside:avoid;break-inside:avoid}
+.tac{text-align:center}.tar{text-align:right}.tal{text-align:left}.fw7{font-weight:700}.small{font-size:7.5pt}.muted{color:${COLORS.midGray}}
+.col-w6{width:6%}.col-w8{width:8%}.col-w10{width:10%}.col-w12{width:12%}.col-w14{width:14%}
+.info-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1mm 4mm;font-size:8.5pt;margin-bottom:2mm}
+.info-grid .full{grid-column:span 2}
+.info-label{font-size:7pt;color:${COLORS.lightGray}}
+.row2{display:flex;gap:3mm;margin-bottom:2mm}
+.box{flex:1;border:1px solid ${COLORS.borderGray};border-left:3px solid ${COLORS.primary};padding:2mm 2.5mm;font-size:8.5pt;white-space:pre-wrap;line-height:1.5;color:${COLORS.darkGray};background:#fafafa;min-height:18mm}
+.note-line{font-size:8pt;line-height:1.5;color:${COLORS.darkGray}}
+.amt-box{position:absolute;bottom:58mm;right:0;width:72mm;border:2px solid ${COLORS.primary};overflow:hidden}
+.amt-r{display:flex;justify-content:space-between;padding:1.5mm 3mm;border-bottom:1px solid #ebebeb;font-size:8.5pt}
+.amt-r .lbl{color:${COLORS.lightGray}}.amt-r .val{font-weight:600}
+.amt-total{background:${COLORS.black};padding:2mm 3mm;display:flex;justify-content:space-between;align-items:center}
+.amt-total .lbl{color:${COLORS.primary};font-size:9pt;font-weight:700;letter-spacing:1px}
+.amt-total .val{color:#fff;font-size:12pt;font-weight:700;font-family:monospace}
+.bank-box{position:absolute;bottom:36mm;left:0;right:80mm;border:1px solid ${COLORS.borderGray};padding:2mm 3mm}
+.bank-title{font-size:7pt;font-weight:700;background:${COLORS.black};color:${COLORS.primary};padding:1mm 2mm;display:inline-block;margin-bottom:1.5mm}
+.bank-row{display:flex;gap:6mm;font-size:8pt;color:${COLORS.darkGray};line-height:1.6;flex-wrap:wrap}
+.bank-row span{white-space:nowrap}
+.sig-row{position:absolute;bottom:12mm;left:0;right:0;display:grid;grid-template-columns:1fr 1fr 1fr;gap:6mm}
+.sig-box{text-align:center;border-top:1.5px solid ${COLORS.black};padding-top:2mm;font-size:8pt;color:${COLORS.midGray};padding-bottom:4mm}
+.pf{position:absolute;bottom:2mm;left:0;right:0;display:flex;justify-content:space-between;align-items:center;font-size:6.5pt;color:${COLORS.lightGray};border-top:1px solid ${COLORS.borderGray};padding-top:1mm}
+</style></head><body>
+<div class="page">
+  <div class="hdr">
+    <div class="co">
+      <img src="${logoUrl()}" class="co-logo" alt="">
+      <div>
+        <div class="co-name">${COMPANY.name}</div>
+        <div class="co-sub">${COMPANY.subTitle}</div>
+        <div class="co-info">${COMPANY.taxId}　${COMPANY.phone}<br>${COMPANY.email}<br>${COMPANY.address}</div>
+      </div>
+    </div>
+    <div class="doc-r">
+      <div class="doc-label">報價單</div>
+      <div class="doc-en">QUOTATION</div>
+      <div class="doc-no">${quoteNo}</div>
+      <div class="doc-dates">狀態：${esc(quote.status||"待確認")}<br>報價日期：${quoteDate}<br>有效期限：${validDate}<br>列印：${printDate}</div>
+    </div>
+  </div>
+  <div class="sec">
+    <div class="stitle">客戶資訊 Client Information</div>
+    <div class="info-grid">
+      <div><span class="info-label">客戶名稱</span> <strong>${esc(quote.customerName)||"—"}</strong></div>
+      <div><span class="info-label">聧絡電話</span> <strong>${esc(quote.customerPhone)||"—"}</strong></div>
+      <div><span class="info-label">負責業務</span> <strong>${esc(quote.salesRepName)||"—"}</strong></div>
+      <div class="full"><span class="info-label">施工地址</span> <strong>${esc(quote.address)||"—"}</strong></div>
+      <div><span class="info-label">稅別</span> <strong>${esc(taxType)}</strong></div>
+    </div>
+  </div>
+  <div class="sec">
+    <div class="stitle">工程設備明細 Equipment Schedule</div>
+    <table>
+      <thead><tr class="head-row"><th class="col-w6">項次</th><th class="col-w10">類別</th><th class="col-w8">品牌</th><th>品項</th><th class="col-w6">數量</th><th class="col-w6">單位</th><th class="col-w12">單價</th><th class="col-w12">小計</th><th class="col-w12">備註</th></tr></thead>
+      <tbody>${itemRows}${padRows}</tbody>
+    </table>
+  </div>
+  <div class="row2">
+    <div style="flex:0 0 55%">
+      <div class="stitle">服務內容 Notes &amp; Remarks</div>
+      <div class="box">${esc(quote.description)||"施工方式：\n施工天數：\n注意事項："}</div>
+    </div>
+    <div style="flex:1">
+      <div class="stitle">備註</div>
+      <div style="border:1px solid ${COLORS.borderGray};padding:2mm 2.5mm;font-size:8.5pt;min-height:18mm">${notesList}</div>
+    </div>
+  </div>
+  <div class="amt-box">
+    <div class="amt-r"><span class="lbl">項目小計</span><span class="val">${fmtMoney(rawTotal)}</span></div>
+    ${discAmt>0?`<div class="amt-r"><span class="lbl">折扣</span><span class="val" style="color:${COLORS.red}">– ${fmtMoney(discAmt)}</span></div>`:""}
+    <div class="amt-r"><span class="lbl">未稅小計</span><span class="val">${fmtMoney(preTax)}</span></div>
+    <div class="amt-r"><span class="lbl">稅額 5%</span><span class="val">${fmtMoney(taxAmt)}</span></div>
+    <div class="amt-total"><span class="lbl">含稅總計</span><span class="val">${fmtMoney(total)}</span></div>
+  </div>
+  <div class="bank-box">
+    <div class="bank-title">匯款資訊</div>
+    <div class="bank-row">
+      <span><strong>銀行代碼：</strong>${COMPANY.bankCode}</span>
+      <span><strong>帳號：</strong>${COMPANY.bankAccount}</span>
+      <span><strong>戶名：</strong>${COMPANY.bankAccountName}</span>
+    </div>
+  </div>
+  <div class="sig-row">
+    <div class="sig-box">客戶確認簽名<br><span style="font-size:6.5pt;color:#aaa">日期：________</span></div>
+    <div class="sig-box">業務簽名<br><span style="font-size:6.5pt;color:#aaa">日期：________</span></div>
+    <div class="sig-box">公　司　章<br><span style="font-size:6.5pt;color:#aaa">&nbsp;</span></div>
+  </div>
+  <div class="pf">
+    <div>${COMPANY.name}　${COMPANY.phone}　${COMPANY.address}</div>
+    <div>列印：${printDate}</div>
+  </div>
+</div>
+</body></html>`;
+}
+
+function buildWorkOrderHtml(order){
+  const woNum = order.workOrderNumber || `WO-${String(order.id).padStart(4,"0")}`;
+  const printDate = new Date().toLocaleDateString("zh-TW");
+  let techDisplay = "—";
+  try{ const techs = order.technicians ? JSON.parse(order.technicians) : null; if(Array.isArray(techs)&&techs.length) techDisplay = techs.join("、"); }catch{}
+  if(order.assignedTo) techDisplay = order.assignedTo + (order.assistantTo ? ` / ${order.assistantTo}` : "");
+  const items = order.items ?? [];
+  const itemRows = items.length > 0 ? items.map((it,i) => `
+    <tr><td class="tac">${i+1}</td><td class="tal">${esc(it.productName||it.description||"—")}</td>
+      <td class="tac">${it.qty??1}</td><td class="tac">${esc(it.unit||"個")}</td><td class="tal small">${esc(it.notes||"")}</td></tr>`).join("") :
+    `<tr><td class="tac">1</td><td class="tal">${esc(order.description||"施工內容")}</td><td class="tac">1</td><td class="tac">式</td><td class="tal small"></td></tr>`;
+  const rowCount = Math.max(items.length||1,1);
+  const padCount = Math.max(0,6-rowCount);
+  const padRows = Array.from({length:padCount},()=>`<tr><td class="tac">&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>`).join("");
+
+  return `<!DOCTYPE html><html lang="zh-TW"><head><meta charset="UTF-8"><title>派工單 ${woNum}</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;font-size:10pt;color:${COLORS.black};background:#fff}
+@page{size:240mm 140mm landscape;margin:6mm}
+.page{width:228mm;min-height:128mm;padding:0;position:relative}
+.hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2px solid ${COLORS.black};padding-bottom:3mm;margin-bottom:3mm}
+.co{display:flex;align-items:center;gap:3mm}
+.co-logo{width:55px;height:55px;max-width:55px;max-height:55px;object-fit:contain;flex-shrink:0;border:1px solid ${COLORS.borderGray};border-radius:3px}
+.co-name{font-size:13pt;font-weight:700}
+.co-sub{font-size:7.5pt;color:${COLORS.midGray}}
+.wo-right{text-align:right}
+.wo-label{font-size:14pt;font-weight:700;color:${COLORS.primary};letter-spacing:4px}
+.wo-num{font-size:10pt;font-weight:700;font-family:monospace}
+.wo-meta{font-size:8pt;color:${COLORS.midGray};margin-top:1px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:1.5mm 6mm;margin-bottom:2mm;font-size:9pt}
+.field{display:flex;gap:2mm;align-items:baseline}
+.lbl{font-size:7.5pt;color:${COLORS.midGray};min-width:52px;flex-shrink:0}
+.val{font-size:9.5pt;font-weight:600}
+.full{grid-column:1/-1}
+.sec-title{font-size:7.5pt;font-weight:700;background:${COLORS.black};color:${COLORS.primary};padding:1mm 2.5mm;letter-spacing:2px;margin-bottom:1.5mm;display:inline-block}
+table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:9pt;margin-bottom:2mm}
+.head-row{background:${COLORS.black};color:${COLORS.primary}}
+.head-row th{border:1px solid ${COLORS.black};padding:2px 4px;font-size:8pt;font-weight:700;text-align:center}
+tbody td{border:1px solid ${COLORS.black};padding:2px 4px;vertical-align:top;font-size:9pt}
+tr{page-break-inside:avoid;break-inside:avoid}
+.tac{text-align:center}.tar{text-align:right}.tal{text-align:left}.small{font-size:8pt}
+.col-w6{width:6%}.col-w8{width:8%}.col-w25{width:25%}
+.box{border:1px solid ${COLORS.borderGray};border-left:3px solid ${COLORS.primary};padding:2mm 3mm;min-height:10mm;font-size:9pt;white-space:pre-wrap;line-height:1.5;background:#fafafa}
+.sigs{position:absolute;bottom:14mm;left:0;right:0;display:grid;grid-template-columns:repeat(3,1fr);gap:10mm}
+.sig{text-align:center;border-top:1.5px solid ${COLORS.black};padding-top:2mm;font-size:8pt;color:${COLORS.midGray};padding-bottom:3mm}
+.pf{position:absolute;bottom:3mm;left:0;right:0;display:flex;justify-content:space-between;align-items:center;font-size:6.5pt;color:${COLORS.lightGray};border-top:1px solid ${COLORS.borderGray};padding-top:1mm}
+</style></head><body>
+<div class="page">
+  <div class="hdr">
+    <div class="co">
+      <img src="${logoUrl()}" class="co-logo" alt="">
+      <div><div class="co-name">${COMPANY.shortName}</div><div class="co-sub">${COMPANY.subTitle}</div></div>
+    </div>
+    <div class="wo-right">
+      <div class="wo-label">派工單</div>
+      <div class="wo-num">${woNum}</div>
+      <div class="wo-meta">日期：${esc(order.scheduledDate||printDate)}　狀態：${esc(order.status||"—")}</div>
+    </div>
+  </div>
+  <div class="grid">
+    <div class="field"><span class="lbl">案件編號</span><span class="val">${woNum}</span></div>
+    <div class="field"><span class="lbl">日期</span><span class="val">${esc(order.scheduledDate||printDate)}</span></div>
+    <div class="field"><span class="lbl">客戶</span><span class="val">${esc(order.customerName||"—")}</span></div>
+    <div class="field"><span class="lbl">電話</span><span class="val">${esc(order.mobilePhone||order.telephone||"—")}</span></div>
+    <div class="field full"><span class="lbl">地址</span><span class="val">${esc(order.installAddress||"—")}</span></div>
+    <div class="field"><span class="lbl">技師</span><span class="val">${esc(techDisplay)}</span></div>
+  </div>
+  <div style="margin-bottom:2mm"><div class="sec-title">施工內容</div><div class="box">${esc(order.description||"（無）")}</div></div>
+  <div style="margin-bottom:2mm">
+    <div class="sec-title">材料</div>
+    <table><thead><tr class="head-row"><th class="col-w6">項次</th><th>材料名稱 / 規格</th><th class="col-w8">數量</th><th class="col-w8">單位</th><th class="col-w25">備註</th></tr></thead>
+    <tbody>${itemRows}${padRows}</tbody>
+    </table>
+  </div>
+  <div style="margin-bottom:2mm"><div class="sec-title">備註</div><div class="box" style="min-height:10mm;font-size:9pt">${esc(order.notes||"（無）")}</div></div>
+  <div class="sigs">
+    <div class="sig">客戶簽名<br><span style="font-size:6.5pt;color:#aaa">日期：________</span></div>
+    <div class="sig">技師簽名<br><span style="font-size:6.5pt;color:#aaa">日期：________</span></div>
+    <div class="sig">公司經手人<br><span style="font-size:6.5pt;color:#aaa">日期：________</span></div>
+  </div>
+  <div class="pf">
+    <div>${COMPANY.name}　${COMPANY.phone}</div>
+    <div>列印：${printDate}</div>
+  </div>
+</div>
+</body></html>`;
+}
+
+function buildDeliveryHtml(order){
+  const items = order.items ?? [];
+  const orderNo = order.orderNumber || `DO-${String(order.id).padStart(4,"0")}`;
+  const orderDate = order.orderDate || today();
+  const deliveryDate = order.expectedDelivery || "—";
+  const printDate = today();
+  const maxRows = 8;
+  const displayItems = items.slice(0, maxRows);
+  const rows = displayItems.map((it,i) => `
+    <tr><td class="tac">${i+1}</td><td class="tal">${esc(it.productName||"—")}</td>
+      <td class="tal">${esc(it.brand??"")}</td><td class="tal">${esc(it.model??"")}</td>
+      <td class="tac">${it.qty??1}${it.unit?" "+it.unit:""}</td><td class="tal small">${esc(it.notes??"")}</td></tr>`).join("");
+  const padCount = Math.max(0, maxRows - displayItems.length);
+  const padRows = Array.from({length:padCount},()=>`<tr><td class="tac">&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>`).join("");
+
+  return `<!DOCTYPE html><html lang="zh-TW"><head><meta charset="UTF-8"><title>出貨單 ${orderNo}</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;font-size:10pt;color:${COLORS.black};background:#fff}
+@page{size:240mm 140mm landscape;margin:6mm}
+.page{width:228mm;min-height:128mm;padding:0;position:relative}
+.hdr{display:flex;justify-content:space-between;align-items:flex-end;padding-bottom:3mm;border-bottom:2px solid ${COLORS.black};margin-bottom:3mm}
+.co{display:flex;align-items:center;gap:3mm}
+.co-logo{width:55px;height:55px;max-width:55px;max-height:55px;object-fit:contain;flex-shrink:0;border:1px solid ${COLORS.borderGray};border-radius:3px}
+.co-name{font-size:13pt;font-weight:700}
+.co-sub{font-size:7.5pt;color:${COLORS.midGray}}
+.doc-info{text-align:right}
+.doc-no{font-size:11pt;font-weight:700;color:${COLORS.primary};font-family:monospace}
+.doc-meta{font-size:8pt;color:${COLORS.midGray};margin-top:1px}
+.info{display:flex;justify-content:space-between;margin-bottom:2.5mm;font-size:9pt}
+.info-left p{margin:1px 0}.info-right{text-align:right}.info-right p{margin:1px 0}
+table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:9pt;margin-bottom:2.5mm}
+.head-row{background:${COLORS.black};color:${COLORS.primary}}
+.head-row th{border:1px solid ${COLORS.black};padding:2px 4px;font-size:8pt;font-weight:700;text-align:center}
+tbody td{border:1px solid ${COLORS.black};padding:2px 4px;vertical-align:top;font-size:9pt}
+tr{page-break-inside:avoid;break-inside:avoid}
+.tac{text-align:center}.tar{text-align:right}.tal{text-align:left}.small{font-size:8pt}
+.col-w6{width:6%}.col-w12{width:12%}.col-w14{width:14%}.col-w10{width:10%}
+.notes-box{border:1px solid ${COLORS.borderGray};padding:2mm 3mm;margin-bottom:2mm;min-height:10mm;font-size:9pt}
+.sig{position:absolute;bottom:12mm;left:0;right:0;display:grid;grid-template-columns:1fr 1fr;gap:20mm}
+.sig-box{text-align:center;border-top:1.5px solid ${COLORS.black};padding-top:2mm;font-size:9pt;color:${COLORS.midGray};padding-bottom:3mm}
+.pf{position:absolute;bottom:3mm;left:0;right:0;display:flex;justify-content:space-between;align-items:center;font-size:6.5pt;color:${COLORS.lightGray};border-top:1px solid ${COLORS.borderGray};padding-top:1mm}
+</style></head><body>
+<div class="page">
+  <div class="hdr">
+    <div class="co">
+      <img src="${logoUrl()}" class="co-logo" alt="">
+      <div><div class="co-name">${COMPANY.shortName} — 出貨單</div><div class="co-sub">冷氣工程 / 批發材料</div></div>
+    </div>
+    <div class="doc-info">
+      <div class="doc-no">${orderNo}</div>
+      <div class="doc-meta">出貨日期：${deliveryDate}　列印：${printDate}</div>
+    </div>
+  </div>
+  <div class="info">
+    <div class="info-left">
+      <p><strong>客戶：</strong>${esc(order.customerName||"—")}</p>
+      <p><strong>電話：</strong>${esc(order.customerPhone||"—")}</p>
+      <p><strong>地址：</strong>${esc(order.customerAddress||"—")}</p>
+    </div>
+    <div class="info-right">
+      <p><strong>訂單日期：</strong>${orderDate}</p>
+      <p><strong>出貨日期：</strong>${deliveryDate}</p>
+      ${order.salesperson?`<p><strong>業務：</strong>${esc(order.salesperson)}</p>`:""}
+    </div>
+  </div>
+  <table>
+    <thead><tr class="head-row"><th class="col-w6">項次</th><th>商品</th><th class="col-w12">品牌</th><th class="col-w14">規格</th><th class="col-w10">數量</th><th>備註</th></tr></thead>
+    <tbody>${rows}${padRows}</tbody>
+  </table>
+  ${order.notes?`<div class="notes-box"><strong>備註：</strong>${esc(order.notes)}</div>`:""}
+  <div class="sig">
+    <div class="sig-box">客戶簽收<br><span style="font-size:7pt;color:#aaa">日期：________</span></div>
+    <div class="sig-box">貨運簽名 / 公司經手<br><span style="font-size:7pt;color:#aaa">日期：________</span></div>
+  </div>
+  <div class="pf">
+    <div>${COMPANY.name}　${COMPANY.phone}　${COMPANY.address}</div>
+    <div>列印：${printDate}</div>
+  </div>
+</div>
+</body></html>`;
+}
+
+function buildStatementHtml(customerName, fromDate, toDate, items, subtotal, taxRate, taxAmount, total, receivedAmount, receivableAmount){
+  const maxRows = 12;
+  const displayItems = items.slice(0, maxRows);
+  const rows = displayItems.map(it => `
+    <tr><td class="tac">${fmtDate(it.orderDate)}</td><td class="tac">${it.orderNumber??"—"}</td>
+      <td class="tal">${esc(it.productName)}</td><td class="tac">${esc(it.model??"")}</td>
+      <td class="tac">${it.qty}${it.unit?" "+it.unit:""}</td><td class="tar">${fmtMoney(it.unitPrice)}</td>
+      <td class="tar">${fmtMoney(it.amount)}</td><td class="tal small">${esc(it.notes??"")}</td></tr>`).join("");
+  const padCount = Math.max(0, maxRows - displayItems.length);
+  const padRows = Array.from({length:padCount},()=>`<tr><td class="tac">&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>`).join("");
+  const printDate = today();
+
+  return `<!DOCTYPE html><html lang="zh-TW"><head><meta charset="UTF-8"><title>請款單 — ${esc(customerName)}</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;font-size:10pt;color:${COLORS.black};background:#fff}
+@page{size:A4 portrait;margin:12mm}
+.page{width:186mm;min-height:273mm;padding:0;position:relative}
+.hdr{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:2.5px solid ${COLORS.black};padding-bottom:4mm;margin-bottom:3mm}
+.co{display:flex;align-items:center;gap:3mm}
+.co-logo{width:55px;height:55px;max-width:55px;max-height:55px;object-fit:contain;flex-shrink:0;border:1px solid ${COLORS.borderGray};border-radius:3px}
+.co-name{font-size:13pt;font-weight:700;letter-spacing:0.5px}
+.co-sub{font-size:7.5pt;color:${COLORS.midGray};margin-top:1px}
+.co-info{font-size:7pt;color:${COLORS.lightGray};margin-top:2px;line-height:1.6}
+.doc-r{text-align:right}
+.doc-label{font-size:16pt;font-weight:700;color:${COLORS.primary};letter-spacing:4px}
+.doc-en{font-size:7pt;color:#aaa;letter-spacing:1px}
+.doc-no{font-size:9pt;font-weight:700;font-family:monospace;margin-top:2px}
+.doc-dates{font-size:7.5pt;color:${COLORS.midGray};line-height:1.6;margin-top:1px}
+.stitle{font-size:7.5pt;font-weight:700;background:${COLORS.black};color:${COLORS.primary};padding:1mm 2.5mm;letter-spacing:2px;margin-bottom:1.5mm;display:inline-block}
+table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:8.5pt}
+.head-row{background:${COLORS.black};color:${COLORS.primary}}
+.head-row th{border:1px solid ${COLORS.black};padding:2px 3px;font-size:7.5pt;font-weight:700;text-align:center}
+tbody td{border:1px solid ${COLORS.black};padding:2px 3px;vertical-align:top;font-size:8.5pt}
+tr{page-break-inside:avoid;break-inside:avoid}
+.tac{text-align:center}.tar{text-align:right}.tal{text-align:left}.fw7{font-weight:700}.small{font-size:7.5pt}
+.col-w12{width:12%}.col-w14{width:14%}.col-w10{width:10%}
+.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:1mm 6mm;font-size:8.5pt;margin-bottom:2mm;padding-bottom:2mm;border-bottom:1px solid ${COLORS.borderGray}}
+.info-label{font-size:7pt;color:${COLORS.lightGray}}
+.amt-box{position:absolute;bottom:58mm;right:0;width:72mm;border:2px solid ${COLORS.primary};overflow:hidden}
+.amt-r{display:flex;justify-content:space-between;padding:1.5mm 3mm;border-bottom:1px solid #ebebeb;font-size:8.5pt}
+.amt-r .lbl{color:${COLORS.lightGray}}.amt-r .val{font-weight:600}
+.amt-total{background:${COLORS.black};padding:2mm 3mm;display:flex;justify-content:space-between;align-items:center}
+.amt-total .lbl{color:${COLORS.primary};font-size:9pt;font-weight:700;letter-spacing:1px}
+.amt-total .val{color:#fff;font-size:12pt;font-weight:700;font-family:monospace}
+.paid{color:${COLORS.green};font-weight:600}.unpaid{color:${COLORS.red};font-weight:700}
+.bank-box{position:absolute;bottom:36mm;left:0;right:80mm;border:1px solid ${COLORS.borderGray};padding:2mm 3mm}
+.bank-title{font-size:7pt;font-weight:700;background:${COLORS.black};color:${COLORS.primary};padding:1mm 2mm;display:inline-block;margin-bottom:1.5mm}
+.bank-row{display:flex;gap:6mm;font-size:8pt;color:${COLORS.darkGray};line-height:1.6;flex-wrap:wrap}
+.bank-row span{white-space:nowrap}
+.notice{position:absolute;bottom:20mm;left:0;right:82mm;font-size:7.5pt;color:${COLORS.midGray};line-height:1.6}
+.sig-row{position:absolute;bottom:12mm;left:0;right:0;display:grid;grid-template-columns:1fr 1fr;gap:20mm}
+.sig-box{text-align:center;border-top:1.5px solid ${COLORS.black};padding-top:2mm;font-size:8pt;color:${COLORS.midGray};padding-bottom:4mm}
+.pf{position:absolute;bottom:2mm;left:0;right:0;display:flex;justify-content:space-between;align-items:center;font-size:6.5pt;color:${COLORS.lightGray};border-top:1px solid ${COLORS.borderGray};padding-top:1mm}
+</style></head><body>
+<div class="page">
+  <div class="hdr">
+    <div class="co">
+      <img src="${logoUrl()}" class="co-logo" alt="">
+      <div>
+        <div class="co-name">${COMPANY.name}</div>
+        <div class="co-sub">${COMPANY.subTitle}</div>
+        <div class="co-info">${COMPANY.taxId}　${COMPANY.phone}<br>${COMPANY.email}<br>${COMPANY.address}</div>
+      </div>
+    </div>
+    <div class="doc-r">
+      <div class="doc-label">請款單</div>
+      <div class="doc-en">PAYMENT REQUEST</div>
+      <div class="doc-no">${esc(customerName)}_${fromDate}</div>
+      <div class="doc-dates">請款日期：${printDate}<br>請款期間：${fromDate} — ${toDate}<br>列印：${printDate}</div>
+    </div>
+  </div>
+  <div class="info-grid">
+    <div><span class="info-label">客戶</span> <strong>${esc(customerName)}</strong></div>
+    <div><span class="info-label">匯款資訊</span> <strong>${COMPANY.bankName}</strong></div>
+    <div><span class="info-label">銀行代碼</span> <strong>${COMPANY.bankCode}</strong></div>
+    <div><span class="info-label">帳號</span> <strong>${COMPANY.bankAccount}</strong></div>
+  </div>
+  <div class="sec">
+    <div class="stitle">月結明細 Statement Detail</div>
+    <table>
+      <thead><tr class="head-row"><th class="col-w12">出貨日</th><th class="col-w14">出貨單號</th><th>商品</th><th class="col-w12">型號</th><th class="col-w10">數量</th><th class="col-w12">單價</th><th class="col-w12">金額</th><th class="col-w12">備註</th></tr></thead>
+      <tbody>${rows}${padRows}</tbody>
+    </table>
+  </div>
+  <div class="amt-box">
+    <div class="amt-r"><span class="lbl">小計</span><span class="val">${fmtMoney(subtotal)}</span></div>
+    ${taxRate>0?`<div class="amt-r"><span class="lbl">稅額 (${taxRate}%)</span><span class="val">${fmtMoney(taxAmount)}</span></div>`:""}
+    <div class="amt-total"><span class="lbl">應付金額</span><span class="val">${fmtMoney(total)}</span></div>
+    ${receivedAmount>0?`<div class="amt-r"><span class="lbl">已收金額</span><span class="val paid">${fmtMoney(receivedAmount)}</span></div>`:""}
+    ${receivableAmount>0?`<div class="amt-r"><span class="lbl">未收金額</span><span class="val unpaid">${fmtMoney(receivableAmount)}</span></div>`:""}
+  </div>
+  <div class="bank-box">
+    <div class="bank-title">付款資訊</div>
+    <div class="bank-row">
+      <span><strong>銀行代碼：</strong>${COMPANY.bankCode}</span>
+      <span><strong>帳號：</strong>${COMPANY.bankAccount}</span>
+      <span><strong>戶名：</strong>${COMPANY.bankAccountName}</span>
+    </div>
+  </div>
+  <div class="notice">
+    <strong>注意事項：</strong><br>
+    1. 請於請款單發出後 7 日內完成付款。<br>
+    2. 付款後請傳送匯款明細以便對帳。<br>
+    3. 如有問題請聯絡業務人員。
+  </div>
+  <div class="sig-row">
+    <div class="sig-box">客戶簽章<br><span style="font-size:6.5pt;color:#aaa">日期：________</span></div>
+    <div class="sig-box">製單日期：${printDate}<br><span style="font-size:6.5pt;color:#aaa">&nbsp;</span></div>
+  </div>
+  <div class="pf">
+    <div>${COMPANY.name}　${COMPANY.taxId}　${COMPANY.phone}</div>
+    <div>列印：${printDate}</div>
+  </div>
+</div>
+</body></html>`;
+}
+
+const demoQuote = {
+  id: 42, createdAt: "2025-07-04", status: "待確認", taxType: "未稅",
+  customerName: "王大明", customerPhone: "0912-345-678", salesRepName: "洪宇風", address: "彰化縣花壇鄉花南路168號",
+  title: "客廳冷氣安裝工程", description: "施工方式：壁挎分離式\n施工天數：1天\n注意事項：施工前需清空場地", notes: "報價單有效期限30日，施工前請支付50%訂金。",
+  items: [
+    { category: "裝新機", brand: "三菱重工", itemName: "壁挎分離式 3.5kW", quantity: 2, unit: "台", unitPrice: 28500, subtotal: 57000, notes: "含安裝" },
+    { category: "裝新機", brand: "三菱重工", itemName: "壁挎分離式 2.2kW", quantity: 1, unit: "台", unitPrice: 22000, subtotal: 22000, notes: "" },
+    { category: "配管工程", brand: "—", itemName: "銀管配管 5公尺", quantity: 1, unit: "式", unitPrice: 8500, subtotal: 8500, notes: "吸排引撤" },
+  ]
+};
+const demoWorkOrder = {
+  id: 567, workOrderNumber: "WO-20250704-0567", scheduledDate: "2025-07-05", status: "待施工",
+  customerName: "張小芳", mobilePhone: "0933-456-789", installAddress: "彰化市南門路88號12F",
+  assignedTo: "李技師", assistantTo: "陳助手",
+  description: "客廳及房間冷氣安裝，含配管、配線、洞孔封塞。",
+  notes: "請於上午 9:00 前到達，戶主會在現場。",
+  items: [
+    { productName: "壁挎分離式 3.5kW MSZ-AP35VG", qty: 2, unit: "台", notes: "含安裝" },
+    { productName: "室外機支架", qty: 2, unit: "組", notes: "" },
+    { productName: "銀管配管 5公尺", qty: 1, unit: "式", notes: "吸排引撤" },
+  ]
+};
+const demoDelivery = {
+  id: 101, orderNumber: "DO-20250601-0101", orderDate: "2025-06-01", expectedDelivery: "2025-06-03",
+  customerName: "林記冷氣行", customerPhone: "04-9876-5432", customerAddress: "彰化市秀水路55號",
+  salesperson: "王業務", notes: "請於下午 2:00 前送達，聯絡人林老闆。",
+  items: [
+    { productName: "壁挎分離式 3.5kW", brand: "三菱重工", model: "MSZ-AP35VG", qty: 2, unit: "台", notes: "含安裝" },
+    { productName: "室外機支架", brand: "景風自製", model: "JFK-01", qty: 2, unit: "組", notes: "" },
+    { productName: "銀管配管 5公尺", brand: "景風自製", model: "JFP-5M", qty: 1, unit: "式", notes: "吸排引撤" },
+  ]
+};
+const demoStatementItems = [
+  { orderId:1, orderNumber:"DO-20250601-0101", orderDate:"2025-06-01", productName:"壁挎分離式 3.5kW", brand:"三菱重工", model:"MSZ-AP35VG", spec:null, unit:"台", qty:2, unitPrice:"22500", amount:"45000", notes:"含安裝" },
+  { orderId:2, orderNumber:"DO-20250605-0102", orderDate:"2025-06-05", productName:"室外機支架", brand:"景風自製", model:"JFK-01", spec:null, unit:"組", qty:2, unitPrice:"1200", amount:"2400", notes:"" },
+  { orderId:3, orderNumber:"DO-20250610-0103", orderDate:"2025-06-10", productName:"銀管配管 5公尺", brand:"景風自製", model:"JFP-5M", spec:null, unit:"式", qty:1, unitPrice:"8000", amount:"8000", notes:"吸排引撤" },
+];
+
+document.getElementById('q-frame').srcdoc = buildQuotationHtml(demoQuote);
+document.getElementById('w-frame').srcdoc = buildWorkOrderHtml(demoWorkOrder);
+document.getElementById('d-frame').srcdoc = buildDeliveryHtml(demoDelivery);
+document.getElementById('s-frame').srcdoc = buildStatementHtml("林記冷氣行", "2025-06-01", "2025-06-30", demoStatementItems, 55400, 0, 0, 55400, 0, 55400);
+
+function printFrame(id){
+  const iframe = document.getElementById(id);
+  if(iframe && iframe.contentWindow){
+    iframe.contentWindow.focus();
+    iframe.contentWindow.print();
+  }
+}
+</script>
+</body>
+</html>

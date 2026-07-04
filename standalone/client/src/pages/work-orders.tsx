@@ -25,8 +25,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
 import { WO_STATUSES, makeEmpty, type WOForm, buildPayload, WorkOrderFormFields } from "@/components/work-order-form";
 import { PdfPreviewDialog } from "@/components/pdf/pdf-preview-dialog";
-import { handlePdfAction, isMobileDevice } from "@/components/pdf/pdf-service";
-import { buildWorkOrderHtml } from "@/components/pdf/pdf-templates";
+import { handlePdfAction, isMobileDevice, openPrintWindow } from "@/components/pdf/pdf-service";
+import { buildWorkOrderHtml } from "@/components/pdf/templates/WorkOrderTemplate";
 
 const STATUSES = WO_STATUSES;
 
@@ -78,17 +78,20 @@ async function printWorkOrderPDF(
 ) {
   const woNum = order.workOrderNumber || `#${order.id}`;
   const html = buildWorkOrderHtml(order);
-  const action = isMobileDevice() ? "preview" : "download";
-  await handlePdfAction({
-    html,
-    docNo: woNum,
-    filename: `派工單_${woNum}.pdf`,
-    title: "晨風工程派工單",
-    lineText: `派工單：${woNum} / 客戶：${order.customerName || ""} / 地址：${order.installAddress || ""}`,
-    action,
-    setPdfPreview,
-    toast,
-  });
+  if (isMobileDevice()) {
+    await handlePdfAction({
+      html,
+      docNo: woNum,
+      filename: `派工單_${woNum}.pdf`,
+      title: "景風工程派工單",
+      action: "download",
+      setPdfPreview,
+      toast,
+      pageFormat: "custom-240x140-landscape",
+    });
+  } else {
+    openPrintWindow(html, `景風工程派工單 — ${woNum}`);
+  }
 }
 
 async function shareWorkOrderViaLine(
@@ -102,11 +105,11 @@ async function shareWorkOrderViaLine(
     html,
     docNo: woNum,
     filename: `派工單_${woNum}.pdf`,
-    title: "晨風工程派工單",
-    lineText: `派工單：${woNum} / 客戶：${order.customerName || ""} / 地址：${order.installAddress || ""}`,
+    title: "景風工程派工單",
     action: "share",
     setPdfPreview,
     toast,
+    pageFormat: "custom-240x140-landscape",
   });
 }
 
