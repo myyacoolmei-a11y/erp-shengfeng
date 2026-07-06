@@ -5,6 +5,7 @@
  * 晟風工程 ERP API
  * OpenAPI spec version: 0.1.0
  */
+import type { WorkOrderEquipmentItemInput } from './workOrderEquipmentItemInput';
 
 export interface WorkOrderInput {
   /** @nullable */
@@ -34,4 +35,5 @@ export interface WorkOrderInput {
   description?: string;
   notes?: string;
   technicians?: string;
+  equipmentItems?: WorkOrderEquipmentItemInput[];
 }

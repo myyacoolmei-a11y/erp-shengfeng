@@ -26,7 +26,9 @@
     "allowImportingTsExtensions": true,
     "paths": {
       "@/*": ["./client/src/*"],
-      "@workspace/api-client-react": ["./shared/api-client/index.ts"]
+      "@workspace/api-client-react": ["./shared/api-client/index.ts"],
+      "@workspace/db": ["./shared/db/index.ts"],
+      "@workspace/api-zod": ["./shared/schemas/index.ts"]
     }
   },
   "include": ["client/src/**/*", "shared/**/*", "server/**/*"],

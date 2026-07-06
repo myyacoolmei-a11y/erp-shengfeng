@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useMemo } from "react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -6,12 +6,83 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
-import { MapPin } from "lucide-react";
+import { MapPin, Plus, X } from "lucide-react";
 import { CustomerSelector, type CustomerSelectorValue } from "@/components/customer-selector";
 
 export const WO_STATUSES = ["待施工", "已完成"];
 export const WO_PROJECT_TYPES = ["新裝", "維修", "保養", "遷機", "清洗", "保固服務"];
 export const WO_ELEVATOR_OPTIONS = ["有電梯", "無電梯"];
+
+export interface EquipmentItemForm {
+  brand: string;
+  model: string;
+  quantity: number | undefined;
+  indoorUnits: number | undefined;
+  outdoorUnits: number | undefined;
+  floor: string;
+}
+
+export function defaultEquipmentItem(): EquipmentItemForm {
+  return {
+    brand: "",
+    model: "",
+    quantity: undefined,
+    indoorUnits: undefined,
+    outdoorUnits: undefined,
+    floor: "",
+  };
+}
+
+/** Map API work order (with equipmentItems or legacy flat fields) to form equipment list */
+export function equipmentItemsFromOrder(o: {
+  equipmentItems?: Array<{
+    brand?: string | null;
+    model?: string | null;
+    quantity?: number | null;
+    indoorUnits?: number | null;
+    outdoorUnits?: number | null;
+    floor?: string | null;
+  }>;
+  acBrand?: string | null;
+  modelNumber?: string | null;
+  quantity?: number | null;
+  indoorUnits?: number | null;
+  outdoorUnits?: number | null;
+  floorLevel?: string | null;
+}): EquipmentItemForm[] {
+  const items = o.equipmentItems ?? [];
+  if (items.length > 0) {
+    return items.map(it => ({
+      brand: it.brand ?? "",
+      model: it.model ?? "",
+      quantity: it.quantity ?? undefined,
+      indoorUnits: it.indoorUnits ?? undefined,
+      outdoorUnits: it.outdoorUnits ?? undefined,
+      floor: it.floor ?? "",
+    }));
+  }
+
+  const hasLegacy = !!(
+    o.acBrand ||
+    o.modelNumber ||
+    o.quantity != null ||
+    o.indoorUnits != null ||
+    o.outdoorUnits != null ||
+    o.floorLevel
+  );
+  if (hasLegacy) {
+    return [{
+      brand: o.acBrand ?? "",
+      model: o.modelNumber ?? "",
+      quantity: o.quantity ?? undefined,
+      indoorUnits: o.indoorUnits ?? undefined,
+      outdoorUnits: o.outdoorUnits ?? undefined,
+      floor: o.floorLevel ?? "",
+    }];
+  }
+
+  return [defaultEquipmentItem()];
+}
 
 export function makeEmpty() {
   return {
@@ -29,12 +100,7 @@ export function makeEmpty() {
     completedDate: "",
     technicians: [] as string[],
     projectType: "",
-    acBrand: "",
-    modelNumber: "",
-    quantity: undefined as number | undefined,
-    indoorUnits: undefined as number | undefined,
-    outdoorUnits: undefined as number | undefined,
-    floorLevel: "",
+    equipmentItems: [defaultEquipmentItem()] as EquipmentItemForm[],
     hasElevator: "",
     description: "",
     notes: "",
@@ -61,15 +127,18 @@ export function buildPayload(f: WOForm) {
     completedDate: f.completedDate || undefined,
     technicians: f.technicians.length > 0 ? JSON.stringify(f.technicians) : undefined,
     projectType: f.projectType || undefined,
-    acBrand: f.acBrand || undefined,
-    modelNumber: f.modelNumber || undefined,
-    quantity: f.quantity,
-    indoorUnits: f.indoorUnits,
-    outdoorUnits: f.outdoorUnits,
-    floorLevel: f.floorLevel || undefined,
     hasElevator: f.hasElevator || undefined,
     description: f.description || undefined,
     notes: f.notes || undefined,
+    equipmentItems: f.equipmentItems.map((item, idx) => ({
+      brand: item.brand || undefined,
+      model: item.model || undefined,
+      quantity: item.quantity,
+      indoorUnits: item.indoorUnits,
+      outdoorUnits: item.outdoorUnits,
+      floor: item.floor || undefined,
+      sortOrder: idx,
+    })),
   };
 }
 
@@ -82,6 +151,94 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
   );
 }
 
+function EquipmentItemCard({
+  item,
+  index,
+  onChange,
+  onDelete,
+  canDelete,
+}: {
+  item: EquipmentItemForm;
+  index: number;
+  onChange: (updated: EquipmentItemForm) => void;
+  onDelete: () => void;
+  canDelete: boolean;
+}) {
+  return (
+    <div className="border rounded-lg p-3 space-y-2 bg-card/50">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-semibold text-muted-foreground">設備 {index + 1}</span>
+        {canDelete && (
+          <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground" onClick={onDelete}>
+            <X className="h-3.5 w-3.5" />
+          </Button>
+        )}
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+        <div className="space-y-1">
+          <Label className="text-xs">冷氣品牌</Label>
+          <Input
+            className="h-8 text-sm"
+            placeholder="大金、日立…"
+            value={item.brand}
+            onChange={e => onChange({ ...item, brand: e.target.value })}
+          />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">型號</Label>
+          <Input
+            className="h-8 text-sm"
+            placeholder="型號"
+            value={item.model}
+            onChange={e => onChange({ ...item, model: e.target.value })}
+          />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">數量（台）</Label>
+          <Input
+            className="h-8 text-sm"
+            type="number"
+            min="0"
+            placeholder="0"
+            value={item.quantity ?? ""}
+            onChange={e => onChange({ ...item, quantity: e.target.value ? parseInt(e.target.value, 10) : undefined })}
+          />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">室內機（台）</Label>
+          <Input
+            className="h-8 text-sm"
+            type="number"
+            min="0"
+            placeholder="0"
+            value={item.indoorUnits ?? ""}
+            onChange={e => onChange({ ...item, indoorUnits: e.target.value ? parseInt(e.target.value, 10) : undefined })}
+          />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">室外機（台）</Label>
+          <Input
+            className="h-8 text-sm"
+            type="number"
+            min="0"
+            placeholder="0"
+            value={item.outdoorUnits ?? ""}
+            onChange={e => onChange({ ...item, outdoorUnits: e.target.value ? parseInt(e.target.value, 10) : undefined })}
+          />
+        </div>
+        <div className="space-y-1">
+          <Label className="text-xs">樓層</Label>
+          <Input
+            className="h-8 text-sm"
+            placeholder="例：3樓"
+            value={item.floor}
+            onChange={e => onChange({ ...item, floor: e.target.value })}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 interface WorkOrderFormFieldsProps {
   form: WOForm;
@@ -103,18 +260,21 @@ export function WorkOrderFormFields({
   customerDisabled = false,
 }: WorkOrderFormFieldsProps) {
 
+  const linkedCustomer = form.customerId > 0
+    ? customers.find((x: any) => x.id === form.customerId)
+    : undefined;
+
   const selectorValue: CustomerSelectorValue | null = useMemo(() => {
-    if (form.customerId > 0) {
-      const c = customers.find((x: any) => x.id === form.customerId);
+    if (form.customerId > 0 && linkedCustomer) {
       return {
         type: "linked",
         customerId: form.customerId,
-        name: c?.name ?? `客戶 #${form.customerId}`,
-        contactPerson: form.contactPerson || c?.contactPerson || "",
-        phone: form.telephone || c?.phone || "",
-        mobile: form.mobilePhone || c?.mobile || "",
-        address: form.installAddress || c?.address || "",
-        taxId: c?.taxId || "",
+        name: linkedCustomer.name ?? `客戶 #${form.customerId}`,
+        contactPerson: linkedCustomer.contactPerson || "",
+        phone: linkedCustomer.phone || "",
+        mobile: linkedCustomer.mobile || "",
+        address: form.installAddress || linkedCustomer.address || "",
+        taxId: linkedCustomer.taxId || "",
       };
     }
     if (form.customerName) {
@@ -130,7 +290,7 @@ export function WorkOrderFormFields({
       };
     }
     return null;
-  }, [form, customers]);
+  }, [form, linkedCustomer]);
 
   function handleSelectorChange(v: CustomerSelectorValue | null) {
     if (!v) {
@@ -162,7 +322,7 @@ export function WorkOrderFormFields({
       quoteId: qid,
       customerId: quote.customerId ?? f.customerId,
       contactPerson: quote.contactPerson || f.contactPerson || "",
-      mobilePhone: quote.customerPhone || cust?.phone || f.mobilePhone || "",
+      mobilePhone: quote.customerPhone || cust?.mobile || f.mobilePhone || "",
       installAddress: quote.address || cust?.address || f.installAddress || "",
       description: quote.description || f.description || "",
     }));
@@ -174,6 +334,24 @@ export function WorkOrderFormFields({
       technicians: f.technicians.includes(name)
         ? f.technicians.filter(n => n !== name)
         : [...f.technicians, name],
+    }));
+  }
+
+  function addEquipmentItem() {
+    setForm(f => ({ ...f, equipmentItems: [...f.equipmentItems, defaultEquipmentItem()] }));
+  }
+
+  function updateEquipmentItem(idx: number, updated: EquipmentItemForm) {
+    setForm(f => ({
+      ...f,
+      equipmentItems: f.equipmentItems.map((item, i) => (i === idx ? updated : item)),
+    }));
+  }
+
+  function removeEquipmentItem(idx: number) {
+    setForm(f => ({
+      ...f,
+      equipmentItems: f.equipmentItems.filter((_, i) => i !== idx),
     }));
   }
 
@@ -226,16 +404,27 @@ export function WorkOrderFormFields({
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {linkedCustomer && (
+          <div className="space-y-1">
+            <Label>客戶手機</Label>
+            <Input
+              readOnly
+              disabled
+              className="bg-muted/50"
+              value={linkedCustomer.mobile || "—"}
+            />
+          </div>
+        )}
         <div className="space-y-1">
-          <Label>聯絡人</Label>
-          <Input placeholder="聯絡人姓名" value={form.contactPerson} onChange={e => setForm(f => ({ ...f, contactPerson: e.target.value }))} />
+          <Label>現場聯絡人</Label>
+          <Input placeholder="現場聯絡人姓名" value={form.contactPerson} onChange={e => setForm(f => ({ ...f, contactPerson: e.target.value }))} />
         </div>
         <div className="space-y-1">
-          <Label>行動電話</Label>
+          <Label>現場聯絡人電話</Label>
           <Input type="tel" placeholder="0912-345-678" value={form.mobilePhone} onChange={e => setForm(f => ({ ...f, mobilePhone: e.target.value }))} />
         </div>
         <div className="space-y-1">
-          <Label>聯絡電話</Label>
+          <Label>公司電話<span className="text-muted-foreground font-normal">（選填）</span></Label>
           <Input type="tel" placeholder="(02) 1234-5678" value={form.telephone} onChange={e => setForm(f => ({ ...f, telephone: e.target.value }))} />
         </div>
         <div className="space-y-1 sm:col-span-2">
@@ -326,48 +515,29 @@ export function WorkOrderFormFields({
       </div>
 
       {/* ── 冷氣設備 ── */}
-      <SectionHeading>冷氣設備</SectionHeading>
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-        <div className="space-y-1">
-          <Label>冷氣品牌</Label>
-          <Input placeholder="大金、日立…" value={form.acBrand} onChange={e => setForm(f => ({ ...f, acBrand: e.target.value }))} />
+      <div className="space-y-2">
+        <div className="flex items-center justify-between border-b pb-1">
+          <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground">冷氣設備</h3>
+          <Button type="button" size="sm" variant="outline" className="h-7 text-xs shrink-0" onClick={addEquipmentItem}>
+            <Plus className="h-3.5 w-3.5 mr-1" />新增設備
+          </Button>
         </div>
-        <div className="space-y-1">
-          <Label>型號</Label>
-          <Input placeholder="型號" value={form.modelNumber} onChange={e => setForm(f => ({ ...f, modelNumber: e.target.value }))} />
-        </div>
-        <div className="space-y-1">
-          <Label>數量（台）</Label>
-          <Input
-            type="number" min="0" placeholder="0"
-            value={form.quantity ?? ""}
-            onChange={e => setForm(f => ({ ...f, quantity: e.target.value ? parseInt(e.target.value) : undefined }))}
-          />
-        </div>
-        <div className="space-y-1">
-          <Label>室內機（台）</Label>
-          <Input
-            type="number" min="0" placeholder="0"
-            value={form.indoorUnits ?? ""}
-            onChange={e => setForm(f => ({ ...f, indoorUnits: e.target.value ? parseInt(e.target.value) : undefined }))}
-          />
-        </div>
-        <div className="space-y-1">
-          <Label>室外機（台）</Label>
-          <Input
-            type="number" min="0" placeholder="0"
-            value={form.outdoorUnits ?? ""}
-            onChange={e => setForm(f => ({ ...f, outdoorUnits: e.target.value ? parseInt(e.target.value) : undefined }))}
-          />
-        </div>
-        <div className="space-y-1">
-          <Label>樓層</Label>
-          <Input placeholder="例：3樓" value={form.floorLevel} onChange={e => setForm(f => ({ ...f, floorLevel: e.target.value }))} />
+        <div className="space-y-2">
+          {form.equipmentItems.map((item, idx) => (
+            <EquipmentItemCard
+              key={idx}
+              item={item}
+              index={idx}
+              canDelete={form.equipmentItems.length > 1}
+              onChange={updated => updateEquipmentItem(idx, updated)}
+              onDelete={() => removeEquipmentItem(idx)}
+            />
+          ))}
         </div>
         <div className="space-y-1">
           <Label>電梯</Label>
           <Select value={form.hasElevator} onValueChange={v => setForm(f => ({ ...f, hasElevator: v }))}>
-            <SelectTrigger><SelectValue placeholder="選擇" /></SelectTrigger>
+            <SelectTrigger className="max-w-xs"><SelectValue placeholder="選擇" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="">（未填）</SelectItem>
               {WO_ELEVATOR_OPTIONS.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}

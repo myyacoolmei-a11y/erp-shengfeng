@@ -1,6 +1,12 @@
 import { Router, type IRouter } from "express";
-import { eq, and } from "drizzle-orm";
-import { db, workOrdersTable, progressTable, customersTable } from "@workspace/db";
+import { eq, and, inArray } from "drizzle-orm";
+import {
+  db,
+  workOrdersTable,
+  workOrderEquipmentItemsTable,
+  progressTable,
+  customersTable,
+} from "@workspace/db";
 import { CreateWorkOrderBody, UpdateWorkOrderBody, CreateProgressBody } from "@workspace/api-zod";
 import { requireRole } from "../lib/auth";
 
@@ -49,28 +55,119 @@ const WO_SELECT = {
   updatedAt: workOrdersTable.updatedAt,
 };
 
-function formatOrder(o: Record<string, unknown>) {
+function serializeEquipmentItem(item: typeof workOrderEquipmentItemsTable.$inferSelect) {
+  return {
+    id: item.id,
+    workOrderId: item.workOrderId,
+    brand: item.brand ?? null,
+    model: item.model ?? null,
+    quantity: item.quantity ?? null,
+    indoorUnits: item.indoorUnits ?? null,
+    outdoorUnits: item.outdoorUnits ?? null,
+    floor: item.floor ?? null,
+    sortOrder: item.sortOrder,
+  };
+}
+
+function hasLegacyEquipment(order: Record<string, unknown>): boolean {
+  return !!(
+    order.acBrand ||
+    order.modelNumber ||
+    order.quantity != null ||
+    order.indoorUnits != null ||
+    order.outdoorUnits != null ||
+    order.floorLevel
+  );
+}
+
+function legacyEquipmentFallback(order: Record<string, unknown>) {
+  if (!hasLegacyEquipment(order)) return [];
+  return [{
+    id: 0,
+    workOrderId: order.id as number,
+    brand: (order.acBrand as string | null) ?? null,
+    model: (order.modelNumber as string | null) ?? null,
+    quantity: (order.quantity as number | null) ?? null,
+    indoorUnits: (order.indoorUnits as number | null) ?? null,
+    outdoorUnits: (order.outdoorUnits as number | null) ?? null,
+    floor: (order.floorLevel as string | null) ?? null,
+    sortOrder: 0,
+  }];
+}
+
+function resolveEquipmentItems(order: Record<string, unknown>, dbItems: ReturnType<typeof serializeEquipmentItem>[]) {
+  if (dbItems.length > 0) return dbItems;
+  return legacyEquipmentFallback(order);
+}
+
+function formatOrder(o: Record<string, unknown>, equipmentItems: ReturnType<typeof serializeEquipmentItem>[] = []) {
   const { storedCustomerName, linkedCustomerName, ...rest } = o as any;
   return {
     ...rest,
     customerName: (linkedCustomerName as string | null) ?? (storedCustomerName as string | null) ?? null,
+    equipmentItems: resolveEquipmentItems(o, equipmentItems),
     createdAt: isoStr(o.createdAt),
     updatedAt: isoStr(o.updatedAt),
   };
 }
 
-/** Convert empty strings to undefined for date/string columns that can't be empty */
-function sanitizeWOData<T extends Record<string, unknown>>(data: T): T {
+async function buildEquipmentInsert(itemInputs: any[], workOrderId: number) {
+  return itemInputs.map((item: any, idx: number) => ({
+    workOrderId,
+    brand: item.brand || null,
+    model: item.model || null,
+    quantity: item.quantity ?? null,
+    indoorUnits: item.indoorUnits ?? null,
+    outdoorUnits: item.outdoorUnits ?? null,
+    floor: item.floor || null,
+    sortOrder: item.sortOrder ?? idx,
+  }));
+}
+
+async function fetchEquipmentByWorkOrderIds(workOrderIds: number[]) {
+  if (workOrderIds.length === 0) return {} as Record<number, ReturnType<typeof serializeEquipmentItem>[]>;
+
+  const rows = await db
+    .select()
+    .from(workOrderEquipmentItemsTable)
+    .where(inArray(workOrderEquipmentItemsTable.workOrderId, workOrderIds))
+    .orderBy(workOrderEquipmentItemsTable.workOrderId, workOrderEquipmentItemsTable.sortOrder);
+
+  const byWorkOrder: Record<number, ReturnType<typeof serializeEquipmentItem>[]> = {};
+  for (const row of rows) {
+    const arr = byWorkOrder[row.workOrderId] ?? [];
+    arr.push(serializeEquipmentItem(row));
+    byWorkOrder[row.workOrderId] = arr;
+  }
+  return byWorkOrder;
+}
+
+/** Strip equipmentItems and optionally clear legacy flat equipment columns */
+function sanitizeWOData<T extends Record<string, unknown>>(
+  data: T,
+  options?: { clearLegacyEquipment?: boolean },
+): Record<string, unknown> {
   const DATE_FIELDS = ["scheduledDate", "completedDate"];
-  const result = { ...data } as Record<string, unknown>;
+  const { equipmentItems: _items, ...rest } = data;
+  const result = { ...rest } as Record<string, unknown>;
+
   for (const f of DATE_FIELDS) {
     if (result[f] === "") result[f] = undefined;
   }
-  // Also remove undefined keys so Drizzle skips them entirely
+
+  if (options?.clearLegacyEquipment) {
+    result.acBrand = null;
+    result.modelNumber = null;
+    result.quantity = null;
+    result.indoorUnits = null;
+    result.outdoorUnits = null;
+    result.floorLevel = null;
+  }
+
   for (const key of Object.keys(result)) {
     if (result[key] === undefined) delete result[key];
   }
-  return result as T;
+  return result;
 }
 
 router.get("/work-orders", requireRole(...WO_READ_ROLES), async (req, res): Promise<void> => {
@@ -95,7 +192,10 @@ router.get("/work-orders", requireRole(...WO_READ_ROLES), async (req, res): Prom
     .where(conditions.length > 0 ? and(...conditions) : undefined)
     .orderBy(workOrdersTable.createdAt);
 
-  res.json(orders.map(formatOrder));
+  const orderIds = orders.map(o => o.id);
+  const equipmentByOrder = await fetchEquipmentByWorkOrderIds(orderIds);
+
+  res.json(orders.map(o => formatOrder(o, equipmentByOrder[o.id] ?? [])));
 });
 
 router.post("/work-orders", requireRole(...WO_WRITE_ROLES), async (req, res): Promise<void> => {
@@ -104,9 +204,15 @@ router.post("/work-orders", requireRole(...WO_WRITE_ROLES), async (req, res): Pr
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const [order] = await db.insert(workOrdersTable).values(sanitizeWOData(parsed.data)).returning();
 
-  // Auto-generate work order number
+  const { equipmentItems: itemInputs = [], ...orderFields } = parsed.data as any;
+  const hasEquipment = Array.isArray(itemInputs) && itemInputs.length > 0;
+
+  const [order] = await db
+    .insert(workOrdersTable)
+    .values(sanitizeWOData(orderFields, { clearLegacyEquipment: hasEquipment }) as any)
+    .returning();
+
   const now = new Date();
   const year = now.getFullYear();
   const month = String(now.getMonth() + 1).padStart(2, "0");
@@ -118,7 +224,14 @@ router.post("/work-orders", requireRole(...WO_WRITE_ROLES), async (req, res): Pr
     .where(eq(workOrdersTable.id, order.id))
     .returning();
 
-  res.status(201).json(formatOrder({ ...updated, linkedCustomerName: null }));
+  let insertedItems: ReturnType<typeof serializeEquipmentItem>[] = [];
+  if (hasEquipment) {
+    const rows = await buildEquipmentInsert(itemInputs, order.id);
+    const inserted = await db.insert(workOrderEquipmentItemsTable).values(rows).returning();
+    insertedItems = inserted.map(serializeEquipmentItem);
+  }
+
+  res.status(201).json(formatOrder({ ...updated, linkedCustomerName: null }, insertedItems));
 });
 
 router.get("/work-orders/:id", requireRole(...WO_READ_ROLES), async (req, res): Promise<void> => {
@@ -139,7 +252,8 @@ router.get("/work-orders/:id", requireRole(...WO_READ_ROLES), async (req, res): 
     return;
   }
 
-  res.json(formatOrder(order));
+  const equipmentByOrder = await fetchEquipmentByWorkOrderIds([id]);
+  res.json(formatOrder(order, equipmentByOrder[id] ?? []));
 });
 
 router.patch("/work-orders/:id", requireRole(...WO_WRITE_ROLES), async (req, res): Promise<void> => {
@@ -150,10 +264,31 @@ router.patch("/work-orders/:id", requireRole(...WO_WRITE_ROLES), async (req, res
   const parsed = UpdateWorkOrderBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
-  const [order] = await db.update(workOrdersTable).set(sanitizeWOData(parsed.data)).where(eq(workOrdersTable.id, id)).returning();
+  const { equipmentItems: itemInputs, ...orderFields } = parsed.data as any;
+  const clearLegacy = itemInputs !== undefined;
+
+  const [order] = await db
+    .update(workOrdersTable)
+    .set(sanitizeWOData(orderFields, { clearLegacyEquipment: clearLegacy }) as any)
+    .where(eq(workOrdersTable.id, id))
+    .returning();
+
   if (!order) { res.status(404).json({ error: "找不到派工單" }); return; }
 
-  res.json(formatOrder({ ...order, linkedCustomerName: null }));
+  let equipmentItems: ReturnType<typeof serializeEquipmentItem>[] = [];
+  if (itemInputs !== undefined) {
+    await db.delete(workOrderEquipmentItemsTable).where(eq(workOrderEquipmentItemsTable.workOrderId, id));
+    if (itemInputs.length > 0) {
+      const rows = await buildEquipmentInsert(itemInputs, id);
+      const inserted = await db.insert(workOrderEquipmentItemsTable).values(rows).returning();
+      equipmentItems = inserted.map(serializeEquipmentItem);
+    }
+  } else {
+    const equipmentByOrder = await fetchEquipmentByWorkOrderIds([id]);
+    equipmentItems = equipmentByOrder[id] ?? [];
+  }
+
+  res.json(formatOrder({ ...order, linkedCustomerName: null }, equipmentItems));
 });
 
 router.delete("/work-orders/:id", requireRole(...WO_DELETE_ROLES), async (req, res): Promise<void> => {

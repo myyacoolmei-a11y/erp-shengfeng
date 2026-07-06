@@ -5,6 +5,7 @@
  * 晟風工程 ERP API
  * OpenAPI spec version: 0.1.0
  */
+import type { WorkOrderEquipmentItem } from './workOrderEquipmentItem';
 
 export interface WorkOrder {
   id: number;
@@ -58,6 +59,7 @@ export interface WorkOrder {
   notes?: string | null;
   /** @nullable */
   technicians?: string | null;
+  equipmentItems?: WorkOrderEquipmentItem[];
   createdAt: string;
   updatedAt: string;
 }

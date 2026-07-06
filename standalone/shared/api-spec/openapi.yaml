@@ -2023,6 +2023,31 @@ components:
         status: { type: string }
         notes: { type: string }
 
+    WorkOrderEquipmentItemInput:
+      type: object
+      properties:
+        brand: { type: string }
+        model: { type: string }
+        quantity: { type: integer }
+        indoorUnits: { type: integer }
+        outdoorUnits: { type: integer }
+        floor: { type: string }
+        sortOrder: { type: integer }
+
+    WorkOrderEquipmentItem:
+      type: object
+      required: [id, workOrderId, sortOrder]
+      properties:
+        id: { type: integer }
+        workOrderId: { type: integer }
+        brand: { type: ["string", "null"] }
+        model: { type: ["string", "null"] }
+        quantity: { type: ["integer", "null"] }
+        indoorUnits: { type: ["integer", "null"] }
+        outdoorUnits: { type: ["integer", "null"] }
+        floor: { type: ["string", "null"] }
+        sortOrder: { type: integer }
+
     WorkOrder:
       type: object
       required: [id, title, status, createdAt, updatedAt]
@@ -2054,6 +2079,10 @@ components:
         description: { type: ["string", "null"] }
         notes: { type: ["string", "null"] }
         technicians: { type: ["string", "null"] }
+        equipmentItems:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkOrderEquipmentItem"
         createdAt: { type: string }
         updatedAt: { type: string }
 
@@ -2086,6 +2115,10 @@ components:
         description: { type: string }
         notes: { type: string }
         technicians: { type: string }
+        equipmentItems:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkOrderEquipmentItemInput"
 
     WorkOrderUpdate:
       type: object
@@ -2114,6 +2147,10 @@ components:
         description: { type: string }
         notes: { type: string }
         technicians: { type: string }
+        equipmentItems:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkOrderEquipmentItemInput"
 
     Progress:
       type: object

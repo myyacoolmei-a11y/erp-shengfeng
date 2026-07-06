@@ -80,5 +80,7 @@ export * from './wholesaleQuoteItemInput';
 export * from './wholesaleReceivable';
 export * from './wholesaleSettlementSummary';
 export * from './workOrder';
+export * from './workOrderEquipmentItem';
+export * from './workOrderEquipmentItemInput';
 export * from './workOrderInput';
 export * from './workOrderUpdate';

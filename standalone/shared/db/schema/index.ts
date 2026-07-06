@@ -5,6 +5,7 @@ export * from "./employees";
 export * from "./quotes";
 export * from "./quoteItems";
 export * from "./workOrders";
+export * from "./workOrderEquipmentItems";
 export * from "./progress";
 export * from "./payments";
 export * from "./warranties";

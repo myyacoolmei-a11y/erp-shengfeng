@@ -1,6 +1,5 @@
 // PDF V5 Shared Service
 // Off-screen iframe render + style injection for mobile PDF generation
-// All templates are fixed 1-page; no auto page break needed
 
 export interface PdfBlobResult {
   blob: Blob;
@@ -23,7 +22,7 @@ export async function generatePdfBlobFromHtml(
 ): Promise<PdfBlobResult> {
   const cfg = PAGE_CONFIG[pageFormat];
   const iframe = document.createElement("iframe");
-  iframe.style.cssText = `position:fixed;top:0;left:0;width:${cfg.renderWidth}px;height:1200px;opacity:0;pointer-events:none;touch-action:none;overflow:hidden;border:none;`;
+  iframe.style.cssText = `position:fixed;top:0;left:0;width:${cfg.renderWidth}px;height:2400px;opacity:0;pointer-events:none;touch-action:none;overflow:hidden;border:none;`;
   document.body.appendChild(iframe);
 
   let tempStyles: HTMLStyleElement[] = [];
@@ -80,6 +79,7 @@ export async function generatePdfBlobFromHtml(
       image: { type: "jpeg", quality: 0.98 },
       html2canvas: { scale: cfg.scale, useCORS: true, logging: false, windowWidth: cfg.renderWidth },
       jsPDF: { unit: "mm", format: cfg.format, orientation: cfg.orientation },
+      pagebreak: { mode: ["css", "legacy"], avoid: [".bottom-block", "tr"] },
     };
 
     const worker = html2pdf().set(opt).from(pageEl);

@@ -3,6 +3,73 @@
 
 import { logoUrl, COMPANY, COLORS, esc } from "./brand-config";
 
+interface EquipmentRow {
+  brand?: string | null;
+  model?: string | null;
+  quantity?: number | null;
+  indoorUnits?: number | null;
+  outdoorUnits?: number | null;
+  floor?: string | null;
+}
+
+function resolveEquipmentItems(order: Record<string, unknown>): EquipmentRow[] {
+  const fromApi = (order.equipmentItems as EquipmentRow[] | undefined) ?? [];
+  if (fromApi.length > 0) return fromApi;
+
+  const hasLegacy = !!(
+    order.acBrand ||
+    order.modelNumber ||
+    order.quantity != null ||
+    order.indoorUnits != null ||
+    order.outdoorUnits != null ||
+    order.floorLevel
+  );
+  if (!hasLegacy) return [];
+
+  return [{
+    brand: (order.acBrand as string | null) ?? null,
+    model: (order.modelNumber as string | null) ?? null,
+    quantity: (order.quantity as number | null) ?? null,
+    indoorUnits: (order.indoorUnits as number | null) ?? null,
+    outdoorUnits: (order.outdoorUnits as number | null) ?? null,
+    floor: (order.floorLevel as string | null) ?? null,
+  }];
+}
+
+function equipmentSpec(it: EquipmentRow): string {
+  const name = [it.brand, it.model].filter(Boolean).join(" ").trim();
+  return name || "—";
+}
+
+function equipmentRemark(it: EquipmentRow): string {
+  const parts: string[] = [];
+  if (it.indoorUnits != null) parts.push(`室內機${it.indoorUnits}台`);
+  if (it.outdoorUnits != null) parts.push(`室外機${it.outdoorUnits}台`);
+  if (it.floor) parts.push(it.floor);
+  return parts.join("／");
+}
+
+function buildMaterialRows(equipment: EquipmentRow[]): string {
+  if (equipment.length === 0) {
+    return `<tr>
+      <td class="tac">&nbsp;</td>
+      <td>&nbsp;</td>
+      <td class="tac">&nbsp;</td>
+      <td class="tac">&nbsp;</td>
+      <td>&nbsp;</td>
+    </tr>`;
+  }
+
+  return equipment.map((it, i) => `
+    <tr>
+      <td class="tac">${i + 1}</td>
+      <td class="tal">${esc(equipmentSpec(it))}</td>
+      <td class="tac">${it.quantity ?? ""}</td>
+      <td class="tac">台</td>
+      <td class="tal small">${esc(equipmentRemark(it))}</td>
+    </tr>`).join("");
+}
+
 export function buildWorkOrderHtml(order: any): string {
   const woNum = order.workOrderNumber || `WO-${String(order.id).padStart(4, "0")}`;
   const printDate = new Date().toLocaleDateString("zh-TW");
@@ -15,32 +82,12 @@ export function buildWorkOrderHtml(order: any): string {
     techDisplay = order.assignedTo + (order.assistantTo ? ` / ${order.assistantTo}` : "");
   }
 
-  const items: any[] = order.items ?? [];
-  const itemRows = items.length > 0
-    ? items.map((it: any, i: number) => `
-      <tr>
-        <td class="tac">${i + 1}</td>
-        <td class="tal">${esc(it.productName || it.description || "—")}</td>
-        <td class="tac">${it.qty ?? 1}</td>
-        <td class="tac">${esc(it.unit || "個")}</td>
-        <td class="tal small">${esc(it.notes || "")}</td>
-      </tr>`).join("")
-    : `<tr>
-        <td class="tac">1</td>
-        <td class="tal">${esc(order.description || "施工內容")}</td>
-        <td class="tac">1</td>
-        <td class="tac">式</td>
-        <td class="tal small"></td>
-      </tr>`;
+  const equipment = resolveEquipmentItems(order);
+  const itemRows = buildMaterialRows(equipment);
 
-  // Pad to 6 rows max for fixed 1-page
-  const rowCount = Math.max(items.length || 1, 1);
-  const padCount = Math.max(0, 6 - rowCount);
-  const padRows = Array.from({ length: padCount }, () => `
-    <tr>
-      <td class="tac">&nbsp;</td>
-      <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
-    </tr>`).join("");
+  const sitePhone = order.mobilePhone || "";
+  const companyPhone = order.telephone || "";
+  const phoneDisplay = [sitePhone, companyPhone ? `公司 ${companyPhone}` : ""].filter(Boolean).join("　") || "—";
 
   return `<!DOCTYPE html>
 <html lang="zh-TW">
@@ -51,15 +98,19 @@ export function buildWorkOrderHtml(order: any): string {
 /* ===== Base ===== */
 *{margin:0;padding:0;box-sizing:border-box}
 body{
-  font-family:'Microsoft JhengHei','\u5fae\u8edf\u6b63\u9ed1\u9ad4',Arial,sans-serif;
+  font-family:'Microsoft JhengHei','\\5fae\\8edf\\6b63\\9ed1\\9ad4',Arial,sans-serif;
   font-size:10pt;color:${COLORS.black};background:#fff;
+  -webkit-print-color-adjust:exact;print-color-adjust:exact;
 }
 
 /* ===== Page setup ===== */
 @page{size:240mm 140mm landscape;margin:6mm}
 .page{
-  width:228mm;min-height:128mm;
-  padding:0;position:relative;
+  width:228mm;
+  min-height:128mm;
+  padding:0;
+  display:flex;
+  flex-direction:column;
 }
 
 /* ===== Header ===== */
@@ -67,6 +118,7 @@ body{
   display:flex;justify-content:space-between;align-items:flex-start;
   border-bottom:2px solid ${COLORS.black};
   padding-bottom:3mm;margin-bottom:3mm;
+  flex-shrink:0;
 }
 .co{display:flex;align-items:center;gap:3mm}
 .co-logo{
@@ -85,6 +137,7 @@ body{
 .grid{
   display:grid;grid-template-columns:1fr 1fr;
   gap:1.5mm 6mm;margin-bottom:2mm;font-size:9pt;
+  flex-shrink:0;
 }
 .field{display:flex;gap:2mm;align-items:baseline}
 .lbl{font-size:7.5pt;color:${COLORS.midGray};min-width:52px;flex-shrink:0}
@@ -98,28 +151,30 @@ body{
   padding:1mm 2.5mm;letter-spacing:2px;margin-bottom:1.5mm;
   display:inline-block;
 }
+.section{margin-bottom:2mm}
 
 /* ===== Table ===== */
 table{
   width:100%;border-collapse:collapse;
-  table-layout:fixed;font-size:9pt;margin-bottom:2mm;
+  table-layout:fixed;font-size:9pt;
 }
 .head-row{background:${COLORS.black};color:${COLORS.primary}}
 .head-row th{
-  border:1px solid ${COLORS.black};padding:2px 4px;
-  font-size:8pt;font-weight:700;text-align:center;
+  border:1px solid ${COLORS.black};padding:3px 4px;
+  font-size:8.5pt;font-weight:700;text-align:center;
 }
 tbody td{
-  border:1px solid ${COLORS.black};padding:2px 4px;
-  vertical-align:top;font-size:9pt;
+  border:1px solid ${COLORS.black};padding:3px 4px;
+  vertical-align:top;font-size:9pt;line-height:1.45;
+  min-height:7mm;
 }
-tr{page-break-inside:avoid;break-inside:avoid}
+tbody tr{page-break-inside:avoid;break-inside:avoid}
 
 /* Text align helpers */
 .tac{text-align:center}
 .tar{text-align:right}
 .tal{text-align:left}
-.small{font-size:8pt}
+.small{font-size:8.5pt}
 
 /* Column widths */
 .col-w6{width:6%}
@@ -130,28 +185,31 @@ tr{page-break-inside:avoid;break-inside:avoid}
 .box{
   border:1px solid ${COLORS.borderGray};
   border-left:3px solid ${COLORS.primary};
-  padding:2mm 3mm;min-height:10mm;
+  padding:2mm 3mm;
   font-size:9pt;white-space:pre-wrap;
   line-height:1.5;background:#fafafa;
+  page-break-inside:auto;break-inside:auto;
 }
 
-/* ===== Signature ===== */
+/* ===== Bottom block (signatures + footer) ===== */
+.bottom-block{
+  margin-top:4mm;
+  flex-shrink:0;
+  page-break-inside:avoid;break-inside:avoid;
+}
 .sigs{
-  position:absolute;bottom:14mm;left:0;right:0;
   display:grid;grid-template-columns:repeat(3,1fr);gap:10mm;
+  margin-bottom:3mm;
 }
 .sig{
   text-align:center;border-top:1.5px solid ${COLORS.black};
   padding-top:2mm;font-size:8pt;color:${COLORS.midGray};
-  padding-bottom:3mm;
+  padding-bottom:2mm;
 }
-
-/* ===== Footer ===== */
 .pf{
-  position:absolute;bottom:3mm;left:0;right:0;
   display:flex;justify-content:space-between;align-items:center;
   font-size:6.5pt;color:${COLORS.lightGray};
-  border-top:1px solid ${COLORS.borderGray};padding-top:1mm;
+  border-top:1px solid ${COLORS.borderGray};padding-top:1.5mm;
 }
 </style>
 </head>
@@ -180,19 +238,20 @@ tr{page-break-inside:avoid;break-inside:avoid}
     <div class="field"><span class="lbl">案件編號</span><span class="val">${woNum}</span></div>
     <div class="field"><span class="lbl">日期</span><span class="val">${esc(order.scheduledDate || printDate)}</span></div>
     <div class="field"><span class="lbl">客戶</span><span class="val">${esc(order.customerName || "—")}</span></div>
-    <div class="field"><span class="lbl">電話</span><span class="val">${esc(order.mobilePhone || order.telephone || "—")}</span></div>
+    <div class="field"><span class="lbl">電話</span><span class="val">${esc(phoneDisplay)}</span></div>
+    ${order.contactPerson ? `<div class="field"><span class="lbl">現場聯絡</span><span class="val">${esc(order.contactPerson)}</span></div>` : ""}
     <div class="field full"><span class="lbl">地址</span><span class="val">${esc(order.installAddress || "—")}</span></div>
     <div class="field"><span class="lbl">技師</span><span class="val">${esc(techDisplay)}</span></div>
   </div>
 
   <!-- Work Content -->
-  <div style="margin-bottom:2mm">
+  <div class="section">
     <div class="sec-title">施工內容</div>
     <div class="box">${esc(order.description || "（無）")}</div>
   </div>
 
   <!-- Materials -->
-  <div style="margin-bottom:2mm">
+  <div class="section">
     <div class="sec-title">材料</div>
     <table>
       <thead><tr class="head-row">
@@ -202,27 +261,27 @@ tr{page-break-inside:avoid;break-inside:avoid}
         <th class="col-w8">單位</th>
         <th class="col-w25">備註</th>
       </tr></thead>
-      <tbody>${itemRows}${padRows}</tbody>
+      <tbody>${itemRows}</tbody>
     </table>
   </div>
 
   <!-- Notes -->
-  <div style="margin-bottom:2mm">
+  <div class="section">
     <div class="sec-title">備註</div>
-    <div class="box" style="min-height:10mm;font-size:9pt">${esc(order.notes || "（無）")}</div>
+    <div class="box">${esc(order.notes || "（無）")}</div>
   </div>
 
-  <!-- Signature -->
-  <div class="sigs">
-    <div class="sig">客戶簽名<br><span style="font-size:6.5pt;color:#aaa">日期：________</span></div>
-    <div class="sig">技師簽名<br><span style="font-size:6.5pt;color:#aaa">日期：________</span></div>
-    <div class="sig">公司經手人<br><span style="font-size:6.5pt;color:#aaa">日期：________</span></div>
-  </div>
-
-  <!-- Footer -->
-  <div class="pf">
-    <div>${COMPANY.name}　${COMPANY.phone}</div>
-    <div>列印：${printDate}</div>
+  <!-- Signature + Footer -->
+  <div class="bottom-block">
+    <div class="sigs">
+      <div class="sig">客戶簽名<br><span style="font-size:6.5pt;color:#aaa">日期：________</span></div>
+      <div class="sig">技師簽名<br><span style="font-size:6.5pt;color:#aaa">日期：________</span></div>
+      <div class="sig">公司經手人<br><span style="font-size:6.5pt;color:#aaa">日期：________</span></div>
+    </div>
+    <div class="pf">
+      <div>${COMPANY.name}　${COMPANY.phone}</div>
+      <div>列印：${printDate}</div>
+    </div>
   </div>
 </div>
 </body>

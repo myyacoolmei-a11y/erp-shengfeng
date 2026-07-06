@@ -259,6 +259,34 @@ export interface EmployeeUpdate {
   notes?: string;
 }
 
+export interface WorkOrderEquipmentItemInput {
+  brand?: string;
+  model?: string;
+  quantity?: number;
+  indoorUnits?: number;
+  outdoorUnits?: number;
+  floor?: string;
+  sortOrder?: number;
+}
+
+export interface WorkOrderEquipmentItem {
+  id: number;
+  workOrderId: number;
+  /** @nullable */
+  brand?: string | null;
+  /** @nullable */
+  model?: string | null;
+  /** @nullable */
+  quantity?: number | null;
+  /** @nullable */
+  indoorUnits?: number | null;
+  /** @nullable */
+  outdoorUnits?: number | null;
+  /** @nullable */
+  floor?: string | null;
+  sortOrder: number;
+}
+
 export interface WorkOrder {
   id: number;
   /** @nullable */
@@ -311,6 +339,7 @@ export interface WorkOrder {
   notes?: string | null;
   /** @nullable */
   technicians?: string | null;
+  equipmentItems?: WorkOrderEquipmentItem[];
   createdAt: string;
   updatedAt: string;
 }
@@ -343,6 +372,7 @@ export interface WorkOrderInput {
   description?: string;
   notes?: string;
   technicians?: string;
+  equipmentItems?: WorkOrderEquipmentItemInput[];
 }
 
 export interface WorkOrderUpdate {
@@ -371,6 +401,7 @@ export interface WorkOrderUpdate {
   description?: string;
   notes?: string;
   technicians?: string;
+  equipmentItems?: WorkOrderEquipmentItemInput[];
 }
 
 export interface Progress {

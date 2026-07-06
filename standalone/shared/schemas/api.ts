@@ -873,6 +873,17 @@ export const ListWorkOrdersResponseItem = zod.object({
   "description": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "technicians": zod.string().nullish(),
+  "equipmentItems": zod.array(zod.object({
+  "id": zod.number(),
+  "workOrderId": zod.number(),
+  "brand": zod.string().nullish(),
+  "model": zod.string().nullish(),
+  "quantity": zod.number().nullish(),
+  "indoorUnits": zod.number().nullish(),
+  "outdoorUnits": zod.number().nullish(),
+  "floor": zod.string().nullish(),
+  "sortOrder": zod.number()
+})).optional(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -910,7 +921,16 @@ export const CreateWorkOrderBody = zod.object({
   "hasElevator": zod.string().optional(),
   "description": zod.string().optional(),
   "notes": zod.string().optional(),
-  "technicians": zod.string().optional()
+  "technicians": zod.string().optional(),
+  "equipmentItems": zod.array(zod.object({
+  "brand": zod.string().optional(),
+  "model": zod.string().optional(),
+  "quantity": zod.number().optional(),
+  "indoorUnits": zod.number().optional(),
+  "outdoorUnits": zod.number().optional(),
+  "floor": zod.string().optional(),
+  "sortOrder": zod.number().optional()
+})).optional()
 })
 
 export const CreateWorkOrderResponse = zod.object({
@@ -941,6 +961,17 @@ export const CreateWorkOrderResponse = zod.object({
   "description": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "technicians": zod.string().nullish(),
+  "equipmentItems": zod.array(zod.object({
+  "id": zod.number(),
+  "workOrderId": zod.number(),
+  "brand": zod.string().nullish(),
+  "model": zod.string().nullish(),
+  "quantity": zod.number().nullish(),
+  "indoorUnits": zod.number().nullish(),
+  "outdoorUnits": zod.number().nullish(),
+  "floor": zod.string().nullish(),
+  "sortOrder": zod.number()
+})).optional(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -981,6 +1012,17 @@ export const GetWorkOrderResponse = zod.object({
   "description": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "technicians": zod.string().nullish(),
+  "equipmentItems": zod.array(zod.object({
+  "id": zod.number(),
+  "workOrderId": zod.number(),
+  "brand": zod.string().nullish(),
+  "model": zod.string().nullish(),
+  "quantity": zod.number().nullish(),
+  "indoorUnits": zod.number().nullish(),
+  "outdoorUnits": zod.number().nullish(),
+  "floor": zod.string().nullish(),
+  "sortOrder": zod.number()
+})).optional(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -1017,7 +1059,16 @@ export const UpdateWorkOrderBody = zod.object({
   "hasElevator": zod.string().optional(),
   "description": zod.string().optional(),
   "notes": zod.string().optional(),
-  "technicians": zod.string().optional()
+  "technicians": zod.string().optional(),
+  "equipmentItems": zod.array(zod.object({
+  "brand": zod.string().optional(),
+  "model": zod.string().optional(),
+  "quantity": zod.number().optional(),
+  "indoorUnits": zod.number().optional(),
+  "outdoorUnits": zod.number().optional(),
+  "floor": zod.string().optional(),
+  "sortOrder": zod.number().optional()
+})).optional()
 })
 
 export const UpdateWorkOrderResponse = zod.object({
@@ -1048,6 +1099,17 @@ export const UpdateWorkOrderResponse = zod.object({
   "description": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "technicians": zod.string().nullish(),
+  "equipmentItems": zod.array(zod.object({
+  "id": zod.number(),
+  "workOrderId": zod.number(),
+  "brand": zod.string().nullish(),
+  "model": zod.string().nullish(),
+  "quantity": zod.number().nullish(),
+  "indoorUnits": zod.number().nullish(),
+  "outdoorUnits": zod.number().nullish(),
+  "floor": zod.string().nullish(),
+  "sortOrder": zod.number()
+})).optional(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })

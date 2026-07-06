@@ -23,7 +23,7 @@ import { Plus, Pencil, Trash2, ChevronDown, ChevronUp, CreditCard, Printer, Shar
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
-import { WO_STATUSES, makeEmpty, type WOForm, buildPayload, WorkOrderFormFields } from "@/components/work-order-form";
+import { WO_STATUSES, makeEmpty, type WOForm, buildPayload, WorkOrderFormFields, equipmentItemsFromOrder } from "@/components/work-order-form";
 import { PdfPreviewDialog } from "@/components/pdf/pdf-preview-dialog";
 import { handlePdfAction, isMobileDevice, openPrintWindow } from "@/components/pdf/pdf-service";
 import { buildWorkOrderHtml } from "@/components/pdf/templates/WorkOrderTemplate";
@@ -338,12 +338,7 @@ export default function WorkOrders() {
       completedDate: o.completedDate ?? "",
       technicians,
       projectType: o.projectType ?? "",
-      acBrand: o.acBrand ?? "",
-      modelNumber: o.modelNumber ?? "",
-      quantity: o.quantity ?? undefined,
-      indoorUnits: o.indoorUnits ?? undefined,
-      outdoorUnits: o.outdoorUnits ?? undefined,
-      floorLevel: o.floorLevel ?? "",
+      equipmentItems: equipmentItemsFromOrder(o),
       hasElevator: o.hasElevator ?? "",
       description: o.description ?? "",
       notes: o.notes ?? "",
