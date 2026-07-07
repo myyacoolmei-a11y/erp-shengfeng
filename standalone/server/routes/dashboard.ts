@@ -1,9 +1,28 @@
 import { Router, type IRouter } from "express";
-import { eq, count, sum, lte, gte, and, desc, ne } from "drizzle-orm";
+import { eq, count, sum, lte, gte, and, desc, ne, or, gt, sql } from "drizzle-orm";
 import { db, customersTable, quotesTable, workOrdersTable, paymentsTable, maintenanceRemindersTable, warrantiesTable, receivablesTable } from "@workspace/db";
 import { requireRole } from "../lib/auth";
 
 const router: IRouter = Router();
+
+/** Parse numeric / numeric-string DB values; null/undefined => 0 */
+function toAmount(val: unknown): number {
+  if (val == null) return 0;
+  const n = typeof val === "number" ? val : parseFloat(String(val));
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** Fully settled — compatible with Chinese and English status labels */
+function isFullyPaidStatus(status: string | null | undefined): boolean {
+  if (!status) return false;
+  const s = status.trim().toLowerCase();
+  return s === "paid" || s === "已收款" || s === "已收";
+}
+
+/** Has outstanding balance */
+function remainingAmount(total: unknown, received: unknown): number {
+  return Math.max(0, toAmount(total) - toAmount(received));
+}
 
 router.get("/dashboard/summary", requireRole("super_admin", "owner", "admin", "accountant"), async (req, res): Promise<void> => {
   const today = new Date().toISOString().split("T")[0];
@@ -29,20 +48,20 @@ router.get("/dashboard/summary", requireRole("super_admin", "owner", "admin", "a
     [totalReceivablesResult],
     [invoiceNotIssuedResult],
     allReceivables,
-    paidThisMonthRows,
     [todayWorkOrderCountResult],
     [todayPaymentsResult],
     [todayMaintenanceResult],
     [monthlyQuoteAmountResult],
     [monthlyWonAmountResult],
-    [monthlyPaidResult],
+    [monthlyPaidFromPaymentsResult],
     [todayDueResult],
     todayWorkOrderRows,
+    receivablesPaidThisMonthRows,
+    receivablesPaidTodayRows,
   ] = await Promise.all([
     db.select({ count: count() }).from(customersTable),
     db.select({ count: count() }).from(quotesTable),
     db.select({ count: count() }).from(workOrdersTable),
-    // 待施工 count (replaces old 待處理)
     db.select({ count: count() }).from(workOrdersTable).where(eq(workOrdersTable.status, "待施工")),
     db.select({ count: count() }).from(workOrdersTable).where(eq(workOrdersTable.status, "進行中")),
     db.select({ count: count() }).from(workOrdersTable).where(eq(workOrdersTable.status, "已完成")),
@@ -72,49 +91,33 @@ router.get("/dashboard/summary", requireRole("super_admin", "owner", "admin", "a
       receivedAmount: receivablesTable.receivedAmount,
       paymentStatus: receivablesTable.paymentStatus,
       expectedPaymentDate: receivablesTable.expectedPaymentDate,
-    }).from(receivablesTable).where(ne(receivablesTable.paymentStatus, "已收款")),
-    db.select({ receivedAmount: receivablesTable.receivedAmount })
-      .from(receivablesTable)
-      .where(
-        and(
-          eq(receivablesTable.paymentStatus, "已收款"),
-          gte(receivablesTable.actualPaymentDate, firstOfMonthStr),
-        )
-      ),
-    // Today's work orders count
+    }).from(receivablesTable),
     db.select({ count: count() }).from(workOrdersTable).where(eq(workOrdersTable.scheduledDate, today)),
-    // Today's payments amount
     db.select({ total: sum(paymentsTable.amount) }).from(paymentsTable).where(eq(paymentsTable.paymentDate, today)),
-    // Today's maintenance reminders
     db.select({ count: count() }).from(maintenanceRemindersTable).where(
       and(
         eq(maintenanceRemindersTable.reminderDate, today),
         eq(maintenanceRemindersTable.status, "待處理"),
       )
     ),
-    // Monthly quote amount (quotes created this month)
-    db.select({ total: sum(quotesTable.amount) }).from(quotesTable).where(
-      gte(quotesTable.createdAt, firstOfMonthDate)
+    // Monthly quote amount — prefer finalAmount, fallback to amount
+    db.select({
+      total: sum(sql`COALESCE(${quotesTable.finalAmount}::numeric, ${quotesTable.amount}::numeric, 0)`),
+    }).from(quotesTable).where(gte(quotesTable.createdAt, firstOfMonthDate)),
+    // Monthly won = receivables created this month (all statuses: unpaid / partial / paid)
+    db.select({ total: sum(receivablesTable.totalAmount) }).from(receivablesTable).where(
+      gte(receivablesTable.createdAt, firstOfMonthDate)
     ),
-    // Monthly won quote amount
-    db.select({ total: sum(quotesTable.amount) }).from(quotesTable).where(
-      and(
-        eq(quotesTable.status, "已成交"),
-        gte(quotesTable.createdAt, firstOfMonthDate),
-      )
-    ),
-    // Monthly paid (payments this month)
+    // Monthly paid from independent payment records
     db.select({ total: sum(paymentsTable.amount) }).from(paymentsTable).where(
       gte(paymentsTable.paymentDate, firstOfMonthStr)
     ),
-    // Today due receivables (unpaid)
     db.select({ count: count() }).from(receivablesTable).where(
       and(
         eq(receivablesTable.expectedPaymentDate, today),
         ne(receivablesTable.paymentStatus, "已收款"),
       )
     ),
-    // Today's work orders list
     db.select({
       id: workOrdersTable.id,
       workOrderNumber: workOrdersTable.workOrderNumber,
@@ -127,19 +130,53 @@ router.get("/dashboard/summary", requireRole("super_admin", "owner", "admin", "a
       .leftJoin(customersTable, eq(workOrdersTable.customerId, customersTable.id))
       .where(eq(workOrdersTable.scheduledDate, today))
       .orderBy(workOrdersTable.scheduledTime),
+    // Receivable payments this month (actualPaymentDate or created this month with received > 0)
+    db.select({
+      id: receivablesTable.id,
+      receivedAmount: receivablesTable.receivedAmount,
+    }).from(receivablesTable).where(
+      or(
+        gte(receivablesTable.actualPaymentDate, firstOfMonthStr),
+        and(
+          gte(receivablesTable.createdAt, firstOfMonthDate),
+          gt(receivablesTable.receivedAmount, "0"),
+        ),
+      )
+    ),
+    // Receivable payments today (actualPaymentDate = today)
+    db.select({
+      receivedAmount: receivablesTable.receivedAmount,
+    }).from(receivablesTable).where(eq(receivablesTable.actualPaymentDate, today)),
   ]);
 
   let totalUnpaid = 0;
   let overdueAmount = 0;
   for (const r of allReceivables) {
-    const remaining = parseFloat(String(r.totalAmount ?? "0")) - parseFloat(String(r.receivedAmount ?? "0"));
+    const remaining = remainingAmount(r.totalAmount, r.receivedAmount);
+    if (remaining <= 0) continue;
     totalUnpaid += remaining;
-    if (r.expectedPaymentDate && r.expectedPaymentDate < today) {
+    const isOverdueStatus = r.paymentStatus === "逾期" || r.paymentStatus?.toLowerCase() === "overdue";
+    if (isOverdueStatus || (r.expectedPaymentDate && r.expectedPaymentDate < today && !isFullyPaidStatus(r.paymentStatus))) {
       overdueAmount += remaining;
     }
   }
 
-  const paidThisMonthAR = paidThisMonthRows.reduce((s, r) => s + parseFloat(String(r.receivedAmount ?? "0")), 0);
+  const monthlyPaidFromPayments = toAmount(monthlyPaidFromPaymentsResult.total);
+  const monthlyPaidFromReceivables = receivablesPaidThisMonthRows.reduce(
+    (s, r) => s + toAmount(r.receivedAmount),
+    0,
+  );
+  // Payment records take priority; add receivable received amounts (most collections go through AR)
+  const monthlyPaidAmount = monthlyPaidFromPayments + monthlyPaidFromReceivables;
+
+  const todayPaymentsFromTable = toAmount(todayPaymentsResult.total);
+  const todayPaymentsFromReceivables = receivablesPaidTodayRows.reduce(
+    (s, r) => s + toAmount(r.receivedAmount),
+    0,
+  );
+  const todayPaymentsAmount = todayPaymentsFromTable + todayPaymentsFromReceivables;
+
+  const paidThisMonthAR = monthlyPaidFromReceivables;
 
   res.json({
     totalCustomers: totalCustomersResult.count,
@@ -148,10 +185,10 @@ router.get("/dashboard/summary", requireRole("super_admin", "owner", "admin", "a
     pendingWorkOrders: pendingWorkOrdersResult.count,
     inProgressWorkOrders: inProgressWorkOrdersResult.count,
     completedWorkOrders: completedWorkOrdersResult.count,
-    totalPaymentsAmount: parseFloat(totalPaymentsResult.total as string || "0"),
+    totalPaymentsAmount: toAmount(totalPaymentsResult.total),
     upcomingMaintenanceCount: upcomingMaintenanceResult.count,
     expiringWarrantiesCount: expiringWarrantiesResult.count,
-    totalReceivables: parseFloat(totalReceivablesResult.total as string || "0"),
+    totalReceivables: toAmount(totalReceivablesResult.total),
     totalUnpaid,
     overdueAmount,
     paidThisMonthAR,
@@ -162,11 +199,11 @@ router.get("/dashboard/summary", requireRole("super_admin", "owner", "admin", "a
       updatedAt: c.updatedAt instanceof Date ? c.updatedAt.toISOString() : c.updatedAt,
     })),
     todayWorkOrderCount: todayWorkOrderCountResult.count,
-    todayPaymentsAmount: parseFloat(todayPaymentsResult.total as string || "0"),
+    todayPaymentsAmount,
     todayMaintenanceCount: todayMaintenanceResult.count,
-    monthlyQuoteAmount: parseFloat(monthlyQuoteAmountResult.total as string || "0"),
-    monthlyWonAmount: parseFloat(monthlyWonAmountResult.total as string || "0"),
-    monthlyPaidAmount: parseFloat(monthlyPaidResult.total as string || "0"),
+    monthlyQuoteAmount: toAmount(monthlyQuoteAmountResult.total),
+    monthlyWonAmount: toAmount(monthlyWonAmountResult.total),
+    monthlyPaidAmount,
     todayDueCount: todayDueResult.count,
     todayWorkOrders: todayWorkOrderRows.map(o => ({
       id: o.id,

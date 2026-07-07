@@ -10,7 +10,8 @@ import { Link, useLocation } from "wouter";
 import { useAuth } from "@/contexts/auth-context";
 
 function fmt(n: number) {
-  return "NT$" + n.toLocaleString("zh-TW", { minimumFractionDigits: 0 });
+  const val = Number.isFinite(n) ? n : 0;
+  return "NT$" + val.toLocaleString("zh-TW", { minimumFractionDigits: 0 });
 }
 
 function getTechDisplay(technicians: string | null | undefined): string {
@@ -50,11 +51,28 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 }
 
 export default function Dashboard() {
-  const { data, isLoading } = useGetDashboardSummary();
+  const { data, isLoading, isError, error } = useGetDashboardSummary();
   const { user } = useAuth();
   const [, navigate] = useLocation();
 
   const canSeeFinance = user?.role !== "admin";
+
+  if (isError) {
+    return (
+      <div className="space-y-4">
+        <h1 className="text-xl sm:text-2xl font-bold text-foreground">儀表板</h1>
+        <Card className="border-destructive/50 bg-destructive/5">
+          <CardContent className="py-8 text-center">
+            <AlertCircle className="h-8 w-8 text-destructive mx-auto mb-2" />
+            <p className="font-medium text-destructive">無法載入儀表板統計</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              {error instanceof Error ? error.message : "請稍後再試或聯絡管理員"}
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5">
@@ -125,7 +143,7 @@ export default function Dashboard() {
             <StatCard
               label="本月成交金額" value={fmt(data?.monthlyWonAmount ?? 0)}
               icon={DollarSign} color="text-green-600"
-              href="/quotes" isLoading={isLoading}
+              href="/receivables" isLoading={isLoading}
             />
             <StatCard
               label="本月已收款" value={fmt(data?.monthlyPaidAmount ?? 0)}
