@@ -64,6 +64,12 @@ const NAV_ITEMS: NavItem[] = [
     roles: ["super_admin", "owner", "admin", "engineer", "technician"],
   },
   {
+    href: "/repair-cases",
+    label: "維修案件",
+    icon: Wrench,
+    roles: ["super_admin", "owner", "admin", "engineer", "technician", "sales"],
+  },
+  {
     href: "/receivables",
     label: "收款 / 應收帳款",
     icon: CreditCard,

@@ -1540,6 +1540,152 @@ export const DeleteMaintenanceReminderResponse = zod.void()
 
 
 /**
+ * @summary 列出維修案件
+ */
+export const ListRepairCasesQueryParams = zod.object({
+  "search": zod.coerce.string().optional().describe('搜尋案件編號、客戶、電話、技師、狀態'),
+  "status": zod.coerce.string().optional(),
+  "source": zod.coerce.string().optional()
+})
+
+export const ListRepairCasesResponseItem = zod.object({
+  "id": zod.number(),
+  "repairNo": zod.string().nullish(),
+  "source": zod.string(),
+  "customerId": zod.number().nullish(),
+  "customerName": zod.string().nullish(),
+  "tempCustomerName": zod.string().nullish(),
+  "contactName": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "siteAddress": zod.string().nullish(),
+  "brand": zod.string().nullish(),
+  "model": zod.string().nullish(),
+  "quantity": zod.number().nullish(),
+  "problemDescription": zod.string().nullish(),
+  "status": zod.string(),
+  "priority": zod.string(),
+  "appointmentDate": zod.string().nullish(),
+  "appointmentTime": zod.string().nullish(),
+  "employeeId": zod.number().nullish(),
+  "employeeName": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+export const ListRepairCasesResponse = zod.array(ListRepairCasesResponseItem)
+
+
+/**
+ * @summary 新增維修案件
+ */
+export const CreateRepairCaseBody = zod.object({
+  "source": zod.string().optional(),
+  "customerId": zod.number().nullish(),
+  "tempCustomerName": zod.string().nullish(),
+  "contactName": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "siteAddress": zod.string().nullish(),
+  "brand": zod.string().nullish(),
+  "model": zod.string().nullish(),
+  "quantity": zod.number().nullish(),
+  "problemDescription": zod.string().nullish(),
+  "status": zod.string().optional(),
+  "priority": zod.string().optional(),
+  "appointmentDate": zod.string().nullish(),
+  "appointmentTime": zod.string().nullish(),
+  "employeeId": zod.number().nullish(),
+  "notes": zod.string().nullish(),
+  "photos": zod.array(zod.string()).optional()
+})
+
+export const CreateRepairCaseResponse = zod.object({
+  "id": zod.number(),
+  "repairNo": zod.string().nullish(),
+  "source": zod.string(),
+  "customerId": zod.number().nullish(),
+  "customerName": zod.string().nullish(),
+  "tempCustomerName": zod.string().nullish(),
+  "contactName": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "siteAddress": zod.string().nullish(),
+  "brand": zod.string().nullish(),
+  "model": zod.string().nullish(),
+  "quantity": zod.number().nullish(),
+  "problemDescription": zod.string().nullish(),
+  "status": zod.string(),
+  "priority": zod.string(),
+  "appointmentDate": zod.string().nullish(),
+  "appointmentTime": zod.string().nullish(),
+  "employeeId": zod.number().nullish(),
+  "employeeName": zod.string().nullish(),
+  "notes": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string(),
+  "photos": zod.array(zod.object({
+    "id": zod.number(),
+    "repairCaseId": zod.number(),
+    "url": zod.string(),
+    "sortOrder": zod.number(),
+    "createdAt": zod.string()
+  })).optional()
+})
+
+
+/**
+ * @summary 取得維修案件詳情
+ */
+export const GetRepairCaseParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const GetRepairCaseResponse = CreateRepairCaseResponse
+
+
+/**
+ * @summary 更新維修案件
+ */
+export const UpdateRepairCaseParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const UpdateRepairCaseBody = zod.object({
+  "source": zod.string().optional(),
+  "customerId": zod.number().nullish(),
+  "tempCustomerName": zod.string().nullish(),
+  "contactName": zod.string().nullish(),
+  "phone": zod.string().nullish(),
+  "address": zod.string().nullish(),
+  "siteAddress": zod.string().nullish(),
+  "brand": zod.string().nullish(),
+  "model": zod.string().nullish(),
+  "quantity": zod.number().nullish(),
+  "problemDescription": zod.string().nullish(),
+  "status": zod.string().optional(),
+  "priority": zod.string().optional(),
+  "appointmentDate": zod.string().nullish(),
+  "appointmentTime": zod.string().nullish(),
+  "employeeId": zod.number().nullish(),
+  "notes": zod.string().nullish(),
+  "photos": zod.array(zod.string()).optional()
+})
+
+export const UpdateRepairCaseResponse = CreateRepairCaseResponse
+
+
+/**
+ * @summary 刪除維修案件
+ */
+export const DeleteRepairCaseParams = zod.object({
+  "id": zod.coerce.number()
+})
+
+export const DeleteRepairCaseResponse = zod.void()
+
+
+/**
  * @summary 列出所有應收帳款
  */
 export const ListReceivablesQueryParams = zod.object({

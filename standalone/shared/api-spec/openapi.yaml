@@ -22,6 +22,8 @@ tags:
     description: 報價單
   - name: workOrders
     description: 派工單
+  - name: repairCases
+    description: 維修案件
   - name: progress
     description: 工程進度
   - name: payments
@@ -877,6 +879,109 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Progress"
+
+  /repair-cases:
+    get:
+      operationId: listRepairCases
+      tags: [repairCases]
+      summary: 列出維修案件
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: 搜尋案件編號、客戶、電話、技師、狀態
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: source
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 維修案件列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RepairCase"
+    post:
+      operationId: createRepairCase
+      tags: [repairCases]
+      summary: 新增維修案件
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RepairCaseInput"
+      responses:
+        "201":
+          description: 新增成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RepairCaseDetail"
+
+  /repair-cases/{id}:
+    get:
+      operationId: getRepairCase
+      tags: [repairCases]
+      summary: 取得維修案件詳情
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: 維修案件詳情
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RepairCaseDetail"
+        "404":
+          description: 找不到維修案件
+    patch:
+      operationId: updateRepairCase
+      tags: [repairCases]
+      summary: 更新維修案件
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RepairCaseUpdate"
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RepairCaseDetail"
+    delete:
+      operationId: deleteRepairCase
+      tags: [repairCases]
+      summary: 刪除維修案件
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: 刪除成功
 
   /payments:
     get:
@@ -2323,6 +2428,104 @@ components:
         endDate: { type: string }
         description: { type: string }
         notes: { type: string }
+
+    RepairCasePhoto:
+      type: object
+      required: [id, repairCaseId, url, sortOrder, createdAt]
+      properties:
+        id: { type: integer }
+        repairCaseId: { type: integer }
+        url: { type: string }
+        sortOrder: { type: integer }
+        createdAt: { type: string }
+
+    RepairCase:
+      type: object
+      required: [id, source, status, priority, createdAt, updatedAt]
+      properties:
+        id: { type: integer }
+        repairNo: { type: ["string", "null"] }
+        source: { type: string }
+        customerId: { type: ["integer", "null"] }
+        customerName: { type: ["string", "null"] }
+        tempCustomerName: { type: ["string", "null"] }
+        contactName: { type: ["string", "null"] }
+        phone: { type: ["string", "null"] }
+        address: { type: ["string", "null"] }
+        siteAddress: { type: ["string", "null"] }
+        brand: { type: ["string", "null"] }
+        model: { type: ["string", "null"] }
+        quantity: { type: ["integer", "null"] }
+        problemDescription: { type: ["string", "null"] }
+        status: { type: string }
+        priority: { type: string }
+        appointmentDate: { type: ["string", "null"] }
+        appointmentTime: { type: ["string", "null"] }
+        employeeId: { type: ["integer", "null"] }
+        employeeName: { type: ["string", "null"] }
+        notes: { type: ["string", "null"] }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+
+    RepairCaseDetail:
+      allOf:
+        - $ref: "#/components/schemas/RepairCase"
+        - type: object
+          properties:
+            photos:
+              type: array
+              items:
+                $ref: "#/components/schemas/RepairCasePhoto"
+
+    RepairCaseInput:
+      type: object
+      properties:
+        source: { type: string }
+        customerId: { type: ["integer", "null"] }
+        tempCustomerName: { type: ["string", "null"] }
+        contactName: { type: ["string", "null"] }
+        phone: { type: ["string", "null"] }
+        address: { type: ["string", "null"] }
+        siteAddress: { type: ["string", "null"] }
+        brand: { type: ["string", "null"] }
+        model: { type: ["string", "null"] }
+        quantity: { type: ["integer", "null"] }
+        problemDescription: { type: ["string", "null"] }
+        status: { type: string }
+        priority: { type: string }
+        appointmentDate: { type: ["string", "null"] }
+        appointmentTime: { type: ["string", "null"] }
+        employeeId: { type: ["integer", "null"] }
+        notes: { type: ["string", "null"] }
+        photos:
+          type: array
+          items:
+            type: string
+
+    RepairCaseUpdate:
+      type: object
+      properties:
+        source: { type: string }
+        customerId: { type: ["integer", "null"] }
+        tempCustomerName: { type: ["string", "null"] }
+        contactName: { type: ["string", "null"] }
+        phone: { type: ["string", "null"] }
+        address: { type: ["string", "null"] }
+        siteAddress: { type: ["string", "null"] }
+        brand: { type: ["string", "null"] }
+        model: { type: ["string", "null"] }
+        quantity: { type: ["integer", "null"] }
+        problemDescription: { type: ["string", "null"] }
+        status: { type: string }
+        priority: { type: string }
+        appointmentDate: { type: ["string", "null"] }
+        appointmentTime: { type: ["string", "null"] }
+        employeeId: { type: ["integer", "null"] }
+        notes: { type: ["string", "null"] }
+        photos:
+          type: array
+          items:
+            type: string
 
     MaintenanceReminder:
       type: object

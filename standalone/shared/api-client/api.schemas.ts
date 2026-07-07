@@ -559,6 +559,131 @@ export interface MaintenanceReminderUpdate {
   notes?: string;
 }
 
+export interface RepairCasePhoto {
+  id: number;
+  repairCaseId: number;
+  url: string;
+  sortOrder: number;
+  createdAt: string;
+}
+
+export interface RepairCase {
+  id: number;
+  /** @nullable */
+  repairNo?: string | null;
+  source: string;
+  /** @nullable */
+  customerId?: number | null;
+  /** @nullable */
+  customerName?: string | null;
+  /** @nullable */
+  tempCustomerName?: string | null;
+  /** @nullable */
+  contactName?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  /** @nullable */
+  address?: string | null;
+  /** @nullable */
+  siteAddress?: string | null;
+  /** @nullable */
+  brand?: string | null;
+  /** @nullable */
+  model?: string | null;
+  /** @nullable */
+  quantity?: number | null;
+  /** @nullable */
+  problemDescription?: string | null;
+  status: string;
+  priority: string;
+  /** @nullable */
+  appointmentDate?: string | null;
+  /** @nullable */
+  appointmentTime?: string | null;
+  /** @nullable */
+  employeeId?: number | null;
+  /** @nullable */
+  employeeName?: string | null;
+  /** @nullable */
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RepairCaseDetail extends RepairCase {
+  photos?: RepairCasePhoto[];
+}
+
+export interface RepairCaseInput {
+  source?: string;
+  /** @nullable */
+  customerId?: number | null;
+  /** @nullable */
+  tempCustomerName?: string | null;
+  /** @nullable */
+  contactName?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  /** @nullable */
+  address?: string | null;
+  /** @nullable */
+  siteAddress?: string | null;
+  /** @nullable */
+  brand?: string | null;
+  /** @nullable */
+  model?: string | null;
+  /** @nullable */
+  quantity?: number | null;
+  /** @nullable */
+  problemDescription?: string | null;
+  status?: string;
+  priority?: string;
+  /** @nullable */
+  appointmentDate?: string | null;
+  /** @nullable */
+  appointmentTime?: string | null;
+  /** @nullable */
+  employeeId?: number | null;
+  /** @nullable */
+  notes?: string | null;
+  photos?: string[];
+}
+
+export interface RepairCaseUpdate {
+  source?: string;
+  /** @nullable */
+  customerId?: number | null;
+  /** @nullable */
+  tempCustomerName?: string | null;
+  /** @nullable */
+  contactName?: string | null;
+  /** @nullable */
+  phone?: string | null;
+  /** @nullable */
+  address?: string | null;
+  /** @nullable */
+  siteAddress?: string | null;
+  /** @nullable */
+  brand?: string | null;
+  /** @nullable */
+  model?: string | null;
+  /** @nullable */
+  quantity?: number | null;
+  /** @nullable */
+  problemDescription?: string | null;
+  status?: string;
+  priority?: string;
+  /** @nullable */
+  appointmentDate?: string | null;
+  /** @nullable */
+  appointmentTime?: string | null;
+  /** @nullable */
+  employeeId?: number | null;
+  /** @nullable */
+  notes?: string | null;
+  photos?: string[];
+}
+
 export interface Receivable {
   id: number;
   customerId: number;
@@ -1144,6 +1269,15 @@ status?: string;
  * 是否只顯示即將到期的提醒 (true/false)
  */
 upcoming?: string;
+};
+
+export type ListRepairCasesParams = {
+/**
+ * 搜尋案件編號、客戶、電話、技師、狀態
+ */
+search?: string;
+status?: string;
+source?: string;
 };
 
 export type ListReceivablesParams = {

@@ -49,6 +49,7 @@ import type {
   ListProductsParams,
   ListQuotesParams,
   ListReceivablesParams,
+  ListRepairCasesParams,
   ListWarrantiesParams,
   ListWholesaleCustomersParams,
   ListWholesaleOrdersParams,
@@ -75,6 +76,10 @@ import type {
   ReceivableInput,
   ReceivableUpdate,
   RecordPaymentInput,
+  RepairCase,
+  RepairCaseDetail,
+  RepairCaseInput,
+  RepairCaseUpdate,
   UpdateProductInput,
   UpdateUserInput,
   UpdateWholesaleReceivableInput,
@@ -3072,6 +3077,374 @@ export const useCreateProgress = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getCreateProgressMutationOptions(options));
+    }
+
+export const getListRepairCasesUrl = (params?: ListRepairCasesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value))
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/repair-cases?${stringifiedParams}` : `/api/repair-cases`
+}
+
+/**
+ * @summary 列出維修案件
+ */
+export const listRepairCases = async (params?: ListRepairCasesParams, options?: RequestInit): Promise<RepairCase[]> => {
+
+  return customFetch<RepairCase[]>(getListRepairCasesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+export const getListRepairCasesQueryKey = (params?: ListRepairCasesParams,) => {
+    return [
+    `/api/repair-cases`, ...(params ? [params] : [])
+    ] as const;
+    }
+
+
+export const getListRepairCasesQueryOptions = <TData = Awaited<ReturnType<typeof listRepairCases>>, TError = ErrorType<unknown>>(params?: ListRepairCasesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listRepairCases>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListRepairCasesQueryKey(params);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listRepairCases>>> = ({ signal }) => listRepairCases(params, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listRepairCases>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListRepairCasesQueryResult = NonNullable<Awaited<ReturnType<typeof listRepairCases>>>
+export type ListRepairCasesQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary 列出維修案件
+ */
+
+export function useListRepairCases<TData = Awaited<ReturnType<typeof listRepairCases>>, TError = ErrorType<unknown>>(
+ params?: ListRepairCasesParams, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listRepairCases>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListRepairCasesQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getCreateRepairCaseUrl = () => {
+
+
+
+
+  return `/api/repair-cases`
+}
+
+/**
+ * @summary 新增維修案件
+ */
+export const createRepairCase = async (repairCaseInput: RepairCaseInput, options?: RequestInit): Promise<RepairCaseDetail> => {
+
+  return customFetch<RepairCaseDetail>(getCreateRepairCaseUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(repairCaseInput)
+  }
+);}
+
+
+
+
+export const getCreateRepairCaseMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createRepairCase>>, TError,{data: BodyType<RepairCaseInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createRepairCase>>, TError,{data: BodyType<RepairCaseInput>}, TContext> => {
+
+const mutationKey = ['createRepairCase'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createRepairCase>>, {data: BodyType<RepairCaseInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  createRepairCase(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateRepairCaseMutationResult = NonNullable<Awaited<ReturnType<typeof createRepairCase>>>
+    export type CreateRepairCaseMutationBody = BodyType<RepairCaseInput>
+    export type CreateRepairCaseMutationError = ErrorType<unknown>
+
+    /**
+ * @summary 新增維修案件
+ */
+export const useCreateRepairCase = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createRepairCase>>, TError,{data: BodyType<RepairCaseInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createRepairCase>>,
+        TError,
+        {data: BodyType<RepairCaseInput>},
+        TContext
+      > => {
+      return useMutation(getCreateRepairCaseMutationOptions(options));
+    }
+
+export const getGetRepairCaseUrl = (id: number,) => {
+
+
+
+
+  return `/api/repair-cases/${id}`
+}
+
+/**
+ * @summary 取得維修案件詳情
+ */
+export const getRepairCase = async (id: number, options?: RequestInit): Promise<RepairCaseDetail> => {
+
+  return customFetch<RepairCaseDetail>(getGetRepairCaseUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+export const getGetRepairCaseQueryKey = (id: number,) => {
+    return [
+    `/api/repair-cases/${id}`
+    ] as const;
+    }
+
+
+export const getGetRepairCaseQueryOptions = <TData = Awaited<ReturnType<typeof getRepairCase>>, TError = ErrorType<unknown>>(id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRepairCase>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetRepairCaseQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getRepairCase>>> = ({ signal }) => getRepairCase(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getRepairCase>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetRepairCaseQueryResult = NonNullable<Awaited<ReturnType<typeof getRepairCase>>>
+export type GetRepairCaseQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary 取得維修案件詳情
+ */
+
+export function useGetRepairCase<TData = Awaited<ReturnType<typeof getRepairCase>>, TError = ErrorType<unknown>>(
+ id: number, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getRepairCase>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetRepairCaseQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+export const getUpdateRepairCaseUrl = (id: number,) => {
+
+
+
+
+  return `/api/repair-cases/${id}`
+}
+
+/**
+ * @summary 更新維修案件
+ */
+export const updateRepairCase = async (id: number,
+    repairCaseUpdate: RepairCaseUpdate, options?: RequestInit): Promise<RepairCaseDetail> => {
+
+  return customFetch<RepairCaseDetail>(getUpdateRepairCaseUrl(id),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(repairCaseUpdate)
+  }
+);}
+
+
+
+
+export const getUpdateRepairCaseMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateRepairCase>>, TError,{id: number;data: BodyType<RepairCaseUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateRepairCase>>, TError,{id: number;data: BodyType<RepairCaseUpdate>}, TContext> => {
+
+const mutationKey = ['updateRepairCase'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateRepairCase>>, {id: number;data: BodyType<RepairCaseUpdate>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateRepairCase(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateRepairCaseMutationResult = NonNullable<Awaited<ReturnType<typeof updateRepairCase>>>
+    export type UpdateRepairCaseMutationBody = BodyType<RepairCaseUpdate>
+    export type UpdateRepairCaseMutationError = ErrorType<unknown>
+
+    /**
+ * @summary 更新維修案件
+ */
+export const useUpdateRepairCase = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateRepairCase>>, TError,{id: number;data: BodyType<RepairCaseUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateRepairCase>>,
+        TError,
+        {id: number;data: BodyType<RepairCaseUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateRepairCaseMutationOptions(options));
+    }
+
+export const getDeleteRepairCaseUrl = (id: number,) => {
+
+
+
+
+  return `/api/repair-cases/${id}`
+}
+
+/**
+ * @summary 刪除維修案件
+ */
+export const deleteRepairCase = async (id: number, options?: RequestInit): Promise<void> => {
+
+  return customFetch<void>(getDeleteRepairCaseUrl(id),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+
+export const getDeleteRepairCaseMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteRepairCase>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof deleteRepairCase>>, TError,{id: number}, TContext> => {
+
+const mutationKey = ['deleteRepairCase'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof deleteRepairCase>>, {id: number}> = (props) => {
+          const {id} = props ?? {};
+
+          return  deleteRepairCase(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type DeleteRepairCaseMutationResult = NonNullable<Awaited<ReturnType<typeof deleteRepairCase>>>
+
+    export type DeleteRepairCaseMutationError = ErrorType<unknown>
+
+    /**
+ * @summary 刪除維修案件
+ */
+export const useDeleteRepairCase = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof deleteRepairCase>>, TError,{id: number}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof deleteRepairCase>>,
+        TError,
+        {id: number},
+        TContext
+      > => {
+      return useMutation(getDeleteRepairCaseMutationOptions(options));
     }
 
 export const getListPaymentsUrl = (params?: ListPaymentsParams,) => {
