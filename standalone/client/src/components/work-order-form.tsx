@@ -109,6 +109,10 @@ export function makeEmpty() {
 
 export type WOForm = ReturnType<typeof makeEmpty>;
 
+export function hasWorkOrderCustomer(f: WOForm): boolean {
+  return f.customerId > 0 || f.customerName.trim().length > 0;
+}
+
 export function buildPayload(f: WOForm) {
   const title = f.title.trim() || `${f.projectType || "派工"} 派工單`;
   const hasLinkedCustomer = f.customerId > 0;
@@ -260,37 +264,42 @@ export function WorkOrderFormFields({
   customerDisabled = false,
 }: WorkOrderFormFieldsProps) {
 
+  const selectedQuote = form.quoteId ? quotes.find(q => q.id === form.quoteId) : undefined;
+
   const linkedCustomer = form.customerId > 0
     ? customers.find((x: any) => x.id === form.customerId)
     : undefined;
 
   const selectorValue: CustomerSelectorValue | null = useMemo(() => {
-    if (form.customerId > 0 && linkedCustomer) {
+    if (form.customerId > 0) {
       return {
         type: "linked",
         customerId: form.customerId,
-        name: linkedCustomer.name ?? `客戶 #${form.customerId}`,
-        contactPerson: linkedCustomer.contactPerson || "",
-        phone: linkedCustomer.phone || "",
-        mobile: linkedCustomer.mobile || "",
-        address: form.installAddress || linkedCustomer.address || "",
-        taxId: linkedCustomer.taxId || "",
+        name: linkedCustomer?.name ?? selectedQuote?.customerName ?? `客戶 #${form.customerId}`,
+        contactPerson: form.contactPerson || linkedCustomer?.contactPerson || selectedQuote?.contactPerson || "",
+        phone: form.telephone || linkedCustomer?.phone || selectedQuote?.customerPhone || "",
+        mobile: linkedCustomer?.mobile || form.mobilePhone || "",
+        address: form.installAddress || linkedCustomer?.address || selectedQuote?.address || "",
+        taxId: linkedCustomer?.taxId || "",
       };
     }
-    if (form.customerName) {
+    const tempName = form.customerName || selectedQuote?.customerName || "";
+    if (tempName) {
       return {
         type: "temp",
         customerId: null,
-        name: form.customerName,
-        contactPerson: form.contactPerson,
-        phone: form.telephone,
-        mobile: form.mobilePhone,
-        address: form.installAddress,
+        name: tempName,
+        contactPerson: form.contactPerson || selectedQuote?.contactPerson || "",
+        phone: form.telephone || selectedQuote?.customerPhone || "",
+        mobile: form.mobilePhone || "",
+        address: form.installAddress || selectedQuote?.address || "",
         taxId: "",
       };
     }
     return null;
-  }, [form, linkedCustomer]);
+  }, [form, linkedCustomer, selectedQuote]);
+
+  const customerLockedFromQuote = !!(form.quoteId && selectorValue);
 
   function handleSelectorChange(v: CustomerSelectorValue | null) {
     if (!v) {
@@ -313,16 +322,19 @@ export function WorkOrderFormFields({
       setForm(f => ({ ...f, quoteId: undefined }));
       return;
     }
-    const qid = parseInt(v);
+    const qid = parseInt(v, 10);
     const quote = quotes.find(q => q.id === qid);
     if (!quote) return;
-    const cust = customers.find((c: any) => c.id === (quote.customerId ?? 0));
+    const linkedId = quote.customerId != null && quote.customerId > 0 ? quote.customerId : 0;
+    const cust = linkedId > 0 ? customers.find((c: any) => c.id === linkedId) : undefined;
     setForm(f => ({
       ...f,
       quoteId: qid,
-      customerId: quote.customerId ?? f.customerId,
-      contactPerson: quote.contactPerson || f.contactPerson || "",
+      customerId: linkedId,
+      customerName: linkedId > 0 ? "" : (quote.customerName ?? ""),
+      contactPerson: quote.contactPerson || cust?.contactPerson || f.contactPerson || "",
       mobilePhone: quote.customerPhone || cust?.mobile || f.mobilePhone || "",
+      telephone: f.telephone || cust?.phone || "",
       installAddress: quote.address || cust?.address || f.installAddress || "",
       description: quote.description || f.description || "",
     }));
@@ -379,7 +391,7 @@ export function WorkOrderFormFields({
               </SelectContent>
             </Select>
             {form.quoteId && (
-              <p className="text-xs text-muted-foreground">已自動帶入報價單客戶資料，可修改</p>
+              <p className="text-xs text-muted-foreground">已自動帶入報價單客戶資料{customerLockedFromQuote ? "（不可更改）" : "，可修改"}</p>
             )}
           </div>
         </>
@@ -395,8 +407,8 @@ export function WorkOrderFormFields({
         <CustomerSelector
           value={selectorValue}
           onChange={handleSelectorChange}
-          disabled={customerDisabled}
-          allowTemp={true}
+          disabled={customerDisabled || customerLockedFromQuote}
+          allowTemp={!customerLockedFromQuote}
           showAddressPicker={true}
           onAddressSelect={(_, address) => setForm(f => ({ ...f, installAddress: address }))}
           selectedAddressId={null}

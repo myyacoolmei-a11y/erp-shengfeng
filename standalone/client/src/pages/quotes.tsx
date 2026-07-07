@@ -17,7 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { WorkOrderFormFields, makeEmpty, buildPayload, type WOForm } from "@/components/work-order-form";
+import { WorkOrderFormFields, makeEmpty, buildPayload, hasWorkOrderCustomer, type WOForm } from "@/components/work-order-form";
 import { CustomerSelector, type CustomerSelectorValue } from "@/components/customer-selector";
 import { PdfPreviewDialog } from "@/components/pdf/pdf-preview-dialog";
 import {
@@ -400,11 +400,12 @@ export default function QuotesPage() {
   function handleConvert(e: React.FormEvent) {
     e.preventDefault();
     if (!convertItem) return;
-    if (!(woForm.customerId > 0) && !woForm.customerName.trim()) {
+    if (!hasWorkOrderCustomer(woForm)) {
       toast({ title: "請填寫客戶資訊", description: "請選擇現有客戶或輸入臨時客戶名稱", variant: "destructive" });
       return;
     }
     const payload = buildPayload(woForm);
+    console.log("[work-order submit]", { customerId: payload.customerId, quoteId: payload.quoteId, customerName: payload.customerName });
     createWoMutation.mutate({ data: payload });
   }
 
@@ -671,8 +672,9 @@ export default function QuotesPage() {
                 setForm={setWoForm}
                 customers={customers ?? []}
                 technicianOptions={technicianOptions}
+                quotes={convertItem ? [convertItem] : []}
                 showQuoteSelector={false}
-                customerDisabled={!!(convertItem?.customerId)}
+                customerDisabled={!!(convertItem?.customerId || convertItem?.customerName)}
               />
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setConvertItem(null)}>取消</Button>

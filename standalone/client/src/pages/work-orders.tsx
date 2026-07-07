@@ -23,7 +23,7 @@ import { Plus, Pencil, Trash2, ChevronDown, ChevronUp, CreditCard, Printer, Shar
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
-import { WO_STATUSES, makeEmpty, type WOForm, buildPayload, WorkOrderFormFields, equipmentItemsFromOrder } from "@/components/work-order-form";
+import { WO_STATUSES, makeEmpty, type WOForm, buildPayload, hasWorkOrderCustomer, WorkOrderFormFields, equipmentItemsFromOrder } from "@/components/work-order-form";
 import { PdfPreviewDialog } from "@/components/pdf/pdf-preview-dialog";
 import { handlePdfAction, isMobileDevice, openPrintWindow } from "@/components/pdf/pdf-service";
 import { buildWorkOrderHtml } from "@/components/pdf/templates/WorkOrderTemplate";
@@ -348,8 +348,12 @@ export default function WorkOrders() {
 
   function handleSubmit(e: React.FormEvent, mode: "create" | "edit") {
     e.preventDefault();
-    if (!form.customerId) { toast({ title: "請選擇客戶", variant: "destructive" }); return; }
+    if (!hasWorkOrderCustomer(form)) {
+      toast({ title: "請選擇客戶", variant: "destructive" });
+      return;
+    }
     const payload = buildPayload(form);
+    console.log("[work-order submit]", { customerId: payload.customerId, quoteId: payload.quoteId, customerName: payload.customerName });
     if (mode === "create") {
       createMutation.mutate({ data: payload });
     } else {
