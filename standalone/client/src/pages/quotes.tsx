@@ -2,8 +2,8 @@ import { useState } from "react";
 import { useSearch, useLocation } from "wouter";
 import {
   useListQuotes, useCreateQuote, useUpdateQuote, useDeleteQuote,
-  useListCustomers, useCreateWorkOrder, useListEmployees,
-  getListQuotesQueryKey, getListWorkOrdersQueryKey,
+  useListCustomers, useUpdateCustomer, useCreateWorkOrder, useListEmployees,
+  getListQuotesQueryKey, getListWorkOrdersQueryKey, getListCustomersQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { X, Plus, Pencil, Trash2, Printer, Wrench, Copy, Share2, Download, FileText } from "lucide-react";
@@ -327,8 +327,39 @@ export default function QuotesPage() {
   const { data: quotes, isLoading } = useListQuotes();
   const { data: customers } = useListCustomers();
   const { data: employees } = useListEmployees();
-  const salesReps = employees?.filter((e: any) => e.role === "業務") ?? [];
-  const technicianOptions = employees?.filter((e: any) => e.role === "技師").map((e: any) => ({ value: String(e.id), label: e.name })) ?? [];
+  const salesReps = employees?.filter((e: any) => e.position === "業務" && e.status !== "離職") ?? [];
+  const technicianOptions = employees?.filter((e: any) => e.position === "師傅技師" && e.status !== "離職").map((e: any) => ({ value: String(e.id), label: e.name })) ?? [];
+
+  const updateCustomerMutation = useUpdateCustomer({
+    mutation: {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getListCustomersQueryKey() });
+      },
+    },
+  });
+
+  function handleCustomerChange(v: CustomerSelectorValue | null) {
+    const linked = v?.customerId ? customers?.find((c: any) => c.id === v.customerId) : null;
+    setForm(f => ({
+      ...f,
+      customerId: v?.customerId ?? 0,
+      customerName: v?.name ?? "",
+      contactPerson: v?.contactPerson ?? "",
+      customerPhone: v?.phone ?? "",
+      address: v?.address ?? "",
+      salesRepId: f.salesRepId > 0 ? f.salesRepId : (linked?.primarySalesRepId ?? 0),
+    }));
+  }
+
+  function handleConvertToFormal(newCustomer: { id: number; name: string }) {
+    if (form.salesRepId <= 0) return;
+    const existing = customers?.find((c: any) => c.id === newCustomer.id);
+    if (existing?.primarySalesRepId) return;
+    updateCustomerMutation.mutate({
+      id: newCustomer.id,
+      data: { primarySalesRepId: form.salesRepId } as any,
+    });
+  }
 
   const filtered = (quotes ?? []).filter((q: any) => {
     if (statusFilter !== "全部" && q.status !== statusFilter) return false;
@@ -492,6 +523,8 @@ export default function QuotesPage() {
                 <Label>客戶</Label>
                 <CustomerSelector
                   allowTemp={true}
+                  convertPrimarySalesRepId={form.salesRepId > 0 ? form.salesRepId : undefined}
+                  onConvertToFormal={handleConvertToFormal}
                   value={
                     form.customerId > 0 ? {
                       type: "linked", customerId: form.customerId,
@@ -504,14 +537,7 @@ export default function QuotesPage() {
                       mobile: "", address: form.address, taxId: "",
                     } : null
                   }
-                  onChange={v => setForm(f => ({
-                    ...f,
-                    customerId: v?.customerId ?? 0,
-                    customerName: v?.name ?? "",
-                    contactPerson: v?.contactPerson ?? "",
-                    customerPhone: v?.phone ?? "",
-                    address: v?.address ?? "",
-                  }))}
+                  onChange={handleCustomerChange}
                 />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

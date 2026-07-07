@@ -19,4 +19,6 @@ export interface CustomerUpdate {
   status?: string;
   discountScheme?: string;
   notes?: string;
+  /** @nullable */
+  primarySalesRepId?: number | null;
 }

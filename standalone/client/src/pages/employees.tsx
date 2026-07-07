@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   useListEmployees, useCreateEmployee, useUpdateEmployee,
+  useListEmployeesPerformance, useGetEmployeePerformance,
   getListEmployeesQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -26,16 +27,86 @@ const POSITION_COLORS: Record<string, string> = {
   "老闆": "bg-amber-100 text-amber-700",
 };
 
+function currentMonth() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function fmtMoney(n: number) {
+  return `NT$${Math.round(n).toLocaleString()}`;
+}
+
+function fmtPct(n: number) {
+  return `${Math.round(n * 100)}%`;
+}
+
+function PerformanceSummary({ perf }: { perf?: { sales: any; technician: any } }) {
+  if (!perf) return null;
+  return (
+    <div className="text-[11px] text-muted-foreground mt-1 flex gap-x-3 gap-y-0.5 flex-wrap">
+      <span>業績 {fmtMoney(perf.sales.performanceAmount)}</span>
+      <span>報價 {perf.sales.quoteCount}</span>
+      <span>成交 {perf.sales.wonCount}</span>
+      <span>安裝 {perf.technician.installCount}</span>
+      <span>保養 {perf.technician.maintenanceCount}</span>
+      <span>維修 {perf.technician.repairCount}</span>
+    </div>
+  );
+}
+
+function PerformanceCards({ perf }: { perf: { sales: any; technician: any } }) {
+  return (
+    <div className="space-y-3 pt-2 border-t">
+      <p className="text-xs font-semibold text-muted-foreground">業務績效</p>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        {[
+          ["報價件數", perf.sales.quoteCount],
+          ["報價金額", fmtMoney(perf.sales.quoteAmount)],
+          ["成交件數", perf.sales.wonCount],
+          ["成交金額", fmtMoney(perf.sales.wonAmount)],
+          ["成交率", fmtPct(perf.sales.winRate)],
+          ["平均客單價", fmtMoney(perf.sales.avgTicket)],
+          ["本月業績", fmtMoney(perf.sales.performanceAmount)],
+        ].map(([label, value]) => (
+          <div key={label as string} className="rounded-md border px-2 py-1.5">
+            <p className="text-[10px] text-muted-foreground">{label}</p>
+            <p className="text-sm font-medium">{value}</p>
+          </div>
+        ))}
+      </div>
+      <p className="text-xs font-semibold text-muted-foreground">技師績效</p>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        {[
+          ["安裝件數", perf.technician.installCount],
+          ["保養件數", perf.technician.maintenanceCount],
+          ["維修件數", perf.technician.repairCount],
+          ["完成派工", perf.technician.completedWorkOrderCount],
+        ].map(([label, value]) => (
+          <div key={label as string} className="rounded-md border px-2 py-1.5">
+            <p className="text-[10px] text-muted-foreground">{label}</p>
+            <p className="text-sm font-medium">{value}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function Employees() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
   const [statusFilter, setStatusFilter] = useState<string>("在職");
+  const [month, setMonth] = useState(currentMonth());
   const [showCreate, setShowCreate] = useState(false);
   const [editItem, setEditItem] = useState<any>(null);
   const [disableId, setDisableId] = useState<number | null>(null);
 
   const { data: employees, isLoading } = useListEmployees({});
+  const { data: performanceList } = useListEmployeesPerformance({ month });
+  const { data: editPerformance } = useGetEmployeePerformance(editItem?.id ?? 0, { month }, { query: { enabled: !!editItem } as any });
+
+  const perfByEmployeeId = new Map((performanceList ?? []).map(p => [p.employeeId, p]));
 
   const createMutation = useCreateEmployee({
     mutation: {
@@ -76,7 +147,7 @@ export default function Employees() {
         </Button>
       </div>
 
-      <div className="flex gap-2 flex-wrap">
+      <div className="flex gap-2 flex-wrap items-center">
         {["全部", "在職", "配合", "離職"].map(s => (
           <button
             key={s}
@@ -90,7 +161,8 @@ export default function Employees() {
             {s}
           </button>
         ))}
-        <span className="text-xs text-muted-foreground self-center ml-2">共 {filtered.length} 人</span>
+        <Input type="month" className="h-8 w-36 text-xs ml-auto" value={month} onChange={e => setMonth(e.target.value)} />
+        <span className="text-xs text-muted-foreground self-center">共 {filtered.length} 人</span>
       </div>
 
       {isLoading ? (
@@ -119,6 +191,7 @@ export default function Employees() {
                       {e.phone && <span>{e.phone}</span>}
                       {e.notes && <span className="truncate max-w-xs">{e.notes}</span>}
                     </div>
+                    <PerformanceSummary perf={perfByEmployeeId.get(e.id)} />
                   </div>
                   <div className="flex gap-1 ml-2">
                     <Button
@@ -157,7 +230,7 @@ export default function Employees() {
       {/* Create / Edit Dialog */}
       {[showCreate && "create", editItem && "edit"].filter(Boolean).map(mode => (
         <Dialog key={mode as string} open={true} onOpenChange={() => mode === "create" ? setShowCreate(false) : setEditItem(null)}>
-          <DialogContent className="max-w-md">
+          <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>{mode === "create" ? "新增員工" : "編輯員工"}</DialogTitle>
             </DialogHeader>
@@ -206,6 +279,7 @@ export default function Employees() {
                 <Label>備註</Label>
                 <Textarea rows={2} value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
               </div>
+              {mode === "edit" && editPerformance && <PerformanceCards perf={editPerformance} />}
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => mode === "create" ? setShowCreate(false) : setEditItem(null)}>取消</Button>
                 <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending}>儲存</Button>

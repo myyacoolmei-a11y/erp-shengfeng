@@ -42,6 +42,8 @@ export interface CustomerSelectorProps {
   allowTemp?: boolean
   /** When provided, shows a "轉成正式客戶" button for temp-type values */
   onConvertToFormal?: (newCustomer: { id: number; name: string }) => void
+  /** 報價單負責業務，轉正式客戶時帶入 */
+  convertPrimarySalesRepId?: number
   /** When provided, show an address picker below the selector for the linked customer */
   showAddressPicker?: boolean
   selectedAddressId?: number | null
@@ -97,6 +99,7 @@ export function CustomerSelector({
   disabled = false,
   allowTemp = true,
   onConvertToFormal,
+  convertPrimarySalesRepId,
   showAddressPicker = false,
   selectedAddressId,
   onAddressSelect,
@@ -245,7 +248,13 @@ export function CustomerSelector({
 
   function handleConfirmConvert() {
     if (!convertForm.name.trim()) return;
-    convertMut.mutate({ data: convertForm as any });
+    const payload = {
+      ...convertForm,
+      ...(convertPrimarySalesRepId && convertPrimarySalesRepId > 0
+        ? { primarySalesRepId: convertPrimarySalesRepId }
+        : {}),
+    };
+    convertMut.mutate({ data: payload as any });
   }
 
   // ── Render ───────────────────────────────────────────────────────────────

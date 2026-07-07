@@ -29,6 +29,10 @@ export interface Customer {
   discountScheme?: string | null;
   /** @nullable */
   notes?: string | null;
+  /** @nullable */
+  primarySalesRepId?: number | null;
+  /** @nullable */
+  primarySalesRepName?: string | null;
   createdAt: string;
   updatedAt: string;
 }

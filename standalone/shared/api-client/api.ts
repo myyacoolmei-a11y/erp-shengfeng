@@ -37,10 +37,13 @@ import type {
   DashboardSummary,
   Employee,
   EmployeeInput,
+  EmployeePerformance,
   EmployeeUpdate,
+  GetEmployeePerformanceParams,
   HealthStatus,
   ListCustomersParams,
   ListEmployeesParams,
+  ListEmployeesPerformanceParams,
   ListMaintenanceRemindersParams,
   ListPaymentsParams,
   ListProductsParams,
@@ -1808,6 +1811,88 @@ export function useListEmployees<TData = Awaited<ReturnType<typeof listEmployees
 
 
 
+
+export const getListEmployeesPerformanceUrl = (params?: ListEmployeesPerformanceParams) => {
+  const normalizedParams = new URLSearchParams();
+  if (params?.month !== undefined) {
+    normalizedParams.append('month', params.month);
+  }
+  const stringifiedParams = normalizedParams.toString();
+  return stringifiedParams.length > 0 ? `/api/employees/performance?${stringifiedParams}` : `/api/employees/performance`;
+};
+
+export const listEmployeesPerformance = async (params?: ListEmployeesPerformanceParams, options?: RequestInit): Promise<EmployeePerformance[]> => {
+  return customFetch<EmployeePerformance[]>(getListEmployeesPerformanceUrl(params), {
+    ...options,
+    method: 'GET',
+  });
+};
+
+export const getListEmployeesPerformanceQueryKey = (params?: ListEmployeesPerformanceParams) => {
+  return [`/api/employees/performance`, ...(params ? [params] : [])] as const;
+};
+
+export const getListEmployeesPerformanceQueryOptions = <TData = Awaited<ReturnType<typeof listEmployeesPerformance>>, TError = ErrorType<unknown>>(
+  params?: ListEmployeesPerformanceParams,
+  options?: { query?: UseQueryOptions<Awaited<ReturnType<typeof listEmployeesPerformance>>, TError, TData>, request?: SecondParameter<typeof customFetch> },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getListEmployeesPerformanceQueryKey(params);
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listEmployeesPerformance>>> = ({ signal }) =>
+    listEmployeesPerformance(params, { signal, ...requestOptions });
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<Awaited<ReturnType<typeof listEmployeesPerformance>>, TError, TData> & { queryKey: QueryKey };
+};
+
+export function useListEmployeesPerformance<TData = Awaited<ReturnType<typeof listEmployeesPerformance>>, TError = ErrorType<unknown>>(
+  params?: ListEmployeesPerformanceParams,
+  options?: { query?: UseQueryOptions<Awaited<ReturnType<typeof listEmployeesPerformance>>, TError, TData>, request?: SecondParameter<typeof customFetch> },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListEmployeesPerformanceQueryOptions(params, options);
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+export const getGetEmployeePerformanceUrl = (id: number, params?: GetEmployeePerformanceParams) => {
+  const normalizedParams = new URLSearchParams();
+  if (params?.month !== undefined) {
+    normalizedParams.append('month', params.month);
+  }
+  const stringifiedParams = normalizedParams.toString();
+  return stringifiedParams.length > 0 ? `/api/employees/${id}/performance?${stringifiedParams}` : `/api/employees/${id}/performance`;
+};
+
+export const getEmployeePerformance = async (id: number, params?: GetEmployeePerformanceParams, options?: RequestInit): Promise<EmployeePerformance> => {
+  return customFetch<EmployeePerformance>(getGetEmployeePerformanceUrl(id, params), {
+    ...options,
+    method: 'GET',
+  });
+};
+
+export const getGetEmployeePerformanceQueryKey = (id: number, params?: GetEmployeePerformanceParams) => {
+  return [`/api/employees/${id}/performance`, ...(params ? [params] : [])] as const;
+};
+
+export const getGetEmployeePerformanceQueryOptions = <TData = Awaited<ReturnType<typeof getEmployeePerformance>>, TError = ErrorType<unknown>>(
+  id: number,
+  params?: GetEmployeePerformanceParams,
+  options?: { query?: UseQueryOptions<Awaited<ReturnType<typeof getEmployeePerformance>>, TError, TData>, request?: SecondParameter<typeof customFetch> },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getGetEmployeePerformanceQueryKey(id, params);
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof getEmployeePerformance>>> = ({ signal }) =>
+    getEmployeePerformance(id, params, { signal, ...requestOptions });
+  return { queryKey, queryFn, enabled: !!id, ...queryOptions } as UseQueryOptions<Awaited<ReturnType<typeof getEmployeePerformance>>, TError, TData> & { queryKey: QueryKey };
+};
+
+export function useGetEmployeePerformance<TData = Awaited<ReturnType<typeof getEmployeePerformance>>, TError = ErrorType<unknown>>(
+  id: number,
+  params?: GetEmployeePerformanceParams,
+  options?: { query?: UseQueryOptions<Awaited<ReturnType<typeof getEmployeePerformance>>, TError, TData>, request?: SecondParameter<typeof customFetch> },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getGetEmployeePerformanceQueryOptions(id, params, options);
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+  return withQueryKey(query, queryOptions.queryKey);
+}
 
 export const getCreateEmployeeUrl = () => {
 

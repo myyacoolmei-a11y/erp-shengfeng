@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import {
   useListCustomers, useCreateCustomer, useUpdateCustomer, useDeleteCustomer,
   useListQuotes, useListWorkOrders, useListPayments, useListWarranties,
+  useListEmployees,
   getListCustomersQueryKey,
 } from "@workspace/api-client-react";
 
@@ -15,6 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Plus, Search, Trash2, Pencil, ClipboardList } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
@@ -101,21 +103,23 @@ export default function Customers() {
   const [showCreate, setShowCreate] = useState(false);
   const [deleteCustomer, setDeleteCustomer] = useState<Customer | null>(null);
   const [editCustomer, setEditCustomer] = useState<Customer | null>(null);
-  const [editForm, setEditForm] = useState({ name: "", phone: "", address: "", email: "", discountScheme: "", notes: "" });
+  const [editForm, setEditForm] = useState({ name: "", phone: "", address: "", email: "", discountScheme: "", notes: "", primarySalesRepId: 0 });
 
   const { data: customers, isLoading } = useListCustomers({
     search: search || undefined,
     includeOld: includeOld ? "true" : undefined,
   });
+  const { data: employees } = useListEmployees({});
+  const salesEmployees = employees?.filter(e => e.position === "業務" && e.status !== "離職") ?? [];
 
-  const [createForm, setCreateForm] = useState({ name: "", phone: "", address: "", email: "", discountScheme: "", notes: "" });
+  const [createForm, setCreateForm] = useState({ name: "", phone: "", address: "", email: "", discountScheme: "", notes: "", primarySalesRepId: 0 });
 
   const createMutation = useCreateCustomer({
     mutation: {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListCustomersQueryKey() });
         setShowCreate(false);
-        setCreateForm({ name: "", phone: "", address: "", email: "", discountScheme: "", notes: "" });
+        setCreateForm({ name: "", phone: "", address: "", email: "", discountScheme: "", notes: "", primarySalesRepId: 0 });
         toast({ title: "客戶新增成功" });
       },
     },
@@ -149,8 +153,16 @@ export default function Customers() {
       email: c.email ?? "",
       discountScheme: c.discountScheme ?? "",
       notes: c.notes ?? "",
+      primarySalesRepId: c.primarySalesRepId ?? 0,
     });
     setEditCustomer(c);
+  }
+
+  function customerPayload(form: typeof createForm) {
+    return {
+      ...form,
+      ...(form.primarySalesRepId > 0 ? { primarySalesRepId: form.primarySalesRepId } : {}),
+    };
   }
 
   return (
@@ -206,6 +218,7 @@ export default function Customers() {
                       </div>
                       <div className="text-xs text-muted-foreground mt-0.5 flex gap-2 flex-wrap">
                         <span>{c.phone}</span>
+                        {c.primarySalesRepName && <span>業務：{c.primarySalesRepName}</span>}
                         <span className="truncate max-w-52 hidden sm:inline">{c.address}</span>
                       </div>
                     </div>
@@ -258,7 +271,7 @@ export default function Customers() {
           <DialogHeader>
             <DialogTitle>新增客戶</DialogTitle>
           </DialogHeader>
-          <form onSubmit={e => { e.preventDefault(); createMutation.mutate({ data: createForm }); }} className="space-y-3">
+          <form onSubmit={e => { e.preventDefault(); createMutation.mutate({ data: customerPayload(createForm) as any }); }} className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
                 <Label>姓名 *</Label>
@@ -284,6 +297,16 @@ export default function Customers() {
               </div>
             </div>
             <div className="space-y-1.5">
+              <Label>主要負責業務</Label>
+              <Select value={String(createForm.primarySalesRepId)} onValueChange={v => setCreateForm(f => ({ ...f, primarySalesRepId: parseInt(v, 10) }))}>
+                <SelectTrigger><SelectValue placeholder="選擇業務（選填）" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="0">（不指定）</SelectItem>
+                  {salesEmployees.map(e => <SelectItem key={e.id} value={String(e.id)}>{e.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
               <Label>備註</Label>
               <Textarea rows={2} value={createForm.notes} onChange={e => setCreateForm(f => ({ ...f, notes: e.target.value }))} />
             </div>
@@ -304,7 +327,13 @@ export default function Customers() {
           <form
             onSubmit={e => {
               e.preventDefault();
-              if (editCustomer) updateMutation.mutate({ id: editCustomer.id, data: editForm });
+              if (editCustomer) updateMutation.mutate({
+                id: editCustomer.id,
+                data: {
+                  ...customerPayload(editForm),
+                  primarySalesRepId: editForm.primarySalesRepId > 0 ? editForm.primarySalesRepId : null,
+                } as any,
+              });
             }}
             className="space-y-3"
           >
@@ -331,6 +360,16 @@ export default function Customers() {
                 <Label>折扣方案</Label>
                 <Input value={editForm.discountScheme} onChange={e => setEditForm(f => ({ ...f, discountScheme: e.target.value }))} />
               </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>主要負責業務</Label>
+              <Select value={String(editForm.primarySalesRepId)} onValueChange={v => setEditForm(f => ({ ...f, primarySalesRepId: parseInt(v, 10) }))}>
+                <SelectTrigger><SelectValue placeholder="選擇業務（選填）" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="0">（不指定）</SelectItem>
+                  {salesEmployees.map(e => <SelectItem key={e.id} value={String(e.id)}>{e.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-1.5">
               <Label>備註</Label>

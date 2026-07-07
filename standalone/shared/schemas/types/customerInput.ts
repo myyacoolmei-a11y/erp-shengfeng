@@ -19,4 +19,5 @@ export interface CustomerInput {
   status?: string;
   discountScheme?: string;
   notes?: string;
+  primarySalesRepId?: number;
 }

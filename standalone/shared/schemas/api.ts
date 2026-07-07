@@ -176,6 +176,8 @@ export const ListCustomersResponseItem = zod.object({
   "status": zod.string().nullish(),
   "discountScheme": zod.string().nullish(),
   "notes": zod.string().nullish(),
+  "primarySalesRepId": zod.number().nullish(),
+  "primarySalesRepName": zod.string().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -199,7 +201,8 @@ export const CreateCustomerBody = zod.object({
   "source": zod.string().optional(),
   "status": zod.string().optional(),
   "discountScheme": zod.string().optional(),
-  "notes": zod.string().optional()
+  "notes": zod.string().optional(),
+  "primarySalesRepId": zod.number().optional()
 })
 
 export const CreateCustomerResponse = zod.object({
@@ -215,6 +218,8 @@ export const CreateCustomerResponse = zod.object({
   "status": zod.string().nullish(),
   "discountScheme": zod.string().nullish(),
   "notes": zod.string().nullish(),
+  "primarySalesRepId": zod.number().nullish(),
+  "primarySalesRepName": zod.string().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -240,6 +245,8 @@ export const GetCustomerResponse = zod.object({
   "status": zod.string().nullish(),
   "discountScheme": zod.string().nullish(),
   "notes": zod.string().nullish(),
+  "primarySalesRepId": zod.number().nullish(),
+  "primarySalesRepName": zod.string().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -266,7 +273,8 @@ export const UpdateCustomerBody = zod.object({
   "source": zod.string().optional(),
   "status": zod.string().optional(),
   "discountScheme": zod.string().optional(),
-  "notes": zod.string().optional()
+  "notes": zod.string().optional(),
+  "primarySalesRepId": zod.number().nullish()
 })
 
 export const UpdateCustomerResponse = zod.object({
@@ -282,6 +290,8 @@ export const UpdateCustomerResponse = zod.object({
   "status": zod.string().nullish(),
   "discountScheme": zod.string().nullish(),
   "notes": zod.string().nullish(),
+  "primarySalesRepId": zod.number().nullish(),
+  "primarySalesRepName": zod.string().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -319,6 +329,8 @@ export const CheckCustomerDuplicateResponseItem = zod.object({
   "status": zod.string().nullish(),
   "discountScheme": zod.string().nullish(),
   "notes": zod.string().nullish(),
+  "primarySalesRepId": zod.number().nullish(),
+  "primarySalesRepName": zod.string().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -592,6 +604,48 @@ export const UpdateEmployeeResponse = zod.object({
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
+
+export const SalesPerformanceSchema = zod.object({
+  "quoteCount": zod.number(),
+  "quoteAmount": zod.number(),
+  "wonCount": zod.number(),
+  "wonAmount": zod.number(),
+  "winRate": zod.number(),
+  "avgTicket": zod.number(),
+  "performanceAmount": zod.number(),
+})
+
+export const TechnicianPerformanceSchema = zod.object({
+  "installCount": zod.number(),
+  "maintenanceCount": zod.number(),
+  "repairCount": zod.number(),
+  "completedWorkOrderCount": zod.number(),
+})
+
+export const EmployeePerformanceSchema = zod.object({
+  "employeeId": zod.number(),
+  "employeeName": zod.string(),
+  "position": zod.string(),
+  "month": zod.string(),
+  "sales": SalesPerformanceSchema,
+  "technician": TechnicianPerformanceSchema,
+})
+
+export const ListEmployeesPerformanceQueryParams = zod.object({
+  "month": zod.coerce.string().optional(),
+})
+
+export const ListEmployeesPerformanceResponse = zod.array(EmployeePerformanceSchema)
+
+export const GetEmployeePerformanceParams = zod.object({
+  "id": zod.coerce.number(),
+})
+
+export const GetEmployeePerformanceQueryParams = zod.object({
+  "month": zod.coerce.string().optional(),
+})
+
+export const GetEmployeePerformanceResponse = EmployeePerformanceSchema
 
 
 /**
@@ -1757,6 +1811,8 @@ export const GetDashboardSummaryResponse = zod.object({
   "status": zod.string().nullish(),
   "discountScheme": zod.string().nullish(),
   "notes": zod.string().nullish(),
+  "primarySalesRepId": zod.number().nullish(),
+  "primarySalesRepName": zod.string().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })).optional()

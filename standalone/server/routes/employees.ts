@@ -3,6 +3,11 @@ import { eq, and } from "drizzle-orm";
 import { db, employeesTable } from "@workspace/db";
 import { CreateEmployeeBody, UpdateEmployeeBody } from "@workspace/api-zod";
 import { requireRole } from "../lib/auth";
+import {
+  computeEmployeePerformance,
+  currentMonthParam,
+  listEmployeePerformance,
+} from "../lib/employeePerformance";
 
 const router: IRouter = Router();
 
@@ -26,6 +31,33 @@ router.get("/employees", requireRole(...READ_ROLES), async (req, res): Promise<v
     createdAt: e.createdAt instanceof Date ? e.createdAt.toISOString() : e.createdAt,
     updatedAt: e.updatedAt instanceof Date ? e.updatedAt.toISOString() : e.updatedAt,
   })));
+});
+
+router.get("/employees/performance", requireRole(...READ_ROLES), async (req, res): Promise<void> => {
+  const month = (req.query.month as string | undefined) ?? currentMonthParam();
+  try {
+    const rows = await listEmployeePerformance(month);
+    res.json(rows);
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "Invalid month" });
+  }
+});
+
+router.get("/employees/:id/performance", requireRole(...READ_ROLES), async (req, res): Promise<void> => {
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const id = parseInt(raw, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const month = (req.query.month as string | undefined) ?? currentMonthParam();
+  const [employee] = await db.select().from(employeesTable).where(eq(employeesTable.id, id));
+  if (!employee) { res.status(404).json({ error: "找不到員工" }); return; }
+
+  try {
+    const row = await computeEmployeePerformance(employee, month);
+    res.json(row);
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "Invalid month" });
+  }
 });
 
 router.post("/employees", requireRole(...WRITE_ROLES), async (req, res): Promise<void> => {

@@ -1,6 +1,7 @@
-import { pgTable, text, serial, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, timestamp } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
+import { employeesTable } from "./employees";
 
 export const customersTable = pgTable("customers", {
   id: serial("id").primaryKey(),
@@ -11,6 +12,7 @@ export const customersTable = pgTable("customers", {
   address: text("address"),
   email: text("email"),
   taxId: text("tax_id"),
+  primarySalesRepId: integer("primary_sales_rep_id").references(() => employeesTable.id, { onDelete: "set null" }),
   source: text("source").default("手動"),
   status: text("status").default("詢價中"),
   discountScheme: text("discount_scheme"),

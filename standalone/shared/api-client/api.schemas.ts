@@ -32,6 +32,10 @@ export interface Customer {
   discountScheme?: string | null;
   /** @nullable */
   notes?: string | null;
+  /** @nullable */
+  primarySalesRepId?: number | null;
+  /** @nullable */
+  primarySalesRepName?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -49,6 +53,7 @@ export interface CustomerInput {
   status?: string;
   discountScheme?: string;
   notes?: string;
+  primarySalesRepId?: number;
 }
 
 export interface CustomerUpdate {
@@ -64,6 +69,8 @@ export interface CustomerUpdate {
   status?: string;
   discountScheme?: string;
   notes?: string;
+  /** @nullable */
+  primarySalesRepId?: number | null;
 }
 
 export interface CustomerAddress {
@@ -257,6 +264,40 @@ export interface EmployeeUpdate {
   position?: string;
   status?: string;
   notes?: string;
+}
+
+export interface SalesPerformance {
+  quoteCount: number;
+  quoteAmount: number;
+  wonCount: number;
+  wonAmount: number;
+  winRate: number;
+  avgTicket: number;
+  performanceAmount: number;
+}
+
+export interface TechnicianPerformance {
+  installCount: number;
+  maintenanceCount: number;
+  repairCount: number;
+  completedWorkOrderCount: number;
+}
+
+export interface EmployeePerformance {
+  employeeId: number;
+  employeeName: string;
+  position: string;
+  month: string;
+  sales: SalesPerformance;
+  technician: TechnicianPerformance;
+}
+
+export interface ListEmployeesPerformanceParams {
+  month?: string;
+}
+
+export interface GetEmployeePerformanceParams {
+  month?: string;
 }
 
 export interface WorkOrderEquipmentItemInput {

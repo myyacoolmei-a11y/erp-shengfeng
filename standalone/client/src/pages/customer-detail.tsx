@@ -4,6 +4,7 @@ import {
   useGetCustomer, useUpdateCustomer, getGetCustomerQueryKey,
   useListAcUnits, useCreateAcUnit, useDeleteAcUnit, getListAcUnitsQueryKey,
   useListQuotes,
+  useListEmployees,
   useListWorkOrders,
   useListReceivables,
   useListWarranties,
@@ -16,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -82,6 +84,7 @@ function QuoteDetailModal({ quote, onClose }: { quote: Quote; onClose: () => voi
           <InfoRow label="報價單名稱" value={quote.title} />
           <InfoRow label="建立日期" value={new Date(quote.createdAt).toLocaleDateString("zh-TW")} />
           <InfoRow label="報價金額" value={`NT$${Number(quote.amount).toLocaleString()}`} />
+          <InfoRow label="負責業務" value={quote.salesRepName} />
           {quote.discountAmount ? <InfoRow label="折扣金額" value={`NT$${Number(quote.discountAmount).toLocaleString()}`} /> : null}
           <InfoRow label="最終金額" value={`NT$${Number(quote.finalAmount ?? quote.amount).toLocaleString()}`} />
           <div className="flex gap-2 items-center">
@@ -216,6 +219,8 @@ export default function CustomerDetail() {
   const { data: receivables } = useListReceivables({ customerId: id });
   const { data: warranties } = useListWarranties({ customerId: id });
   const { data: reminders } = useListMaintenanceReminders({ customerId: id });
+  const { data: employees } = useListEmployees({});
+  const salesEmployees = employees?.filter(e => e.position === "業務" && e.status !== "離職") ?? [];
 
   const updateMutation = useUpdateCustomer({
     mutation: {
@@ -254,7 +259,7 @@ export default function CustomerDetail() {
   });
 
   const [editing, setEditing] = useState(false);
-  const [editForm, setEditForm] = useState({ name: "", phone: "", address: "", email: "", discountScheme: "", notes: "" });
+  const [editForm, setEditForm] = useState({ name: "", phone: "", address: "", email: "", discountScheme: "", notes: "", primarySalesRepId: 0 });
   const [showAcForm, setShowAcForm] = useState(false);
   const [acForm, setAcForm] = useState({ brand: "", model: "", serialNumber: "", purchaseDate: "", installationDate: "", notes: "" });
   const [showReminderForm, setShowReminderForm] = useState(false);
@@ -275,6 +280,7 @@ export default function CustomerDetail() {
       email: customer!.email ?? "",
       discountScheme: customer!.discountScheme ?? "",
       notes: customer!.notes ?? "",
+      primarySalesRepId: customer!.primarySalesRepId ?? 0,
     });
     setEditing(true);
   }
@@ -324,6 +330,7 @@ export default function CustomerDetail() {
                 <div className="col-span-2"><span className="text-muted-foreground">地址：</span>{customer.address}</div>
                 {customer.email && <div><span className="text-muted-foreground">Email：</span>{customer.email}</div>}
                 {customer.discountScheme && <div><span className="text-muted-foreground">折扣方案：</span>{customer.discountScheme}</div>}
+                {customer.primarySalesRepName && <div><span className="text-muted-foreground">主要負責業務：</span>{customer.primarySalesRepName}</div>}
                 {customer.notes && <div className="col-span-2"><span className="text-muted-foreground">備註：</span>{customer.notes}</div>}
                 <div className="col-span-2 text-xs text-muted-foreground">建立時間：{new Date(customer.createdAt).toLocaleDateString("zh-TW")}</div>
               </div>
@@ -611,7 +618,16 @@ export default function CustomerDetail() {
         <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>編輯客戶資料</DialogTitle></DialogHeader>
           <form
-            onSubmit={e => { e.preventDefault(); updateMutation.mutate({ id, data: editForm }); }}
+            onSubmit={e => {
+              e.preventDefault();
+              updateMutation.mutate({
+                id,
+                data: {
+                  ...editForm,
+                  primarySalesRepId: editForm.primarySalesRepId > 0 ? editForm.primarySalesRepId : null,
+                } as any,
+              });
+            }}
             className="space-y-3"
           >
             <div className="grid grid-cols-2 gap-3">
@@ -637,6 +653,16 @@ export default function CustomerDetail() {
                 <Label>折扣方案</Label>
                 <Input value={editForm.discountScheme} onChange={e => setEditForm(f => ({ ...f, discountScheme: e.target.value }))} />
               </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>主要負責業務</Label>
+              <Select value={String(editForm.primarySalesRepId)} onValueChange={v => setEditForm(f => ({ ...f, primarySalesRepId: parseInt(v, 10) }))}>
+                <SelectTrigger><SelectValue placeholder="選擇業務（選填）" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="0">（不指定）</SelectItem>
+                  {salesEmployees.map(e => <SelectItem key={e.id} value={String(e.id)}>{e.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-1.5">
               <Label>備註</Label>
