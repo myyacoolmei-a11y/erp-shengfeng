@@ -420,6 +420,7 @@ export default function CustomerHistory() {
             <InfoRow label="電話" value={customer.phone} />
             <InfoRow label="Email" value={customer.email} />
             <InfoRow label="折扣方案" value={customer.discountScheme} />
+            <InfoRow label="主要負責業務" value={customer.primarySalesRepName || "未指定"} />
             <div className="sm:col-span-2"><InfoRow label="地址" value={customer.address} /></div>
             {customer.notes && <div className="sm:col-span-2"><InfoRow label="備註" value={customer.notes} /></div>}
             <InfoRow label="建立日期" value={new Date(customer.createdAt).toLocaleDateString("zh-TW")} />

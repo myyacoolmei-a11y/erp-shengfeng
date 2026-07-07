@@ -330,7 +330,7 @@ export default function CustomerDetail() {
                 <div className="col-span-2"><span className="text-muted-foreground">地址：</span>{customer.address}</div>
                 {customer.email && <div><span className="text-muted-foreground">Email：</span>{customer.email}</div>}
                 {customer.discountScheme && <div><span className="text-muted-foreground">折扣方案：</span>{customer.discountScheme}</div>}
-                {customer.primarySalesRepName && <div><span className="text-muted-foreground">主要負責業務：</span>{customer.primarySalesRepName}</div>}
+                <div><span className="text-muted-foreground">主要負責業務：</span>{customer.primarySalesRepName || "未指定"}</div>
                 {customer.notes && <div className="col-span-2"><span className="text-muted-foreground">備註：</span>{customer.notes}</div>}
                 <div className="col-span-2 text-xs text-muted-foreground">建立時間：{new Date(customer.createdAt).toLocaleDateString("zh-TW")}</div>
               </div>
