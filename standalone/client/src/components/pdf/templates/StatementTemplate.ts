@@ -1,7 +1,7 @@
 // 請款單 Template — A4 Portrait, 正式工程文件風格
 // 獨立版面：修改此檔不影響其他 Template
 
-import { logoUrl, COMPANY, COLORS, esc, fmtMoney, fmtDate, today } from "./brand-config";
+import { logoUrl, COMPANY, COLORS, esc, fmtMoney, fmtDate, today, PDF_LAYOUT_CSS } from "./brand-config";
 
 export function buildStatementHtml(
   customerName: string,
@@ -22,12 +22,12 @@ export function buildStatementHtml(
     <tr>
       <td class="tac">${fmtDate(it.orderDate)}</td>
       <td class="tac">${it.orderNumber ?? "—"}</td>
-      <td class="tal">${esc(it.productName)}</td>
+      <td class="tal col-item">${esc(it.productName)}</td>
       <td class="tac">${esc(it.model ?? "")}</td>
       <td class="tac">${it.qty}${it.unit ? " " + it.unit : ""}</td>
       <td class="tar">${fmtMoney(it.unitPrice)}</td>
       <td class="tar">${fmtMoney(it.amount)}</td>
-      <td class="tal small">${esc(it.notes ?? "")}</td>
+      <td class="tal small col-notes">${esc(it.notes ?? "")}</td>
     </tr>
   `).join("");
 
@@ -93,16 +93,16 @@ body{
 /* ===== Table ===== */
 table{
   width:100%;border-collapse:collapse;
-  table-layout:fixed;font-size:8.5pt;
+  table-layout:fixed;font-size:9pt;
 }
 .head-row{background:${COLORS.black};color:${COLORS.primary}}
 .head-row th{
-  border:1px solid ${COLORS.black};padding:2px 3px;
-  font-size:7.5pt;font-weight:700;text-align:center;
+  border:1px solid ${COLORS.black};
+  font-size:8.5pt;font-weight:700;text-align:center;
 }
 tbody td{
-  border:1px solid ${COLORS.black};padding:2px 3px;
-  vertical-align:top;font-size:8.5pt;
+  border:1px solid ${COLORS.black};
+  vertical-align:middle;font-size:9pt;
 }
 tr{page-break-inside:avoid;break-inside:avoid}
 
@@ -132,14 +132,14 @@ tr{page-break-inside:avoid;break-inside:avoid}
   border:2px solid ${COLORS.primary};overflow:hidden;
 }
 .amt-r{
-  display:flex;justify-content:space-between;
-  padding:1.5mm 3mm;border-bottom:1px solid #ebebeb;
-  font-size:8.5pt;
+  display:flex;justify-content:space-between;align-items:center;
+  border-bottom:1px solid #ebebeb;
+  font-size:9pt;
 }
-.amt-r .lbl{color:${COLORS.lightGray}}
-.amt-r .val{font-weight:600}
+.amt-r .lbl{color:${COLORS.lightGray};padding-right:3mm}
+.amt-r .val{font-weight:600;text-align:right}
 .amt-total{
-  background:${COLORS.black};padding:2mm 3mm;
+  background:${COLORS.black};
   display:flex;justify-content:space-between;align-items:center;
 }
 .amt-total .lbl{color:${COLORS.primary};font-size:9pt;font-weight:700;letter-spacing:1px}
@@ -166,7 +166,8 @@ tr{page-break-inside:avoid;break-inside:avoid}
 /* ===== Notice ===== */
 .notice{
   position:absolute;bottom:20mm;left:0;right:82mm;
-  font-size:7.5pt;color:${COLORS.midGray};line-height:1.6;
+  font-size:8pt;color:${COLORS.midGray};line-height:1.6;
+  padding:2mm 3mm;
 }
 
 /* ===== Signature ===== */
@@ -176,8 +177,7 @@ tr{page-break-inside:avoid;break-inside:avoid}
 }
 .sig-box{
   text-align:center;border-top:1.5px solid ${COLORS.black};
-  padding-top:2mm;font-size:8pt;color:${COLORS.midGray};
-  padding-bottom:4mm;
+  font-size:8.5pt;color:${COLORS.midGray};
 }
 
 /* ===== Footer ===== */
@@ -187,6 +187,7 @@ tr{page-break-inside:avoid;break-inside:avoid}
   font-size:6.5pt;color:${COLORS.lightGray};
   border-top:1px solid ${COLORS.borderGray};padding-top:1mm;
 }
+${PDF_LAYOUT_CSS}
 </style>
 </head>
 <body>

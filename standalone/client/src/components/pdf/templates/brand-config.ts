@@ -56,3 +56,68 @@ export function fmtDate(d: string | null | undefined): string {
   if (!d) return "\u2014";
   return d;
 }
+
+/** Shared table / notes / amount / signature spacing for all PDF templates */
+export const PDF_LAYOUT_CSS = `
+/* ===== Shared PDF readability ===== */
+body{line-height:1.55}
+table{font-size:9pt;line-height:1.55}
+.head-row th{
+  padding:6px 8px;
+  min-height:40px;
+  line-height:1.55;
+  vertical-align:middle;
+}
+tbody td{
+  padding:6px 8px;
+  min-height:40px;
+  line-height:1.55;
+  vertical-align:middle;
+}
+tbody tr{min-height:40px}
+.col-item{
+  word-wrap:break-word;
+  word-break:break-word;
+  white-space:normal;
+}
+.col-notes{
+  padding-left:10px!important;
+  padding-right:10px!important;
+}
+.notes-box,.remarks-box{
+  border:1px solid ${COLORS.borderGray};
+  padding:3mm 4mm;
+  font-size:9pt;
+  line-height:1.6;
+  min-height:18mm;
+  background:#fafafa;
+}
+.note-line{
+  font-size:8.5pt;
+  line-height:1.6;
+  padding:1px 0;
+  color:${COLORS.darkGray};
+}
+.amt-r{
+  padding:2.5mm 5mm!important;
+}
+.amt-r .val{
+  text-align:right;
+  min-width:28mm;
+  padding-left:4mm;
+  font-variant-numeric:tabular-nums;
+}
+.amt-total{
+  padding:3mm 5mm!important;
+}
+.amt-total .val{
+  text-align:right;
+  padding-left:4mm;
+  font-variant-numeric:tabular-nums;
+}
+.sig-box,.sig{
+  padding-top:3mm;
+  padding-bottom:10mm;
+  min-height:18mm;
+}
+`;

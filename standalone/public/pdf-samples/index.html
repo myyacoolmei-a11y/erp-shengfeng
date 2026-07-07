@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>PDF Layout Preview</title>
+<style>
+body{font-family:sans-serif;background:#f0f0f0;margin:0;padding:20px}
+h1{text-align:center;font-size:18px}
+.grid{display:flex;flex-direction:column;gap:24px;max-width:900px;margin:0 auto}
+.card{background:#fff;border-radius:8px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.08)}
+.card h2{margin:0 0 8px;font-size:14px;color:#333}
+iframe{width:100%;border:1px solid #ddd;background:#fff}
+</style>
+</head>
+<body>
+<h1>PDF 版面預覽 — 報價單 / 派工單 / 請款單</h1>
+<div class="grid">
+  <div class="card"><h2>報價單 (A4)</h2><iframe src="quotation.html" height="1120"></iframe></div>
+  <div class="card"><h2>派工單 (24×14cm)</h2><iframe src="work-order.html" height="560"></iframe></div>
+  <div class="card"><h2>請款單 (A4)</h2><iframe src="statement.html" height="1120"></iframe></div>
+</div>
+</body>
+</html>

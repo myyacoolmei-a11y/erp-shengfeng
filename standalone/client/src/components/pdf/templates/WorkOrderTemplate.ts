@@ -1,7 +1,7 @@
 // 派工單 Template — 24×14cm Landscape, 工程現場單據風格
 // 獨立版面：修改此檔不影響其他 Template
 
-import { logoUrl, COMPANY, COLORS, esc } from "./brand-config";
+import { logoUrl, COMPANY, COLORS, esc, PDF_LAYOUT_CSS } from "./brand-config";
 
 interface EquipmentRow {
   brand?: string | null;
@@ -63,10 +63,10 @@ function buildMaterialRows(equipment: EquipmentRow[]): string {
   return equipment.map((it, i) => `
     <tr>
       <td class="tac">${i + 1}</td>
-      <td class="tal">${esc(equipmentSpec(it))}</td>
+      <td class="tal col-item">${esc(equipmentSpec(it))}</td>
       <td class="tac">${it.quantity ?? ""}</td>
       <td class="tac">台</td>
-      <td class="tal small">${esc(equipmentRemark(it))}</td>
+      <td class="tal small col-notes">${esc(equipmentRemark(it))}</td>
     </tr>`).join("");
 }
 
@@ -160,13 +160,12 @@ table{
 }
 .head-row{background:${COLORS.black};color:${COLORS.primary}}
 .head-row th{
-  border:1px solid ${COLORS.black};padding:3px 4px;
+  border:1px solid ${COLORS.black};
   font-size:8.5pt;font-weight:700;text-align:center;
 }
 tbody td{
-  border:1px solid ${COLORS.black};padding:3px 4px;
-  vertical-align:top;font-size:9pt;line-height:1.45;
-  min-height:7mm;
+  border:1px solid ${COLORS.black};
+  vertical-align:middle;font-size:9pt;
 }
 tbody tr{page-break-inside:avoid;break-inside:avoid}
 
@@ -185,9 +184,9 @@ tbody tr{page-break-inside:avoid;break-inside:avoid}
 .box{
   border:1px solid ${COLORS.borderGray};
   border-left:3px solid ${COLORS.primary};
-  padding:2mm 3mm;
+  padding:3mm 4mm;
   font-size:9pt;white-space:pre-wrap;
-  line-height:1.5;background:#fafafa;
+  line-height:1.6;background:#fafafa;
   page-break-inside:auto;break-inside:auto;
 }
 
@@ -203,14 +202,14 @@ tbody tr{page-break-inside:avoid;break-inside:avoid}
 }
 .sig{
   text-align:center;border-top:1.5px solid ${COLORS.black};
-  padding-top:2mm;font-size:8pt;color:${COLORS.midGray};
-  padding-bottom:2mm;
+  font-size:8.5pt;color:${COLORS.midGray};
 }
 .pf{
   display:flex;justify-content:space-between;align-items:center;
   font-size:6.5pt;color:${COLORS.lightGray};
   border-top:1px solid ${COLORS.borderGray};padding-top:1.5mm;
 }
+${PDF_LAYOUT_CSS}
 </style>
 </head>
 <body>

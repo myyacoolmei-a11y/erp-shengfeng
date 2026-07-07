@@ -1,7 +1,7 @@
 // 報價單 Template — A4 Portrait, 正式工程文件風格
 // 獨立版面：修改此檔不影響其他 Template
 
-import { logoUrl, COMPANY, COLORS, esc, fmtMoney } from "./brand-config";
+import { logoUrl, COMPANY, COLORS, esc, fmtMoney, PDF_LAYOUT_CSS } from "./brand-config";
 
 export function buildQuotationHtml(quote: any): string {
   const items: any[] = quote.items ?? [];
@@ -32,23 +32,23 @@ export function buildQuotationHtml(quote: any): string {
         <td class="tac">${i + 1}</td>
         <td class="tac">${esc(item.category)}</td>
         <td class="tac">${esc(item.brand || "—")}</td>
-        <td class="tal">${esc(item.itemName)}</td>
+        <td class="tal col-item">${esc(item.itemName)}</td>
         <td class="tac">${Number(item.quantity)}</td>
         <td class="tac">${esc(item.unit)}</td>
         <td class="tar">${fmtMoney(Number(item.unitPrice))}</td>
         <td class="tar fw7">${fmtMoney(Number(item.subtotal))}</td>
-        <td class="tal small">${esc(item.notes || "")}</td>
+        <td class="tal small col-notes">${esc(item.notes || "")}</td>
       </tr>`).join("")
     : `<tr>
         <td class="tac">1</td>
         <td class="tac">工程</td>
         <td class="tac">—</td>
-        <td class="tal">${esc(quote.title)}</td>
+        <td class="tal col-item">${esc(quote.title)}</td>
         <td class="tac">1</td>
         <td class="tac">式</td>
         <td class="tar">${fmtMoney(rawTotal)}</td>
         <td class="tar fw7">${fmtMoney(rawTotal)}</td>
-        <td class="tal small"></td>
+        <td class="tal small col-notes"></td>
       </tr>`;
 
   const padCount = Math.max(0, maxRows - displayItems.length - (items.length === 0 ? 1 : 0));
@@ -117,16 +117,16 @@ body{
 /* ===== Table ===== */
 table{
   width:100%;border-collapse:collapse;
-  table-layout:fixed;font-size:8.5pt;
+  table-layout:fixed;font-size:9pt;
 }
 .head-row{background:${COLORS.black};color:${COLORS.primary}}
 .head-row th{
-  border:1px solid ${COLORS.black};padding:2px 3px;
-  font-size:7.5pt;font-weight:700;text-align:center;
+  border:1px solid ${COLORS.black};
+  font-size:8.5pt;font-weight:700;text-align:center;
 }
 tbody td{
-  border:1px solid ${COLORS.black};padding:2px 3px;
-  vertical-align:top;font-size:8.5pt;
+  border:1px solid ${COLORS.black};
+  vertical-align:middle;font-size:9pt;
 }
 tr{page-break-inside:avoid;break-inside:avoid}
 
@@ -158,12 +158,12 @@ tr{page-break-inside:avoid;break-inside:avoid}
 .box{
   flex:1;border:1px solid ${COLORS.borderGray};
   border-left:3px solid ${COLORS.primary};
-  padding:2mm 2.5mm;font-size:8.5pt;
-  white-space:pre-wrap;line-height:1.5;
+  padding:3mm 4mm;font-size:9pt;
+  white-space:pre-wrap;line-height:1.6;
   color:${COLORS.darkGray};background:#fafafa;
   min-height:18mm;
 }
-.note-line{font-size:8pt;line-height:1.5;color:${COLORS.darkGray}}
+.note-line{font-size:8.5pt;line-height:1.6;color:${COLORS.darkGray}}
 
 /* ===== Amount box ===== */
 .amt-box{
@@ -171,14 +171,14 @@ tr{page-break-inside:avoid;break-inside:avoid}
   border:2px solid ${COLORS.primary};overflow:hidden;
 }
 .amt-r{
-  display:flex;justify-content:space-between;
-  padding:1.5mm 3mm;border-bottom:1px solid #ebebeb;
-  font-size:8.5pt;
+  display:flex;justify-content:space-between;align-items:center;
+  border-bottom:1px solid #ebebeb;
+  font-size:9pt;
 }
-.amt-r .lbl{color:${COLORS.lightGray}}
-.amt-r .val{font-weight:600}
+.amt-r .lbl{color:${COLORS.lightGray};padding-right:3mm}
+.amt-r .val{font-weight:600;text-align:right}
 .amt-total{
-  background:${COLORS.black};padding:2mm 3mm;
+  background:${COLORS.black};
   display:flex;justify-content:space-between;align-items:center;
 }
 .amt-total .lbl{color:${COLORS.primary};font-size:9pt;font-weight:700;letter-spacing:1px}
@@ -207,8 +207,7 @@ tr{page-break-inside:avoid;break-inside:avoid}
 }
 .sig-box{
   text-align:center;border-top:1.5px solid ${COLORS.black};
-  padding-top:2mm;font-size:8pt;color:${COLORS.midGray};
-  padding-bottom:4mm;
+  font-size:8.5pt;color:${COLORS.midGray};
 }
 
 /* ===== Footer ===== */
@@ -218,6 +217,7 @@ tr{page-break-inside:avoid;break-inside:avoid}
   font-size:6.5pt;color:${COLORS.lightGray};
   border-top:1px solid ${COLORS.borderGray};padding-top:1mm;
 }
+${PDF_LAYOUT_CSS}
 </style>
 </head>
 <body>
@@ -288,7 +288,7 @@ tr{page-break-inside:avoid;break-inside:avoid}
     </div>
     <div style="flex:1">
       <div class="stitle">備註</div>
-      <div style="border:1px solid ${COLORS.borderGray};padding:2mm 2.5mm;font-size:8.5pt;min-height:18mm">
+      <div class="notes-box">
         ${notesList}
       </div>
     </div>
