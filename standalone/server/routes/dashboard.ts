@@ -1,7 +1,18 @@
 import { Router, type IRouter } from "express";
-import { eq, count, sum, lte, gte, and, desc, ne, or, gt, sql } from "drizzle-orm";
-import { db, customersTable, quotesTable, workOrdersTable, paymentsTable, maintenanceRemindersTable, warrantiesTable, receivablesTable } from "@workspace/db";
+import { eq, count, sum, lte, gte, and, desc, ne, inArray } from "drizzle-orm";
+import {
+  db,
+  customersTable,
+  quotesTable,
+  quoteItemsTable,
+  workOrdersTable,
+  paymentsTable,
+  maintenanceRemindersTable,
+  warrantiesTable,
+  receivablesTable,
+} from "@workspace/db";
 import { requireRole } from "../lib/auth";
+import { computeQuoteDisplayTotal } from "../lib/quoteTotals";
 
 const router: IRouter = Router();
 
@@ -19,10 +30,19 @@ function isFullyPaidStatus(status: string | null | undefined): boolean {
   return s === "paid" || s === "已收款" || s === "已收";
 }
 
-/** Has outstanding balance */
+/** Outstanding balance: totalAmount - receivedAmount */
 function remainingAmount(total: unknown, received: unknown): number {
   return Math.max(0, toAmount(total) - toAmount(received));
 }
+
+const QUOTE_SUMMARY_SELECT = {
+  id: quotesTable.id,
+  amount: quotesTable.amount,
+  finalAmount: quotesTable.finalAmount,
+  discountAmount: quotesTable.discountAmount,
+  taxType: quotesTable.taxType,
+  createdAt: quotesTable.createdAt,
+};
 
 router.get("/dashboard/summary", requireRole("super_admin", "owner", "admin", "accountant"), async (req, res): Promise<void> => {
   const today = new Date().toISOString().split("T")[0];
@@ -33,6 +53,7 @@ router.get("/dashboard/summary", requireRole("super_admin", "owner", "admin", "a
   const now = new Date();
   const firstOfMonthStr = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split("T")[0];
   const firstOfMonthDate = new Date(now.getFullYear(), now.getMonth(), 1);
+  const lastOfMonthDate = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
 
   const [
     [totalCustomersResult],
@@ -51,13 +72,11 @@ router.get("/dashboard/summary", requireRole("super_admin", "owner", "admin", "a
     [todayWorkOrderCountResult],
     [todayPaymentsResult],
     [todayMaintenanceResult],
-    [monthlyQuoteAmountResult],
     [monthlyWonAmountResult],
     [monthlyPaidFromPaymentsResult],
     [todayDueResult],
     todayWorkOrderRows,
-    receivablesPaidThisMonthRows,
-    receivablesPaidTodayRows,
+    monthlyQuoteRows,
   ] = await Promise.all([
     db.select({ count: count() }).from(customersTable),
     db.select({ count: count() }).from(quotesTable),
@@ -100,17 +119,19 @@ router.get("/dashboard/summary", requireRole("super_admin", "owner", "admin", "a
         eq(maintenanceRemindersTable.status, "待處理"),
       )
     ),
-    // Monthly quote amount — prefer finalAmount, fallback to amount
-    db.select({
-      total: sum(sql`COALESCE(${quotesTable.finalAmount}::numeric, ${quotesTable.amount}::numeric, 0)`),
-    }).from(quotesTable).where(gte(quotesTable.createdAt, firstOfMonthDate)),
-    // Monthly won = receivables created this month (all statuses: unpaid / partial / paid)
+    // Monthly won = receivables created this month (unpaid / partial / paid all count)
     db.select({ total: sum(receivablesTable.totalAmount) }).from(receivablesTable).where(
-      gte(receivablesTable.createdAt, firstOfMonthDate)
+      and(
+        gte(receivablesTable.createdAt, firstOfMonthDate),
+        lte(receivablesTable.createdAt, lastOfMonthDate),
+      )
     ),
-    // Monthly paid from independent payment records
+    // Monthly paid — payments table only (same source as 收款紀錄 page)
     db.select({ total: sum(paymentsTable.amount) }).from(paymentsTable).where(
-      gte(paymentsTable.paymentDate, firstOfMonthStr)
+      and(
+        gte(paymentsTable.paymentDate, firstOfMonthStr),
+        lte(paymentsTable.paymentDate, today),
+      )
     ),
     db.select({ count: count() }).from(receivablesTable).where(
       and(
@@ -130,53 +151,51 @@ router.get("/dashboard/summary", requireRole("super_admin", "owner", "admin", "a
       .leftJoin(customersTable, eq(workOrdersTable.customerId, customersTable.id))
       .where(eq(workOrdersTable.scheduledDate, today))
       .orderBy(workOrdersTable.scheduledTime),
-    // Receivable payments this month (actualPaymentDate or created this month with received > 0)
-    db.select({
-      id: receivablesTable.id,
-      receivedAmount: receivablesTable.receivedAmount,
-    }).from(receivablesTable).where(
-      or(
-        gte(receivablesTable.actualPaymentDate, firstOfMonthStr),
-        and(
-          gte(receivablesTable.createdAt, firstOfMonthDate),
-          gt(receivablesTable.receivedAmount, "0"),
-        ),
+    // Quotes created this month — amount computed same as quotes list
+    db.select(QUOTE_SUMMARY_SELECT).from(quotesTable).where(
+      and(
+        gte(quotesTable.createdAt, firstOfMonthDate),
+        lte(quotesTable.createdAt, lastOfMonthDate),
       )
     ),
-    // Receivable payments today (actualPaymentDate = today)
-    db.select({
-      receivedAmount: receivablesTable.receivedAmount,
-    }).from(receivablesTable).where(eq(receivablesTable.actualPaymentDate, today)),
   ]);
+
+  const monthlyQuoteIds = monthlyQuoteRows.map(q => q.id);
+  const monthlyQuoteItems = monthlyQuoteIds.length > 0
+    ? await db.select({
+        quoteId: quoteItemsTable.quoteId,
+        subtotal: quoteItemsTable.subtotal,
+      }).from(quoteItemsTable).where(inArray(quoteItemsTable.quoteId, monthlyQuoteIds))
+    : [];
+
+  const itemsByQuoteId = new Map<number, Array<{ subtotal?: unknown }>>();
+  for (const item of monthlyQuoteItems) {
+    const list = itemsByQuoteId.get(item.quoteId) ?? [];
+    list.push({ subtotal: item.subtotal });
+    itemsByQuoteId.set(item.quoteId, list);
+  }
+
+  let monthlyQuoteAmount = 0;
+  for (const quote of monthlyQuoteRows) {
+    monthlyQuoteAmount += computeQuoteDisplayTotal(quote, itemsByQuoteId.get(quote.id) ?? []);
+  }
 
   let totalUnpaid = 0;
   let overdueAmount = 0;
   for (const r of allReceivables) {
     const remaining = remainingAmount(r.totalAmount, r.receivedAmount);
+    if (remaining > 0) {
+      totalUnpaid += remaining;
+    }
     if (remaining <= 0) continue;
-    totalUnpaid += remaining;
     const isOverdueStatus = r.paymentStatus === "逾期" || r.paymentStatus?.toLowerCase() === "overdue";
     if (isOverdueStatus || (r.expectedPaymentDate && r.expectedPaymentDate < today && !isFullyPaidStatus(r.paymentStatus))) {
       overdueAmount += remaining;
     }
   }
 
-  const monthlyPaidFromPayments = toAmount(monthlyPaidFromPaymentsResult.total);
-  const monthlyPaidFromReceivables = receivablesPaidThisMonthRows.reduce(
-    (s, r) => s + toAmount(r.receivedAmount),
-    0,
-  );
-  // Payment records take priority; add receivable received amounts (most collections go through AR)
-  const monthlyPaidAmount = monthlyPaidFromPayments + monthlyPaidFromReceivables;
-
-  const todayPaymentsFromTable = toAmount(todayPaymentsResult.total);
-  const todayPaymentsFromReceivables = receivablesPaidTodayRows.reduce(
-    (s, r) => s + toAmount(r.receivedAmount),
-    0,
-  );
-  const todayPaymentsAmount = todayPaymentsFromTable + todayPaymentsFromReceivables;
-
-  const paidThisMonthAR = monthlyPaidFromReceivables;
+  const monthlyPaidAmount = toAmount(monthlyPaidFromPaymentsResult.total);
+  const todayPaymentsAmount = toAmount(todayPaymentsResult.total);
 
   res.json({
     totalCustomers: totalCustomersResult.count,
@@ -191,7 +210,7 @@ router.get("/dashboard/summary", requireRole("super_admin", "owner", "admin", "a
     totalReceivables: toAmount(totalReceivablesResult.total),
     totalUnpaid,
     overdueAmount,
-    paidThisMonthAR,
+    paidThisMonthAR: monthlyPaidAmount,
     invoiceNotIssuedCount: invoiceNotIssuedResult.count,
     recentCustomers: recentCustomers.map(c => ({
       ...c,
@@ -201,7 +220,7 @@ router.get("/dashboard/summary", requireRole("super_admin", "owner", "admin", "a
     todayWorkOrderCount: todayWorkOrderCountResult.count,
     todayPaymentsAmount,
     todayMaintenanceCount: todayMaintenanceResult.count,
-    monthlyQuoteAmount: toAmount(monthlyQuoteAmountResult.total),
+    monthlyQuoteAmount,
     monthlyWonAmount: toAmount(monthlyWonAmountResult.total),
     monthlyPaidAmount,
     todayDueCount: todayDueResult.count,
