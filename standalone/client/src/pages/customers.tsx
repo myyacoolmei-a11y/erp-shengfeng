@@ -173,7 +173,11 @@ export default function Customers() {
           <p className="text-sm text-muted-foreground mt-0.5">管理所有客戶資料</p>
         </div>
         {canWrite && (
-          <Button onClick={() => setShowCreate(true)} size="sm">
+          <Button
+            onClick={() => setShowCreate(true)}
+            size="sm"
+            className="text-black hover:text-black active:text-black disabled:text-black [&_svg]:text-black disabled:opacity-70"
+          >
             <Plus className="h-4 w-4 mr-1" />新增客戶
           </Button>
         )}
