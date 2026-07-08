@@ -33,6 +33,7 @@ export function buildQuotationHtml(quote: any): string {
         <td class="tac">${esc(item.category)}</td>
         <td class="tac">${esc(item.brand || "—")}</td>
         <td class="tal col-item">${esc(item.itemName)}</td>
+        <td class="tac">${esc(item.model || "—")}</td>
         <td class="tac">${Number(item.quantity)}</td>
         <td class="tac">${esc(item.unit)}</td>
         <td class="tar">${fmtMoney(Number(item.unitPrice))}</td>
@@ -44,6 +45,7 @@ export function buildQuotationHtml(quote: any): string {
         <td class="tac">工程</td>
         <td class="tac">—</td>
         <td class="tal col-item">${esc(quote.title)}</td>
+        <td class="tac">—</td>
         <td class="tac">1</td>
         <td class="tac">式</td>
         <td class="tar">${fmtMoney(rawTotal)}</td>
@@ -55,8 +57,8 @@ export function buildQuotationHtml(quote: any): string {
   const padRows = Array.from({ length: padCount }, () => `
     <tr>
       <td class="tac">&nbsp;</td>
-      <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
-      <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
+      <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
+      <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
     </tr>`).join("");
 
   const notesList = (quote.notes ?? "").split(/\n/).filter((l: string) => l.trim()).slice(0, 3)
@@ -296,6 +298,7 @@ ${PDF_LAYOUT_CSS}
         <th class="col-w10">類別</th>
         <th class="col-w8">品牌</th>
         <th>品項</th>
+        <th class="col-w10">機型</th>
         <th class="col-w6">數量</th>
         <th class="col-w6">單位</th>
         <th class="col-w12">單價</th>

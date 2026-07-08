@@ -2,8 +2,9 @@
  * Quote → Work Order workflow sync.
  * Keeps quotes.dispatchStatus aligned with quote.status + linked work order.
  */
-import { eq, inArray, desc } from "drizzle-orm";
+import { eq, inArray, desc, or } from "drizzle-orm";
 import { db, quotesTable, workOrdersTable } from "@workspace/db";
+import { isQuoteWon } from "./quoteStatus";
 
 export const DISPATCH_STATUSES = ["未派工", "待派工", "已派工", "施工中", "已完工"] as const;
 export type DispatchStatus = typeof DISPATCH_STATUSES[number];
@@ -13,7 +14,7 @@ export function deriveDispatchStatus(
   workOrderStatus: string | null | undefined,
 ): DispatchStatus {
   if (!workOrderStatus) {
-    return quoteStatus === "已接受" ? "待派工" : "未派工";
+    return isQuoteWon(quoteStatus) ? "待派工" : "未派工";
   }
   if (workOrderStatus === "已完成") return "已完工";
   if (workOrderStatus === "進行中") return "施工中";
@@ -118,7 +119,7 @@ export async function listPendingDispatchQuotes(limit = 15) {
       createdAt: quotesTable.createdAt,
     })
     .from(quotesTable)
-    .where(eq(quotesTable.status, "已接受"))
+    .where(or(eq(quotesTable.status, "已成交"), eq(quotesTable.status, "已接受")))
     .orderBy(desc(quotesTable.createdAt));
 
   const ids = rows.map(r => r.id);

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSearch, useLocation } from "wouter";
 import {
   useListQuotes, useCreateQuote, useUpdateQuote, useDeleteQuote,
@@ -17,7 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { WorkOrderFormFields, makeEmpty, buildPayload, hasWorkOrderCustomer, type WOForm } from "@/components/work-order-form";
+import { makeEmpty, buildPayload, hasWorkOrderCustomer, type WOForm } from "@/components/work-order-form";
 import { CustomerSelector, type CustomerSelectorValue } from "@/components/customer-selector";
 import { PdfPreviewDialog } from "@/components/pdf/pdf-preview-dialog";
 import {
@@ -28,6 +28,12 @@ import {
 import { buildQuotationHtml } from "@/components/pdf/templates/QuotationTemplate";
 import { computeQuoteAmounts } from "@/components/pdf/quote-amounts";
 import { invalidateStatistics } from "@/lib/invalidateStatistics";
+import {
+  formatQuoteNumber,
+  buildWorkOrderFormFromQuote,
+  canConvertQuoteToWorkOrder,
+  normalizeQuoteStatus,
+} from "@/lib/quoteToWorkOrder";
 
 // ── Constants ──────────────────────────────────────────────────────────────
 const CATEGORIES = ["裝新機", "保養", "維修", "移機", "拆機", "冷媒工程", "配管工程", "其他"];
@@ -44,14 +50,13 @@ const CATEGORY_ITEMS: Record<string, string[]> = {
 const BRANDS = ["冰點", "聲寶", "國際", "三菱重工", "金鼎", "格力", "三洋", "日立", "奇美", "其他"];
 const KNOWN_BRANDS = BRANDS.filter(b => b !== "其他");
 const UNITS = ["台", "式", "個", "組", "套", "次", "公尺", "公斤"];
-const STATUSES = ["草稿", "已送出", "已接受", "已拒絕", "已完成"];
-const FILTER_TABS = ["全部", "草稿", "已送出", "已接受", "待派工", "已派工", "施工中", "已完成"];
+const STATUSES = ["草稿", "已送出", "已成交", "已拒絕"];
+const FILTER_TABS = ["全部", "草稿", "已送出", "已成交", "待派工", "已派工", "已拒絕"];
 const STATUS_COLORS: Record<string, string> = {
   "草稿": "bg-gray-100 text-gray-700",
   "已送出": "bg-blue-100 text-blue-700",
-  "已接受": "bg-green-100 text-green-700",
+  "已成交": "bg-green-100 text-green-700",
   "已拒絕": "bg-red-100 text-red-700",
-  "已完成": "bg-emerald-100 text-emerald-700",
 };
 const DISPATCH_COLORS: Record<string, string> = {
   "未派工": "bg-slate-100 text-slate-600",
@@ -63,8 +68,8 @@ const DISPATCH_COLORS: Record<string, string> = {
 
 function quoteMatchesFilter(q: any, filter: string): boolean {
   if (filter === "全部") return true;
-  if (filter === "已完成") return q.status === "已完成" || q.dispatchStatus === "已完工";
-  if (["待派工", "已派工", "施工中"].includes(filter)) return q.dispatchStatus === filter;
+  if (["待派工", "已派工"].includes(filter)) return q.dispatchStatus === filter;
+  if (filter === "已成交") return normalizeQuoteStatus(q.status) === "已成交";
   return q.status === filter;
 }
 
@@ -73,6 +78,7 @@ interface QuoteItem {
   category: string;
   itemName: string;
   brand: string;
+  model: string;
   quantity: number;
   unit: string;
   unitPrice: number;
@@ -96,7 +102,7 @@ interface QuoteForm {
 }
 
 const DEFAULT_ITEM = (): QuoteItem => ({
-  category: "裝新機", itemName: "壁掛分離式", brand: "冰點",
+  category: "裝新機", itemName: "壁掛分離式", brand: "冰點", model: "",
   quantity: 1, unit: "台", unitPrice: 0, notes: "", sortOrder: 0,
 });
 const emptyForm = (): QuoteForm => ({
@@ -133,6 +139,7 @@ function formToApi(f: QuoteForm) {
       category: item.category,
       itemName: item.itemName,
       brand: item.brand || undefined,
+      model: item.model || undefined,
       quantity: item.quantity,
       unit: item.unit,
       unitPrice: item.unitPrice,
@@ -160,6 +167,7 @@ function quoteToForm(q: any): QuoteForm {
       category: item.category ?? "其他",
       itemName: item.itemName ?? "",
       brand: item.brand ?? "",
+      model: item.model ?? "",
       quantity: Number(item.quantity ?? 1),
       unit: item.unit ?? "台",
       unitPrice: Number(item.unitPrice ?? 0),
@@ -171,9 +179,7 @@ function quoteToForm(q: any): QuoteForm {
 
 // ── Shared PDF V2 helpers ────────────────────────────────────────────────
 function getQuoteNo(quote: any): string {
-  const d = quote.createdAt ? new Date(quote.createdAt) : new Date();
-  const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
-  return `Q-${ymd}-${String(quote.id).padStart(4, "0")}`;
+  return formatQuoteNumber(quote);
 }
 
 async function printQuote(
@@ -237,7 +243,7 @@ function ItemCard({ item, index, onChange, onDelete }: {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
         <div className="space-y-1">
           <Label className="text-xs">類別</Label>
           <Select value={item.category} onValueChange={v => {
@@ -246,6 +252,17 @@ function ItemCard({ item, index, onChange, onDelete }: {
             <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
             <SelectContent>{CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
           </Select>
+        </div>
+
+        <div className="space-y-1">
+          <Label className="text-xs">品牌</Label>
+          <Select value={isCustomBrand ? "其他" : (item.brand || "其他")} onValueChange={v => onChange({ ...item, brand: v === "其他" ? "" : v })}>
+            <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>{BRANDS.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}</SelectContent>
+          </Select>
+          {(isCustomBrand || item.brand === "") && (
+            <Input className="h-7 text-xs mt-1" value={item.brand} onChange={e => onChange({ ...item, brand: e.target.value })} placeholder="請輸入品牌" />
+          )}
         </div>
 
         <div className="space-y-1">
@@ -267,14 +284,8 @@ function ItemCard({ item, index, onChange, onDelete }: {
         </div>
 
         <div className="space-y-1">
-          <Label className="text-xs">品牌</Label>
-          <Select value={isCustomBrand ? "其他" : (item.brand || "其他")} onValueChange={v => onChange({ ...item, brand: v === "其他" ? "" : v })}>
-            <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-            <SelectContent>{BRANDS.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}</SelectContent>
-          </Select>
-          {(isCustomBrand || item.brand === "") && (
-            <Input className="h-7 text-xs mt-1" value={item.brand} onChange={e => onChange({ ...item, brand: e.target.value })} placeholder="請輸入品牌" />
-          )}
+          <Label className="text-xs">機型</Label>
+          <Input className="h-8 text-xs" value={item.model} onChange={e => onChange({ ...item, model: e.target.value })} placeholder="例：RXV-28H" />
         </div>
       </div>
 
@@ -330,12 +341,12 @@ export default function QuotesPage() {
 
   const searchParams = new URLSearchParams(search);
   const filterCustomerName = searchParams.get("customer") || "";
+  const focusQuoteId = parseInt(searchParams.get("focusId") ?? "0", 10) || null;
 
   const { data: quotes, isLoading } = useListQuotes();
   const { data: customers } = useListCustomers();
   const { data: employees } = useListEmployees();
   const salesReps = employees?.filter((e: any) => e.position === "業務" && e.status !== "離職") ?? [];
-  const technicianOptions = employees?.filter((e: any) => e.position === "師傅技師" && e.status !== "離職").map((e: any) => ({ value: String(e.id), label: e.name })) ?? [];
 
   const updateCustomerMutation = useUpdateCustomer({
     mutation: {
@@ -382,6 +393,7 @@ export default function QuotesPage() {
     mutation: {
       onSuccess: () => {
         invalidateStatistics(qc);
+        invQuotes();
         setConvertItem(null);
         toast({ title: "派工單建立成功" });
       },
@@ -398,6 +410,12 @@ export default function QuotesPage() {
   }
 
   function openEdit(q: any) { setForm(quoteToForm(q)); setEditItem(q); }
+
+  useEffect(() => {
+    if (!focusQuoteId || !quotes?.length) return;
+    const q = quotes.find((x: any) => x.id === focusQuoteId);
+    if (q) openEdit(q);
+  }, [focusQuoteId, quotes]);
 
   function addItem() { setForm(f => ({ ...f, items: [...f.items, { ...DEFAULT_ITEM(), sortOrder: f.items.length }] })); }
   function removeItem(idx: number) { setForm(f => ({ ...f, items: f.items.filter((_, i) => i !== idx) })); }
@@ -463,7 +481,7 @@ export default function QuotesPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="font-medium text-sm">{q.title}</span>
-                      <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${STATUS_COLORS[q.status] ?? "bg-gray-100 text-gray-700"}`}>{q.status}</span>
+                      <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${STATUS_COLORS[normalizeQuoteStatus(q.status)] ?? "bg-gray-100 text-gray-700"}`}>{normalizeQuoteStatus(q.status)}</span>
                       <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${DISPATCH_COLORS[q.dispatchStatus ?? "未派工"] ?? "bg-slate-100 text-slate-600"}`}>
                         {q.dispatchStatus === "待派工" ? "🟠 " : q.dispatchStatus === "已派工" ? "🟢 " : ""}{q.dispatchStatus ?? "未派工"}
                       </span>
@@ -488,20 +506,10 @@ export default function QuotesPage() {
                     <Button variant="ghost" size="icon" className="h-7 w-7" title="列印/PDF" onClick={() => printQuote(q, setPdfPreview, toast)}><Printer className="h-3.5 w-3.5" /></Button>
                     <Button variant="ghost" size="icon" className="h-7 w-7 text-green-600 hover:text-green-700" title="LINE 分享" onClick={() => shareQuoteViaLine(q, setPdfPreview, toast)}><Share2 className="h-3.5 w-3.5" /></Button>
                     <Button variant="ghost" size="icon" className="h-7 w-7" title="複製" onClick={() => handleCopy(q)}><Copy className="h-3.5 w-3.5" /></Button>
-                    {(q.dispatchStatus === "待派工" || (q.status === "已接受" && q.dispatchStatus === "未派工")) && (
+                    {canConvertQuoteToWorkOrder(q) && (
                       <Button variant="ghost" size="icon" className="h-7 w-7 text-blue-600" title="轉為派工單" onClick={() => {
                         setConvertItem(q);
-                        setWoForm({
-                          ...makeEmpty(),
-                          quoteId: q.id,
-                          customerId: q.customerId ?? 0,
-                          customerName: q.customerId ? "" : (q.customerName ?? ""),
-                          title: q.title ?? "",
-                          contactPerson: q.contactPerson ?? "",
-                          mobilePhone: q.customerPhone ?? "",
-                          installAddress: q.address ?? "",
-                          description: q.description ?? "",
-                        });
+                        setWoForm(buildWorkOrderFormFromQuote(q));
                       }}><Wrench className="h-3.5 w-3.5" /></Button>
                     )}
                     <Button variant="ghost" size="icon" className="h-7 w-7" title="編輯" onClick={() => openEdit(q)}><Pencil className="h-3.5 w-3.5" /></Button>
@@ -679,18 +687,39 @@ export default function QuotesPage() {
       {/* Convert to Work Order */}
       {convertItem && (
         <Dialog open onOpenChange={() => setConvertItem(null)}>
-          <DialogContent className="max-w-2xl w-full max-h-[92dvh] overflow-y-auto p-4 sm:p-6">
-            <DialogHeader><DialogTitle>轉為派工單</DialogTitle></DialogHeader>
+          <DialogContent className="max-w-lg w-full max-h-[92dvh] overflow-y-auto p-4 sm:p-6">
+            <DialogHeader><DialogTitle>由報價單建立派工單</DialogTitle></DialogHeader>
             <form onSubmit={handleConvert} className="space-y-4 mt-1">
-              <WorkOrderFormFields
-                form={woForm}
-                setForm={setWoForm}
-                customers={customers ?? []}
-                technicianOptions={technicianOptions}
-                quotes={convertItem ? [convertItem] : []}
-                showQuoteSelector={false}
-                customerDisabled={!!(convertItem?.customerId || convertItem?.customerName)}
-              />
+              <div className="rounded-lg border bg-muted/30 p-3 text-sm space-y-2">
+                <p className="font-mono text-xs text-muted-foreground">{formatQuoteNumber(convertItem)}</p>
+                <p className="font-semibold">{convertItem.title}</p>
+                <div className="text-xs text-muted-foreground space-y-0.5">
+                  <p>客戶：{convertItem.customerName ?? "—"} · {convertItem.customerPhone ?? "—"}</p>
+                  <p>聯絡人：{convertItem.contactPerson ?? "—"} · 業務：{convertItem.salesRepName ?? "—"}</p>
+                  <p>地址：{convertItem.address ?? "—"}</p>
+                  {convertItem.description && <p>服務內容：{convertItem.description}</p>}
+                  {(convertItem.items ?? []).length > 0 && (
+                    <ul className="list-disc pl-4 mt-1">
+                      {(convertItem.items as any[]).map((it: any, i: number) => (
+                        <li key={i}>
+                          {it.category} / {it.brand || "—"} / {it.model || it.itemName || "—"} ×{it.quantity}{it.unit}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">以上資料將自動帶入派工單，僅需確認施工排程（選填）。</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>預定施工日</Label>
+                  <Input type="date" value={woForm.scheduledDate} onChange={e => setWoForm(f => ({ ...f, scheduledDate: e.target.value }))} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>預定時間</Label>
+                  <Input value={woForm.scheduledTime} onChange={e => setWoForm(f => ({ ...f, scheduledTime: e.target.value }))} placeholder="例：09:00" />
+                </div>
+              </div>
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setConvertItem(null)}>取消</Button>
                 <Button type="submit" disabled={createWoMutation.isPending}><Wrench className="h-3.5 w-3.5 mr-1" />建立派工單</Button>

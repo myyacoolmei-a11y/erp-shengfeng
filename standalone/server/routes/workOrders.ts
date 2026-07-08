@@ -6,10 +6,12 @@ import {
   workOrderEquipmentItemsTable,
   progressTable,
   customersTable,
+  quotesTable,
 } from "@workspace/db";
 import { CreateWorkOrderBody, UpdateWorkOrderBody, CreateProgressBody } from "@workspace/api-zod";
 import { requireRole } from "../lib/auth";
 import { syncQuoteDispatchStatus } from "../lib/quoteWorkflow";
+import { formatQuoteNumber } from "../lib/quoteStatus";
 
 const router: IRouter = Router();
 
@@ -29,6 +31,7 @@ const WO_SELECT = {
   storedCustomerName: workOrdersTable.customerName,
   linkedCustomerName: customersTable.name,
   quoteId: workOrdersTable.quoteId,
+  linkedQuoteCreatedAt: quotesTable.createdAt,
   workOrderNumber: workOrdersTable.workOrderNumber,
   title: workOrdersTable.title,
   status: workOrdersTable.status,
@@ -102,10 +105,14 @@ function resolveEquipmentItems(order: Record<string, unknown>, dbItems: ReturnTy
 }
 
 function formatOrder(o: Record<string, unknown>, equipmentItems: ReturnType<typeof serializeEquipmentItem>[] = []) {
-  const { storedCustomerName, linkedCustomerName, ...rest } = o as any;
+  const { storedCustomerName, linkedCustomerName, linkedQuoteCreatedAt, ...rest } = o as any;
+  const quoteId = rest.quoteId as number | null | undefined;
   return {
     ...rest,
     customerName: (linkedCustomerName as string | null) ?? (storedCustomerName as string | null) ?? null,
+    quoteNumber: quoteId != null
+      ? formatQuoteNumber(quoteId, linkedQuoteCreatedAt ?? rest.createdAt)
+      : null,
     equipmentItems: resolveEquipmentItems(o, equipmentItems),
     createdAt: isoStr(o.createdAt),
     updatedAt: isoStr(o.updatedAt),
@@ -190,6 +197,7 @@ router.get("/work-orders", requireRole(...WO_READ_ROLES), async (req, res): Prom
     .select(WO_SELECT)
     .from(workOrdersTable)
     .leftJoin(customersTable, eq(workOrdersTable.customerId, customersTable.id))
+    .leftJoin(quotesTable, eq(workOrdersTable.quoteId, quotesTable.id))
     .where(conditions.length > 0 ? and(...conditions) : undefined)
     .orderBy(workOrdersTable.createdAt);
 
@@ -248,6 +256,7 @@ router.get("/work-orders/:id", requireRole(...WO_READ_ROLES), async (req, res): 
     .select(WO_SELECT)
     .from(workOrdersTable)
     .leftJoin(customersTable, eq(workOrdersTable.customerId, customersTable.id))
+    .leftJoin(quotesTable, eq(workOrdersTable.quoteId, quotesTable.id))
     .where(eq(workOrdersTable.id, id));
 
   if (!order) { res.status(404).json({ error: "找不到派工單" }); return; }

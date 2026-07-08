@@ -9,6 +9,7 @@ export const quoteItemsTable = pgTable("quote_items", {
   category: text("category").notNull().default("其他"),
   itemName: text("item_name").notNull().default(""),
   brand: text("brand"),
+  model: text("model"),
   quantity: numeric("quantity", { precision: 10, scale: 2 }).notNull().default("1"),
   unit: text("unit").notNull().default("台"),
   unitPrice: numeric("unit_price", { precision: 12, scale: 2 }).notNull().default("0"),

@@ -440,6 +440,15 @@ export default function WorkOrders() {
                       {/* Row 2: customer + address */}
                       <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5">
                         <span className="text-sm font-semibold">{o.customerName}</span>
+                        {o.quoteId && (o as any).quoteNumber && (
+                          <button
+                            type="button"
+                            className="text-xs font-mono text-blue-600 hover:underline"
+                            onClick={() => navigate(`/quotes?focusId=${o.quoteId}`)}
+                          >
+                            來源報價單：{(o as any).quoteNumber}
+                          </button>
+                        )}
                         {o.installAddress && (
                           <span className="text-xs text-muted-foreground truncate max-w-[200px]">{o.installAddress}</span>
                         )}

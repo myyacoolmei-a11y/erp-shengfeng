@@ -143,6 +143,7 @@ export interface QuoteItemInput {
   category: string;
   itemName: string;
   brand?: string;
+  model?: string;
   quantity: number;
   unit: string;
   unitPrice: number;
@@ -157,6 +158,8 @@ export interface QuoteItem {
   itemName: string;
   /** @nullable */
   brand?: string | null;
+  /** @nullable */
+  model?: string | null;
   quantity: number;
   unit: string;
   unitPrice: number;
@@ -355,6 +358,8 @@ export interface WorkOrder {
   customerName?: string | null;
   /** @nullable */
   quoteId?: number | null;
+  /** @nullable */
+  quoteNumber?: string | null;
   /** @nullable */
   workOrderNumber?: string | null;
   title: string;

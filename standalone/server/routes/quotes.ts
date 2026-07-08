@@ -4,6 +4,7 @@ import { db, quotesTable, customersTable, employeesTable, quoteItemsTable } from
 import { CreateQuoteBody, UpdateQuoteBody } from "@workspace/api-zod";
 import { requireRole } from "../lib/auth";
 import { syncQuoteDispatchBatch, syncQuoteDispatchStatus } from "../lib/quoteWorkflow";
+import { normalizeQuoteStatus } from "../lib/quoteStatus";
 
 const router: IRouter = Router();
 
@@ -20,6 +21,7 @@ function serializeItem(item: typeof quoteItemsTable.$inferSelect) {
     category: item.category,
     itemName: item.itemName,
     brand: item.brand ?? null,
+    model: item.model ?? null,
     quantity: parseFloat(item.quantity as string),
     unit: item.unit,
     unitPrice: parseFloat(item.unitPrice as string),
@@ -44,7 +46,7 @@ function serializeQuote(
     amount: parseFloat(q.amount as string),
     discountAmount: q.discountAmount != null ? parseFloat(q.discountAmount as string) : null,
     finalAmount: q.finalAmount != null ? parseFloat(q.finalAmount as string) : null,
-    status: q.status,
+    status: normalizeQuoteStatus(q.status),
     dispatchStatus: workflow?.dispatchStatus ?? q.dispatchStatus ?? "未派工",
     workOrderId: workflow?.workOrderId ?? null,
     workOrderNumber: workflow?.workOrderNumber ?? null,
@@ -66,6 +68,7 @@ async function buildItemsInsert(itemInputs: any[], quoteId: number) {
     category: item.category ?? "其他",
     itemName: item.itemName ?? "",
     brand: item.brand || null,
+    model: item.model || null,
     quantity: String(item.quantity ?? 1),
     unit: item.unit ?? "台",
     unitPrice: String(item.unitPrice ?? 0),
@@ -158,6 +161,7 @@ router.post("/quotes", requireRole(...WRITE_ROLES), async (req, res): Promise<vo
 
   const data: any = {
     ...quoteFields,
+    status: normalizeQuoteStatus(quoteFields.status),
     amount: String(amount),
     discountAmount: discountAmount >= 0 ? String(discountAmount) : "0",
     finalAmount: String(finalAmount),
@@ -221,6 +225,7 @@ router.patch("/quotes/:id", requireRole(...WRITE_ROLES), async (req, res): Promi
     data["discountAmount"] = String(d);
   }
   if (quoteFields.finalAmount != null) data["finalAmount"] = String(quoteFields.finalAmount);
+  if (quoteFields.status != null) data["status"] = normalizeQuoteStatus(quoteFields.status);
 
   if (itemInputs !== undefined) {
     const itemArr: any[] = Array.isArray(itemInputs) ? itemInputs : [];

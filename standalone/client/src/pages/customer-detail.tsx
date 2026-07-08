@@ -29,7 +29,7 @@ import { useToast } from "@/hooks/use-toast";
 const STATUS_COLORS: Record<string, string> = {
   "草稿": "bg-gray-100 text-gray-700",
   "已送出": "bg-blue-100 text-blue-700",
-  "已接受": "bg-green-100 text-green-700",
+  "已成交": "bg-green-100 text-green-700",
   "已拒絕": "bg-red-100 text-red-700",
   "待處理": "bg-amber-100 text-amber-700",
   "進行中": "bg-blue-100 text-blue-700",

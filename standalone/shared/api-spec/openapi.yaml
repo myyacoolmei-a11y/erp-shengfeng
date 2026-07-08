@@ -2113,6 +2113,7 @@ components:
         category: { type: string }
         itemName: { type: string }
         brand: { type: string }
+        model: { type: string }
         quantity: { type: number }
         unit: { type: string }
         unitPrice: { type: number }
@@ -2128,6 +2129,7 @@ components:
         category: { type: string }
         itemName: { type: string }
         brand: { type: ["string", "null"] }
+        model: { type: ["string", "null"] }
         quantity: { type: number }
         unit: { type: string }
         unitPrice: { type: number }
@@ -2313,6 +2315,7 @@ components:
         customerId: { type: ["integer", "null"] }
         customerName: { type: ["string", "null"] }
         quoteId: { type: ["integer", "null"] }
+        quoteNumber: { type: ["string", "null"] }
         workOrderNumber: { type: ["string", "null"] }
         title: { type: string }
         status: { type: string }
