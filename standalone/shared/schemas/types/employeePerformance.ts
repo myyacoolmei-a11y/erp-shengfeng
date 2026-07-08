@@ -6,6 +6,7 @@ export interface EmployeePerformance {
   employeeName: string;
   position: string;
   month: string;
+  period?: string;
   sales: SalesPerformance;
   technician: TechnicianPerformance;
 }

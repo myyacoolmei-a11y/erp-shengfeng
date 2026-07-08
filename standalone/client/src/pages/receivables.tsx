@@ -3,10 +3,10 @@ import { useSearch, useLocation } from "wouter";
 import {
   useListReceivables, useCreateReceivable, useUpdateReceivable, useDeleteReceivable,
   useRecordReceivablePayment, useListCustomers,
-  getListReceivablesQueryKey, getListPaymentsQueryKey, getGetDashboardSummaryQueryKey,
 } from "@workspace/api-client-react";
 import type { Receivable } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { invalidateStatistics } from "@/lib/invalidateStatistics";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -92,11 +92,7 @@ export default function Receivables() {
   const { data: items = [], isLoading } = useListReceivables(apiFilter as any);
   const { data: customers = [] } = useListCustomers({ includeOld: "true" });
 
-  const invalidate = () => {
-    queryClient.invalidateQueries({ queryKey: getListReceivablesQueryKey() });
-    queryClient.invalidateQueries({ queryKey: getListPaymentsQueryKey() });
-    queryClient.invalidateQueries({ queryKey: getGetDashboardSummaryQueryKey() });
-  };
+  const invalidate = () => invalidateStatistics(queryClient);
 
   const createMutation = useCreateReceivable({ mutation: { onSuccess: () => { invalidate(); setShowCreate(false); toast({ title: "應收帳款已建立" }); } } });
   const updateMutation = useUpdateReceivable({ mutation: { onSuccess: () => { invalidate(); setEditItem(null); toast({ title: "已更新" }); } } });

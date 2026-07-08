@@ -5,9 +5,10 @@ import {
   useListCustomers, useListProgress, useCreateProgress,
   useCreatePayment, useCreateReceivable,
   useListEmployees, useListQuotes,
-  getListWorkOrdersQueryKey, getListProgressQueryKey, getListPaymentsQueryKey, getListReceivablesQueryKey,
+  getListWorkOrdersQueryKey, getListProgressQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { invalidateStatistics } from "@/lib/invalidateStatistics";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -144,7 +145,7 @@ function ProgressPanel({ workOrderId, customerId, workOrderTitle }: {
   const createPayment = useCreatePayment({
     mutation: {
       onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getListPaymentsQueryKey() });
+        invalidateStatistics(queryClient);
         setShowPayForm(false);
         toast({ title: "收款已登錄" });
       },
@@ -263,6 +264,7 @@ export default function WorkOrders() {
   const createMutation = useCreateWorkOrder({
     mutation: {
       onSuccess: () => {
+        invalidateStatistics(queryClient);
         queryClient.invalidateQueries({ queryKey: getListWorkOrdersQueryKey() });
         setShowCreate(false);
         toast({ title: "派工單已新增" });
@@ -272,6 +274,7 @@ export default function WorkOrders() {
   const updateMutation = useUpdateWorkOrder({
     mutation: {
       onSuccess: () => {
+        invalidateStatistics(queryClient);
         queryClient.invalidateQueries({ queryKey: getListWorkOrdersQueryKey() });
         setEditItem(null);
         toast({ title: "派工單已更新" });
@@ -287,7 +290,7 @@ export default function WorkOrders() {
   const createARMutation = useCreateReceivable({
     mutation: {
       onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getListReceivablesQueryKey() });
+        invalidateStatistics(queryClient);
         setArModal(null);
         toast({ title: "應收帳款已建立", description: "可至「應收帳款」頁面查看" });
       },
@@ -304,6 +307,7 @@ export default function WorkOrders() {
   const deleteMutation = useDeleteWorkOrder({
     mutation: {
       onSuccess: () => {
+        invalidateStatistics(queryClient);
         queryClient.invalidateQueries({ queryKey: getListWorkOrdersQueryKey() });
         setDeleteId(null);
         toast({ title: "派工單已刪除" });

@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   useListEmployees, useCreateEmployee, useUpdateEmployee,
   useListEmployeesPerformance, useGetEmployeePerformance,
   getListEmployeesQueryKey,
 } from "@workspace/api-client-react";
+import type { ListEmployeesPerformanceParams } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,9 +28,20 @@ const POSITION_COLORS: Record<string, string> = {
   "老闆": "bg-amber-100 text-amber-700",
 };
 
+type PeriodMode = "month" | "quarter" | "year" | "custom";
+
 function currentMonth() {
   const now = new Date();
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function currentQuarter() {
+  const now = new Date();
+  return `${now.getFullYear()}-Q${Math.floor(now.getMonth() / 3) + 1}`;
+}
+
+function currentYear() {
+  return String(new Date().getFullYear());
 }
 
 function fmtMoney(n: number) {
@@ -44,9 +56,10 @@ function PerformanceSummary({ perf }: { perf?: { sales: any; technician: any } }
   if (!perf) return null;
   return (
     <div className="text-[11px] text-muted-foreground mt-1 flex gap-x-3 gap-y-0.5 flex-wrap">
-      <span>業績 {fmtMoney(perf.sales.performanceAmount)}</span>
-      <span>報價 {perf.sales.quoteCount}</span>
-      <span>成交 {perf.sales.wonCount}</span>
+      <span>報價 {perf.sales.quoteCount} 件 · {fmtMoney(perf.sales.quoteAmount)}</span>
+      <span>成交 {perf.sales.wonCount} 件 · {fmtMoney(perf.sales.wonAmount)}</span>
+      <span>成交率 {fmtPct(perf.sales.winRate)}</span>
+      <span>已收 {fmtMoney(perf.sales.collectedAmount ?? 0)}</span>
       <span>安裝 {perf.technician.installCount}</span>
       <span>保養 {perf.technician.maintenanceCount}</span>
       <span>維修 {perf.technician.repairCount}</span>
@@ -65,8 +78,9 @@ function PerformanceCards({ perf }: { perf: { sales: any; technician: any } }) {
           ["成交件數", perf.sales.wonCount],
           ["成交金額", fmtMoney(perf.sales.wonAmount)],
           ["成交率", fmtPct(perf.sales.winRate)],
+          ["已收金額", fmtMoney(perf.sales.collectedAmount ?? 0)],
+          ["收款率", fmtPct(perf.sales.collectionRate ?? 0)],
           ["平均客單價", fmtMoney(perf.sales.avgTicket)],
-          ["本月業績", fmtMoney(perf.sales.performanceAmount)],
         ].map(([label, value]) => (
           <div key={label as string} className="rounded-md border px-2 py-1.5">
             <p className="text-[10px] text-muted-foreground">{label}</p>
@@ -97,14 +111,34 @@ export default function Employees() {
   const queryClient = useQueryClient();
 
   const [statusFilter, setStatusFilter] = useState<string>("在職");
+  const [periodMode, setPeriodMode] = useState<PeriodMode>("month");
   const [month, setMonth] = useState(currentMonth());
+  const [quarter, setQuarter] = useState(currentQuarter());
+  const [year, setYear] = useState(currentYear());
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [editItem, setEditItem] = useState<any>(null);
   const [disableId, setDisableId] = useState<number | null>(null);
 
+  const perfParams = useMemo((): ListEmployeesPerformanceParams => {
+    if (periodMode === "month") return { period: "month", month };
+    if (periodMode === "quarter") return { period: "quarter", quarter };
+    if (periodMode === "year") return { period: "year", year };
+    return { period: "custom", from: customFrom, to: customTo };
+  }, [periodMode, month, quarter, year, customFrom, customTo]);
+
+  const perfEnabled = periodMode !== "custom" || (customFrom.length > 0 && customTo.length > 0);
+
   const { data: employees, isLoading } = useListEmployees({});
-  const { data: performanceList } = useListEmployeesPerformance({ month });
-  const { data: editPerformance } = useGetEmployeePerformance(editItem?.id ?? 0, { month }, { query: { enabled: !!editItem } as any });
+  const { data: performanceList } = useListEmployeesPerformance(perfParams, {
+    query: { enabled: perfEnabled } as any,
+  });
+  const { data: editPerformance } = useGetEmployeePerformance(
+    editItem?.id ?? 0,
+    perfParams,
+    { query: { enabled: !!editItem && perfEnabled } as any },
+  );
 
   const perfByEmployeeId = new Map((performanceList ?? []).map(p => [p.employeeId, p]));
 
@@ -140,7 +174,7 @@ export default function Employees() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">員工管理</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">管理公司員工資料</p>
+          <p className="text-sm text-muted-foreground mt-0.5">管理公司員工資料與 KPI 績效</p>
         </div>
         <Button size="sm" onClick={() => { setForm(emptyForm); setShowCreate(true); }}>
           <Plus className="h-4 w-4 mr-1" />新增員工
@@ -161,8 +195,60 @@ export default function Employees() {
             {s}
           </button>
         ))}
-        <Input type="month" className="h-8 w-36 text-xs ml-auto" value={month} onChange={e => setMonth(e.target.value)} />
-        <span className="text-xs text-muted-foreground self-center">共 {filtered.length} 人</span>
+      </div>
+
+      <div className="flex flex-wrap gap-3 items-end border rounded-lg p-3 bg-muted/30">
+        <div className="space-y-1">
+          <Label className="text-xs text-muted-foreground">統計期間</Label>
+          <div className="flex gap-1 flex-wrap">
+            {([
+              ["month", "本月"],
+              ["quarter", "本季"],
+              ["year", "本年"],
+              ["custom", "自訂日期"],
+            ] as const).map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setPeriodMode(id)}
+                className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
+                  periodMode === id
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-background border-border hover:bg-muted"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+        {periodMode === "month" && (
+          <Input type="month" className="h-8 w-36 text-xs" value={month} onChange={e => setMonth(e.target.value)} />
+        )}
+        {periodMode === "quarter" && (
+          <Select value={quarter} onValueChange={setQuarter}>
+            <SelectTrigger className="h-8 w-28 text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {[1, 2, 3, 4].map(q => {
+                const y = new Date().getFullYear();
+                const val = `${y}-Q${q}`;
+                return <SelectItem key={val} value={val}>{y} Q{q}</SelectItem>;
+              })}
+            </SelectContent>
+          </Select>
+        )}
+        {periodMode === "year" && (
+          <Input type="number" className="h-8 w-24 text-xs" value={year} min={2020} max={2100}
+            onChange={e => setYear(e.target.value)} />
+        )}
+        {periodMode === "custom" && (
+          <div className="flex gap-2 items-center">
+            <Input type="date" className="h-8 w-36 text-xs" value={customFrom} onChange={e => setCustomFrom(e.target.value)} />
+            <span className="text-xs text-muted-foreground">~</span>
+            <Input type="date" className="h-8 w-36 text-xs" value={customTo} onChange={e => setCustomTo(e.target.value)} />
+          </div>
+        )}
+        <span className="text-xs text-muted-foreground ml-auto self-center">共 {filtered.length} 人</span>
       </div>
 
       {isLoading ? (
@@ -227,7 +313,6 @@ export default function Employees() {
         </Card>
       )}
 
-      {/* Create / Edit Dialog */}
       {[showCreate && "create", editItem && "edit"].filter(Boolean).map(mode => (
         <Dialog key={mode as string} open={true} onOpenChange={() => mode === "create" ? setShowCreate(false) : setEditItem(null)}>
           <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
@@ -289,7 +374,6 @@ export default function Employees() {
         </Dialog>
       ))}
 
-      {/* Disable Confirm */}
       <AlertDialog open={disableId !== null} onOpenChange={open => !open && setDisableId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>

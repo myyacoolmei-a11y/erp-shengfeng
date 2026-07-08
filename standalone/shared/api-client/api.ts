@@ -1819,9 +1819,12 @@ export function useListEmployees<TData = Awaited<ReturnType<typeof listEmployees
 
 export const getListEmployeesPerformanceUrl = (params?: ListEmployeesPerformanceParams) => {
   const normalizedParams = new URLSearchParams();
-  if (params?.month !== undefined) {
-    normalizedParams.append('month', params.month);
-  }
+  if (params?.period !== undefined) normalizedParams.append('period', params.period);
+  if (params?.month !== undefined) normalizedParams.append('month', params.month);
+  if (params?.quarter !== undefined) normalizedParams.append('quarter', params.quarter);
+  if (params?.year !== undefined) normalizedParams.append('year', params.year);
+  if (params?.from !== undefined) normalizedParams.append('from', params.from);
+  if (params?.to !== undefined) normalizedParams.append('to', params.to);
   const stringifiedParams = normalizedParams.toString();
   return stringifiedParams.length > 0 ? `/api/employees/performance?${stringifiedParams}` : `/api/employees/performance`;
 };
@@ -1859,9 +1862,12 @@ export function useListEmployeesPerformance<TData = Awaited<ReturnType<typeof li
 
 export const getGetEmployeePerformanceUrl = (id: number, params?: GetEmployeePerformanceParams) => {
   const normalizedParams = new URLSearchParams();
-  if (params?.month !== undefined) {
-    normalizedParams.append('month', params.month);
-  }
+  if (params?.period !== undefined) normalizedParams.append('period', params.period);
+  if (params?.month !== undefined) normalizedParams.append('month', params.month);
+  if (params?.quarter !== undefined) normalizedParams.append('quarter', params.quarter);
+  if (params?.year !== undefined) normalizedParams.append('year', params.year);
+  if (params?.from !== undefined) normalizedParams.append('from', params.from);
+  if (params?.to !== undefined) normalizedParams.append('to', params.to);
   const stringifiedParams = normalizedParams.toString();
   return stringifiedParams.length > 0 ? `/api/employees/${id}/performance?${stringifiedParams}` : `/api/employees/${id}/performance`;
 };

@@ -611,6 +611,8 @@ export const SalesPerformanceSchema = zod.object({
   "wonCount": zod.number(),
   "wonAmount": zod.number(),
   "winRate": zod.number(),
+  "collectedAmount": zod.number(),
+  "collectionRate": zod.number(),
   "avgTicket": zod.number(),
   "performanceAmount": zod.number(),
 })
@@ -627,12 +629,18 @@ export const EmployeePerformanceSchema = zod.object({
   "employeeName": zod.string(),
   "position": zod.string(),
   "month": zod.string(),
+  "period": zod.string().optional(),
   "sales": SalesPerformanceSchema,
   "technician": TechnicianPerformanceSchema,
 })
 
 export const ListEmployeesPerformanceQueryParams = zod.object({
+  "period": zod.coerce.string().optional(),
   "month": zod.coerce.string().optional(),
+  "quarter": zod.coerce.string().optional(),
+  "year": zod.coerce.string().optional(),
+  "from": zod.coerce.string().optional(),
+  "to": zod.coerce.string().optional(),
 })
 
 export const ListEmployeesPerformanceResponse = zod.array(EmployeePerformanceSchema)
@@ -642,7 +650,12 @@ export const GetEmployeePerformanceParams = zod.object({
 })
 
 export const GetEmployeePerformanceQueryParams = zod.object({
+  "period": zod.coerce.string().optional(),
   "month": zod.coerce.string().optional(),
+  "quarter": zod.coerce.string().optional(),
+  "year": zod.coerce.string().optional(),
+  "from": zod.coerce.string().optional(),
+  "to": zod.coerce.string().optional(),
 })
 
 export const GetEmployeePerformanceResponse = EmployeePerformanceSchema

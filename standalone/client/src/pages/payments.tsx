@@ -3,9 +3,9 @@ import { useSearch, useLocation } from "wouter";
 import {
   useListPayments, useCreatePayment, useDeletePayment,
   useListQuotes, useListWorkOrders,
-  getListPaymentsQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { invalidateStatistics } from "@/lib/invalidateStatistics";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -51,7 +51,7 @@ export default function Payments() {
   const createMutation = useCreatePayment({
     mutation: {
       onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getListPaymentsQueryKey() });
+        invalidateStatistics(queryClient);
         setShowCreate(false);
         setSelectedCustomer(0);
         toast({ title: "收款紀錄已新增" });
@@ -61,7 +61,7 @@ export default function Payments() {
   const deleteMutation = useDeletePayment({
     mutation: {
       onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey: getListPaymentsQueryKey() });
+        invalidateStatistics(queryClient);
         setDeleteId(null);
         toast({ title: "收款紀錄已刪除" });
       }

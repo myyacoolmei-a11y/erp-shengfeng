@@ -4,15 +4,28 @@ import { db, employeesTable } from "@workspace/db";
 import { CreateEmployeeBody, UpdateEmployeeBody } from "@workspace/api-zod";
 import { requireRole } from "../lib/auth";
 import {
-  computeEmployeePerformance,
-  currentMonthParam,
-  listEmployeePerformance,
-} from "../lib/employeePerformance";
+  computeAllEmployeeKpis,
+  computeEmployeeKpi,
+  parseStatsRange,
+  type StatsRangeParams,
+} from "../lib/statistics/statisticsService";
+import { currentMonthParam } from "../lib/statistics/dateRange";
 
 const router: IRouter = Router();
 
 const READ_ROLES = ["super_admin", "owner", "admin", "sales", "distributor", "accountant", "engineer", "technician"];
 const WRITE_ROLES = ["super_admin", "owner", "admin"];
+
+function perfParams(query: Record<string, unknown>): StatsRangeParams {
+  return {
+    period: query.period as string | undefined,
+    month: query.month as string | undefined,
+    quarter: query.quarter as string | undefined,
+    year: query.year as string | undefined,
+    from: query.from as string | undefined,
+    to: query.to as string | undefined,
+  };
+}
 
 router.get("/employees", requireRole(...READ_ROLES), async (req, res): Promise<void> => {
   const { position, status } = req.query as { position?: string; status?: string };
@@ -34,12 +47,17 @@ router.get("/employees", requireRole(...READ_ROLES), async (req, res): Promise<v
 });
 
 router.get("/employees/performance", requireRole(...READ_ROLES), async (req, res): Promise<void> => {
-  const month = (req.query.month as string | undefined) ?? currentMonthParam();
+  const params = perfParams(req.query as Record<string, unknown>);
+  if (!params.period && !params.month) {
+    params.period = "month";
+    params.month = currentMonthParam();
+  }
   try {
-    const rows = await listEmployeePerformance(month);
+    const range = parseStatsRange(params);
+    const rows = await computeAllEmployeeKpis(range);
     res.json(rows);
   } catch (err) {
-    res.status(400).json({ error: err instanceof Error ? err.message : "Invalid month" });
+    res.status(400).json({ error: err instanceof Error ? err.message : "Invalid period" });
   }
 });
 
@@ -48,15 +66,20 @@ router.get("/employees/:id/performance", requireRole(...READ_ROLES), async (req,
   const id = parseInt(raw, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
-  const month = (req.query.month as string | undefined) ?? currentMonthParam();
+  const params = perfParams(req.query as Record<string, unknown>);
+  if (!params.period && !params.month) {
+    params.period = "month";
+    params.month = currentMonthParam();
+  }
+
   const [employee] = await db.select().from(employeesTable).where(eq(employeesTable.id, id));
   if (!employee) { res.status(404).json({ error: "找不到員工" }); return; }
 
   try {
-    const row = await computeEmployeePerformance(employee, month);
+    const row = await computeEmployeeKpi(employee, params);
     res.json(row);
   } catch (err) {
-    res.status(400).json({ error: err instanceof Error ? err.message : "Invalid month" });
+    res.status(400).json({ error: err instanceof Error ? err.message : "Invalid period" });
   }
 });
 

@@ -4,6 +4,8 @@ export interface SalesPerformance {
   wonCount: number;
   wonAmount: number;
   winRate: number;
+  collectedAmount: number;
+  collectionRate: number;
   avgTicket: number;
   performanceAmount: number;
 }

@@ -11,6 +11,7 @@ import {
 } from "@workspace/api-client-react";
 import type { RepairCase, RepairCaseDetail } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { invalidateStatistics } from "@/lib/invalidateStatistics";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -260,7 +261,10 @@ export default function RepairCases() {
     query: { enabled: detailId !== null, queryKey: getGetRepairCaseQueryKey(detailId ?? 0) },
   });
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: getListRepairCasesQueryKey() });
+  const invalidate = () => {
+    invalidateStatistics(queryClient);
+    queryClient.invalidateQueries({ queryKey: getListRepairCasesQueryKey() });
+  };
 
   const createMutation = useCreateRepairCase({
     mutation: {

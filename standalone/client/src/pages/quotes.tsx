@@ -3,7 +3,7 @@ import { useSearch, useLocation } from "wouter";
 import {
   useListQuotes, useCreateQuote, useUpdateQuote, useDeleteQuote,
   useListCustomers, useUpdateCustomer, useCreateWorkOrder, useListEmployees,
-  getListQuotesQueryKey, getListWorkOrdersQueryKey, getListCustomersQueryKey,
+  getListWorkOrdersQueryKey, getListCustomersQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { X, Plus, Pencil, Trash2, Printer, Wrench, Copy, Share2, Download, FileText } from "lucide-react";
@@ -27,6 +27,7 @@ import {
 } from "@/components/pdf/pdf-service";
 import { buildQuotationHtml } from "@/components/pdf/templates/QuotationTemplate";
 import { computeQuoteAmounts } from "@/components/pdf/quote-amounts";
+import { invalidateStatistics } from "@/lib/invalidateStatistics";
 
 // ── Constants ──────────────────────────────────────────────────────────────
 const CATEGORIES = ["裝新機", "保養", "維修", "移機", "拆機", "冷媒工程", "配管工程", "其他"];
@@ -358,15 +359,14 @@ export default function QuotesPage() {
     return true;
   });
 
-  const invQuotes = () => qc.invalidateQueries({ queryKey: getListQuotesQueryKey() });
+  const invQuotes = () => invalidateStatistics(qc);
   const createMutation = useCreateQuote({ mutation: { onSuccess: () => { invQuotes(); setShowCreate(false); toast({ title: "報價單已新增" }); } } });
   const updateMutation = useUpdateQuote({ mutation: { onSuccess: () => { invQuotes(); setEditItem(null); toast({ title: "報價單已更新" }); } } });
   const deleteMutation = useDeleteQuote({ mutation: { onSuccess: () => { invQuotes(); setDeleteId(null); toast({ title: "報價單已刪除" }); } } });
   const createWoMutation = useCreateWorkOrder({
     mutation: {
       onSuccess: () => {
-        qc.invalidateQueries({ queryKey: getListWorkOrdersQueryKey() });
-        qc.invalidateQueries({ queryKey: getListQuotesQueryKey() });
+        invalidateStatistics(qc);
         setConvertItem(null);
         toast({ title: "派工單建立成功" });
       },

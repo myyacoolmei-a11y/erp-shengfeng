@@ -272,6 +272,8 @@ export interface SalesPerformance {
   wonCount: number;
   wonAmount: number;
   winRate: number;
+  collectedAmount: number;
+  collectionRate: number;
   avgTicket: number;
   performanceAmount: number;
 }
@@ -288,16 +290,27 @@ export interface EmployeePerformance {
   employeeName: string;
   position: string;
   month: string;
+  period?: string;
   sales: SalesPerformance;
   technician: TechnicianPerformance;
 }
 
 export interface ListEmployeesPerformanceParams {
+  period?: string;
   month?: string;
+  quarter?: string;
+  year?: string;
+  from?: string;
+  to?: string;
 }
 
 export interface GetEmployeePerformanceParams {
+  period?: string;
   month?: string;
+  quarter?: string;
+  year?: string;
+  from?: string;
+  to?: string;
 }
 
 export interface WorkOrderEquipmentItemInput {
