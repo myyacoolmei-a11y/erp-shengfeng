@@ -12,6 +12,7 @@ import { CreateWorkOrderBody, UpdateWorkOrderBody, CreateProgressBody } from "@w
 import { requireRole } from "../lib/auth";
 import { syncQuoteDispatchStatus } from "../lib/quoteWorkflow";
 import { formatQuoteNumber } from "../lib/quoteStatus";
+import { stripQuotePricingFromNotes } from "../../shared/workOrderNotes.ts";
 
 const router: IRouter = Router();
 
@@ -71,7 +72,6 @@ function serializeEquipmentItem(item: typeof workOrderEquipmentItemsTable.$infer
     model: item.model ?? null,
     quantity: item.quantity ?? null,
     unit: item.unit ?? null,
-    unitPrice: item.unitPrice != null ? parseFloat(item.unitPrice as string) : null,
     notes: item.notes ?? null,
     indoorUnits: item.indoorUnits ?? null,
     outdoorUnits: item.outdoorUnits ?? null,
@@ -121,6 +121,7 @@ function formatOrder(o: Record<string, unknown>, equipmentItems: ReturnType<type
       ? formatQuoteNumber(quoteId, linkedQuoteCreatedAt ?? rest.createdAt)
       : null,
     equipmentItems: resolveEquipmentItems(o, equipmentItems),
+    notes: stripQuotePricingFromNotes(rest.notes as string | null | undefined) || null,
     createdAt: isoStr(o.createdAt),
     updatedAt: isoStr(o.updatedAt),
   };
@@ -137,12 +138,13 @@ async function buildEquipmentInsert(itemInputs: any[], workOrderId: number) {
     model: item.model || null,
     quantity: item.quantity ?? null,
     unit: item.unit || null,
-    unitPrice: item.unitPrice != null ? String(item.unitPrice) : null,
     notes: item.notes || null,
     indoorUnits: item.indoorUnits ?? null,
     outdoorUnits: item.outdoorUnits ?? null,
     floor: item.floor || null,
     sortOrder: item.sortOrder ?? idx,
+    // unitPrice intentionally not persisted from client — pricing belongs on quotes only
+    unitPrice: null,
   }));
 }
 

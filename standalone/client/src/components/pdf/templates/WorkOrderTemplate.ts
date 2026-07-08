@@ -2,11 +2,16 @@
 // 獨立版面：修改此檔不影響其他 Template
 
 import { logoUrl, COMPANY, COLORS, esc, PDF_LAYOUT_CSS } from "./brand-config";
+import { stripQuotePricingFromNotes } from "@/lib/quoteToWorkOrder";
 
 interface EquipmentRow {
   brand?: string | null;
+  itemName?: string | null;
   model?: string | null;
+  category?: string | null;
   quantity?: number | null;
+  unit?: string | null;
+  notes?: string | null;
   indoorUnits?: number | null;
   outdoorUnits?: number | null;
   floor?: string | null;
@@ -29,20 +34,31 @@ function resolveEquipmentItems(order: Record<string, unknown>): EquipmentRow[] {
   return [{
     brand: (order.acBrand as string | null) ?? null,
     model: (order.modelNumber as string | null) ?? null,
+    itemName: (order.modelNumber as string | null) ?? null,
     quantity: (order.quantity as number | null) ?? null,
+    unit: "台",
     indoorUnits: (order.indoorUnits as number | null) ?? null,
     outdoorUnits: (order.outdoorUnits as number | null) ?? null,
     floor: (order.floorLevel as string | null) ?? null,
   }];
 }
 
+function equipmentName(it: EquipmentRow): string {
+  const parts = [it.brand, it.itemName || it.model].filter(Boolean);
+  return parts.join(" ").trim() || "—";
+}
+
 function equipmentSpec(it: EquipmentRow): string {
-  const name = [it.brand, it.model].filter(Boolean).join(" ").trim();
-  return name || "—";
+  const name = equipmentName(it);
+  if (it.model && it.itemName && it.model !== it.itemName) {
+    return `${name}（${it.model}）`;
+  }
+  return name;
 }
 
 function equipmentRemark(it: EquipmentRow): string {
   const parts: string[] = [];
+  if (it.notes) parts.push(it.notes);
   if (it.indoorUnits != null) parts.push(`室內機${it.indoorUnits}台`);
   if (it.outdoorUnits != null) parts.push(`室外機${it.outdoorUnits}台`);
   if (it.floor) parts.push(it.floor);
@@ -65,7 +81,7 @@ function buildMaterialRows(equipment: EquipmentRow[]): string {
       <td class="tac">${i + 1}</td>
       <td class="tal col-item">${esc(equipmentSpec(it))}</td>
       <td class="tac">${it.quantity ?? ""}</td>
-      <td class="tac">台</td>
+      <td class="tac">${esc(it.unit || "台")}</td>
       <td class="tal small col-notes">${esc(equipmentRemark(it))}</td>
     </tr>`).join("");
 }
@@ -88,6 +104,7 @@ export function buildWorkOrderHtml(order: any): string {
   const sitePhone = order.mobilePhone || "";
   const companyPhone = order.telephone || "";
   const phoneDisplay = [sitePhone, companyPhone ? `公司 ${companyPhone}` : ""].filter(Boolean).join("　") || "—";
+  const woNotes = stripQuotePricingFromNotes(order.notes || "");
 
   return `<!DOCTYPE html>
 <html lang="zh-TW">
@@ -238,6 +255,7 @@ ${PDF_LAYOUT_CSS}
     <div class="field"><span class="lbl">日期</span><span class="val">${esc(order.scheduledDate || printDate)}</span></div>
     <div class="field"><span class="lbl">客戶</span><span class="val">${esc(order.customerName || "—")}</span></div>
     <div class="field"><span class="lbl">電話</span><span class="val">${esc(phoneDisplay)}</span></div>
+    ${order.title ? `<div class="field full"><span class="lbl">工程名稱</span><span class="val">${esc(order.title)}</span></div>` : ""}
     ${order.contactPerson ? `<div class="field"><span class="lbl">現場聯絡</span><span class="val">${esc(order.contactPerson)}</span></div>` : ""}
     <div class="field full"><span class="lbl">地址</span><span class="val">${esc(order.installAddress || "—")}</span></div>
     <div class="field"><span class="lbl">技師</span><span class="val">${esc(techDisplay)}</span></div>
@@ -251,11 +269,11 @@ ${PDF_LAYOUT_CSS}
 
   <!-- Materials -->
   <div class="section">
-    <div class="sec-title">材料</div>
+    <div class="sec-title">材料 / 設備</div>
     <table>
       <thead><tr class="head-row">
         <th class="col-w6">項次</th>
-        <th>材料名稱 / 規格</th>
+        <th>品牌 / 品項 / 型號</th>
         <th class="col-w8">數量</th>
         <th class="col-w8">單位</th>
         <th class="col-w25">備註</th>
@@ -267,7 +285,7 @@ ${PDF_LAYOUT_CSS}
   <!-- Notes -->
   <div class="section">
     <div class="sec-title">備註</div>
-    <div class="box">${esc(order.notes || "（無）")}</div>
+    <div class="box">${esc(woNotes || "（無）")}</div>
   </div>
 
   <!-- Signature + Footer -->

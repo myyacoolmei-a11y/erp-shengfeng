@@ -8,6 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { MapPin, Plus, X } from "lucide-react";
 import { CustomerSelector, type CustomerSelectorValue } from "@/components/customer-selector";
+import { stripQuotePricingFromNotes, categoryToProjectType } from "../../../shared/workOrderNotes.ts";
 
 export const WO_STATUSES = ["待施工", "已完成"];
 export const WO_PROJECT_TYPES = ["新裝", "維修", "保養", "遷機", "清洗", "保固服務"];
@@ -22,7 +23,6 @@ export interface EquipmentItemForm {
   model: string;
   quantity: number | undefined;
   unit: string;
-  unitPrice: number | undefined;
   notes: string;
   indoorUnits: number | undefined;
   outdoorUnits: number | undefined;
@@ -38,7 +38,6 @@ export function defaultEquipmentItem(): EquipmentItemForm {
     model: "",
     quantity: undefined,
     unit: "台",
-    unitPrice: undefined,
     notes: "",
     indoorUnits: undefined,
     outdoorUnits: undefined,
@@ -57,7 +56,6 @@ export function equipmentItemsFromOrder(o: {
     model?: string | null;
     quantity?: number | null;
     unit?: string | null;
-    unitPrice?: number | null;
     notes?: string | null;
     indoorUnits?: number | null;
     outdoorUnits?: number | null;
@@ -81,7 +79,6 @@ export function equipmentItemsFromOrder(o: {
       model: it.model ?? "",
       quantity: it.quantity ?? undefined,
       unit: it.unit ?? "台",
-      unitPrice: it.unitPrice ?? undefined,
       notes: it.notes ?? "",
       indoorUnits: it.indoorUnits ?? undefined,
       outdoorUnits: it.outdoorUnits ?? undefined,
@@ -106,7 +103,6 @@ export function equipmentItemsFromOrder(o: {
       model: o.modelNumber ?? "",
       quantity: o.quantity ?? undefined,
       unit: "台",
-      unitPrice: undefined,
       notes: "",
       indoorUnits: o.indoorUnits ?? undefined,
       outdoorUnits: o.outdoorUnits ?? undefined,
@@ -176,7 +172,6 @@ export function buildPayload(f: WOForm) {
       model: item.model || undefined,
       quantity: item.quantity,
       unit: item.unit || undefined,
-      unitPrice: item.unitPrice,
       notes: item.notes || undefined,
       indoorUnits: item.indoorUnits,
       outdoorUnits: item.outdoorUnits,
@@ -220,10 +215,10 @@ function EquipmentItemCard({
       </div>
       {item.fromQuote && item.itemName ? (
         <div className="text-sm space-y-1 bg-muted/30 rounded-md p-2">
-          <p><span className="text-muted-foreground">類別：</span>{item.category || "—"}</p>
-          <p><span className="text-muted-foreground">品項：</span>{item.itemName} {item.brand ? `· ${item.brand}` : ""} {item.model ? `· ${item.model}` : ""}</p>
+          {item.brand && <p><span className="text-muted-foreground">品牌：</span>{item.brand}</p>}
+          <p><span className="text-muted-foreground">品項：</span>{item.itemName}</p>
+          {item.model && <p><span className="text-muted-foreground">型號：</span>{item.model}</p>}
           <p><span className="text-muted-foreground">數量：</span>{item.quantity ?? "—"} {item.unit}</p>
-          {item.unitPrice != null && <p><span className="text-muted-foreground">單價：</span>NT${item.unitPrice.toLocaleString()}</p>}
           {item.notes && <p><span className="text-muted-foreground">備註：</span>{item.notes}</p>}
         </div>
       ) : (
@@ -377,16 +372,40 @@ export function WorkOrderFormFields({
     if (!quote) return;
     const linkedId = quote.customerId != null && quote.customerId > 0 ? quote.customerId : 0;
     const cust = linkedId > 0 ? customers.find((c: any) => c.id === linkedId) : undefined;
+    const salesLine = quote.salesRepName ? `負責業務：${quote.salesRepName}` : "";
+    const notesParts = [quote.notes, salesLine].filter(Boolean);
     setForm(f => ({
       ...f,
       quoteId: qid,
       customerId: linkedId,
       customerName: linkedId > 0 ? "" : (quote.customerName ?? ""),
+      title: quote.title || f.title,
       contactPerson: quote.contactPerson || cust?.contactPerson || f.contactPerson || "",
       mobilePhone: quote.customerPhone || cust?.mobile || f.mobilePhone || "",
       telephone: f.telephone || cust?.phone || "",
       installAddress: quote.address || cust?.address || f.installAddress || "",
+      projectType: quote.items?.[0]?.category
+        ? categoryToProjectType(quote.items[0].category)
+        : f.projectType,
       description: quote.description || f.description || "",
+      notes: stripQuotePricingFromNotes(notesParts.join("\n\n")) || f.notes,
+      equipmentItems: (quote.items ?? []).length > 0
+        ? (quote.items as any[]).map((it: any) => ({
+            productId: it.productId ?? undefined,
+            quoteItemId: it.id ?? undefined,
+            category: it.category ?? "",
+            itemName: it.itemName ?? "",
+            brand: it.brand ?? "",
+            model: it.model ?? "",
+            quantity: Number(it.quantity ?? 1),
+            unit: it.unit ?? "台",
+            notes: it.notes ?? "",
+            indoorUnits: undefined,
+            outdoorUnits: undefined,
+            floor: "",
+            fromQuote: true,
+          }))
+        : f.equipmentItems,
     }));
   }
 
@@ -543,7 +562,7 @@ export function WorkOrderFormFields({
           </Select>
         </div>
         <div className="space-y-1">
-          <Label>工程標題</Label>
+          <Label>工程名稱</Label>
           <Input
             placeholder={`${form.projectType || "派工"} 派工單`}
             value={form.title}

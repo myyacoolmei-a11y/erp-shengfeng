@@ -25,6 +25,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
 import { WO_STATUSES, makeEmpty, type WOForm, buildPayload, hasWorkOrderCustomer, WorkOrderFormFields, equipmentItemsFromOrder } from "@/components/work-order-form";
+import { stripQuotePricingFromNotes } from "@/lib/quoteToWorkOrder";
 import { PdfPreviewDialog } from "@/components/pdf/pdf-preview-dialog";
 import { handlePdfAction, isMobileDevice, openPrintWindow } from "@/components/pdf/pdf-service";
 import { buildWorkOrderHtml } from "@/components/pdf/templates/WorkOrderTemplate";
@@ -112,6 +113,57 @@ async function shareWorkOrderViaLine(
     toast,
     pageFormat: "custom-240x140-landscape",
   });
+}
+
+function WorkOrderDetailSummary({ order }: { order: any }) {
+  const items = equipmentItemsFromOrder(order);
+  const hasEquipment = items.some(it => it.brand || it.itemName || it.model || it.quantity);
+  const notes = stripQuotePricingFromNotes(order.notes ?? "");
+  const phone = [order.mobilePhone, order.telephone].filter(Boolean).join(" / ");
+
+  return (
+    <div className="rounded-lg border bg-muted/20 p-3 space-y-2 text-sm">
+      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">派工詳情</p>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-xs">
+        {order.title && (
+          <p><span className="text-muted-foreground">工程名稱：</span>{order.title}</p>
+        )}
+        {phone && (
+          <p><span className="text-muted-foreground">電話：</span>{phone}</p>
+        )}
+        {order.installAddress && (
+          <p className="sm:col-span-2"><span className="text-muted-foreground">施工地址：</span>{order.installAddress}</p>
+        )}
+      </div>
+      {order.description && (
+        <div className="text-xs">
+          <span className="text-muted-foreground">施工內容：</span>
+          <p className="mt-0.5 whitespace-pre-wrap">{order.description}</p>
+        </div>
+      )}
+      {hasEquipment && (
+        <div className="text-xs space-y-1">
+          <span className="text-muted-foreground">材料 / 設備</span>
+          <ul className="list-disc pl-4 space-y-0.5">
+            {items.filter(it => it.brand || it.itemName || it.model || it.quantity).map((it, i) => (
+              <li key={i}>
+                {[it.brand, it.itemName || it.model].filter(Boolean).join(" ")}
+                {it.model && it.itemName && it.model !== it.itemName ? `（${it.model}）` : ""}
+                {" "}×{it.quantity ?? "—"}{it.unit}
+                {it.notes ? ` — ${it.notes}` : ""}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {notes && (
+        <div className="text-xs">
+          <span className="text-muted-foreground">備註：</span>
+          <p className="mt-0.5 whitespace-pre-wrap">{notes}</p>
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ─── Progress + Quick Payment Panel ────────────────────────────────────────
@@ -345,7 +397,7 @@ export default function WorkOrders() {
       equipmentItems: equipmentItemsFromOrder(o),
       hasElevator: o.hasElevator ?? "",
       description: o.description ?? "",
-      notes: o.notes ?? "",
+      notes: stripQuotePricingFromNotes(o.notes ?? ""),
     });
     setEditItem(o);
   }
@@ -437,9 +489,12 @@ export default function WorkOrders() {
                         )}
                       </div>
 
-                      {/* Row 2: customer + address */}
+                      {/* Row 2: customer + title + address */}
                       <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5">
                         <span className="text-sm font-semibold">{o.customerName}</span>
+                        {o.title && (
+                          <span className="text-xs text-foreground/80">{o.title}</span>
+                        )}
                         {o.quoteId && (o as any).quoteNumber && (
                           <button
                             type="button"
@@ -516,7 +571,10 @@ export default function WorkOrders() {
 
                   {/* Progress panel */}
                   {expandedId === o.id && (
-                    <ProgressPanel workOrderId={o.id} customerId={o.customerId ?? 0} workOrderTitle={o.workOrderNumber || o.title} />
+                    <div className="mt-3 space-y-3 border-t pt-3">
+                      <WorkOrderDetailSummary order={o} />
+                      <ProgressPanel workOrderId={o.id} customerId={o.customerId ?? 0} workOrderTitle={o.workOrderNumber || o.title} />
+                    </div>
                   )}
                 </div>
               );

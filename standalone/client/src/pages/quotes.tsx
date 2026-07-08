@@ -800,7 +800,10 @@ export default function QuotesPage() {
                     <ul className="list-disc pl-4 mt-1">
                       {(convertItem.items as any[]).map((it: any, i: number) => (
                         <li key={i}>
-                          {it.category} / {it.brand || "—"} / {it.model || it.itemName || "—"} ×{it.quantity}{it.unit}
+                          {it.category} / {it.brand || "—"} / {it.itemName || it.model || "—"}
+                          {it.model && it.itemName && it.model !== it.itemName ? `（${it.model}）` : ""}
+                          {" "}×{it.quantity}{it.unit}
+                          {it.notes ? ` — ${it.notes}` : ""}
                         </li>
                       ))}
                     </ul>

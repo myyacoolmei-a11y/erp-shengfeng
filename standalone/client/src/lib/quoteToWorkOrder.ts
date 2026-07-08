@@ -1,4 +1,7 @@
 import { makeEmpty, defaultEquipmentItem, type WOForm } from "@/components/work-order-form";
+import { stripQuotePricingFromNotes, categoryToProjectType } from "../../../shared/workOrderNotes.ts";
+
+export { stripQuotePricingFromNotes, categoryToProjectType };
 
 export function formatQuoteNumber(quote: { id: number; createdAt?: string | null }): string {
   const d = quote.createdAt ? new Date(quote.createdAt) : new Date();
@@ -16,21 +19,6 @@ export function isQuoteWon(status: string | null | undefined): boolean {
   return s === "已成交" || s === "已接受";
 }
 
-const CATEGORY_TO_PROJECT: Record<string, string> = {
-  "裝新機": "新裝",
-  "保養": "保養",
-  "維修": "維修",
-  "移機": "遷機",
-  "拆機": "清洗",
-  "冷媒工程": "新裝",
-  "配管工程": "新裝",
-  "其他": "新裝",
-};
-
-export function categoryToProjectType(category: string | null | undefined): string {
-  return CATEGORY_TO_PROJECT[category ?? ""] ?? "新裝";
-}
-
 export function canConvertQuoteToWorkOrder(q: {
   status?: string | null;
   dispatchStatus?: string | null;
@@ -40,13 +28,7 @@ export function canConvertQuoteToWorkOrder(q: {
   return isQuoteWon(q.status) || dispatch === "待派工";
 }
 
-function formatItemLine(item: any, idx: number): string {
-  const model = item.model || item.itemName || "—";
-  const subtotal = Number(item.subtotal ?? (item.quantity ?? 0) * (item.unitPrice ?? 0));
-  return `${idx + 1}. ${item.category}/${item.brand || "—"}/${model} ×${item.quantity}${item.unit} @${Number(item.unitPrice).toLocaleString()} = ${subtotal.toLocaleString()}`;
-}
-
-/** Build a pre-filled work order form from a quote — copies all quote item fields to equipment items. */
+/** Build a pre-filled work order form from a quote — construction fields only, no pricing. */
 export function buildWorkOrderFormFromQuote(q: any): WOForm {
   const items: any[] = q.items ?? [];
   const firstCategory = items[0]?.category ?? "裝新機";
@@ -60,7 +42,6 @@ export function buildWorkOrderFormFromQuote(q: any): WOForm {
         model: it.model ?? "",
         quantity: Number(it.quantity ?? 1),
         unit: it.unit ?? "台",
-        unitPrice: Number(it.unitPrice ?? 0),
         notes: it.notes ?? "",
         indoorUnits: undefined,
         outdoorUnits: undefined,
@@ -69,9 +50,8 @@ export function buildWorkOrderFormFromQuote(q: any): WOForm {
       }))
     : [defaultEquipmentItem()];
 
-  const itemLines = items.map(formatItemLine).join("\n");
   const salesLine = q.salesRepName ? `負責業務：${q.salesRepName}` : "";
-  const notesParts = [q.notes, salesLine, itemLines ? `報價項目：\n${itemLines}` : ""].filter(Boolean);
+  const notesParts = [q.notes, salesLine].filter(Boolean);
 
   return {
     ...makeEmpty(),
@@ -84,7 +64,7 @@ export function buildWorkOrderFormFromQuote(q: any): WOForm {
     installAddress: q.address ?? "",
     projectType: categoryToProjectType(firstCategory),
     description: q.description ?? "",
-    notes: notesParts.join("\n\n"),
+    notes: stripQuotePricingFromNotes(notesParts.join("\n\n")),
     equipmentItems,
   };
 }
