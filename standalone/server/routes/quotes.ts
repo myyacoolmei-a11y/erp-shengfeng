@@ -137,7 +137,7 @@ router.post("/quotes", requireRole(...WRITE_ROLES), async (req, res): Promise<vo
   const data: any = {
     ...quoteFields,
     amount: String(amount),
-    discountAmount: discountAmount > 0 ? String(discountAmount) : undefined,
+    discountAmount: discountAmount >= 0 ? String(discountAmount) : "0",
     finalAmount: String(finalAmount),
   };
 
@@ -188,7 +188,10 @@ router.patch("/quotes/:id", requireRole(...WRITE_ROLES), async (req, res): Promi
 
   const data: Record<string, unknown> = { ...quoteFields };
   if (quoteFields.amount != null) data["amount"] = String(quoteFields.amount);
-  if (quoteFields.discountAmount != null) data["discountAmount"] = String(quoteFields.discountAmount);
+  if (quoteFields.discountAmount != null) {
+    const d = Math.max(0, Number(quoteFields.discountAmount));
+    data["discountAmount"] = String(d);
+  }
   if (quoteFields.finalAmount != null) data["finalAmount"] = String(quoteFields.finalAmount);
 
   if (itemInputs !== undefined) {

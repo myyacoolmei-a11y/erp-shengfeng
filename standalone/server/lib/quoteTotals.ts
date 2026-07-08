@@ -27,6 +27,6 @@ export function computeQuoteDisplayTotal(
   const raw = items.length > 0
     ? items.reduce((s, i) => s + toAmount(i.subtotal), 0)
     : toAmount(quote.finalAmount ?? quote.amount);
-  const discount = toAmount(quote.discountAmount);
+  const discount = Math.max(0, toAmount(quote.discountAmount));
   return calcQuoteTax(Math.max(0, raw - discount), quote.taxType ?? "未稅").total;
 }

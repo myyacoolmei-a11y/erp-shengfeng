@@ -2,6 +2,7 @@
 // 獨立版面：修改此檔不影響其他 Template
 
 import { logoUrl, COMPANY, COLORS, esc, fmtMoney, PDF_LAYOUT_CSS } from "./brand-config";
+import { computeQuoteAmounts } from "../quote-amounts";
 
 export function buildQuotationHtml(quote: any): string {
   const items: any[] = quote.items ?? [];
@@ -16,12 +17,11 @@ export function buildQuotationHtml(quote: any): string {
   const rawTotal = items.length > 0
     ? items.reduce((s: number, i: any) => s + Number(i.subtotal || 0), 0)
     : Number(quote.finalAmount ?? quote.amount ?? 0);
-  const discAmt = Number(quote.discountAmount ?? 0);
-  const subtotal = Math.max(0, rawTotal - discAmt);
-  const taxRate = taxType === "含稅" ? 0 : 0.05;
-  const preTax = taxType === "含稅" ? subtotal / 1.05 : subtotal;
-  const taxAmt = subtotal - preTax;
-  const total = preTax + taxAmt;
+  const { discAmt, preTax, taxAmt, total } = computeQuoteAmounts(
+    rawTotal,
+    Number(quote.discountAmount ?? 0),
+    taxType,
+  );
 
   // Max 10 rows for A4 single page
   const maxRows = 10;
@@ -63,6 +63,10 @@ export function buildQuotationHtml(quote: any): string {
     .map((l: string) => `<div class="note-line">${esc(l)}</div>`).join("")
     || `<div class="note-line muted">報價單有效期限30日，施工前請支付50%訂金，完工驗收後付清尾款。</div>`;
 
+  const discountVal = discAmt > 0
+    ? `<span class="val disc-val">– ${fmtMoney(discAmt)}</span>`
+    : `<span class="val">${fmtMoney(0)}</span>`;
+
   return `<!DOCTYPE html>
 <html lang="zh-TW">
 <head>
@@ -72,8 +76,9 @@ export function buildQuotationHtml(quote: any): string {
 /* ===== Base ===== */
 *{margin:0;padding:0;box-sizing:border-box}
 body{
-  font-family:'Microsoft JhengHei','\u5fae\u8edf\u6b63\u9ed1\u9ad4',Arial,sans-serif;
+  font-family:'Microsoft JhengHei','\\5fae\\8edf\\6b63\\9ed1\\9ad4',Arial,sans-serif;
   font-size:10pt;color:${COLORS.black};background:#fff;
+  -webkit-print-color-adjust:exact;print-color-adjust:exact;
 }
 
 /* ===== Page setup ===== */
@@ -81,7 +86,7 @@ body{
 .page{
   width:186mm;min-height:273mm;
   padding:0;
-  position:relative;
+  display:flex;flex-direction:column;
 }
 
 /* ===== Logo & Header ===== */
@@ -130,7 +135,6 @@ tbody td{
 }
 tr{page-break-inside:avoid;break-inside:avoid}
 
-/* Text align helpers */
 .tac{text-align:center}
 .tar{text-align:right}
 .tal{text-align:left}
@@ -138,14 +142,11 @@ tr{page-break-inside:avoid;break-inside:avoid}
 .small{font-size:7.5pt}
 .muted{color:${COLORS.midGray}}
 
-/* Column widths */
 .col-w6{width:6%}
 .col-w8{width:8%}
 .col-w10{width:10%}
 .col-w12{width:12%}
-.col-w14{width:14%}
 
-/* ===== Info grid ===== */
 .info-grid{
   display:grid;grid-template-columns:1fr 1fr 1fr;
   gap:1mm 4mm;font-size:8.5pt;margin-bottom:2mm;
@@ -153,8 +154,26 @@ tr{page-break-inside:avoid;break-inside:avoid}
 .info-grid .full{grid-column:span 2}
 .info-label{font-size:7pt;color:${COLORS.lightGray}}
 
-/* ===== Service & Notes ===== */
-.row2{display:flex;gap:3mm;margin-bottom:2mm}
+/* ===== Notes + Totals side-by-side (no overlap) ===== */
+.notes-totals-row{
+  display:flex;
+  gap:4mm;
+  align-items:flex-start;
+  margin-top:2mm;
+  margin-bottom:4mm;
+  page-break-inside:avoid;
+  break-inside:avoid;
+}
+.notes-column{
+  flex:1 1 auto;
+  min-width:0;
+}
+.totals-column{
+  flex:0 0 72mm;
+  width:72mm;
+  max-width:72mm;
+}
+.row2{display:flex;gap:3mm}
 .box{
   flex:1;border:1px solid ${COLORS.borderGray};
   border-left:3px solid ${COLORS.primary};
@@ -163,20 +182,28 @@ tr{page-break-inside:avoid;break-inside:avoid}
   color:${COLORS.darkGray};background:#fafafa;
   min-height:18mm;
 }
+.notes-box{
+  border:1px solid ${COLORS.borderGray};
+  border-left:3px solid ${COLORS.primary};
+  padding:3mm 4mm;font-size:9pt;
+  line-height:1.6;min-height:18mm;background:#fafafa;
+}
 .note-line{font-size:8.5pt;line-height:1.6;color:${COLORS.darkGray}}
 
-/* ===== Amount box ===== */
 .amt-box{
-  position:absolute;bottom:58mm;right:0;width:72mm;
-  border:2px solid ${COLORS.primary};overflow:hidden;
+  width:100%;
+  border:2px solid ${COLORS.primary};
+  overflow:hidden;
+  background:#fff;
 }
 .amt-r{
   display:flex;justify-content:space-between;align-items:center;
   border-bottom:1px solid #ebebeb;
   font-size:9pt;
 }
-.amt-r .lbl{color:${COLORS.lightGray};padding-right:3mm}
-.amt-r .val{font-weight:600;text-align:right}
+.amt-r .lbl{color:${COLORS.lightGray};padding-right:3mm;flex-shrink:0}
+.amt-r .val{font-weight:600;text-align:right;flex-shrink:0}
+.disc-val{color:${COLORS.red}}
 .amt-total{
   background:${COLORS.black};
   display:flex;justify-content:space-between;align-items:center;
@@ -184,10 +211,10 @@ tr{page-break-inside:avoid;break-inside:avoid}
 .amt-total .lbl{color:${COLORS.primary};font-size:9pt;font-weight:700;letter-spacing:1px}
 .amt-total .val{color:#fff;font-size:12pt;font-weight:700;font-family:monospace}
 
-/* ===== Bank info ===== */
 .bank-box{
-  position:absolute;bottom:36mm;left:0;right:80mm;
-  border:1px solid ${COLORS.borderGray};padding:2mm 3mm;
+  border:1px solid ${COLORS.borderGray};
+  padding:2mm 3mm;
+  margin-bottom:5mm;
 }
 .bank-title{
   font-size:7pt;font-weight:700;
@@ -200,29 +227,30 @@ tr{page-break-inside:avoid;break-inside:avoid}
 }
 .bank-row span{white-space:nowrap}
 
-/* ===== Signature ===== */
 .sig-row{
-  position:absolute;bottom:12mm;left:0;right:0;
   display:grid;grid-template-columns:1fr 1fr 1fr;gap:6mm;
+  margin-bottom:6mm;
 }
 .sig-box{
   text-align:center;border-top:1.5px solid ${COLORS.black};
   font-size:8.5pt;color:${COLORS.midGray};
 }
 
-/* ===== Footer ===== */
 .pf{
-  position:absolute;bottom:2mm;left:0;right:0;
+  margin-top:auto;
   display:flex;justify-content:space-between;align-items:center;
   font-size:6.5pt;color:${COLORS.lightGray};
   border-top:1px solid ${COLORS.borderGray};padding-top:1mm;
+}
+
+@media print{
+  .notes-totals-row,.amt-box,.bank-box,.sig-row{page-break-inside:avoid;break-inside:avoid}
 }
 ${PDF_LAYOUT_CSS}
 </style>
 </head>
 <body>
 <div class="page">
-  <!-- Header -->
   <div class="hdr">
     <div class="co">
       <img src="${logoUrl()}" class="co-logo" alt="">
@@ -249,7 +277,6 @@ ${PDF_LAYOUT_CSS}
     </div>
   </div>
 
-  <!-- Client Info -->
   <div class="sec">
     <div class="stitle">客戶資訊 Client Information</div>
     <div class="info-grid">
@@ -261,7 +288,6 @@ ${PDF_LAYOUT_CSS}
     </div>
   </div>
 
-  <!-- Equipment Schedule -->
   <div class="sec">
     <div class="stitle">工程設備明細 Equipment Schedule</div>
     <table>
@@ -280,30 +306,31 @@ ${PDF_LAYOUT_CSS}
     </table>
   </div>
 
-  <!-- Notes & Service -->
-  <div class="row2">
-    <div style="flex:0 0 55%">
-      <div class="stitle">服務內容 Notes &amp; Remarks</div>
-      <div class="box">${esc(quote.description) || "施工方式：\n施工天數：\n注意事項："}</div>
+  <div class="notes-totals-row">
+    <div class="notes-column">
+      <div class="row2">
+        <div style="flex:0 0 55%">
+          <div class="stitle">服務內容 Notes &amp; Remarks</div>
+          <div class="box">${esc(quote.description) || "施工方式：\n施工天數：\n注意事項："}</div>
+        </div>
+        <div style="flex:1;min-width:0">
+          <div class="stitle">備註</div>
+          <div class="notes-box">${notesList}</div>
+        </div>
+      </div>
     </div>
-    <div style="flex:1">
-      <div class="stitle">備註</div>
-      <div class="notes-box">
-        ${notesList}
+    <div class="totals-column">
+      <div class="stitle">金額總計</div>
+      <div class="amt-box">
+        <div class="amt-r"><span class="lbl">項目小計</span><span class="val">${fmtMoney(rawTotal)}</span></div>
+        <div class="amt-r"><span class="lbl">折扣</span>${discountVal}</div>
+        <div class="amt-r"><span class="lbl">未稅小計</span><span class="val">${fmtMoney(preTax)}</span></div>
+        <div class="amt-r"><span class="lbl">稅額 5%</span><span class="val">${fmtMoney(taxAmt)}</span></div>
+        <div class="amt-total"><span class="lbl">含稅總計</span><span class="val">${fmtMoney(total)}</span></div>
       </div>
     </div>
   </div>
 
-  <!-- Amount Summary -->
-  <div class="amt-box">
-    <div class="amt-r"><span class="lbl">項目小計</span><span class="val">${fmtMoney(rawTotal)}</span></div>
-    ${discAmt > 0 ? `<div class="amt-r"><span class="lbl">折扣</span><span class="val" style="color:${COLORS.red}">– ${fmtMoney(discAmt)}</span></div>` : ""}
-    <div class="amt-r"><span class="lbl">未稅小計</span><span class="val">${fmtMoney(preTax)}</span></div>
-    <div class="amt-r"><span class="lbl">稅額 5%</span><span class="val">${fmtMoney(taxAmt)}</span></div>
-    <div class="amt-total"><span class="lbl">含稅總計</span><span class="val">${fmtMoney(total)}</span></div>
-  </div>
-
-  <!-- Bank Info -->
   <div class="bank-box">
     <div class="bank-title">匯款資訊</div>
     <div class="bank-row">
@@ -313,14 +340,12 @@ ${PDF_LAYOUT_CSS}
     </div>
   </div>
 
-  <!-- Signature -->
   <div class="sig-row">
     <div class="sig-box">客戶確認簽名<br><span style="font-size:6.5pt;color:#aaa">日期：________</span></div>
     <div class="sig-box">業務簽名<br><span style="font-size:6.5pt;color:#aaa">日期：________</span></div>
     <div class="sig-box">公　司　章<br><span style="font-size:6.5pt;color:#aaa">&nbsp;</span></div>
   </div>
 
-  <!-- Footer -->
   <div class="pf">
     <div>${COMPANY.name}　${COMPANY.phone}　${COMPANY.address}</div>
     <div>列印：${printDate}</div>

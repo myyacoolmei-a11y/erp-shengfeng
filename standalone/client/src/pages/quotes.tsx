@@ -26,6 +26,7 @@ import {
   openPrintWindow,
 } from "@/components/pdf/pdf-service";
 import { buildQuotationHtml } from "@/components/pdf/templates/QuotationTemplate";
+import { computeQuoteAmounts } from "@/components/pdf/quote-amounts";
 
 // ── Constants ──────────────────────────────────────────────────────────────
 const CATEGORIES = ["裝新機", "保養", "維修", "移機", "拆機", "冷媒工程", "配管工程", "其他"];
@@ -89,24 +90,14 @@ const emptyForm = (): QuoteForm => ({
 });
 
 // ── Helpers ────────────────────────────────────────────────────────────────
-function calcTax(subtotal: number, taxType: string) {
-  if (taxType === "含稅") {
-    const preTax = Math.round(subtotal / 1.05);
-    return { preTax, taxAmt: subtotal - preTax, total: subtotal };
-  }
-  const taxAmt = Math.round(subtotal * 0.05);
-  return { preTax: subtotal, taxAmt, total: subtotal + taxAmt };
-}
-
 function computeTotals(items: QuoteItem[], discountAmount: number, taxType: string) {
   const rawTotal = items.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
-  const subtotal = Math.max(0, rawTotal - (discountAmount || 0));
-  return { rawTotal, ...calcTax(subtotal, taxType) };
+  return computeQuoteAmounts(rawTotal, discountAmount, taxType);
 }
 
 function formToApi(f: QuoteForm) {
   const rawTotal = f.items.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
-  const discAmt = f.discountAmount || 0;
+  const discAmt = Math.max(0, f.discountAmount || 0);
   return {
     ...(f.customerId > 0 ? { customerId: f.customerId } : {}),
     customerName: f.customerName || undefined,
@@ -114,7 +105,7 @@ function formToApi(f: QuoteForm) {
     title: f.title,
     description: f.description || undefined,
     amount: rawTotal,
-    discountAmount: discAmt > 0 ? discAmt : undefined,
+    discountAmount: discAmt,
     finalAmount: Math.max(0, rawTotal - discAmt),
     status: f.status,
     notes: f.notes || undefined,
@@ -451,7 +442,7 @@ export default function QuotesPage() {
               const qItems = (q.items ?? []) as any[];
               const qRaw = qItems.length > 0 ? qItems.reduce((s: number, i: any) => s + Number(i.subtotal ?? 0), 0) : Number(q.finalAmount ?? q.amount ?? 0);
               const qDisc = Number(q.discountAmount ?? 0);
-              const { total: qTotal } = calcTax(Math.max(0, qRaw - qDisc), q.taxType ?? "未稅");
+              const { total: qTotal } = computeQuoteAmounts(qRaw, qDisc, q.taxType ?? "未稅");
               return (
                 <div key={q.id} className="px-4 py-3 flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
@@ -623,13 +614,16 @@ export default function QuotesPage() {
                 <div className="w-full sm:w-72 space-y-1">
                   <div className="flex items-center gap-2">
                     <Label className="text-xs text-muted-foreground w-20 text-right flex-shrink-0">折扣</Label>
-                    <Input className="h-7 text-sm text-right" type="number" min="0" value={form.discountAmount || ""}
+                    <Input className="h-7 text-sm text-right" type="number" min={0} step="1" value={form.discountAmount}
                       placeholder="0"
-                      onChange={e => setForm(f => ({ ...f, discountAmount: parseFloat(e.target.value) || 0 }))} />
+                      onChange={e => {
+                        const v = e.target.value === "" ? 0 : parseFloat(e.target.value);
+                        setForm(f => ({ ...f, discountAmount: Number.isFinite(v) ? Math.max(0, v) : 0 }));
+                      }} />
                   </div>
                   <div className="bg-muted/40 rounded-md px-3 py-2 text-xs space-y-1">
                     <div className="flex justify-between text-muted-foreground"><span>項目小計</span><span>NT$ {rawTotal.toLocaleString()}</span></div>
-                    {form.discountAmount > 0 && <div className="flex justify-between text-red-600"><span>折扣</span><span>－ NT$ {form.discountAmount.toLocaleString()}</span></div>}
+                    <div className="flex justify-between text-muted-foreground"><span>折扣</span><span>{form.discountAmount > 0 ? `－ NT$ ${form.discountAmount.toLocaleString()}` : `NT$ 0`}</span></div>
                     <div className="flex justify-between text-muted-foreground"><span>未稅小計</span><span>NT$ {preTax.toLocaleString()}</span></div>
                     <div className="flex justify-between text-muted-foreground"><span>稅額 5%</span><span>NT$ {taxAmt.toLocaleString()}</span></div>
                     <div className="flex justify-between font-bold border-t pt-1 text-sm">

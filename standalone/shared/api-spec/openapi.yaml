@@ -2114,7 +2114,7 @@ components:
         title: { type: string, minLength: 1 }
         description: { type: string }
         amount: { type: number }
-        discountAmount: { type: number }
+        discountAmount: { type: number, minimum: 0 }
         finalAmount: { type: number }
         status: { type: string }
         notes: { type: string }
@@ -2136,7 +2136,7 @@ components:
         title: { type: string }
         description: { type: string }
         amount: { type: number }
-        discountAmount: { type: number }
+        discountAmount: { type: number, minimum: 0 }
         finalAmount: { type: number }
         status: { type: string }
         notes: { type: string }
