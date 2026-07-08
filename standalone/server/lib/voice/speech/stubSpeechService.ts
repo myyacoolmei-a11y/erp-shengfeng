@@ -6,7 +6,7 @@ export class StubSpeechService implements SpeechService {
   readonly name = "stub";
 
   isAvailable() {
-    return true;
+    return false;
   }
 
   async transcribe(): Promise<never> {

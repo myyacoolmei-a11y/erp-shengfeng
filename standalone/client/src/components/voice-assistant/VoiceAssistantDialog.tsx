@@ -10,6 +10,8 @@ import {
   blobToBase64,
   isMediaRecorderAvailable,
   normalizeMimeType,
+  validateRecording,
+  VOICE_MAX_RECORDING_MS,
 } from "@/lib/voice/clientSpeech";
 import { getVoiceProviders, parseVoiceText, processVoiceInput } from "@/lib/voice/voiceApi";
 import type { VoiceFormType } from "@/lib/voice/voiceApi";
@@ -18,6 +20,10 @@ import { VOICE_FORM_LABELS, type VoiceAssistantStep, type VoiceAssistantApplyPay
 import { VoiceConfirmPanel } from "./VoiceConfirmPanel";
 import { DrivingModeView } from "./DrivingModeView";
 import { voiceLog, voiceWarn, voiceError } from "@/lib/voice/voiceDebug";
+import {
+  VOICE_ERROR_PAYLOAD_TOO_LARGE,
+  VOICE_ERROR_TOO_LONG,
+} from "@/lib/voice/voiceConstants";
 
 interface VoiceAssistantDialogProps {
   open: boolean;
@@ -41,15 +47,21 @@ export function VoiceAssistantDialog({
   const [parsed, setParsed] = useState<ParsedVoiceResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [speechProviderLabel, setSpeechProviderLabel] = useState<string>("—");
+  const [remainingSec, setRemainingSec] = useState(Math.ceil(VOICE_MAX_RECORDING_MS / 1000));
 
   const previewRef = useRef<LiveSpeechPreview | null>(null);
   const recorderRef = useRef<AudioRecorder | null>(null);
+  const stopRecordingRef = useRef<(() => void) | null>(null);
+  const stoppingRef = useRef(false);
 
   useEffect(() => {
     if (!open) return;
     getVoiceProviders()
       .then(info => {
-        setSpeechProviderLabel(`${info.activeSpeech} (server) · web preview optional`);
+        const label = info.speechAvailable
+          ? `${info.activeSpeech} (server)`
+          : `${info.activeSpeech} — 請設定 OPENAI_API_KEY`;
+        setSpeechProviderLabel(label);
         voiceLog("providers", info);
       })
       .catch(err => {
@@ -66,6 +78,7 @@ export function VoiceAssistantDialog({
     setError(null);
     previewRef.current = null;
     recorderRef.current = null;
+    setRemainingSec(Math.ceil(VOICE_MAX_RECORDING_MS / 1000));
   }, []);
 
   const handleOpenChange = (next: boolean) => {
@@ -114,14 +127,21 @@ export function VoiceAssistantDialog({
     }
 
     try {
-      recorderRef.current = new AudioRecorder();
+      recorderRef.current = new AudioRecorder({
+        maxDurationMs: VOICE_MAX_RECORDING_MS,
+        onAutoStop: () => stopRecordingRef.current?.(),
+        onTick: (_elapsed, remainingMs) => {
+          setRemainingSec(Math.max(0, Math.ceil(remainingMs / 1000)));
+        },
+      });
       await recorderRef.current.start();
 
       previewRef.current = new LiveSpeechPreview();
       previewRef.current.start(t => setPartialText(t));
 
       setStep("recording");
-      voiceLog("recording_started", { formType });
+      setRemainingSec(Math.ceil(VOICE_MAX_RECORDING_MS / 1000));
+      voiceLog("recording_started", { formType, maxSec: VOICE_MAX_RECORDING_MS / 1000 });
     } catch (err) {
       voiceError("recording_start_failed", { message: err instanceof Error ? err.message : String(err) });
       setError(err instanceof Error ? err.message : "無法開始錄音，請允許麥克風權限");
@@ -130,6 +150,10 @@ export function VoiceAssistantDialog({
   }
 
   async function stopRecording() {
+    if (stoppingRef.current) return;
+    if (!recorderRef.current) return;
+
+    stoppingRef.current = true;
     setStep("processing");
     voiceLog("recording_stop_requested");
 
@@ -145,8 +169,17 @@ export function VoiceAssistantDialog({
         throw new Error("找不到錄音資料，請重新錄音");
       }
 
-      const { blob, mimeType, durationMs } = await recorder.stop();
+      const { blob, mimeType, durationMs, autoStopped } = await recorder.stop();
       recorderRef.current = null;
+
+      const validationError = validateRecording({ blob, durationMs });
+      if (validationError) {
+        voiceWarn("recording_rejected", { bytes: blob.size, durationMs, autoStopped });
+        setManualText(previewText);
+        setError(validationError);
+        setStep("manual_input");
+        return;
+      }
 
       if (blob.size < 512) {
         voiceWarn("recording_too_small", { bytes: blob.size, durationMs });
@@ -201,12 +234,27 @@ export function VoiceAssistantDialog({
       setParsed(result.parsed);
       setStep("confirm");
     } catch (err) {
-      voiceError("process_voice_failed", { message: err instanceof Error ? err.message : String(err) });
+      const mapped = err instanceof Error ? err : new Error("語音處理失敗，請修改文字後重試");
+      voiceError("process_voice_failed", { message: mapped.message });
       setManualText(previewText || manualText);
-      setError(err instanceof Error ? err.message : "語音處理失敗，請修改文字後重試");
+
+      const msg = mapped.message;
+      if (msg === VOICE_ERROR_TOO_LONG || msg === VOICE_ERROR_PAYLOAD_TOO_LARGE) {
+        setError(msg);
+        setStep("manual_input");
+        return;
+      }
+
+      setError(msg.includes("HTTP ") ? "語音處理失敗，請修改文字後重試" : msg);
       setStep("manual_input");
+    } finally {
+      stoppingRef.current = false;
     }
   }
+
+  stopRecordingRef.current = () => {
+    void stopRecording();
+  };
 
   function handleConfirm() {
     if (!parsed) return;
@@ -259,6 +307,7 @@ export function VoiceAssistantDialog({
             step={step}
             partialText={partialText || manualText || transcript}
             error={step === "error" ? error : null}
+            remainingSec={remainingSec}
             onStart={startRecording}
             onStop={stopRecording}
             onConfirm={handleConfirm}
@@ -297,7 +346,7 @@ export function VoiceAssistantDialog({
             {step === "recording" && (
               <div className="space-y-3">
                 <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700 animate-pulse">
-                  ● 錄音中… 說完後按停止（背景有噪音也可錄）
+                  ● 錄音中… 最多 {remainingSec} 秒（背景有噪音也可錄）
                 </div>
                 {partialText && (
                   <p className="text-sm text-muted-foreground whitespace-pre-wrap">{partialText}</p>

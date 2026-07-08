@@ -3,6 +3,7 @@ import { logger } from "./lib/logger";
 import { seedDefaultUser, ensureSuperAdmin, migrateUserRoles } from "./routes/auth";
 import { ensureQuoteDispatchColumn } from "./lib/migrations/ensureQuoteDispatchColumn";
 import { ensureProductCatalogMigration } from "./lib/migrations/ensureProductCatalogMigration";
+import { getSpeechService, resolveActiveSpeechProviderId } from "./lib/voice/speech/speechServiceFactory.ts";
 
 const rawPort = process.env["PORT"];
 
@@ -25,6 +26,16 @@ app.listen(port, async (err) => {
   }
 
   logger.info({ port }, "Server listening");
+
+  const speech = getSpeechService();
+  logger.info(
+    {
+      speechProvider: speech.name,
+      configuredSpeech: resolveActiveSpeechProviderId(),
+      speechAvailable: speech.isAvailable(),
+    },
+    "Voice speech provider ready",
+  );
 
   await seedDefaultUser();
   await ensureSuperAdmin();

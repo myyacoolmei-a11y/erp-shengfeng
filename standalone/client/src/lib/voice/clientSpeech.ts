@@ -3,12 +3,25 @@
  * Web Speech may run in parallel for live preview only; it never blocks the pipeline.
  */
 
+import {
+  VOICE_MAX_AUDIO_BYTES,
+  VOICE_MAX_RECORDING_MS,
+} from "./voiceConstants.ts";
 import { voiceLog, voiceWarn } from "./voiceDebug.ts";
+
+export { VOICE_MAX_RECORDING_MS, VOICE_MAX_AUDIO_BYTES } from "./voiceConstants.ts";
 
 export interface RecordingResult {
   blob: Blob;
   mimeType: string;
   durationMs: number;
+  autoStopped: boolean;
+}
+
+export interface AudioRecorderOptions {
+  maxDurationMs?: number;
+  onAutoStop?: () => void;
+  onTick?: (elapsedMs: number, remainingMs: number) => void;
 }
 
 interface BrowserSpeechRecognition extends EventTarget {
@@ -30,6 +43,30 @@ function getSpeechRecognitionCtor(): SpeechRecognitionCtor | null {
     webkitSpeechRecognition?: SpeechRecognitionCtor;
   };
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
+}
+
+function pickRecorderMimeType(): string {
+  const candidates = [
+    "audio/webm;codecs=opus",
+    "audio/webm",
+    "audio/mp4",
+    "audio/aac",
+    "audio/ogg;codecs=opus",
+  ];
+
+  for (const candidate of candidates) {
+    if (MediaRecorder.isTypeSupported(candidate)) {
+      return candidate;
+    }
+  }
+
+  return "";
+}
+
+function extensionForMime(mimeType: string): string {
+  if (mimeType.includes("mp4") || mimeType.includes("aac")) return "m4a";
+  if (mimeType.includes("ogg")) return "ogg";
+  return "webm";
 }
 
 export function isMediaRecorderAvailable(): boolean {
@@ -109,6 +146,18 @@ export class AudioRecorder {
   private stream: MediaStream | null = null;
   private parts: Blob[] = [];
   private startedAt = 0;
+  private maxDurationMs: number;
+  private autoStopTimer: ReturnType<typeof setTimeout> | null = null;
+  private tickTimer: ReturnType<typeof setInterval> | null = null;
+  private autoStopped = false;
+  private onAutoStop?: () => void;
+  private onTick?: (elapsedMs: number, remainingMs: number) => void;
+
+  constructor(options: AudioRecorderOptions = {}) {
+    this.maxDurationMs = options.maxDurationMs ?? VOICE_MAX_RECORDING_MS;
+    this.onAutoStop = options.onAutoStop;
+    this.onTick = options.onTick;
+  }
 
   async start(): Promise<void> {
     if (!isMediaRecorderAvailable()) {
@@ -124,17 +173,45 @@ export class AudioRecorder {
     });
     this.parts = [];
     this.startedAt = Date.now();
+    this.autoStopped = false;
 
-    const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-      ? "audio/webm;codecs=opus"
-      : "audio/webm";
+    const mimeType = pickRecorderMimeType();
+    this.mediaRecorder = mimeType
+      ? new MediaRecorder(this.stream, { mimeType })
+      : new MediaRecorder(this.stream);
 
-    this.mediaRecorder = new MediaRecorder(this.stream, { mimeType });
     this.mediaRecorder.ondataavailable = e => {
       if (e.data.size > 0) this.parts.push(e.data);
     };
     this.mediaRecorder.start(250);
-    voiceLog("recorder_started", { mimeType });
+
+    this.autoStopTimer = setTimeout(() => {
+      this.autoStopped = true;
+      voiceLog("recorder_auto_stop", { maxDurationMs: this.maxDurationMs });
+      this.onAutoStop?.();
+    }, this.maxDurationMs);
+
+    this.tickTimer = setInterval(() => {
+      const elapsedMs = Date.now() - this.startedAt;
+      const remainingMs = Math.max(0, this.maxDurationMs - elapsedMs);
+      this.onTick?.(elapsedMs, remainingMs);
+    }, 250);
+
+    voiceLog("recorder_started", {
+      mimeType: this.mediaRecorder.mimeType || mimeType || "browser-default",
+      maxDurationMs: this.maxDurationMs,
+    });
+  }
+
+  private clearTimers() {
+    if (this.autoStopTimer) {
+      clearTimeout(this.autoStopTimer);
+      this.autoStopTimer = null;
+    }
+    if (this.tickTimer) {
+      clearInterval(this.tickTimer);
+      this.tickTimer = null;
+    }
   }
 
   stop(): Promise<RecordingResult> {
@@ -145,8 +222,11 @@ export class AudioRecorder {
         return;
       }
 
-      const mimeType = mr.mimeType || this.parts[0]?.type || "audio/webm";
+      this.clearTimers();
+
+      const mimeType = mr.mimeType || this.parts[0]?.type || pickRecorderMimeType() || "audio/webm";
       const durationMs = Date.now() - this.startedAt;
+      const autoStopped = this.autoStopped;
 
       mr.onstop = () => {
         this.stream?.getTracks().forEach(t => t.stop());
@@ -158,8 +238,9 @@ export class AudioRecorder {
           durationMs,
           bytes: blob.size,
           chunks: this.parts.length,
+          autoStopped,
         });
-        resolve({ blob, mimeType, durationMs });
+        resolve({ blob, mimeType, durationMs, autoStopped });
       };
 
       mr.onerror = () => {
@@ -177,6 +258,16 @@ export class AudioRecorder {
   }
 }
 
+export function validateRecording(result: Pick<RecordingResult, "blob" | "durationMs">): string | null {
+  if (result.durationMs > VOICE_MAX_RECORDING_MS + 500) {
+    return "錄音太長，請重新錄製";
+  }
+  if (result.blob.size > VOICE_MAX_AUDIO_BYTES) {
+    return "錄音太長，請重新錄製";
+  }
+  return null;
+}
+
 export async function blobToBase64(blob: Blob): Promise<string> {
   const buffer = await blob.arrayBuffer();
   const bytes = new Uint8Array(buffer);
@@ -188,7 +279,13 @@ export async function blobToBase64(blob: Blob): Promise<string> {
 /** Best MIME type for server transcription. */
 export function normalizeMimeType(mimeType: string): string {
   if (mimeType.includes("webm")) return "audio/webm";
-  if (mimeType.includes("mp4") || mimeType.includes("m4a")) return "audio/mp4";
+  if (mimeType.includes("mp4") || mimeType.includes("aac") || mimeType.includes("m4a")) {
+    return "audio/mp4";
+  }
   if (mimeType.includes("ogg")) return "audio/ogg";
   return mimeType || "audio/webm";
+}
+
+export function voiceFileName(mimeType: string): string {
+  return `voice.${extensionForMime(mimeType)}`;
 }

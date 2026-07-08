@@ -4,41 +4,65 @@ import { OpenAiWhisperSpeechService } from "./openaiWhisperSpeechService.ts";
 
 let cached: SpeechService | null = null;
 
+function openAiKey(): string {
+  return process.env.OPENAI_API_KEY?.trim() ?? "";
+}
+
+/** Resolved runtime provider id (not just env default). */
+export function resolveActiveSpeechProviderId(): string {
+  const key = openAiKey();
+  const configured = (process.env.VOICE_SPEECH_PROVIDER ?? "").trim().toLowerCase();
+
+  if (key.length > 0) {
+    if (
+      !configured ||
+      configured === "stub" ||
+      configured === "openai_whisper" ||
+      configured === "openai" ||
+      configured === "whisper"
+    ) {
+      return "openai_whisper";
+    }
+  }
+
+  if (configured) return configured;
+  return key.length > 0 ? "openai_whisper" : "stub";
+}
+
 export function getSpeechService(): SpeechService {
   if (cached) return cached;
 
-  const provider = (process.env.VOICE_SPEECH_PROVIDER ?? "stub").toLowerCase();
-  const openAiKey = process.env.OPENAI_API_KEY ?? "";
-
-  // Prefer Whisper when API key is configured, even if provider is still "stub".
-  if (openAiKey.length > 0 && (provider === "stub" || provider === "openai_whisper" || provider === "openai" || provider === "whisper")) {
-    cached = new OpenAiWhisperSpeechService(openAiKey);
-    return cached;
-  }
+  const provider = resolveActiveSpeechProviderId();
+  const key = openAiKey();
 
   switch (provider) {
     case "openai_whisper":
     case "openai":
     case "whisper":
-      cached = new OpenAiWhisperSpeechService(openAiKey);
+      cached = key.length > 0 ? new OpenAiWhisperSpeechService(key) : new StubSpeechService();
       break;
     case "google":
     case "azure":
-      // Future providers — fall back to stub with clear message
       cached = new StubSpeechService();
       break;
     default:
-      cached = new StubSpeechService();
+      cached = key.length > 0 ? new OpenAiWhisperSpeechService(key) : new StubSpeechService();
   }
 
   return cached;
 }
 
 export function listSpeechProviders(): { id: string; available: boolean; label: string }[] {
-  const openAiKey = process.env.OPENAI_API_KEY ?? "";
+  const key = openAiKey();
+  const active = resolveActiveSpeechProviderId();
   return [
-    { id: "web_speech", available: true, label: "Browser Web Speech (client)" },
-    { id: "openai_whisper", available: openAiKey.length > 0, label: "OpenAI Whisper" },
+    { id: "web_speech", available: true, label: "Browser Web Speech (client preview)" },
+    {
+      id: "openai_whisper",
+      available: key.length > 0,
+      label: active === "openai_whisper" && key.length > 0 ? "OpenAI Whisper (active)" : "OpenAI Whisper",
+    },
+    { id: "stub", available: key.length === 0, label: "Stub — set OPENAI_API_KEY for Whisper" },
     { id: "google", available: false, label: "Google Speech (planned)" },
     { id: "azure", available: false, label: "Azure Speech (planned)" },
   ];

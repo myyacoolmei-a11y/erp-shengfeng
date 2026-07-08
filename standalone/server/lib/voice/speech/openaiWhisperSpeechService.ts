@@ -22,7 +22,10 @@ export class OpenAiWhisperSpeechService implements SpeechService {
 
     const form = new FormData();
     const blob = new Blob([new Uint8Array(audio)], { type: mimeType || "audio/webm" });
-    form.append("file", blob, "voice.webm");
+    const ext = mimeType.includes("mp4") || mimeType.includes("aac") ? "m4a"
+      : mimeType.includes("ogg") ? "ogg"
+      : "webm";
+    form.append("file", blob, `voice.${ext}`);
     form.append("model", "whisper-1");
     form.append("language", "zh");
 

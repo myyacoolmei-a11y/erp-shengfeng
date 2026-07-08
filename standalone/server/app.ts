@@ -1,4 +1,4 @@
-import express, { type Express } from "express";
+import express, { type Express, type NextFunction, type Request, type Response } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
 import router from "./routes";
@@ -40,11 +40,28 @@ app.use(
     },
   }),
 );
+const JSON_BODY_LIMIT = "20mb";
+
 app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(express.json({ limit: JSON_BODY_LIMIT }));
+app.use(express.urlencoded({ extended: true, limit: JSON_BODY_LIMIT }));
 
 app.use("/api", router);
+
+app.use((err: unknown, _req: Request, res: Response, next: NextFunction) => {
+  const entityTooLarge =
+    err &&
+    typeof err === "object" &&
+    "type" in err &&
+    (err as { type?: string }).type === "entity.too.large";
+
+  if (entityTooLarge) {
+    res.status(413).json({ error: "錄音太長或檔案太大，請控制在15秒內" });
+    return;
+  }
+
+  next(err);
+});
 
 // Serve hashed assets with long-term cache
 app.use(

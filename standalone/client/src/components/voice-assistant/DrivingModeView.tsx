@@ -7,6 +7,7 @@ interface DrivingModeViewProps {
   step: VoiceAssistantStep;
   partialText: string;
   error: string | null;
+  remainingSec?: number;
   onStart: () => void;
   onStop: () => void;
   onConfirm: () => void;
@@ -22,6 +23,7 @@ export function DrivingModeView({
   step,
   partialText,
   error,
+  remainingSec,
   onStart,
   onStop,
   onConfirm,
@@ -113,6 +115,10 @@ export function DrivingModeView({
 
       {isProcessing && (
         <p className="text-sm text-muted-foreground animate-pulse">語音辨識與 AI 解析中…</p>
+      )}
+
+      {isRecording && remainingSec != null && (
+        <p className="text-xs text-muted-foreground">最多 {remainingSec} 秒</p>
       )}
     </div>
   );

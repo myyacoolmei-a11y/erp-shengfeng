@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { z } from "zod";
 import { requireRole } from "../lib/auth";
-import { getSpeechService, listSpeechProviders } from "../lib/voice/speech/speechServiceFactory.ts";
+import { getSpeechService, listSpeechProviders, resolveActiveSpeechProviderId } from "../lib/voice/speech/speechServiceFactory.ts";
 import { getVoiceParser, listVoiceParsers } from "../lib/voice/parser/voiceParserFactory.ts";
 import { matchVoiceItems } from "../lib/voice/productMatcher.ts";
 import { db, employeesTable } from "@workspace/db";
@@ -11,6 +11,9 @@ import type { ParsedVoiceResult, VoiceFormType } from "../../shared/voice/types.
 const router: IRouter = Router();
 
 const VOICE_ROLES = ["super_admin", "owner", "admin", "sales", "engineer", "technician"];
+
+/** ~15 MB raw audio (~20 MB base64 JSON payload). */
+const MAX_AUDIO_BYTES = 15 * 1024 * 1024;
 
 const TranscribeBody = z.object({
   text: z.string().optional(),
@@ -42,10 +45,13 @@ async function enrichParsed(
 }
 
 router.get("/voice/providers", requireRole(...VOICE_ROLES), (_req, res) => {
+  const speech = getSpeechService();
   res.json({
     speech: listSpeechProviders(),
     parser: listVoiceParsers(),
-    activeSpeech: process.env.VOICE_SPEECH_PROVIDER ?? "stub",
+    activeSpeech: speech.name,
+    configuredSpeech: resolveActiveSpeechProviderId(),
+    speechAvailable: speech.isAvailable(),
     activeParser: process.env.VOICE_PARSER_PROVIDER ?? "heuristic",
   });
 });
@@ -83,6 +89,10 @@ router.post("/voice/transcribe", requireRole(...VOICE_ROLES), async (req, res): 
       return;
     }
     const audio = Buffer.from(audioBase64, "base64");
+    if (audio.length > MAX_AUDIO_BYTES) {
+      res.status(413).json({ error: "錄音太長或檔案太大，請控制在15秒內" });
+      return;
+    }
     const result = await speech.transcribe(audio, mimeType ?? "audio/webm");
     res.json(result);
   } catch (err) {
@@ -128,19 +138,24 @@ router.post("/voice/process", requireRole(...VOICE_ROLES), async (req, res): Pro
   let speechError: string | null = null;
 
   if (!transcript && parsedBody.data.audioBase64) {
+    const audio = Buffer.from(parsedBody.data.audioBase64, "base64");
+    if (audio.length > MAX_AUDIO_BYTES) {
+      res.status(413).json({ error: "錄音太長或檔案太大，請控制在15秒內" });
+      return;
+    }
+
     const speech = getSpeechService();
     console.log("[voice/process] transcribe", {
       speechProvider: speech.name,
       available: speech.isAvailable(),
       mimeType: parsedBody.data.mimeType ?? "audio/webm",
-      audioBytes: Buffer.from(parsedBody.data.audioBase64, "base64").length,
+      audioBytes: audio.length,
     });
 
     if (!speech.isAvailable()) {
-      speechError = "伺服器 Speech Provider 尚未設定（請設定 OPENAI_API_KEY 或 VOICE_SPEECH_PROVIDER=openai_whisper）";
+      speechError = "伺服器 Speech Provider 尚未設定（請設定 OPENAI_API_KEY）";
     } else {
       try {
-        const audio = Buffer.from(parsedBody.data.audioBase64, "base64");
         const result = await speech.transcribe(audio, parsedBody.data.mimeType ?? "audio/webm");
         transcript = result.text?.trim() ?? "";
         speechProvider = result.provider;
