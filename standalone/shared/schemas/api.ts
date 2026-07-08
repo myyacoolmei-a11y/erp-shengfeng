@@ -677,7 +677,8 @@ export const DeleteEmployeeResponse = zod.void()
  */
 export const ListQuotesQueryParams = zod.object({
   "customerId": zod.coerce.number().optional(),
-  "status": zod.coerce.string().optional()
+  "status": zod.coerce.string().optional(),
+  "dispatchStatus": zod.coerce.string().optional(),
 })
 
 export const ListQuotesResponseItem = zod.object({
@@ -691,6 +692,9 @@ export const ListQuotesResponseItem = zod.object({
   "discountAmount": zod.number().nullish(),
   "finalAmount": zod.number().nullish(),
   "status": zod.string(),
+  "dispatchStatus": zod.string().optional(),
+  "workOrderId": zod.number().nullish(),
+  "workOrderNumber": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "address": zod.string().nullish(),
   "customerPhone": zod.string().nullish(),
@@ -760,6 +764,9 @@ export const CreateQuoteResponse = zod.object({
   "discountAmount": zod.number().nullish(),
   "finalAmount": zod.number().nullish(),
   "status": zod.string(),
+  "dispatchStatus": zod.string().optional(),
+  "workOrderId": zod.number().nullish(),
+  "workOrderNumber": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "address": zod.string().nullish(),
   "customerPhone": zod.string().nullish(),
@@ -802,6 +809,9 @@ export const GetQuoteResponse = zod.object({
   "discountAmount": zod.number().nullish(),
   "finalAmount": zod.number().nullish(),
   "status": zod.string(),
+  "dispatchStatus": zod.string().optional(),
+  "workOrderId": zod.number().nullish(),
+  "workOrderNumber": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "address": zod.string().nullish(),
   "customerPhone": zod.string().nullish(),
@@ -871,6 +881,9 @@ export const UpdateQuoteResponse = zod.object({
   "discountAmount": zod.number().nullish(),
   "finalAmount": zod.number().nullish(),
   "status": zod.string(),
+  "dispatchStatus": zod.string().optional(),
+  "workOrderId": zod.number().nullish(),
+  "workOrderNumber": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "address": zod.string().nullish(),
   "customerPhone": zod.string().nullish(),
@@ -1950,6 +1963,16 @@ export const GetDashboardSummaryResponse = zod.object({
   "monthlyWonAmount": zod.number().optional(),
   "monthlyPaidAmount": zod.number().optional(),
   "todayDueCount": zod.number().optional(),
+  "todayWarrantyExpiryCount": zod.number().optional(),
+  "todayReminderCount": zod.number().optional(),
+  "pendingDispatchCount": zod.number().optional(),
+  "pendingDispatchQuotes": zod.array(zod.object({
+    "id": zod.number(),
+    "title": zod.string(),
+    "customerName": zod.string().nullish(),
+    "dispatchStatus": zod.string(),
+    "createdAt": zod.string(),
+  })).optional(),
   "todayWorkOrders": zod.array(zod.object({
   "id": zod.number().optional(),
   "workOrderNumber": zod.string().nullish(),

@@ -20,6 +20,7 @@ export const quotesTable = pgTable("quotes", {
   customerPhone: text("customer_phone"),
   taxType: text("tax_type").notNull().default("未稅"),
   salesRepId: integer("sales_rep_id").references(() => employeesTable.id, { onDelete: "set null" }),
+  dispatchStatus: text("dispatch_status").notNull().default("未派工"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

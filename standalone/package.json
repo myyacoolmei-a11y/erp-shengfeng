@@ -9,6 +9,7 @@
     "start": "node dist/server/index.mjs",
     "dev": "tsx server/index.ts",
     "db:push": "drizzle-kit push --config drizzle.config.ts",
+    "db:migrate-dispatch": "node scripts/db-migrate-dispatch.mjs",
     "db:studio": "drizzle-kit studio --config drizzle.config.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },

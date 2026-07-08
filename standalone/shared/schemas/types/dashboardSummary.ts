@@ -8,6 +8,14 @@
 import type { Customer } from './customer';
 import type { DashboardSummaryTodayWorkOrdersItem } from './dashboardSummaryTodayWorkOrdersItem';
 
+export type PendingDispatchQuoteItem = {
+  id: number;
+  title: string;
+  customerName?: string | null;
+  dispatchStatus: string;
+  createdAt: string;
+};
+
 export interface DashboardSummary {
   totalCustomers: number;
   totalQuotes: number;
@@ -32,6 +40,8 @@ export interface DashboardSummary {
   todayDueCount?: number;
   todayWarrantyExpiryCount?: number;
   todayReminderCount?: number;
+  pendingDispatchCount?: number;
+  pendingDispatchQuotes?: PendingDispatchQuoteItem[];
   todayWorkOrders?: DashboardSummaryTodayWorkOrdersItem[];
   recentCustomers?: Customer[];
 }

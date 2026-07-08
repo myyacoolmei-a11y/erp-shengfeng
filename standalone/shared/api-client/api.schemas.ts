@@ -183,6 +183,11 @@ export interface Quote {
   /** @nullable */
   finalAmount?: number | null;
   status: string;
+  dispatchStatus?: string;
+  /** @nullable */
+  workOrderId?: number | null;
+  /** @nullable */
+  workOrderNumber?: string | null;
   /** @nullable */
   notes?: string | null;
   /** @nullable */
@@ -873,6 +878,15 @@ export type DashboardSummaryTodayWorkOrdersItem = {
   installAddress?: string | null;
 };
 
+export type PendingDispatchQuoteItem = {
+  id: number;
+  title: string;
+  /** @nullable */
+  customerName?: string | null;
+  dispatchStatus: string;
+  createdAt: string;
+};
+
 export interface DashboardSummary {
   totalCustomers: number;
   totalQuotes: number;
@@ -897,6 +911,8 @@ export interface DashboardSummary {
   todayDueCount?: number;
   todayWarrantyExpiryCount?: number;
   todayReminderCount?: number;
+  pendingDispatchCount?: number;
+  pendingDispatchQuotes?: PendingDispatchQuoteItem[];
   todayWorkOrders?: DashboardSummaryTodayWorkOrdersItem[];
   recentCustomers?: Customer[];
 }

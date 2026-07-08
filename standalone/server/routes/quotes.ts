@@ -3,12 +3,15 @@ import { eq, and, inArray } from "drizzle-orm";
 import { db, quotesTable, customersTable, employeesTable, quoteItemsTable } from "@workspace/db";
 import { CreateQuoteBody, UpdateQuoteBody } from "@workspace/api-zod";
 import { requireRole } from "../lib/auth";
+import { syncQuoteDispatchBatch, syncQuoteDispatchStatus } from "../lib/quoteWorkflow";
 
 const router: IRouter = Router();
 
 const READ_ROLES = ["super_admin", "owner", "admin", "sales", "distributor"];
 const WRITE_ROLES = ["super_admin", "owner", "admin", "sales", "distributor"];
 const DELETE_ROLES = ["super_admin", "owner", "admin"];
+
+const DISPATCH_FILTER_VALUES = new Set(["待派工", "已派工", "施工中", "已完工"]);
 
 function serializeItem(item: typeof quoteItemsTable.$inferSelect) {
   return {
@@ -26,7 +29,11 @@ function serializeItem(item: typeof quoteItemsTable.$inferSelect) {
   };
 }
 
-function serializeQuote(q: any, items: any[] = []) {
+function serializeQuote(
+  q: any,
+  items: any[] = [],
+  workflow?: { dispatchStatus: string; workOrderId: number | null; workOrderNumber: string | null },
+) {
   return {
     id: q.id,
     customerId: q.customerId ?? null,
@@ -38,6 +45,9 @@ function serializeQuote(q: any, items: any[] = []) {
     discountAmount: q.discountAmount != null ? parseFloat(q.discountAmount as string) : null,
     finalAmount: q.finalAmount != null ? parseFloat(q.finalAmount as string) : null,
     status: q.status,
+    dispatchStatus: workflow?.dispatchStatus ?? q.dispatchStatus ?? "未派工",
+    workOrderId: workflow?.workOrderId ?? null,
+    workOrderNumber: workflow?.workOrderNumber ?? null,
     notes: q.notes ?? null,
     address: q.address ?? null,
     customerPhone: q.customerPhone ?? null,
@@ -77,6 +87,7 @@ const QUOTE_SELECT = {
   discountAmount: quotesTable.discountAmount,
   finalAmount: quotesTable.finalAmount,
   status: quotesTable.status,
+  dispatchStatus: quotesTable.dispatchStatus,
   notes: quotesTable.notes,
   address: quotesTable.address,
   customerPhone: quotesTable.customerPhone,
@@ -88,13 +99,22 @@ const QUOTE_SELECT = {
 };
 
 router.get("/quotes", requireRole(...READ_ROLES), async (req, res): Promise<void> => {
-  const { customerId, status } = req.query as { customerId?: string; status?: string };
+  const { customerId, status, dispatchStatus } = req.query as {
+    customerId?: string;
+    status?: string;
+    dispatchStatus?: string;
+  };
   const conditions = [];
   if (customerId) {
     const cid = parseInt(customerId, 10);
     if (!isNaN(cid)) conditions.push(eq(quotesTable.customerId, cid));
   }
-  if (status) conditions.push(eq(quotesTable.status, status));
+  if (status && !DISPATCH_FILTER_VALUES.has(status)) {
+    conditions.push(eq(quotesTable.status, status));
+  }
+  if (dispatchStatus || (status && DISPATCH_FILTER_VALUES.has(status))) {
+    conditions.push(eq(quotesTable.dispatchStatus, dispatchStatus ?? status!));
+  }
 
   const quoteRows = await db
     .select(QUOTE_SELECT)
@@ -105,6 +125,8 @@ router.get("/quotes", requireRole(...READ_ROLES), async (req, res): Promise<void
     .orderBy(quotesTable.createdAt);
 
   if (quoteRows.length === 0) { res.json([]); return; }
+
+  const workflowMap = await syncQuoteDispatchBatch(quoteRows);
 
   const quoteIds = quoteRows.map(q => q.id);
   const allItems = await db.select().from(quoteItemsTable)
@@ -118,7 +140,7 @@ router.get("/quotes", requireRole(...READ_ROLES), async (req, res): Promise<void
     itemsByQuote[item.quoteId] = arr;
   }
 
-  res.json(quoteRows.map(q => serializeQuote(q, itemsByQuote[q.id] ?? [])));
+  res.json(quoteRows.map(q => serializeQuote(q, itemsByQuote[q.id] ?? [], workflowMap.get(q.id))));
 });
 
 router.post("/quotes", requireRole(...WRITE_ROLES), async (req, res): Promise<void> => {
@@ -139,6 +161,7 @@ router.post("/quotes", requireRole(...WRITE_ROLES), async (req, res): Promise<vo
     amount: String(amount),
     discountAmount: discountAmount >= 0 ? String(discountAmount) : "0",
     finalAmount: String(finalAmount),
+    dispatchStatus: "未派工",
   };
 
   const [quote] = await db.insert(quotesTable).values(data).returning();
@@ -149,9 +172,12 @@ router.post("/quotes", requireRole(...WRITE_ROLES), async (req, res): Promise<vo
     insertedItems = await db.insert(quoteItemsTable).values(rows).returning();
   }
 
+  const workflow = await syncQuoteDispatchStatus(quote.id);
+
   res.status(201).json(serializeQuote(
     { ...quote, joinedCustomerName: null, salesRepName: null },
-    insertedItems.map(serializeItem)
+    insertedItems.map(serializeItem),
+    workflow ?? undefined,
   ));
 });
 
@@ -169,11 +195,13 @@ router.get("/quotes/:id", requireRole(...READ_ROLES), async (req, res): Promise<
 
   if (!quote) { res.status(404).json({ error: "找不到報價單" }); return; }
 
+  const workflow = await syncQuoteDispatchStatus(id);
+
   const items = await db.select().from(quoteItemsTable)
     .where(eq(quoteItemsTable.quoteId, id))
     .orderBy(quoteItemsTable.sortOrder);
 
-  res.json(serializeQuote(quote, items.map(serializeItem)));
+  res.json(serializeQuote(quote, items.map(serializeItem), workflow ?? undefined));
 });
 
 router.patch("/quotes/:id", requireRole(...WRITE_ROLES), async (req, res): Promise<void> => {
@@ -184,7 +212,7 @@ router.patch("/quotes/:id", requireRole(...WRITE_ROLES), async (req, res): Promi
   const parsed = UpdateQuoteBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
-  const { items: itemInputs, ...quoteFields } = parsed.data as any;
+  const { items: itemInputs, dispatchStatus: _ignoredDispatch, ...quoteFields } = parsed.data as any;
 
   const data: Record<string, unknown> = { ...quoteFields };
   if (quoteFields.amount != null) data["amount"] = String(quoteFields.amount);
@@ -213,13 +241,16 @@ router.patch("/quotes/:id", requireRole(...WRITE_ROLES), async (req, res): Promi
   const [quote] = await db.update(quotesTable).set(data).where(eq(quotesTable.id, id)).returning();
   if (!quote) { res.status(404).json({ error: "找不到報價單" }); return; }
 
+  const workflow = await syncQuoteDispatchStatus(id);
+
   const items = await db.select().from(quoteItemsTable)
     .where(eq(quoteItemsTable.quoteId, id))
     .orderBy(quoteItemsTable.sortOrder);
 
   res.json(serializeQuote(
     { ...quote, joinedCustomerName: null, salesRepName: null },
-    items.map(serializeItem)
+    items.map(serializeItem),
+    workflow ?? undefined,
   ));
 });
 

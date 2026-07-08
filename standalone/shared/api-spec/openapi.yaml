@@ -704,6 +704,10 @@ paths:
           in: query
           schema:
             type: string
+        - name: dispatchStatus
+          in: query
+          schema:
+            type: string
       responses:
         "200":
           description: 報價單列表
@@ -2145,6 +2149,9 @@ components:
         discountAmount: { type: ["number", "null"] }
         finalAmount: { type: ["number", "null"] }
         status: { type: string }
+        dispatchStatus: { type: string }
+        workOrderId: { type: ["integer", "null"] }
+        workOrderNumber: { type: ["string", "null"] }
         notes: { type: ["string", "null"] }
         address: { type: ["string", "null"] }
         customerPhone: { type: ["string", "null"] }
@@ -2787,6 +2794,17 @@ components:
         todayDueCount: { type: integer }
         todayWarrantyExpiryCount: { type: integer }
         todayReminderCount: { type: integer }
+        pendingDispatchCount: { type: integer }
+        pendingDispatchQuotes:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              title: { type: string }
+              customerName: { type: ["string", "null"] }
+              dispatchStatus: { type: string }
+              createdAt: { type: string }
         todayWorkOrders:
           type: array
           items:

@@ -124,6 +124,54 @@ export default function Dashboard() {
         />
       </div>
 
+      {/* 待派工案件 — 老闆優先關注 */}
+      {(canSeeFinance || user?.role === "owner") && (
+        <Card className={((data?.pendingDispatchCount ?? 0) > 0) ? "border-orange-300 bg-orange-50/30" : ""}>
+          <CardHeader className="pb-2 pt-4 px-4">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
+                <Wrench className="h-4 w-4 text-orange-500" />
+                待派工案件
+                {!isLoading && (data?.pendingDispatchCount ?? 0) > 0 && (
+                  <span className="text-xs font-bold bg-orange-500 text-white px-2 py-0.5 rounded-full ml-1">
+                    {data?.pendingDispatchCount}
+                  </span>
+                )}
+              </CardTitle>
+              <Link href="/quotes">
+                <span className="text-xs text-muted-foreground hover:text-primary flex items-center gap-0.5">
+                  報價單<ChevronRight className="h-3 w-3" />
+                </span>
+              </Link>
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">客戶已回簽、等待安排施工</p>
+          </CardHeader>
+          <CardContent className="px-4 pb-4">
+            {isLoading ? (
+              <div className="space-y-2">{[1, 2].map(i => <Skeleton key={i} className="h-10 w-full" />)}</div>
+            ) : data?.pendingDispatchQuotes && data.pendingDispatchQuotes.length > 0 ? (
+              <div className="divide-y">
+                {data.pendingDispatchQuotes.map(q => (
+                  <Link key={q.id} href="/quotes">
+                    <div className="py-2.5 hover:bg-muted/40 rounded px-1 -mx-1 cursor-pointer flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">{q.title}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {q.customerName ?? "—"} · 🟠 待派工 · {new Date(q.createdAt).toLocaleDateString("zh-TW")}
+                        </p>
+                      </div>
+                      <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground text-center py-4">目前無待派工案件</p>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* 第二排：本月營運 */}
       {canSeeFinance && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

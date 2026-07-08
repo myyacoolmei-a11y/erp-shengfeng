@@ -17,6 +17,7 @@ import {
   employeesTable,
 } from "@workspace/db";
 import { computeQuoteDisplayTotal } from "../quoteTotals";
+import { listPendingDispatchQuotes } from "../quoteWorkflow";
 import {
   currentMonthRange,
   todayRange,
@@ -235,6 +236,7 @@ export async function getDashboardSummary() {
     [todayDueResult],
     [todayWarrantyExpiryResult],
     todayWorkOrderRows,
+    pendingDispatchQuotes,
   ] = await Promise.all([
     computeQuotePeriodStats(monthRange),
     computeReceivablePeriodStats(monthRange),
@@ -278,6 +280,7 @@ export async function getDashboardSummary() {
       .leftJoin(customersTable, eq(workOrdersTable.customerId, customersTable.id))
       .where(eq(workOrdersTable.scheduledDate, today))
       .orderBy(workOrdersTable.scheduledTime),
+    listPendingDispatchQuotes(20),
   ]);
 
   const todayDueCount = todayDueResult.count;
@@ -313,6 +316,8 @@ export async function getDashboardSummary() {
     todayDueCount,
     todayWarrantyExpiryCount,
     todayReminderCount,
+    pendingDispatchCount: pendingDispatchQuotes.length,
+    pendingDispatchQuotes,
     todayWorkOrders: todayWorkOrderRows.map(o => ({
       id: o.id,
       workOrderNumber: o.workOrderNumber,

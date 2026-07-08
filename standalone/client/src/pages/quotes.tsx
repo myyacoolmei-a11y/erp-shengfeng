@@ -45,6 +45,7 @@ const BRANDS = ["冰點", "聲寶", "國際", "三菱重工", "金鼎", "格力"
 const KNOWN_BRANDS = BRANDS.filter(b => b !== "其他");
 const UNITS = ["台", "式", "個", "組", "套", "次", "公尺", "公斤"];
 const STATUSES = ["草稿", "已送出", "已接受", "已拒絕", "已完成"];
+const FILTER_TABS = ["全部", "草稿", "已送出", "已接受", "待派工", "已派工", "施工中", "已完成"];
 const STATUS_COLORS: Record<string, string> = {
   "草稿": "bg-gray-100 text-gray-700",
   "已送出": "bg-blue-100 text-blue-700",
@@ -52,6 +53,20 @@ const STATUS_COLORS: Record<string, string> = {
   "已拒絕": "bg-red-100 text-red-700",
   "已完成": "bg-emerald-100 text-emerald-700",
 };
+const DISPATCH_COLORS: Record<string, string> = {
+  "未派工": "bg-slate-100 text-slate-600",
+  "待派工": "bg-orange-100 text-orange-700",
+  "已派工": "bg-green-100 text-green-700",
+  "施工中": "bg-blue-100 text-blue-700",
+  "已完工": "bg-emerald-100 text-emerald-700",
+};
+
+function quoteMatchesFilter(q: any, filter: string): boolean {
+  if (filter === "全部") return true;
+  if (filter === "已完成") return q.status === "已完成" || q.dispatchStatus === "已完工";
+  if (["待派工", "已派工", "施工中"].includes(filter)) return q.dispatchStatus === filter;
+  return q.status === filter;
+}
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface QuoteItem {
@@ -354,7 +369,7 @@ export default function QuotesPage() {
   }
 
   const filtered = (quotes ?? []).filter((q: any) => {
-    if (statusFilter !== "全部" && q.status !== statusFilter) return false;
+    if (!quoteMatchesFilter(q, statusFilter)) return false;
     if (filterCustomerName && !q.customerName?.toLowerCase().includes(filterCustomerName.toLowerCase())) return false;
     return true;
   });
@@ -424,7 +439,7 @@ export default function QuotesPage() {
 
       {/* Status filter */}
       <div className="flex gap-2 flex-wrap">
-        {["全部", ...STATUSES].map(s => (
+        {FILTER_TABS.map(s => (
           <button key={s} onClick={() => setStatusFilter(s)}
             className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${statusFilter === s ? "bg-primary text-primary-foreground border-primary" : "bg-background border-border hover:bg-muted"}`}>
             {s}
@@ -435,10 +450,10 @@ export default function QuotesPage() {
       {/* List */}
       {isLoading ? (
         <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-16 w-full" />)}</div>
-      ) : quotes && quotes.length > 0 ? (
+      ) : filtered.length > 0 ? (
         <Card><CardContent className="p-0">
           <div className="divide-y">
-            {quotes.map(q => {
+            {filtered.map(q => {
               const qItems = (q.items ?? []) as any[];
               const qRaw = qItems.length > 0 ? qItems.reduce((s: number, i: any) => s + Number(i.subtotal ?? 0), 0) : Number(q.finalAmount ?? q.amount ?? 0);
               const qDisc = Number(q.discountAmount ?? 0);
@@ -449,6 +464,12 @@ export default function QuotesPage() {
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="font-medium text-sm">{q.title}</span>
                       <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${STATUS_COLORS[q.status] ?? "bg-gray-100 text-gray-700"}`}>{q.status}</span>
+                      <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${DISPATCH_COLORS[q.dispatchStatus ?? "未派工"] ?? "bg-slate-100 text-slate-600"}`}>
+                        {q.dispatchStatus === "待派工" ? "🟠 " : q.dispatchStatus === "已派工" ? "🟢 " : ""}{q.dispatchStatus ?? "未派工"}
+                      </span>
+                      {q.workOrderNumber && (
+                        <span className="text-xs px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 font-mono">{q.workOrderNumber}</span>
+                      )}
                       <span className="text-xs px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">{q.taxType ?? "未稅"}</span>
                     </div>
                     <div className="text-xs text-muted-foreground mt-0.5 flex gap-3 flex-wrap">
@@ -467,7 +488,7 @@ export default function QuotesPage() {
                     <Button variant="ghost" size="icon" className="h-7 w-7" title="列印/PDF" onClick={() => printQuote(q, setPdfPreview, toast)}><Printer className="h-3.5 w-3.5" /></Button>
                     <Button variant="ghost" size="icon" className="h-7 w-7 text-green-600 hover:text-green-700" title="LINE 分享" onClick={() => shareQuoteViaLine(q, setPdfPreview, toast)}><Share2 className="h-3.5 w-3.5" /></Button>
                     <Button variant="ghost" size="icon" className="h-7 w-7" title="複製" onClick={() => handleCopy(q)}><Copy className="h-3.5 w-3.5" /></Button>
-                    {(q.status === "已接受" || q.status === "已送出") && (
+                    {(q.dispatchStatus === "待派工" || (q.status === "已接受" && q.dispatchStatus === "未派工")) && (
                       <Button variant="ghost" size="icon" className="h-7 w-7 text-blue-600" title="轉為派工單" onClick={() => {
                         setConvertItem(q);
                         setWoForm({
@@ -492,7 +513,7 @@ export default function QuotesPage() {
           </div>
         </CardContent></Card>
       ) : (
-        <Card><CardContent className="py-12 text-center"><p className="text-muted-foreground">尚無報價單資料</p></CardContent></Card>
+        <Card><CardContent className="py-12 text-center"><p className="text-muted-foreground">{statusFilter === "全部" ? "尚無報價單資料" : `目前無「${statusFilter}」的報價單`}</p></CardContent></Card>
       )}
 
       {/* Create / Edit Dialog */}

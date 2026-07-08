@@ -9,6 +9,7 @@ import {
 } from "@workspace/db";
 import { CreateWorkOrderBody, UpdateWorkOrderBody, CreateProgressBody } from "@workspace/api-zod";
 import { requireRole } from "../lib/auth";
+import { syncQuoteDispatchStatus } from "../lib/quoteWorkflow";
 
 const router: IRouter = Router();
 
@@ -231,6 +232,10 @@ router.post("/work-orders", requireRole(...WO_WRITE_ROLES), async (req, res): Pr
     insertedItems = inserted.map(serializeEquipmentItem);
   }
 
+  if (updated.quoteId) {
+    await syncQuoteDispatchStatus(updated.quoteId);
+  }
+
   res.status(201).json(formatOrder({ ...updated, linkedCustomerName: null }, insertedItems));
 });
 
@@ -288,6 +293,10 @@ router.patch("/work-orders/:id", requireRole(...WO_WRITE_ROLES), async (req, res
     equipmentItems = equipmentByOrder[id] ?? [];
   }
 
+  if (order.quoteId) {
+    await syncQuoteDispatchStatus(order.quoteId);
+  }
+
   res.json(formatOrder({ ...order, linkedCustomerName: null }, equipmentItems));
 });
 
@@ -298,6 +307,9 @@ router.delete("/work-orders/:id", requireRole(...WO_DELETE_ROLES), async (req, r
 
   const [order] = await db.delete(workOrdersTable).where(eq(workOrdersTable.id, id)).returning();
   if (!order) { res.status(404).json({ error: "找不到派工單" }); return; }
+  if (order.quoteId) {
+    await syncQuoteDispatchStatus(order.quoteId);
+  }
   res.sendStatus(204);
 });
 
