@@ -28,8 +28,13 @@ export function VoiceConfirmPanel({
         <p className="text-xs font-semibold text-muted-foreground mb-2">請確認以下內容（確認後填入表單，不會直接建立）</p>
         <Row label="客戶" value={parsed.customerName} />
         <Row label="電話" value={parsed.phone} />
-        <Row label="地址" value={parsed.address} />
-        {"title" in parsed && <Row label="工程名稱" value={parsed.title} />}
+        <Row label="施工地址" value={parsed.address} />
+        {parsed.formType === "quote" && "title" in parsed && (
+          <Row label="工程名稱" value={parsed.title} />
+        )}
+        {parsed.formType !== "quote" && "title" in parsed && (
+          <Row label="標題" value={parsed.title} />
+        )}
         <Row label="施工內容" value={parsed.description} />
         <Row label="備註" value={parsed.notes} />
 

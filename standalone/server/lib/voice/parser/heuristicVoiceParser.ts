@@ -1,4 +1,5 @@
 import type { VoiceFormType, ParsedVoiceResult, ParsedVoiceItem } from "../../../../shared/voice/types.ts";
+import { parseQuoteVoice } from "./quoteVoiceParser.ts";
 
 export interface VoiceParser {
   readonly name: string;
@@ -90,6 +91,17 @@ function isWorkLine(line: string): boolean {
   return /安裝|安装|拆機|拆机|移機|移机|保養|保养|維修|维修|清洗|配管|冷媒|施工/.test(line);
 }
 
+function isStreetOrRegionLine(line: string): boolean {
+  if (/^地址[：:]/.test(line)) return true;
+  if (line.length > 30) return false;
+  if (REGION_LINE_RE.test(line)) return true;
+  if (/[\u4e00-\u9fff]{1,8}(?:路|街|巷|弄)\d+/.test(line)) return true;
+  return false;
+}
+
+const REGION_LINE_RE =
+  /(?:台)?(?:北|新北|桃園|臺中|台中|彰化|南投|雲林|嘉義|屏東|宜蘭|花蓮|台東|臺東|澎湖|金門|連江|基隆|新竹|苗栗|高雄|台南)[市縣][\u4e00-\u9fff]{0,8}(?:鄉|鎮|市|區|里|村)?/;
+
 function isLikelyCustomerLine(line: string): boolean {
   if (PHONE_RE.test(line)) return false;
   if (MODEL_RE.test(line)) return false;
@@ -175,7 +187,7 @@ export function parseVoiceTextHeuristic(
       continue;
     }
 
-    if (/地址[：:]/.test(line) || /(?:路|街|巷|弄|號|号)\d*/.test(line)) {
+    if (isStreetOrRegionLine(line)) {
       address = line.replace(/^地址[：:]\s*/, "").trim();
       continue;
     }
@@ -272,16 +284,11 @@ export function parseVoiceTextHeuristic(
     };
   }
 
-  return {
-    formType: "quote",
-    customerName: customerName || undefined,
-    phone: phone || undefined,
-    address: address || undefined,
-    title: customerName ? `${customerName} 報價` : undefined,
-    description,
-    notes,
-    items: items.length > 0 ? items : undefined,
-  };
+  if (formType === "quote") {
+    return parseQuoteVoice(text);
+  }
+
+  return parseQuoteVoice(text);
 }
 
 /** Rule-based parser — no external API required. */

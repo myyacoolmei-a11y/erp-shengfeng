@@ -46,7 +46,7 @@ export function applyVoiceToQuoteForm(
     model: it.model ?? "",
     quantity: it.quantity ?? 1,
     unit: it.unit ?? "台",
-    unitPrice: it.unitPrice ?? 0,
+    unitPrice: it.unitPrice != null && it.unitPrice > 0 ? it.unitPrice : 0,
     notes: it.notes ?? "",
     sortOrder: idx,
   }));
