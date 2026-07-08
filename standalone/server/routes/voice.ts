@@ -123,25 +123,44 @@ router.post("/voice/process", requireRole(...VOICE_ROLES), async (req, res): Pro
     return;
   }
 
-  let transcript = parsedBody.data.text;
-  let speechProvider = "client_text";
+  let transcript = parsedBody.data.text?.trim() ?? "";
+  let speechProvider = transcript ? "client_text" : "none";
+  let speechError: string | null = null;
 
   if (!transcript && parsedBody.data.audioBase64) {
-    try {
-      const speech = getSpeechService();
-      if (speech.isAvailable()) {
+    const speech = getSpeechService();
+    console.log("[voice/process] transcribe", {
+      speechProvider: speech.name,
+      available: speech.isAvailable(),
+      mimeType: parsedBody.data.mimeType ?? "audio/webm",
+      audioBytes: Buffer.from(parsedBody.data.audioBase64, "base64").length,
+    });
+
+    if (!speech.isAvailable()) {
+      speechError = "伺服器 Speech Provider 尚未設定（請設定 OPENAI_API_KEY 或 VOICE_SPEECH_PROVIDER=openai_whisper）";
+    } else {
+      try {
         const audio = Buffer.from(parsedBody.data.audioBase64, "base64");
         const result = await speech.transcribe(audio, parsedBody.data.mimeType ?? "audio/webm");
-        transcript = result.text;
+        transcript = result.text?.trim() ?? "";
         speechProvider = result.provider;
+        console.log("[voice/process] transcribe_ok", { provider: speechProvider, chars: transcript.length });
+      } catch (err) {
+        speechError = err instanceof Error ? err.message : "語音轉換失敗";
+        console.error("[voice/process] transcribe_failed", speechError);
       }
-    } catch {
-      /* fall through */
     }
   }
 
-  if (!transcript?.trim()) {
-    res.status(400).json({ error: "無法取得語音文字，請重試或使用瀏覽器語音辨識" });
+  if (!transcript) {
+    res.json({
+      transcript: "",
+      provider: speechProvider,
+      parser: null,
+      needsManualTranscript: true,
+      speechError,
+      parsed: null,
+    });
     return;
   }
 
@@ -155,6 +174,8 @@ router.post("/voice/process", requireRole(...VOICE_ROLES), async (req, res): Pro
     transcript,
     provider: speechProvider,
     parser: parser.name,
+    needsManualTranscript: false,
+    speechError,
     parsed: enriched,
   });
 });

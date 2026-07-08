@@ -1,6 +1,15 @@
 import { customFetch } from "../../../../shared/api-client/custom-fetch.ts";
 import type { VoiceFormType, VoiceParseResponse, VoiceTranscribeResponse } from "../../../../shared/voice/types.ts";
 
+export async function getVoiceProviders(): Promise<{
+  speech: { id: string; available: boolean; label: string }[];
+  parser: { id: string; available: boolean; label: string }[];
+  activeSpeech: string;
+  activeParser: string;
+}> {
+  return customFetch("/api/voice/providers");
+}
+
 export async function parseVoiceText(
   text: string,
   formType: VoiceFormType,

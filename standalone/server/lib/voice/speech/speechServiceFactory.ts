@@ -10,6 +10,12 @@ export function getSpeechService(): SpeechService {
   const provider = (process.env.VOICE_SPEECH_PROVIDER ?? "stub").toLowerCase();
   const openAiKey = process.env.OPENAI_API_KEY ?? "";
 
+  // Prefer Whisper when API key is configured, even if provider is still "stub".
+  if (openAiKey.length > 0 && (provider === "stub" || provider === "openai_whisper" || provider === "openai" || provider === "whisper")) {
+    cached = new OpenAiWhisperSpeechService(openAiKey);
+    return cached;
+  }
+
   switch (provider) {
     case "openai_whisper":
     case "openai":

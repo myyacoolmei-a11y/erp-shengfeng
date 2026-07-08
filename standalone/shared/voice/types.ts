@@ -57,8 +57,10 @@ export type ParsedVoiceResult =
 export interface VoiceParseResponse {
   transcript: string;
   provider: string;
-  parser: string;
-  parsed: ParsedVoiceResult;
+  parser: string | null;
+  parsed: ParsedVoiceResult | null;
+  needsManualTranscript?: boolean;
+  speechError?: string | null;
 }
 
 export interface VoiceTranscribeResponse {

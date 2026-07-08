@@ -1,9 +1,14 @@
-/** Browser Web Speech API — primary MVP transcription provider. */
+/**
+ * Client audio capture — record raw audio and send to server Speech Provider.
+ * Web Speech may run in parallel for live preview only; it never blocks the pipeline.
+ */
 
-export interface ClientTranscriptionResult {
-  text: string;
-  provider: string;
-  confidence?: number;
+import { voiceLog, voiceWarn } from "./voiceDebug.ts";
+
+export interface RecordingResult {
+  blob: Blob;
+  mimeType: string;
+  durationMs: number;
 }
 
 interface BrowserSpeechRecognition extends EventTarget {
@@ -11,7 +16,8 @@ interface BrowserSpeechRecognition extends EventTarget {
   continuous: boolean;
   interimResults: boolean;
   onresult: ((event: { resultIndex: number; results: { length: number; [i: number]: { isFinal: boolean; 0?: { transcript?: string } } } }) => void) | null;
-  onerror: (() => void) | null;
+  onerror: ((event: { error?: string; message?: string }) => void) | null;
+  onend: (() => void) | null;
   start(): void;
   stop(): void;
 }
@@ -26,21 +32,21 @@ function getSpeechRecognitionCtor(): SpeechRecognitionCtor | null {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
 
-export function isWebSpeechAvailable(): boolean {
-  return typeof window !== "undefined" && getSpeechRecognitionCtor() != null;
-}
-
 export function isMediaRecorderAvailable(): boolean {
   return typeof window !== "undefined" && typeof MediaRecorder !== "undefined";
 }
 
-export class LiveSpeechRecognizer {
+/** Optional live preview — errors are logged only, never shown as noise warnings. */
+export class LiveSpeechPreview {
   private recognition: BrowserSpeechRecognition | null = null;
   private chunks: string[] = [];
 
   start(onPartial?: (text: string) => void): boolean {
     const Ctor = getSpeechRecognitionCtor();
-    if (!Ctor) return false;
+    if (!Ctor) {
+      voiceLog("web_speech_preview_unavailable");
+      return false;
+    }
 
     this.chunks = [];
     const rec = new Ctor();
@@ -61,22 +67,40 @@ export class LiveSpeechRecognizer {
       onPartial?.([...this.chunks, interim].join("").trim());
     };
 
-    rec.onerror = () => { /* caller handles stop */ };
-    rec.start();
-    this.recognition = rec;
-    return true;
+    rec.onerror = (event) => {
+      voiceWarn("web_speech_preview_error", {
+        error: event.error ?? "unknown",
+        message: event.message ?? null,
+        note: "Preview only — does not block recording pipeline",
+      });
+    };
+
+    rec.onend = () => {
+      voiceLog("web_speech_preview_ended", { chars: this.chunks.join("").length });
+    };
+
+    try {
+      rec.start();
+      this.recognition = rec;
+      voiceLog("web_speech_preview_started");
+      return true;
+    } catch (err) {
+      voiceWarn("web_speech_preview_start_failed", {
+        message: err instanceof Error ? err.message : String(err),
+      });
+      return false;
+    }
   }
 
-  stop(): ClientTranscriptionResult {
+  stop(): string {
     const rec = this.recognition;
     if (rec) {
       try { rec.stop(); } catch { /* ignore */ }
       this.recognition = null;
     }
-    return {
-      text: this.chunks.join("").trim(),
-      provider: "web_speech",
-    };
+    const text = this.chunks.join("").trim();
+    voiceLog("web_speech_preview_stop", { chars: text.length });
+    return text;
   }
 }
 
@@ -84,28 +108,72 @@ export class AudioRecorder {
   private mediaRecorder: MediaRecorder | null = null;
   private stream: MediaStream | null = null;
   private parts: Blob[] = [];
+  private startedAt = 0;
 
   async start(): Promise<void> {
-    this.stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    if (!isMediaRecorderAvailable()) {
+      throw new Error("此瀏覽器不支援錄音，請改用 Chrome 或 Edge");
+    }
+
+    this.stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: false,
+        autoGainControl: true,
+      },
+    });
     this.parts = [];
-    this.mediaRecorder = new MediaRecorder(this.stream);
+    this.startedAt = Date.now();
+
+    const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+      ? "audio/webm;codecs=opus"
+      : "audio/webm";
+
+    this.mediaRecorder = new MediaRecorder(this.stream, { mimeType });
     this.mediaRecorder.ondataavailable = e => {
       if (e.data.size > 0) this.parts.push(e.data);
     };
-    this.mediaRecorder.start();
+    this.mediaRecorder.start(250);
+    voiceLog("recorder_started", { mimeType });
   }
 
-  stop(): { blob: Blob; mimeType: string } {
-    const mr = this.mediaRecorder;
-    if (mr && mr.state !== "inactive") {
-      mr.stop();
-    }
-    this.stream?.getTracks().forEach(t => t.stop());
-    this.stream = null;
-    this.mediaRecorder = null;
-    const mimeType = this.parts[0]?.type || "audio/webm";
-    const blob = new Blob(this.parts, { type: mimeType });
-    return { blob, mimeType };
+  stop(): Promise<RecordingResult> {
+    return new Promise((resolve, reject) => {
+      const mr = this.mediaRecorder;
+      if (!mr || mr.state === "inactive") {
+        reject(new Error("錄音尚未開始"));
+        return;
+      }
+
+      const mimeType = mr.mimeType || this.parts[0]?.type || "audio/webm";
+      const durationMs = Date.now() - this.startedAt;
+
+      mr.onstop = () => {
+        this.stream?.getTracks().forEach(t => t.stop());
+        this.stream = null;
+        this.mediaRecorder = null;
+        const blob = new Blob(this.parts, { type: mimeType });
+        voiceLog("recorder_stopped", {
+          mimeType,
+          durationMs,
+          bytes: blob.size,
+          chunks: this.parts.length,
+        });
+        resolve({ blob, mimeType, durationMs });
+      };
+
+      mr.onerror = () => {
+        voiceWarn("recorder_error");
+        reject(new Error("錄音失敗，請重試"));
+      };
+
+      try {
+        mr.requestData();
+        mr.stop();
+      } catch (err) {
+        reject(err instanceof Error ? err : new Error("停止錄音失敗"));
+      }
+    });
   }
 }
 
@@ -115,4 +183,12 @@ export async function blobToBase64(blob: Blob): Promise<string> {
   let binary = "";
   for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
   return btoa(binary);
+}
+
+/** Best MIME type for server transcription. */
+export function normalizeMimeType(mimeType: string): string {
+  if (mimeType.includes("webm")) return "audio/webm";
+  if (mimeType.includes("mp4") || mimeType.includes("m4a")) return "audio/mp4";
+  if (mimeType.includes("ogg")) return "audio/ogg";
+  return mimeType || "audio/webm";
 }

@@ -6,7 +6,13 @@ export const VOICE_FORM_LABELS: Record<VoiceFormType, string> = {
   repair_case: "維修案件",
 };
 
-export type VoiceAssistantStep = "idle" | "recording" | "processing" | "confirm" | "error";
+export type VoiceAssistantStep =
+  | "idle"
+  | "recording"
+  | "processing"
+  | "manual_input"
+  | "confirm"
+  | "error";
 
 export interface VoiceAssistantApplyPayload {
   formType: VoiceFormType;
