@@ -26,6 +26,9 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
 import { WO_STATUSES, makeEmpty, type WOForm, buildPayload, hasWorkOrderCustomer, WorkOrderFormFields, equipmentItemsFromOrder } from "@/components/work-order-form";
 import { stripQuotePricingFromNotes } from "@/lib/quoteToWorkOrder";
+import { VoiceAssistantButton } from "@/components/voice-assistant/VoiceAssistantDialog";
+import { applyVoiceToWorkOrderForm } from "@/lib/voice/applyVoiceToWorkOrder";
+import type { VoiceAssistantApplyPayload } from "@/components/voice-assistant/types";
 import { PdfPreviewDialog } from "@/components/pdf/pdf-preview-dialog";
 import { handlePdfAction, isMobileDevice, openPrintWindow } from "@/components/pdf/pdf-service";
 import { buildWorkOrderHtml } from "@/components/pdf/templates/WorkOrderTemplate";
@@ -372,6 +375,13 @@ export default function WorkOrders() {
     setShowCreate(true);
   }
 
+  function handleVoiceApply({ parsed }: VoiceAssistantApplyPayload) {
+    if (parsed.formType !== "work_order") return;
+    setForm(applyVoiceToWorkOrderForm(parsed));
+    setEditItem(null);
+    setShowCreate(true);
+  }
+
   function openEdit(o: any) {
     let technicians: string[] = [];
     try {
@@ -432,9 +442,12 @@ export default function WorkOrders() {
           <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">冷氣工程派工管理</p>
         </div>
         {canWrite && (
-          <Button size="sm" onClick={openCreate} className="shrink-0">
-            <Plus className="h-4 w-4 mr-1" />新增派工單
-          </Button>
+          <div className="flex items-center gap-2 shrink-0">
+            <VoiceAssistantButton formType="work_order" onApply={handleVoiceApply} />
+            <Button size="sm" onClick={openCreate}>
+              <Plus className="h-4 w-4 mr-1" />新增派工單
+            </Button>
+          </div>
         )}
       </div>
 

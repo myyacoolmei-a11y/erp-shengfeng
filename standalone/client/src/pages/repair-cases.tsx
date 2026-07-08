@@ -26,6 +26,9 @@ import { Badge } from "@/components/ui/badge";
 import { CustomerSelector, type CustomerSelectorValue } from "@/components/customer-selector";
 import { Plus, Search, Eye, Trash2, FileText, CreditCard, Receipt, ShieldCheck, Bell, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { VoiceAssistantButton } from "@/components/voice-assistant/VoiceAssistantDialog";
+import { applyVoiceToRepairCaseForm, customerFromVoiceRepair } from "@/lib/voice/applyVoiceToRepairCase";
+import type { VoiceAssistantApplyPayload } from "@/components/voice-assistant/types";
 
 const STATUSES = ["待派工", "已派工", "診斷中", "等待客戶確認", "等待零件", "維修中", "已完工", "已取消"] as const;
 const SOURCES = ["客戶報修", "原廠派案"] as const;
@@ -311,6 +314,13 @@ export default function RepairCases() {
     setPhotoInput("");
   }
 
+  function handleVoiceApply({ parsed }: VoiceAssistantApplyPayload) {
+    if (parsed.formType !== "repair_case") return;
+    setForm(applyVoiceToRepairCaseForm(emptyForm, parsed));
+    setFormCustomer(customerFromVoiceRepair(parsed));
+    setShowCreate(true);
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-2 flex-wrap">
@@ -318,9 +328,12 @@ export default function RepairCases() {
           <h1 className="text-2xl font-bold">維修案件</h1>
           <p className="text-sm text-muted-foreground mt-0.5">客戶報修與原廠派案獨立流程</p>
         </div>
-        <Button size="sm" onClick={() => { setForm(emptyForm()); setFormCustomer(null); setShowCreate(true); }}>
-          <Plus className="h-4 w-4 mr-1" />建立案件
-        </Button>
+        <div className="flex items-center gap-2">
+          <VoiceAssistantButton formType="repair_case" onApply={handleVoiceApply} />
+          <Button size="sm" onClick={() => { setForm(emptyForm()); setFormCustomer(null); setShowCreate(true); }}>
+            <Plus className="h-4 w-4 mr-1" />建立案件
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-col sm:flex-row gap-2">

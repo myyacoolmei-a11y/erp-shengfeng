@@ -21,6 +21,7 @@ import wholesaleQuotesRouter from "./wholesale-quotes";
 import wholesaleOrdersRouter from "./wholesale-orders";
 import wholesaleReceivablesRouter from "./wholesale-receivables";
 import wholesaleSettlementsRouter from "./wholesale-settlements";
+import voiceRouter from "./voice";
 import { authenticate } from "../lib/auth";
 
 const router: IRouter = Router();
@@ -50,5 +51,6 @@ router.use(wholesaleQuotesRouter);
 router.use(wholesaleOrdersRouter);
 router.use(wholesaleReceivablesRouter);
 router.use(wholesaleSettlementsRouter);
+router.use(voiceRouter);
 
 export default router;

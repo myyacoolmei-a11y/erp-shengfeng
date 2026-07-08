@@ -36,6 +36,9 @@ import {
   canConvertQuoteToWorkOrder,
   normalizeQuoteStatus,
 } from "@/lib/quoteToWorkOrder";
+import { VoiceAssistantButton } from "@/components/voice-assistant/VoiceAssistantDialog";
+import { applyVoiceToQuoteForm } from "@/lib/voice/applyVoiceToQuote";
+import type { VoiceAssistantApplyPayload } from "@/components/voice-assistant/types";
 
 // ── Constants ──────────────────────────────────────────────────────────────
 const STATUSES = ["草稿", "已送出", "已成交", "已拒絕"];
@@ -502,6 +505,13 @@ export default function QuotesPage() {
 
   function openEdit(q: any) { setForm(quoteToForm(q)); setEditItem(q); }
 
+  function handleVoiceApply({ parsed }: VoiceAssistantApplyPayload) {
+    if (parsed.formType !== "quote") return;
+    setForm(applyVoiceToQuoteForm(emptyForm, parsed));
+    setEditItem(null);
+    setShowCreate(true);
+  }
+
   useEffect(() => {
     if (!focusQuoteId || !quotes?.length) return;
     const q = quotes.find((x: any) => x.id === focusQuoteId);
@@ -534,7 +544,10 @@ export default function QuotesPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div><h1 className="text-2xl font-bold">報價單管理</h1><p className="text-sm text-muted-foreground mt-0.5">管理所有客戶報價單</p></div>
-        <Button size="sm" onClick={() => { setForm(emptyForm()); setShowCreate(true); }}><Plus className="h-4 w-4 mr-1" />新增報價單</Button>
+        <div className="flex items-center gap-2">
+          <VoiceAssistantButton formType="quote" onApply={handleVoiceApply} />
+          <Button size="sm" onClick={() => { setForm(emptyForm()); setShowCreate(true); }}><Plus className="h-4 w-4 mr-1" />新增報價單</Button>
+        </div>
       </div>
 
       {filterCustomerName && (
