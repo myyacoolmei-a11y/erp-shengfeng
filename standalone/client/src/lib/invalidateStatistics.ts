@@ -13,6 +13,7 @@ export function invalidateStatistics(queryClient: QueryClient, employeeId?: numb
   queryClient.invalidateQueries({ queryKey: getGetDashboardSummaryQueryKey() });
   queryClient.invalidateQueries({ queryKey: getListEmployeesPerformanceQueryKey() });
   queryClient.invalidateQueries({ queryKey: getListReceivablesQueryKey() });
+  // payments API retained for legacy data; dashboard/collection stats use receivables
   queryClient.invalidateQueries({ queryKey: getListPaymentsQueryKey() });
   queryClient.invalidateQueries({ queryKey: getListQuotesQueryKey() });
   if (employeeId != null) {

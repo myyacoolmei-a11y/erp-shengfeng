@@ -1,87 +1,60 @@
-import { useState } from "react";
+import { useMemo } from "react";
 import { useSearch, useLocation } from "wouter";
-import {
-  useListPayments, useCreatePayment, useDeletePayment,
-  useListQuotes, useListWorkOrders,
-} from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
-import { invalidateStatistics } from "@/lib/invalidateStatistics";
-import { X } from "lucide-react";
+import { useListReceivables } from "@workspace/api-client-react";
+import { X, TrendingUp, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { CustomerSelector, type CustomerSelectorValue } from "@/components/customer-selector";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Plus, Trash2, TrendingUp } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import type { Receivable } from "@workspace/api-client-react";
 
-const METHODS = ["現金", "銀行轉帳", "支票", "LINE Pay", "其他"];
+function collectedRows(receivables: Receivable[] | undefined): Receivable[] {
+  return (receivables ?? [])
+    .filter(r => Number(r.receivedAmount ?? 0) > 0)
+    .sort((a, b) => {
+      const da = a.actualPaymentDate ?? "";
+      const db = b.actualPaymentDate ?? "";
+      return db.localeCompare(da);
+    });
+}
 
-function groupByMonth(payments: any[]) {
+function groupByMonth(rows: Receivable[]) {
   const map: Record<string, number> = {};
-  for (const p of payments) {
-    const month = p.paymentDate.slice(0, 7);
-    map[month] = (map[month] ?? 0) + Number(p.amount);
+  for (const r of rows) {
+    if (!r.actualPaymentDate) continue;
+    const month = r.actualPaymentDate.slice(0, 7);
+    map[month] = (map[month] ?? 0) + Number(r.receivedAmount ?? 0);
   }
   return Object.entries(map).sort((a, b) => b[0].localeCompare(a[0])).slice(0, 6);
 }
 
 export default function Payments() {
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
   const search = useSearch();
   const [, navigate] = useLocation();
   const urlParams = new URLSearchParams(search);
   const filterCustomerId = parseInt(urlParams.get("customerId") ?? "0", 10) || null;
   const filterCustomerName = urlParams.get("customerName") ?? "";
 
-  const [showCreate, setShowCreate] = useState(false);
-  const [deleteId, setDeleteId] = useState<number | null>(null);
-  const [selectedCustomer, setSelectedCustomer] = useState<number>(filterCustomerId ?? 0);
-  const [formCustomer, setFormCustomer] = useState<CustomerSelectorValue | null>(null);
+  const { data: receivables, isLoading } = useListReceivables(
+    filterCustomerId ? { customerId: filterCustomerId } : {},
+  );
 
-  const { data: payments, isLoading } = useListPayments(filterCustomerId ? { customerId: filterCustomerId } : {});
-  const { data: quotes } = useListQuotes(selectedCustomer ? { customerId: selectedCustomer } : {});
-  const { data: workOrders } = useListWorkOrders(selectedCustomer ? { customerId: selectedCustomer } : {});
-
-  const createMutation = useCreatePayment({
-    mutation: {
-      onSuccess: () => {
-        invalidateStatistics(queryClient);
-        setShowCreate(false);
-        setSelectedCustomer(0);
-        toast({ title: "收款紀錄已新增" });
-      }
-    }
-  });
-  const deleteMutation = useDeletePayment({
-    mutation: {
-      onSuccess: () => {
-        invalidateStatistics(queryClient);
-        setDeleteId(null);
-        toast({ title: "收款紀錄已刪除" });
-      }
-    }
-  });
-
-  const emptyForm = { customerId: 0, quoteId: undefined as number | undefined, workOrderId: undefined as number | undefined, amount: 0, paymentDate: "", paymentMethod: "現金", notes: "" };
-  const [form, setForm] = useState(emptyForm);
-
-  const total = payments?.reduce((s, p) => s + Number(p.amount), 0) ?? 0;
-  const monthlyData = payments ? groupByMonth(payments) : [];
+  const rows = useMemo(() => collectedRows(receivables), [receivables]);
+  const total = rows.reduce((s, r) => s + Number(r.receivedAmount ?? 0), 0);
+  const monthlyData = groupByMonth(rows);
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold">收款紀錄</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">總收款：<span className="font-semibold text-green-700">NT${total.toLocaleString("zh-TW")}</span></p>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            資料來源：應收帳款已收金額 · 總收款：
+            <span className="font-semibold text-green-700"> NT${total.toLocaleString("zh-TW")}</span>
+          </p>
         </div>
-        <Button size="sm" onClick={() => { setForm(emptyForm); setSelectedCustomer(0); setShowCreate(true); }}><Plus className="h-4 w-4 mr-1" />新增收款</Button>
+        <Button size="sm" variant="outline" onClick={() => navigate("/receivables")}>
+          <ExternalLink className="h-4 w-4 mr-1" />前往應收帳款記錄收款
+        </Button>
       </div>
 
       {filterCustomerName && (
@@ -93,19 +66,18 @@ export default function Payments() {
         </div>
       )}
 
-      {/* Monthly breakdown */}
       {monthlyData.length > 0 && (
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-1.5 mb-3">
               <TrendingUp className="h-4 w-4 text-green-600" />
-              <span className="text-sm font-medium">月收款統計</span>
+              <span className="text-sm font-medium">月收款統計（依實際收款日）</span>
             </div>
             <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
               {monthlyData.map(([month, amount]) => (
                 <div key={month} className="text-center">
                   <p className="text-xs text-muted-foreground">{month.slice(5)}月</p>
-                  <p className="text-sm font-semibold text-green-700">NT${(amount / 1000).toFixed(1)}K</p>
+                  <p className="text-sm font-semibold text-green-700">NT${amount.toLocaleString("zh-TW")}</p>
                 </div>
               ))}
             </div>
@@ -114,113 +86,56 @@ export default function Payments() {
       )}
 
       {isLoading ? (
-        <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-14 w-full" />)}</div>
-      ) : payments && payments.length > 0 ? (
+        <div className="space-y-2">{[1, 2, 3].map(i => <Skeleton key={i} className="h-14 w-full" />)}</div>
+      ) : rows.length > 0 ? (
         <Card><CardContent className="p-0">
           <div className="divide-y">
-            {payments.map(p => (
-              <div key={p.id} className="px-4 py-3 flex items-center justify-between">
-                <div className="flex-1">
+            {rows.map(r => (
+              <div
+                key={r.id}
+                className="px-4 py-3 flex items-center justify-between gap-2 cursor-pointer hover:bg-muted/40"
+                onClick={() => navigate("/receivables")}
+              >
+                <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-semibold text-green-700">NT${Number(p.amount).toLocaleString()}</span>
-                    {p.paymentMethod && <span className="text-xs bg-muted px-1.5 py-0.5 rounded">{p.paymentMethod}</span>}
+                    <span className="font-semibold text-green-700">
+                      NT${Number(r.receivedAmount).toLocaleString("zh-TW")}
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      / 應收 NT${Number(r.totalAmount).toLocaleString("zh-TW")}
+                    </span>
+                    <span className={`text-xs px-1.5 py-0.5 rounded ${
+                      r.paymentStatus === "已收款" ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"
+                    }`}>{r.paymentStatus}</span>
+                    {r.paymentMethod && (
+                      <span className="text-xs bg-muted px-1.5 py-0.5 rounded">{r.paymentMethod}</span>
+                    )}
                   </div>
                   <div className="text-xs text-muted-foreground mt-0.5 flex gap-3 flex-wrap">
-                    <span className="font-medium text-foreground">{p.customerName}</span>
-                    <span>{p.paymentDate}</span>
-                    {p.notes && <span>{p.notes}</span>}
-                    {p.quoteId && <span className="text-blue-600">報價單#{p.quoteId}</span>}
-                    {p.workOrderId && <span className="text-purple-600">派工單#{p.workOrderId}</span>}
+                    <span className="font-medium text-foreground">{r.customerName ?? "—"}</span>
+                    {r.projectName && <span>{r.projectName}</span>}
+                    {r.actualPaymentDate
+                      ? <span>收款日 {r.actualPaymentDate}</span>
+                      : <span className="text-amber-600">部分收款（尚未全額收清）</span>}
+                    {r.workOrderNumber && <span className="text-purple-600">{r.workOrderNumber}</span>}
+                    {r.notes && <span className="truncate max-w-xs">{r.notes}</span>}
                   </div>
                 </div>
-                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => setDeleteId(p.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
               </div>
             ))}
           </div>
         </CardContent></Card>
       ) : (
-        <Card><CardContent className="py-12 text-center"><p className="text-muted-foreground">尚無收款紀錄</p></CardContent></Card>
+        <Card>
+          <CardContent className="py-12 text-center space-y-2">
+            <p className="text-muted-foreground">尚無收款紀錄</p>
+            <p className="text-xs text-muted-foreground">請至應收帳款頁面「記錄收款」</p>
+            <Button size="sm" variant="outline" className="mt-2" onClick={() => navigate("/receivables")}>
+              前往應收帳款
+            </Button>
+          </CardContent>
+        </Card>
       )}
-
-      <Dialog open={showCreate} onOpenChange={open => { if (!open) { setShowCreate(false); setSelectedCustomer(0); setFormCustomer(null); } }}>
-        <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>新增收款紀錄</DialogTitle></DialogHeader>
-          <form onSubmit={e => {
-            e.preventDefault();
-            const data: any = { ...form };
-            if (!data.quoteId) delete data.quoteId;
-            if (!data.workOrderId) delete data.workOrderId;
-            createMutation.mutate({ data });
-          }} className="space-y-3">
-            <div className="space-y-1.5">
-              <Label>客戶 *</Label>
-              <CustomerSelector
-                value={formCustomer}
-                onChange={v => {
-                  setFormCustomer(v);
-                  const cid = v?.customerId ?? 0;
-                  setForm(f => ({ ...f, customerId: cid, quoteId: undefined, workOrderId: undefined }));
-                  setSelectedCustomer(cid);
-                }}
-                allowTemp={false}
-              />
-            </div>
-
-            {selectedCustomer > 0 && quotes && quotes.length > 0 && (
-              <div className="space-y-1.5">
-                <Label>關聯報價單</Label>
-                <Select value={String(form.quoteId ?? "")} onValueChange={v => setForm(f => ({ ...f, quoteId: v ? parseInt(v) : undefined }))}>
-                  <SelectTrigger><SelectValue placeholder="選擇報價單（可選）" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">不關聯</SelectItem>
-                    {quotes.map(q => <SelectItem key={q.id} value={String(q.id)}>{q.title} - NT${Number(q.finalAmount ?? q.amount).toLocaleString()}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            {selectedCustomer > 0 && workOrders && workOrders.length > 0 && (
-              <div className="space-y-1.5">
-                <Label>關聯派工單</Label>
-                <Select value={String(form.workOrderId ?? "")} onValueChange={v => setForm(f => ({ ...f, workOrderId: v ? parseInt(v) : undefined }))}>
-                  <SelectTrigger><SelectValue placeholder="選擇派工單（可選）" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="">不關聯</SelectItem>
-                    {workOrders.map(w => <SelectItem key={w.id} value={String(w.id)}>{w.title}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5"><Label>金額 *</Label><Input required type="number" min="0" value={form.amount || ""} onChange={e => setForm(f => ({ ...f, amount: parseFloat(e.target.value) || 0 }))} /></div>
-              <div className="space-y-1.5"><Label>收款日期 *</Label><Input required type="date" value={form.paymentDate} onChange={e => setForm(f => ({ ...f, paymentDate: e.target.value }))} /></div>
-            </div>
-            <div className="space-y-1.5">
-              <Label>付款方式</Label>
-              <Select value={form.paymentMethod} onValueChange={v => setForm(f => ({ ...f, paymentMethod: v }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>{METHODS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5"><Label>備註</Label><Input value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} /></div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => { setShowCreate(false); setSelectedCustomer(0); }}>取消</Button>
-              <Button type="submit" disabled={createMutation.isPending}>儲存</Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      <AlertDialog open={deleteId !== null} onOpenChange={open => !open && setDeleteId(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader><AlertDialogTitle>確認刪除</AlertDialogTitle><AlertDialogDescription>確定要刪除這筆收款紀錄嗎？</AlertDialogDescription></AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
-            <AlertDialogAction onClick={() => deleteId && deleteMutation.mutate({ id: deleteId })} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">刪除</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 }

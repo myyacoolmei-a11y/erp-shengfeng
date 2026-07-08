@@ -113,7 +113,7 @@ export default function Dashboard() {
         <StatCard
           label="今日收款" value={fmt(data?.todayPaymentsAmount ?? 0)}
           icon={CreditCard} color="text-green-600"
-          href="/payments" isLoading={isLoading}
+          href="/receivables" isLoading={isLoading}
         />
         <StatCard
           label="今日提醒" value={todayReminder}
@@ -183,7 +183,7 @@ export default function Dashboard() {
           <StatCard
             label="本月實收" value={fmt(data?.monthlyPaidAmount ?? 0)}
             icon={CreditCard} color="text-teal-600"
-            href="/payments" isLoading={isLoading}
+            href="/receivables" isLoading={isLoading}
           />
           <StatCard
             label="本月未收" value={fmt(data?.totalUnpaid ?? 0)}

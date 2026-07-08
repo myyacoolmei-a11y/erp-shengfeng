@@ -2,7 +2,7 @@
  * Unified business statistics — single source of truth for Dashboard, Employee KPI,
  * and any future analytics (rankings, charts, AI).
  */
-import { and, count, eq, gte, lt, lte, ne, sum, inArray, desc } from "drizzle-orm";
+import { and, count, eq, gte, lt, lte, ne, sum, inArray, desc, isNotNull, gt } from "drizzle-orm";
 import {
   db,
   customersTable,
@@ -149,17 +149,22 @@ export async function computeReceivablePeriodStats(range: StatsDateRange): Promi
   return { count: row?.count ?? 0, amount: toAmount(row?.amount) };
 }
 
-/** Payments table only — same source as 收款紀錄 page */
-export async function computePaymentPeriodStats(range: StatsDateRange): Promise<PaymentPeriodStats> {
+/** Receivables collected in period — same source as 應收帳款 / 收款紀錄 pages */
+export async function computeReceivableCollectionPeriodStats(range: StatsDateRange): Promise<PaymentPeriodStats> {
   const [row] = await db
-    .select({ amount: sum(paymentsTable.amount) })
-    .from(paymentsTable)
+    .select({ amount: sum(receivablesTable.receivedAmount) })
+    .from(receivablesTable)
     .where(and(
-      gte(paymentsTable.paymentDate, range.startDate),
-      lte(paymentsTable.paymentDate, range.endDate),
+      isNotNull(receivablesTable.actualPaymentDate),
+      gt(receivablesTable.receivedAmount, "0"),
+      gte(receivablesTable.actualPaymentDate, range.startDate),
+      lte(receivablesTable.actualPaymentDate, range.endDate),
     ));
   return { amount: toAmount(row?.amount) };
 }
+
+/** @deprecated Alias — use computeReceivableCollectionPeriodStats */
+export const computePaymentPeriodStats = computeReceivableCollectionPeriodStats;
 
 export interface ReceivableBalanceStats {
   totalAmount: number;
@@ -240,9 +245,9 @@ export async function getDashboardSummary() {
   ] = await Promise.all([
     computeQuotePeriodStats(monthRange),
     computeReceivablePeriodStats(monthRange),
-    computePaymentPeriodStats(monthRange),
+    computeReceivableCollectionPeriodStats(monthRange),
     computeReceivableBalanceStats(today),
-    computePaymentPeriodStats(todayRng),
+    computeReceivableCollectionPeriodStats(todayRng),
     db.select({ count: count() }).from(customersTable),
     db.select({ count: count() }).from(quotesTable),
     db.select({ count: count() }).from(workOrdersTable),
