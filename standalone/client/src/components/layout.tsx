@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useAuth, effectiveRoles, type UserRole } from "@/contexts/auth-context";
 import { ROLE_LABELS } from "@/lib/role-labels";
+import { APP_BRAND } from "@/lib/appBrand";
 
 interface NavItem {
   href: string;
@@ -168,10 +169,11 @@ function NavContent() {
       <div className="px-4 py-3">
         <Link href="/">
           <div className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity">
-            <img src="/logo.png" alt="晟風空調" className="h-12 w-12 rounded-full object-cover shrink-0" />
+            <img src="/logo.png" alt={APP_BRAND.logoAlt} className="h-12 w-12 rounded-full object-cover shrink-0" />
             <div>
-              <h1 className="text-base font-bold tracking-tight text-primary leading-tight">晟風工程</h1>
-              <p className="text-xs text-muted-foreground tracking-wider">ERP 系統 <span className="text-[10px] text-gray-400 ml-1">v-wholesale-20260703</span></p>
+              <h1 className="text-base font-bold tracking-tight text-primary leading-tight">{APP_BRAND.brandEn}</h1>
+              <p className="text-[11px] text-muted-foreground leading-snug mt-0.5">{APP_BRAND.nameZh}</p>
+              <p className="text-[10px] text-muted-foreground/80 leading-snug">{APP_BRAND.nameEn}</p>
             </div>
           </div>
         </Link>
@@ -227,6 +229,12 @@ function NavContent() {
 
           {bottomItems.map((item) => <NavLink key={item.href} item={item} />)}
         </nav>
+
+        <div className="mt-4 px-1 text-[10px] text-muted-foreground leading-relaxed border-t pt-3">
+          <p className="font-medium text-foreground/70 mb-1">About</p>
+          <p>{APP_BRAND.nameZh}</p>
+          <p className="mt-0.5">{APP_BRAND.nameEn}</p>
+        </div>
       </div>
 
       {user && (
@@ -287,8 +295,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </Sheet>
           <Link href="/">
             <div className="flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity">
-              <img src="/logo.png" alt="晟風空調" className="h-8 w-8 rounded-full object-cover" />
-              <span className="font-bold text-primary">晟風工程 ERP</span>
+              <img src="/logo.png" alt={APP_BRAND.logoAlt} className="h-8 w-8 rounded-full object-cover" />
+              <span className="font-bold text-primary text-sm leading-tight" title={APP_BRAND.nameZh}>
+                {APP_BRAND.brandEn}
+              </span>
             </div>
           </Link>
           {user && (

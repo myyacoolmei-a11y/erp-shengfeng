@@ -9,6 +9,7 @@ import {
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/contexts/auth-context";
 import { PENDING_DISPATCH } from "@/lib/dispatchPendingTheme";
+import { APP_BRAND } from "@/lib/appBrand";
 
 function fmt(n: number) {
   const val = Number.isFinite(n) ? n : 0;
@@ -77,7 +78,7 @@ export default function Dashboard() {
     <div className="space-y-5">
       <div>
         <h1 className="text-xl sm:text-2xl font-bold text-foreground">儀表板</h1>
-        <p className="text-xs text-muted-foreground mt-0.5">晟風工程 ERP 系統總覽</p>
+        <p className="text-xs text-muted-foreground mt-0.5">{APP_BRAND.nameZh} {APP_BRAND.dashboardSubtitleZh}</p>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">

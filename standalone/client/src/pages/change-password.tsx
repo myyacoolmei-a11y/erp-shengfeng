@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Wind, AlertCircle, Loader2, ShieldCheck } from "lucide-react";
+import { APP_BRAND } from "@/lib/appBrand";
 
 const TOKEN_KEY = "erp_auth_token";
 
@@ -72,8 +73,8 @@ export default function ChangePasswordPage() {
           <div className="flex items-center justify-center w-14 h-14 rounded-full bg-primary/10">
             <Wind className="h-7 w-7 text-primary" />
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-primary">晟風工程</h1>
-          <p className="text-sm text-muted-foreground">ERP 系統</p>
+          <h1 className="text-xl font-bold tracking-tight text-primary text-center leading-snug">{APP_BRAND.nameZh}</h1>
+          <p className="text-xs text-muted-foreground text-center max-w-xs">{APP_BRAND.nameEn}</p>
         </div>
 
         <Card className="shadow-md">

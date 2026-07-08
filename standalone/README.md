@@ -1,6 +1,6 @@
-# 晟風工程 ERP — Standalone
+# 晟風空調工程管理助手 ERP — Standalone
 
-A self-contained build of the 晟風工程 ERP system. No pnpm workspace or Replit-specific tooling required.
+A self-contained build of **Cheng Feng HVAC Management Assistant ERP** (晟風空調工程管理助手 ERP). No pnpm workspace or Replit-specific tooling required.
 
 ## Requirements
 

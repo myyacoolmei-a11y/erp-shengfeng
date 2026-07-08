@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Wind, AlertCircle, Loader2 } from "lucide-react";
+import { APP_BRAND } from "@/lib/appBrand";
 
 export default function LoginPage() {
   const { login, isAuthenticated } = useAuth();
@@ -37,9 +38,9 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <div className="w-full max-w-sm space-y-6">
         <div className="flex flex-col items-center gap-2">
-          <img src="/logo.png" alt="晟風空調" className="w-20 h-20 rounded-full object-cover shadow-md" />
-          <h1 className="text-2xl font-bold tracking-tight text-primary">晟風工程</h1>
-          <p className="text-sm text-muted-foreground">ERP 系統</p>
+          <img src="/logo.png" alt={APP_BRAND.logoAlt} className="w-20 h-20 rounded-full object-cover shadow-md" />
+          <h1 className="text-xl font-bold tracking-tight text-primary text-center leading-snug">{APP_BRAND.nameZh}</h1>
+          <p className="text-xs text-muted-foreground text-center max-w-xs">{APP_BRAND.nameEn}</p>
         </div>
 
         <Card className="shadow-md">

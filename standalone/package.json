@@ -1,7 +1,7 @@
 {
   "name": "shengfeng-erp",
   "version": "1.0.0",
-  "description": "晟風工程 ERP — Air conditioning company ERP system",
+  "description": "晟風空調工程管理助手 ERP — Cheng Feng HVAC Management Assistant ERP",
   "private": true,
   "type": "module",
   "scripts": {
