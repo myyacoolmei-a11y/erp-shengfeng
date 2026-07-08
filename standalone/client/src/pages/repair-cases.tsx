@@ -26,6 +26,7 @@ import { Badge } from "@/components/ui/badge";
 import { CustomerSelector, type CustomerSelectorValue } from "@/components/customer-selector";
 import { Plus, Search, Eye, Trash2, FileText, CreditCard, Receipt, ShieldCheck, Bell, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { PENDING_DISPATCH_BADGE } from "@/lib/dispatchPendingTheme";
 import { VoiceAssistantButton } from "@/components/voice-assistant/VoiceAssistantDialog";
 import { applyVoiceToRepairCaseForm, customerFromVoiceRepair } from "@/lib/voice/applyVoiceToRepairCase";
 import type { VoiceAssistantApplyPayload } from "@/components/voice-assistant/types";
@@ -35,7 +36,7 @@ const SOURCES = ["客戶報修", "原廠派案"] as const;
 const PRIORITIES = ["普通", "急件", "VIP"] as const;
 
 const STATUS_COLORS: Record<string, string> = {
-  "待派工": "bg-slate-100 text-slate-700",
+  "待派工": PENDING_DISPATCH_BADGE,
   "已派工": "bg-blue-100 text-blue-700",
   "診斷中": "bg-purple-100 text-purple-700",
   "等待客戶確認": "bg-amber-100 text-amber-700",

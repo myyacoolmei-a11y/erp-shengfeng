@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/contexts/auth-context";
+import { PENDING_DISPATCH } from "@/lib/dispatchPendingTheme";
 
 function fmt(n: number) {
   const val = Number.isFinite(n) ? n : 0;
@@ -81,10 +82,10 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {[
-          { label: "新增客戶", icon: Users, bg: "#66E85A", text: "#FFFFFF", href: "/customers" },
+          { label: "新增客戶", icon: Users, bg: "#66E85A", text: "#000000", href: "/customers" },
           { label: "新增報價", icon: FileText, bg: "#FF4FB8", text: "#FFFFFF", href: "/quotes" },
           { label: "新增派工", icon: Wrench, bg: "#FFC9E6", text: "#333333", href: "/work-orders" },
-          { label: "新增收款", icon: CreditCard, bg: "#1F5E4A", text: "#FFFFFF", href: "/receivables" },
+          { label: "新增收款", icon: CreditCard, bg: "#2EC4B6", text: "#FFFFFF", href: "/receivables" },
         ].map(({ label, icon: Icon, bg, text, href }) => (
           <button
             key={label}
@@ -92,7 +93,7 @@ export default function Dashboard() {
             style={{ backgroundColor: bg, color: text }}
             className="flex items-center justify-center gap-2 rounded-lg py-3 text-sm font-semibold transition-[transform,filter] duration-200 ease-in-out hover:brightness-[1.08] active:scale-[0.98]"
           >
-            <Icon className="h-4 w-4" />
+            <Icon className="h-4 w-4" style={{ color: text }} />
             {label}
           </button>
         ))}
@@ -127,14 +128,20 @@ export default function Dashboard() {
 
       {/* 待派工案件 — 老闆優先關注 */}
       {(canSeeFinance || user?.role === "owner") && (
-        <Card className={((data?.pendingDispatchCount ?? 0) > 0) ? "border-orange-300 bg-orange-50/30" : ""}>
+        <Card
+          className={((data?.pendingDispatchCount ?? 0) > 0) ? "border-[#FFB8DD]" : ""}
+          style={((data?.pendingDispatchCount ?? 0) > 0) ? { backgroundColor: `${PENDING_DISPATCH.cardBg}80` } : undefined}
+        >
           <CardHeader className="pb-2 pt-4 px-4">
             <div className="flex items-center justify-between">
               <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
-                <Wrench className="h-4 w-4 text-orange-500" />
+                <Wrench className="h-4 w-4" style={{ color: PENDING_DISPATCH.accent }} />
                 待派工案件
                 {!isLoading && (data?.pendingDispatchCount ?? 0) > 0 && (
-                  <span className="text-xs font-bold bg-orange-500 text-white px-2 py-0.5 rounded-full ml-1">
+                  <span
+                    className="text-xs font-bold text-white px-2 py-0.5 rounded-full ml-1"
+                    style={{ backgroundColor: PENDING_DISPATCH.accent }}
+                  >
                     {data?.pendingDispatchCount}
                   </span>
                 )}
@@ -158,7 +165,7 @@ export default function Dashboard() {
                       <div className="min-w-0">
                         <p className="text-sm font-medium truncate">{q.title}</p>
                         <p className="text-xs text-muted-foreground mt-0.5">
-                          {q.customerName ?? "—"} · 🟠 待派工 · {new Date(q.createdAt).toLocaleDateString("zh-TW")}
+                          {q.customerName ?? "—"} · <span style={{ color: PENDING_DISPATCH.accent }}>●</span> 待派工 · {new Date(q.createdAt).toLocaleDateString("zh-TW")}
                         </p>
                       </div>
                       <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />

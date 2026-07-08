@@ -36,6 +36,7 @@ import {
   canConvertQuoteToWorkOrder,
   normalizeQuoteStatus,
 } from "@/lib/quoteToWorkOrder";
+import { PENDING_DISPATCH_BADGE, PENDING_DISPATCH_FILTER_ACTIVE } from "@/lib/dispatchPendingTheme";
 import { VoiceAssistantButton } from "@/components/voice-assistant/VoiceAssistantDialog";
 import { applyVoiceToQuoteForm } from "@/lib/voice/applyVoiceToQuote";
 import type { VoiceAssistantApplyPayload } from "@/components/voice-assistant/types";
@@ -51,7 +52,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 const DISPATCH_COLORS: Record<string, string> = {
   "未派工": "bg-slate-100 text-slate-600",
-  "待派工": "bg-orange-100 text-orange-700",
+  "待派工": PENDING_DISPATCH_BADGE,
   "已派工": "bg-green-100 text-green-700",
   "施工中": "bg-blue-100 text-blue-700",
   "已完工": "bg-emerald-100 text-emerald-700",
@@ -563,7 +564,13 @@ export default function QuotesPage() {
       <div className="flex gap-2 flex-wrap">
         {FILTER_TABS.map(s => (
           <button key={s} onClick={() => setStatusFilter(s)}
-            className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${statusFilter === s ? "bg-primary text-primary-foreground border-primary" : "bg-background border-border hover:bg-muted"}`}>
+            className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
+              statusFilter === s
+                ? s === "待派工"
+                  ? PENDING_DISPATCH_FILTER_ACTIVE
+                  : "bg-primary text-primary-foreground border-primary"
+                : "bg-background border-border hover:bg-muted"
+            }`}>
             {s}
           </button>
         ))}
@@ -587,7 +594,7 @@ export default function QuotesPage() {
                       <span className="font-medium text-sm">{q.title}</span>
                       <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${STATUS_COLORS[normalizeQuoteStatus(q.status)] ?? "bg-gray-100 text-gray-700"}`}>{normalizeQuoteStatus(q.status)}</span>
                       <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${DISPATCH_COLORS[q.dispatchStatus ?? "未派工"] ?? "bg-slate-100 text-slate-600"}`}>
-                        {q.dispatchStatus === "待派工" ? "🟠 " : q.dispatchStatus === "已派工" ? "🟢 " : ""}{q.dispatchStatus ?? "未派工"}
+                        {q.dispatchStatus === "待派工" ? "● " : q.dispatchStatus === "已派工" ? "🟢 " : ""}{q.dispatchStatus ?? "未派工"}
                       </span>
                       {q.workOrderNumber && (
                         <span className="text-xs px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 font-mono">{q.workOrderNumber}</span>
