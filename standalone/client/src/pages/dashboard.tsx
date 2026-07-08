@@ -81,15 +81,16 @@ export default function Dashboard() {
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
         {[
-          { label: "新增客戶", icon: Users, color: "bg-blue-500 hover:bg-blue-600", href: "/customers" },
-          { label: "新增報價", icon: FileText, color: "bg-violet-500 hover:bg-violet-600", href: "/quotes" },
-          { label: "新增派工", icon: Wrench, color: "bg-amber-500 hover:bg-amber-600", href: "/work-orders" },
-          { label: "新增收款", icon: CreditCard, color: "bg-green-500 hover:bg-green-600", href: "/receivables" },
-        ].map(({ label, icon: Icon, color, href }) => (
+          { label: "新增客戶", icon: Users, bg: "#66E85A", text: "#FFFFFF", href: "/customers" },
+          { label: "新增報價", icon: FileText, bg: "#FF4FB8", text: "#FFFFFF", href: "/quotes" },
+          { label: "新增派工", icon: Wrench, bg: "#FFC9E6", text: "#333333", href: "/work-orders" },
+          { label: "新增收款", icon: CreditCard, bg: "#1F5E4A", text: "#FFFFFF", href: "/receivables" },
+        ].map(({ label, icon: Icon, bg, text, href }) => (
           <button
             key={label}
             onClick={() => navigate(href)}
-            className={`flex items-center justify-center gap-2 rounded-lg py-3 text-white text-sm font-semibold transition-colors ${color}`}
+            style={{ backgroundColor: bg, color: text }}
+            className="flex items-center justify-center gap-2 rounded-lg py-3 text-sm font-semibold transition-[transform,filter] duration-200 ease-in-out hover:brightness-[1.08] active:scale-[0.98]"
           >
             <Icon className="h-4 w-4" />
             {label}
