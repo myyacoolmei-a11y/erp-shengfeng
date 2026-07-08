@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and, lt } from "drizzle-orm";
-import { db, receivablesTable, customersTable } from "@workspace/db";
+import { db, receivablesTable, customersTable, paymentsTable } from "@workspace/db";
 import { requireRole } from "../lib/auth";
 import { z } from "zod/v4";
 
@@ -215,7 +215,23 @@ router.post("/receivables/:id/payment", requireRole(...WRITE_ROLES), async (req,
     updateData["actualPaymentDate"] = parsed.data.paymentDate;
   }
 
-  await db.update(receivablesTable).set(updateData).where(eq(receivablesTable.id, id));
+  const receivableRef = `應收帳款 #${id}`;
+  const paymentNotes = parsed.data.notes?.trim()
+    ? `${parsed.data.notes.trim()} (${receivableRef})`
+    : receivableRef;
+
+  await db.transaction(async (tx) => {
+    await tx.update(receivablesTable).set(updateData).where(eq(receivablesTable.id, id));
+    await tx.insert(paymentsTable).values({
+      customerId: current.customerId,
+      workOrderId: current.workOrderId ?? undefined,
+      amount: String(parsed.data.amount),
+      paymentDate: parsed.data.paymentDate,
+      paymentMethod: parsed.data.paymentMethod ?? current.paymentMethod ?? undefined,
+      notes: paymentNotes,
+    });
+  });
+
   const [updated] = await db
     .select(REC_SELECT)
     .from(receivablesTable)
