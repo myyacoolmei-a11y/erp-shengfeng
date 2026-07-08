@@ -69,6 +69,7 @@ function isMaintenanceType(projectType: string | null | undefined): boolean {
 
 const QUOTE_SUMMARY_SELECT = {
   id: quotesTable.id,
+  customerId: quotesTable.customerId,
   salesRepId: quotesTable.salesRepId,
   amount: quotesTable.amount,
   finalAmount: quotesTable.finalAmount,
@@ -232,6 +233,7 @@ export async function getDashboardSummary() {
     [todayWorkOrderCountResult],
     [todayMaintenanceResult],
     [todayDueResult],
+    [todayWarrantyExpiryResult],
     todayWorkOrderRows,
   ] = await Promise.all([
     computeQuotePeriodStats(monthRange),
@@ -263,6 +265,7 @@ export async function getDashboardSummary() {
     db.select({ count: count() }).from(receivablesTable).where(
       and(eq(receivablesTable.expectedPaymentDate, today), ne(receivablesTable.paymentStatus, "已收款")),
     ),
+    db.select({ count: count() }).from(warrantiesTable).where(eq(warrantiesTable.endDate, today)),
     db.select({
       id: workOrdersTable.id,
       workOrderNumber: workOrdersTable.workOrderNumber,
@@ -276,6 +279,10 @@ export async function getDashboardSummary() {
       .where(eq(workOrdersTable.scheduledDate, today))
       .orderBy(workOrdersTable.scheduledTime),
   ]);
+
+  const todayDueCount = todayDueResult.count;
+  const todayWarrantyExpiryCount = todayWarrantyExpiryResult.count;
+  const todayReminderCount = todayDueCount + todayWarrantyExpiryCount;
 
   return {
     totalCustomers: totalCustomersResult.count,
@@ -303,7 +310,9 @@ export async function getDashboardSummary() {
     monthlyQuoteAmount: quoteStats.amount,
     monthlyWonAmount: receivableStats.amount,
     monthlyPaidAmount: paymentStats.amount,
-    todayDueCount: todayDueResult.count,
+    todayDueCount,
+    todayWarrantyExpiryCount,
+    todayReminderCount,
     todayWorkOrders: todayWorkOrderRows.map(o => ({
       id: o.id,
       workOrderNumber: o.workOrderNumber,
@@ -324,6 +333,7 @@ export interface SalesKpi {
   wonAmount: number;
   winRate: number;
   collectedAmount: number;
+  unpaidAmount: number;
   collectionRate: number;
   avgTicket: number;
   performanceAmount: number;
@@ -354,6 +364,7 @@ function emptySales(): SalesKpi {
     wonAmount: 0,
     winRate: 0,
     collectedAmount: 0,
+    unpaidAmount: 0,
     collectionRate: 0,
     avgTicket: 0,
     performanceAmount: 0,
@@ -376,6 +387,7 @@ export async function computeAllEmployeeKpis(range: StatsDateRange): Promise<Emp
     repairRows,
     workOrdersForQuotes,
     quotesForLookup,
+    customerRows,
   ] = await Promise.all([
     db.select(QUOTE_SUMMARY_SELECT).from(quotesTable).where(and(
       gte(quotesTable.createdAt, range.startTs),
@@ -383,6 +395,7 @@ export async function computeAllEmployeeKpis(range: StatsDateRange): Promise<Emp
     )),
     db.select({
       id: receivablesTable.id,
+      customerId: receivablesTable.customerId,
       totalAmount: receivablesTable.totalAmount,
       workOrderId: receivablesTable.workOrderId,
     }).from(receivablesTable).where(and(
@@ -391,6 +404,7 @@ export async function computeAllEmployeeKpis(range: StatsDateRange): Promise<Emp
     )),
     db.select({
       amount: paymentsTable.amount,
+      customerId: paymentsTable.customerId,
       quoteId: paymentsTable.quoteId,
       workOrderId: paymentsTable.workOrderId,
     }).from(paymentsTable).where(and(
@@ -419,6 +433,7 @@ export async function computeAllEmployeeKpis(range: StatsDateRange): Promise<Emp
     )),
     db.select({ id: workOrdersTable.id, quoteId: workOrdersTable.quoteId }).from(workOrdersTable),
     db.select({ id: quotesTable.id, salesRepId: quotesTable.salesRepId }).from(quotesTable),
+    db.select({ id: customersTable.id, primarySalesRepId: customersTable.primarySalesRepId }).from(customersTable),
   ]);
 
   const itemsByQuoteId = await loadQuoteItemsByQuoteId(monthQuotes.map(q => q.id));
@@ -429,11 +444,28 @@ export async function computeAllEmployeeKpis(range: StatsDateRange): Promise<Emp
   const woQuoteId = new Map<number, number | null>();
   for (const wo of workOrdersForQuotes) woQuoteId.set(wo.id, wo.quoteId);
 
-  function resolveSalesRepId(quoteId: number | null, workOrderId: number | null): number | null {
-    if (quoteId != null) return quoteSalesRep.get(quoteId) ?? null;
+  const customerSalesRep = new Map<number, number | null>();
+  for (const c of customerRows) customerSalesRep.set(c.id, c.primarySalesRepId);
+
+  function resolveSalesRepId(
+    quoteId: number | null | undefined,
+    workOrderId: number | null | undefined,
+    customerId?: number | null,
+  ): number | null {
+    if (quoteId != null) {
+      const rep = quoteSalesRep.get(quoteId);
+      if (rep != null) return rep;
+    }
     if (workOrderId != null) {
       const qid = woQuoteId.get(workOrderId);
-      if (qid != null) return quoteSalesRep.get(qid) ?? null;
+      if (qid != null) {
+        const rep = quoteSalesRep.get(qid);
+        if (rep != null) return rep;
+      }
+    }
+    if (customerId != null) {
+      const rep = customerSalesRep.get(customerId);
+      if (rep != null) return rep;
     }
     return null;
   }
@@ -447,15 +479,16 @@ export async function computeAllEmployeeKpis(range: StatsDateRange): Promise<Emp
   }
 
   for (const q of monthQuotes) {
-    if (q.salesRepId == null) continue;
-    const s = salesByEmp.get(q.salesRepId);
+    const repId = q.salesRepId ?? (q.customerId != null ? customerSalesRep.get(q.customerId) ?? null : null);
+    if (repId == null) continue;
+    const s = salesByEmp.get(repId);
     if (!s) continue;
     s.quoteCount += 1;
     s.quoteAmount += quoteDisplayTotal(q, itemsByQuoteId);
   }
 
   for (const r of receivableRows) {
-    const repId = resolveSalesRepId(null, r.workOrderId);
+    const repId = resolveSalesRepId(null, r.workOrderId, r.customerId);
     if (repId == null) continue;
     const s = salesByEmp.get(repId);
     if (!s) continue;
@@ -464,7 +497,7 @@ export async function computeAllEmployeeKpis(range: StatsDateRange): Promise<Emp
   }
 
   for (const p of paymentRows) {
-    const repId = resolveSalesRepId(p.quoteId, p.workOrderId);
+    const repId = resolveSalesRepId(p.quoteId, p.workOrderId, p.customerId);
     if (repId == null) continue;
     const s = salesByEmp.get(repId);
     if (!s) continue;
@@ -491,6 +524,7 @@ export async function computeAllEmployeeKpis(range: StatsDateRange): Promise<Emp
   return employees.map(emp => {
     const sales = salesByEmp.get(emp.id)!;
     sales.winRate = sales.quoteCount > 0 ? sales.wonCount / sales.quoteCount : 0;
+    sales.unpaidAmount = Math.max(0, sales.wonAmount - sales.collectedAmount);
     sales.collectionRate = sales.wonAmount > 0 ? sales.collectedAmount / sales.wonAmount : 0;
     sales.avgTicket = sales.wonCount > 0 ? sales.wonAmount / sales.wonCount : 0;
     sales.performanceAmount = sales.wonAmount;

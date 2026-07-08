@@ -273,6 +273,7 @@ export interface SalesPerformance {
   wonAmount: number;
   winRate: number;
   collectedAmount: number;
+  unpaidAmount: number;
   collectionRate: number;
   avgTicket: number;
   performanceAmount: number;
@@ -894,6 +895,8 @@ export interface DashboardSummary {
   monthlyWonAmount?: number;
   monthlyPaidAmount?: number;
   todayDueCount?: number;
+  todayWarrantyExpiryCount?: number;
+  todayReminderCount?: number;
   todayWorkOrders?: DashboardSummaryTodayWorkOrdersItem[];
   recentCustomers?: Customer[];
 }

@@ -5,6 +5,7 @@ export interface SalesPerformance {
   wonAmount: number;
   winRate: number;
   collectedAmount: number;
+  unpaidAmount: number;
   collectionRate: number;
   avgTicket: number;
   performanceAmount: number;

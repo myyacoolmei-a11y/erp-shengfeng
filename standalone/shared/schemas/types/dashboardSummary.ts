@@ -30,6 +30,8 @@ export interface DashboardSummary {
   monthlyWonAmount?: number;
   monthlyPaidAmount?: number;
   todayDueCount?: number;
+  todayWarrantyExpiryCount?: number;
+  todayReminderCount?: number;
   todayWorkOrders?: DashboardSummaryTodayWorkOrdersItem[];
   recentCustomers?: Customer[];
 }

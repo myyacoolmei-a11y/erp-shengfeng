@@ -2237,7 +2237,7 @@ components:
 
     SalesPerformance:
       type: object
-      required: [quoteCount, quoteAmount, wonCount, wonAmount, winRate, collectedAmount, collectionRate, avgTicket, performanceAmount]
+      required: [quoteCount, quoteAmount, wonCount, wonAmount, winRate, collectedAmount, unpaidAmount, collectionRate, avgTicket, performanceAmount]
       properties:
         quoteCount: { type: integer }
         quoteAmount: { type: number }
@@ -2245,6 +2245,7 @@ components:
         wonAmount: { type: number }
         winRate: { type: number }
         collectedAmount: { type: number }
+        unpaidAmount: { type: number }
         collectionRate: { type: number }
         avgTicket: { type: number }
         performanceAmount: { type: number }
@@ -2784,6 +2785,8 @@ components:
         monthlyWonAmount: { type: number }
         monthlyPaidAmount: { type: number }
         todayDueCount: { type: integer }
+        todayWarrantyExpiryCount: { type: integer }
+        todayReminderCount: { type: integer }
         todayWorkOrders:
           type: array
           items:

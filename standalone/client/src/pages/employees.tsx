@@ -60,6 +60,7 @@ function PerformanceSummary({ perf }: { perf?: { sales: any; technician: any } }
       <span>成交 {perf.sales.wonCount} 件 · {fmtMoney(perf.sales.wonAmount)}</span>
       <span>成交率 {fmtPct(perf.sales.winRate)}</span>
       <span>已收 {fmtMoney(perf.sales.collectedAmount ?? 0)}</span>
+      <span>未收 {fmtMoney(perf.sales.unpaidAmount ?? 0)}</span>
       <span>安裝 {perf.technician.installCount}</span>
       <span>保養 {perf.technician.maintenanceCount}</span>
       <span>維修 {perf.technician.repairCount}</span>
@@ -79,6 +80,7 @@ function PerformanceCards({ perf }: { perf: { sales: any; technician: any } }) {
           ["成交金額", fmtMoney(perf.sales.wonAmount)],
           ["成交率", fmtPct(perf.sales.winRate)],
           ["已收金額", fmtMoney(perf.sales.collectedAmount ?? 0)],
+          ["未收金額", fmtMoney(perf.sales.unpaidAmount ?? 0)],
           ["收款率", fmtPct(perf.sales.collectionRate ?? 0)],
           ["平均客單價", fmtMoney(perf.sales.avgTicket)],
         ].map(([label, value]) => (

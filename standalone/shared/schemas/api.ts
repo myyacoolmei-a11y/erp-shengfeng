@@ -612,6 +612,7 @@ export const SalesPerformanceSchema = zod.object({
   "wonAmount": zod.number(),
   "winRate": zod.number(),
   "collectedAmount": zod.number(),
+  "unpaidAmount": zod.number(),
   "collectionRate": zod.number(),
   "avgTicket": zod.number(),
   "performanceAmount": zod.number(),
