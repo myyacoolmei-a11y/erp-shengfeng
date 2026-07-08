@@ -14,19 +14,32 @@ export const WO_PROJECT_TYPES = ["新裝", "維修", "保養", "遷機", "清洗
 export const WO_ELEVATOR_OPTIONS = ["有電梯", "無電梯"];
 
 export interface EquipmentItemForm {
+  productId?: number;
+  quoteItemId?: number;
+  category: string;
+  itemName: string;
   brand: string;
   model: string;
   quantity: number | undefined;
+  unit: string;
+  unitPrice: number | undefined;
+  notes: string;
   indoorUnits: number | undefined;
   outdoorUnits: number | undefined;
   floor: string;
+  fromQuote?: boolean;
 }
 
 export function defaultEquipmentItem(): EquipmentItemForm {
   return {
+    category: "",
+    itemName: "",
     brand: "",
     model: "",
     quantity: undefined,
+    unit: "台",
+    unitPrice: undefined,
+    notes: "",
     indoorUnits: undefined,
     outdoorUnits: undefined,
     floor: "",
@@ -36,9 +49,16 @@ export function defaultEquipmentItem(): EquipmentItemForm {
 /** Map API work order (with equipmentItems or legacy flat fields) to form equipment list */
 export function equipmentItemsFromOrder(o: {
   equipmentItems?: Array<{
+    productId?: number | null;
+    quoteItemId?: number | null;
+    category?: string | null;
+    itemName?: string | null;
     brand?: string | null;
     model?: string | null;
     quantity?: number | null;
+    unit?: string | null;
+    unitPrice?: number | null;
+    notes?: string | null;
     indoorUnits?: number | null;
     outdoorUnits?: number | null;
     floor?: string | null;
@@ -53,12 +73,20 @@ export function equipmentItemsFromOrder(o: {
   const items = o.equipmentItems ?? [];
   if (items.length > 0) {
     return items.map(it => ({
+      productId: it.productId ?? undefined,
+      quoteItemId: it.quoteItemId ?? undefined,
+      category: it.category ?? "",
+      itemName: it.itemName ?? "",
       brand: it.brand ?? "",
       model: it.model ?? "",
       quantity: it.quantity ?? undefined,
+      unit: it.unit ?? "台",
+      unitPrice: it.unitPrice ?? undefined,
+      notes: it.notes ?? "",
       indoorUnits: it.indoorUnits ?? undefined,
       outdoorUnits: it.outdoorUnits ?? undefined,
       floor: it.floor ?? "",
+      fromQuote: !!(it.category || it.itemName),
     }));
   }
 
@@ -72,9 +100,14 @@ export function equipmentItemsFromOrder(o: {
   );
   if (hasLegacy) {
     return [{
+      category: "",
+      itemName: o.modelNumber ?? "",
       brand: o.acBrand ?? "",
       model: o.modelNumber ?? "",
       quantity: o.quantity ?? undefined,
+      unit: "台",
+      unitPrice: undefined,
+      notes: "",
       indoorUnits: o.indoorUnits ?? undefined,
       outdoorUnits: o.outdoorUnits ?? undefined,
       floor: o.floorLevel ?? "",
@@ -135,9 +168,16 @@ export function buildPayload(f: WOForm) {
     description: f.description || undefined,
     notes: f.notes || undefined,
     equipmentItems: f.equipmentItems.map((item, idx) => ({
+      productId: item.productId,
+      quoteItemId: item.quoteItemId,
+      category: item.category || undefined,
+      itemName: item.itemName || undefined,
       brand: item.brand || undefined,
       model: item.model || undefined,
       quantity: item.quantity,
+      unit: item.unit || undefined,
+      unitPrice: item.unitPrice,
+      notes: item.notes || undefined,
       indoorUnits: item.indoorUnits,
       outdoorUnits: item.outdoorUnits,
       floor: item.floor || undefined,
@@ -178,6 +218,15 @@ function EquipmentItemCard({
           </Button>
         )}
       </div>
+      {item.fromQuote && item.itemName ? (
+        <div className="text-sm space-y-1 bg-muted/30 rounded-md p-2">
+          <p><span className="text-muted-foreground">類別：</span>{item.category || "—"}</p>
+          <p><span className="text-muted-foreground">品項：</span>{item.itemName} {item.brand ? `· ${item.brand}` : ""} {item.model ? `· ${item.model}` : ""}</p>
+          <p><span className="text-muted-foreground">數量：</span>{item.quantity ?? "—"} {item.unit}</p>
+          {item.unitPrice != null && <p><span className="text-muted-foreground">單價：</span>NT${item.unitPrice.toLocaleString()}</p>}
+          {item.notes && <p><span className="text-muted-foreground">備註：</span>{item.notes}</p>}
+        </div>
+      ) : (
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
         <div className="space-y-1">
           <Label className="text-xs">冷氣品牌</Label>
@@ -240,6 +289,7 @@ function EquipmentItemCard({
           />
         </div>
       </div>
+      )}
     </div>
   );
 }

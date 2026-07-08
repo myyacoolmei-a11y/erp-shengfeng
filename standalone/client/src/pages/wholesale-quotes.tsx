@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import {
   useListWholesaleQuotes, useCreateWholesaleQuote, useUpdateWholesaleQuote,
   useDeleteWholesaleQuote, useConvertWholesaleQuote, useGetWholesaleQuote,
-  useListWholesaleCustomers, useListProducts,
+  useListWholesaleCustomers, useListWholesaleProducts,
   getListWholesaleQuotesQueryKey, getListWholesaleOrdersQueryKey,
   getGetWholesaleQuoteQueryKey,
 } from "@workspace/api-client-react";
@@ -129,7 +129,7 @@ export default function WholesaleQuotes() {
   );
 
   const { data: customers } = useListWholesaleCustomers({});
-  const { data: products } = useListProducts({ isActive: "true" });
+  const { data: products } = useListWholesaleProducts({ forSelection: "true" });
 
   useEffect(() => {
     if (editData && editId) setForm(fromData(editData));
@@ -323,7 +323,14 @@ export default function WholesaleQuotes() {
                                     const name = e.target.value;
                                     const found = (products ?? []).find((p: any) => p.name === name);
                                     updateItem(idx, found
-                                      ? { productName: found.name, productId: found.id, brand: found.brand ?? "", model: found.model ?? "", unit: found.unit ?? "台", unitPrice: parseFloat(found.wholesalePrice ?? "0") }
+                                      ? {
+                                          productName: found.name,
+                                          productId: found.id,
+                                          brand: found.brand ?? "",
+                                          model: found.model ?? "",
+                                          unit: found.unit ?? "台",
+                                          unitPrice: found.effectivePrice ?? parseFloat(found.wholesalePrice ?? found.retailPrice ?? "0"),
+                                        }
                                       : { productName: name }
                                     );
                                   }}

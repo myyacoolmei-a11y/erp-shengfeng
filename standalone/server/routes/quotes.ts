@@ -18,6 +18,7 @@ function serializeItem(item: typeof quoteItemsTable.$inferSelect) {
   return {
     id: item.id,
     quoteId: item.quoteId,
+    productId: item.productId ?? null,
     category: item.category,
     itemName: item.itemName,
     brand: item.brand ?? null,
@@ -65,6 +66,7 @@ function serializeQuote(
 async function buildItemsInsert(itemInputs: any[], quoteId: number) {
   return itemInputs.map((item: any, idx: number) => ({
     quoteId,
+    productId: item.productId ?? null,
     category: item.category ?? "其他",
     itemName: item.itemName ?? "",
     brand: item.brand || null,

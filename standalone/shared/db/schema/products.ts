@@ -19,7 +19,6 @@ export const productsTable = pgTable("products", {
   // 價格
   costPrice: numeric("cost_price"),
   retailPrice: numeric("retail_price"),
-  wholesalePrice: numeric("wholesale_price"),
   minPrice: numeric("min_price"),
   taxIncluded: boolean("tax_included").notNull().default(false),
 

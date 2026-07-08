@@ -15,6 +15,8 @@ export * from "./maintenanceReminders";
 export * from "./receivables";
 export * from "./users";
 export * from "./products";
+export * from "./productUsageTypes";
+export * from "./wholesaleProducts";
 export * from "./wholesaleCustomers";
 export * from "./wholesaleQuotes";
 export * from "./wholesaleOrders";

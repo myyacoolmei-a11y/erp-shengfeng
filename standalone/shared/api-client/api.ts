@@ -47,6 +47,7 @@ import type {
   ListMaintenanceRemindersParams,
   ListPaymentsParams,
   ListProductsParams,
+  ListWholesaleProductsParams,
   ListQuotesParams,
   ListReceivablesParams,
   ListRepairCasesParams,
@@ -81,6 +82,7 @@ import type {
   RepairCaseInput,
   RepairCaseUpdate,
   UpdateProductInput,
+  UpdateWholesaleProductInput,
   UpdateUserInput,
   UpdateWholesaleReceivableInput,
   UserItem,
@@ -89,6 +91,7 @@ import type {
   WarrantyUpdate,
   WholesaleCustomer,
   WholesaleCustomerInput,
+  WholesaleProductListItem,
   WholesaleOrder,
   WholesaleOrderInput,
   WholesaleQuote,
@@ -6969,8 +6972,109 @@ export function useListWholesaleSettlementDetail<TData = Awaited<ReturnType<type
   return withQueryKey(query, queryOptions.queryKey);
 }
 
+// ── Wholesale products (product catalog extension) ──
 
+export const getListWholesaleProductsUrl = (params?: ListWholesaleProductsParams) => {
+  const normalizedParams = new URLSearchParams();
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : String(value));
+    }
+  });
+  const stringifiedParams = normalizedParams.toString();
+  return stringifiedParams.length > 0 ? `/api/wholesale/products?${stringifiedParams}` : `/api/wholesale/products`;
+};
 
+export const listWholesaleProducts = async (
+  params?: ListWholesaleProductsParams,
+  options?: RequestInit,
+): Promise<WholesaleProductListItem[]> => {
+  return customFetch<WholesaleProductListItem[]>(getListWholesaleProductsUrl(params), {
+    ...options,
+    method: 'GET',
+  });
+};
+
+export const getListWholesaleProductsQueryKey = (params?: ListWholesaleProductsParams) => {
+  return [`/api/wholesale/products`, ...(params ? [params] : [])] as const;
+};
+
+export const getListWholesaleProductsQueryOptions = <
+  TData = Awaited<ReturnType<typeof listWholesaleProducts>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListWholesaleProductsParams,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof listWholesaleProducts>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+) => {
+  const { query: queryOptions, request: requestOptions } = options ?? {};
+  const queryKey = queryOptions?.queryKey ?? getListWholesaleProductsQueryKey(params);
+  const queryFn: QueryFunction<Awaited<ReturnType<typeof listWholesaleProducts>>> = ({ signal }) =>
+    listWholesaleProducts(params, { signal, ...requestOptions });
+  return { queryKey, queryFn, ...queryOptions } as UseQueryOptions<
+    Awaited<ReturnType<typeof listWholesaleProducts>>,
+    TError,
+    TData
+  > & { queryKey: QueryKey };
+};
+
+export function useListWholesaleProducts<
+  TData = Awaited<ReturnType<typeof listWholesaleProducts>>,
+  TError = ErrorType<unknown>,
+>(
+  params?: ListWholesaleProductsParams,
+  options?: {
+    query?: UseQueryOptions<Awaited<ReturnType<typeof listWholesaleProducts>>, TError, TData>;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+  const queryOptions = getListWholesaleProductsQueryOptions(params, options);
+  const query = useQuery(queryOptions) as UseQueryResult<TData, TError> & { queryKey: QueryKey };
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+export const updateWholesaleProduct = async (
+  productId: number,
+  updateWholesaleProductInput: UpdateWholesaleProductInput,
+  options?: RequestInit,
+): Promise<WholesaleProductListItem> => {
+  return customFetch<WholesaleProductListItem>(`/api/wholesale/products/${productId}`, {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(updateWholesaleProductInput),
+  });
+};
+
+export function useUpdateWholesaleProduct<TError = ErrorType<unknown>, TContext = unknown>(
+  options?: {
+    mutation?: UseMutationOptions<
+      Awaited<ReturnType<typeof updateWholesaleProduct>>,
+      TError,
+      { productId: number; data: UpdateWholesaleProductInput },
+      TContext
+    >;
+    request?: SecondParameter<typeof customFetch>;
+  },
+): UseMutationResult<
+  Awaited<ReturnType<typeof updateWholesaleProduct>>,
+  TError,
+  { productId: number; data: UpdateWholesaleProductInput },
+  TContext
+> {
+  const { mutation: mutationOptions, request: requestOptions } = options ?? {};
+  const mutationFn: MutationFunction<
+    Awaited<ReturnType<typeof updateWholesaleProduct>>,
+    { productId: number; data: UpdateWholesaleProductInput }
+  > = props => updateWholesaleProduct(props.productId, props.data, requestOptions);
+  return useMutation({
+    mutationKey: ['updateWholesaleProduct'],
+    mutationFn,
+    ...mutationOptions,
+  });
+}
 
 
 

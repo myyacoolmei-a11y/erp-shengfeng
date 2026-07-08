@@ -140,6 +140,8 @@ export interface AcUnitUpdate {
 }
 
 export interface QuoteItemInput {
+  /** @nullable */
+  productId?: number | null;
   category: string;
   itemName: string;
   brand?: string;
@@ -154,6 +156,8 @@ export interface QuoteItemInput {
 export interface QuoteItem {
   id: number;
   quoteId: number;
+  /** @nullable */
+  productId?: number | null;
   category: string;
   itemName: string;
   /** @nullable */
@@ -323,9 +327,18 @@ export interface GetEmployeePerformanceParams {
 }
 
 export interface WorkOrderEquipmentItemInput {
+  /** @nullable */
+  productId?: number | null;
+  /** @nullable */
+  quoteItemId?: number | null;
+  category?: string;
+  itemName?: string;
   brand?: string;
   model?: string;
   quantity?: number;
+  unit?: string;
+  unitPrice?: number;
+  notes?: string;
   indoorUnits?: number;
   outdoorUnits?: number;
   floor?: string;
@@ -336,11 +349,25 @@ export interface WorkOrderEquipmentItem {
   id: number;
   workOrderId: number;
   /** @nullable */
+  productId?: number | null;
+  /** @nullable */
+  quoteItemId?: number | null;
+  /** @nullable */
+  category?: string | null;
+  /** @nullable */
+  itemName?: string | null;
+  /** @nullable */
   brand?: string | null;
   /** @nullable */
   model?: string | null;
   /** @nullable */
   quantity?: number | null;
+  /** @nullable */
+  unit?: string | null;
+  /** @nullable */
+  unitPrice?: number | null;
+  /** @nullable */
+  notes?: string | null;
   /** @nullable */
   indoorUnits?: number | null;
   /** @nullable */
@@ -922,6 +949,16 @@ export interface DashboardSummary {
   recentCustomers?: Customer[];
 }
 
+export interface ProductWholesaleSettings {
+  /** @nullable */
+  wholesalePrice?: string | null;
+  minQuantity: number;
+  /** @nullable */
+  wholesaleNote?: string | null;
+  isEnabled: boolean;
+  sortOrder: number;
+}
+
 export interface Product {
   id: number;
   /** @nullable */
@@ -945,7 +982,7 @@ export interface Product {
   /** @nullable */
   retailPrice?: string | null;
   /** @nullable */
-  wholesalePrice?: string | null;
+  defaultPrice?: string | null;
   /** @nullable */
   minPrice?: string | null;
   taxIncluded: boolean;
@@ -970,8 +1007,23 @@ export interface Product {
   warrantyMonths?: number | null;
   /** @nullable */
   notes?: string | null;
+  usageTypes?: string[];
+  /** @nullable */
+  wholesaleSettings?: ProductWholesaleSettings | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface WholesaleProductListItem extends Product {
+  wholesaleProductId: number;
+  /** @nullable */
+  wholesalePrice?: string | null;
+  minQuantity: number;
+  /** @nullable */
+  wholesaleNote?: string | null;
+  isEnabled: boolean;
+  sortOrder: number;
+  effectivePrice: number;
 }
 
 export interface ProductInput {
@@ -989,8 +1041,6 @@ export interface ProductInput {
   /** @nullable */
   retailPrice?: number | null;
   /** @nullable */
-  wholesalePrice?: number | null;
-  /** @nullable */
   minPrice?: number | null;
   taxIncluded?: boolean;
   stockQty?: number;
@@ -1006,6 +1056,16 @@ export interface ProductInput {
   /** @nullable */
   warrantyMonths?: number | null;
   notes?: string;
+  usageTypes?: string[];
+  wholesaleSettings?: {
+    /** @nullable */
+    wholesalePrice?: number | string | null;
+    minQuantity?: number;
+    /** @nullable */
+    wholesaleNote?: string | null;
+    isEnabled?: boolean;
+    sortOrder?: number;
+  };
 }
 
 export interface UpdateProductInput {
@@ -1023,8 +1083,6 @@ export interface UpdateProductInput {
   /** @nullable */
   retailPrice?: number | null;
   /** @nullable */
-  wholesalePrice?: number | null;
-  /** @nullable */
   minPrice?: number | null;
   taxIncluded?: boolean;
   stockQty?: number;
@@ -1040,6 +1098,16 @@ export interface UpdateProductInput {
   /** @nullable */
   warrantyMonths?: number | null;
   notes?: string;
+  usageTypes?: string[];
+  wholesaleSettings?: {
+    /** @nullable */
+    wholesalePrice?: number | string | null;
+    minQuantity?: number;
+    /** @nullable */
+    wholesaleNote?: string | null;
+    isEnabled?: boolean;
+    sortOrder?: number;
+  };
 }
 
 export interface WholesaleCustomer {
@@ -1328,6 +1396,23 @@ search?: string;
 brand?: string;
 category?: string;
 isActive?: string;
+usageType?: string;
+};
+
+export type ListWholesaleProductsParams = {
+search?: string;
+isEnabled?: string;
+forSelection?: string;
+};
+
+export type UpdateWholesaleProductInput = {
+/** @nullable */
+wholesalePrice?: number | string | null;
+minQuantity?: number;
+/** @nullable */
+wholesaleNote?: string | null;
+isEnabled?: boolean;
+sortOrder?: number;
 };
 
 export type ListWholesaleCustomersParams = {

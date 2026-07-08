@@ -3,6 +3,7 @@ import { useSearch, useLocation } from "wouter";
 import {
   useListQuotes, useCreateQuote, useUpdateQuote, useDeleteQuote,
   useListCustomers, useUpdateCustomer, useCreateWorkOrder, useListEmployees,
+  useListProducts,
   getListWorkOrdersQueryKey, getListCustomersQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -36,20 +37,6 @@ import {
 } from "@/lib/quoteToWorkOrder";
 
 // ── Constants ──────────────────────────────────────────────────────────────
-const CATEGORIES = ["裝新機", "保養", "維修", "移機", "拆機", "冷媒工程", "配管工程", "其他"];
-const CATEGORY_ITEMS: Record<string, string[]> = {
-  "裝新機": ["壁掛分離式", "吊隱式", "直立式"],
-  "保養": ["分離式保養", "吊隱式保養", "直立式保養"],
-  "維修": ["維修"],
-  "移機": ["移機"],
-  "拆機": ["拆機"],
-  "冷媒工程": ["冷媒工程"],
-  "配管工程": ["配管工程"],
-  "其他": [],
-};
-const BRANDS = ["冰點", "聲寶", "國際", "三菱重工", "金鼎", "格力", "三洋", "日立", "奇美", "其他"];
-const KNOWN_BRANDS = BRANDS.filter(b => b !== "其他");
-const UNITS = ["台", "式", "個", "組", "套", "次", "公尺", "公斤"];
 const STATUSES = ["草稿", "已送出", "已成交", "已拒絕"];
 const FILTER_TABS = ["全部", "草稿", "已送出", "已成交", "待派工", "已派工", "已拒絕"];
 const STATUS_COLORS: Record<string, string> = {
@@ -75,6 +62,7 @@ function quoteMatchesFilter(q: any, filter: string): boolean {
 
 // ── Types ──────────────────────────────────────────────────────────────────
 interface QuoteItem {
+  productId: number | null;
   category: string;
   itemName: string;
   brand: string;
@@ -102,7 +90,7 @@ interface QuoteForm {
 }
 
 const DEFAULT_ITEM = (): QuoteItem => ({
-  category: "裝新機", itemName: "壁掛分離式", brand: "冰點", model: "",
+  productId: null, category: "", itemName: "", brand: "", model: "",
   quantity: 1, unit: "台", unitPrice: 0, notes: "", sortOrder: 0,
 });
 const emptyForm = (): QuoteForm => ({
@@ -136,6 +124,7 @@ function formToApi(f: QuoteForm) {
     taxType: f.taxType,
     ...(f.salesRepId > 0 ? { salesRepId: f.salesRepId } : {}),
     items: f.items.map((item, idx) => ({
+      productId: item.productId ?? undefined,
       category: item.category,
       itemName: item.itemName,
       brand: item.brand || undefined,
@@ -164,6 +153,7 @@ function quoteToForm(q: any): QuoteForm {
     notes: q.notes ?? "",
     discountAmount: Number(q.discountAmount ?? 0),
     items: (q.items ?? []).map((item: any, idx: number) => ({
+      productId: item.productId ?? null,
       category: item.category ?? "其他",
       itemName: item.itemName ?? "",
       brand: item.brand ?? "",
@@ -225,14 +215,32 @@ async function shareQuoteViaLine(
 }
 
 // ── ItemCard ───────────────────────────────────────────────────────────────
-function ItemCard({ item, index, onChange, onDelete }: {
-  item: QuoteItem; index: number;
+function ItemCard({ item, index, products, onChange, onDelete }: {
+  item: QuoteItem; index: number; products: any[];
   onChange: (u: QuoteItem) => void; onDelete: () => void;
 }) {
-  const itemOptions = CATEGORY_ITEMS[item.category] || [];
-  const hasOptions = itemOptions.length > 0;
-  const isCustomItem = hasOptions && !itemOptions.includes(item.itemName);
-  const isCustomBrand = !!item.brand && !KNOWN_BRANDS.includes(item.brand);
+  const productOptions = products ?? [];
+  const selectedId = item.productId != null ? String(item.productId) : "";
+
+  function applyProduct(productId: string) {
+    if (!productId) {
+      onChange({ ...DEFAULT_ITEM(), sortOrder: item.sortOrder });
+      return;
+    }
+    const found = productOptions.find((p: any) => String(p.id) === productId);
+    if (!found) return;
+    const price = found.retailPrice != null ? parseFloat(found.retailPrice) : 0;
+    onChange({
+      ...item,
+      productId: found.id,
+      category: found.category ?? "其他",
+      itemName: found.name ?? "",
+      brand: found.brand ?? "",
+      model: found.model ?? "",
+      unit: found.unit ?? "台",
+      unitPrice: isNaN(price) ? 0 : price,
+    });
+  }
 
   return (
     <div className="border rounded-lg p-3 space-y-2 bg-card/50">
@@ -243,64 +251,35 @@ function ItemCard({ item, index, onChange, onDelete }: {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
-        <div className="space-y-1">
-          <Label className="text-xs">類別</Label>
-          <Select value={item.category} onValueChange={v => {
-            onChange({ ...item, category: v, itemName: CATEGORY_ITEMS[v]?.[0] || "" });
-          }}>
-            <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-            <SelectContent>{CATEGORIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-1">
-          <Label className="text-xs">品牌</Label>
-          <Select value={isCustomBrand ? "其他" : (item.brand || "其他")} onValueChange={v => onChange({ ...item, brand: v === "其他" ? "" : v })}>
-            <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-            <SelectContent>{BRANDS.map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}</SelectContent>
-          </Select>
-          {(isCustomBrand || item.brand === "") && (
-            <Input className="h-7 text-xs mt-1" value={item.brand} onChange={e => onChange({ ...item, brand: e.target.value })} placeholder="請輸入品牌" />
-          )}
-        </div>
-
-        <div className="space-y-1">
-          <Label className="text-xs">品項</Label>
-          {hasOptions ? (
-            <Select value={isCustomItem ? "其他" : item.itemName} onValueChange={v => onChange({ ...item, itemName: v === "其他" ? "" : v })}>
-              <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {itemOptions.map(o => <SelectItem key={o} value={o}>{o}</SelectItem>)}
-                <SelectItem value="其他">其他（自填）</SelectItem>
-              </SelectContent>
-            </Select>
-          ) : (
-            <Input className="h-8 text-xs" value={item.itemName} onChange={e => onChange({ ...item, itemName: e.target.value })} placeholder="請輸入品項" />
-          )}
-          {isCustomItem && (
-            <Input className="h-7 text-xs mt-1" value={item.itemName} onChange={e => onChange({ ...item, itemName: e.target.value })} placeholder="請輸入品項名稱" />
-          )}
-        </div>
-
-        <div className="space-y-1">
-          <Label className="text-xs">機型</Label>
-          <Input className="h-8 text-xs" value={item.model} onChange={e => onChange({ ...item, model: e.target.value })} placeholder="例：RXV-28H" />
-        </div>
+      <div className="space-y-1">
+        <Label className="text-xs">商品（工程報價）</Label>
+        <Select value={selectedId || undefined} onValueChange={applyProduct}>
+          <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="選擇商品…" /></SelectTrigger>
+          <SelectContent>
+            {productOptions.map((p: any) => (
+              <SelectItem key={p.id} value={String(p.id)}>
+                {[p.brand, p.name, p.model].filter(Boolean).join(" · ")}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 items-end">
+      {item.productId != null && (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs bg-muted/30 rounded-md p-2">
+          <div><span className="text-muted-foreground">類別</span><p className="font-medium">{item.category || "—"}</p></div>
+          <div><span className="text-muted-foreground">品牌</span><p className="font-medium">{item.brand || "—"}</p></div>
+          <div><span className="text-muted-foreground">品項</span><p className="font-medium">{item.itemName || "—"}</p></div>
+          <div><span className="text-muted-foreground">型號</span><p className="font-medium">{item.model || "—"}</p></div>
+          <div><span className="text-muted-foreground">單位</span><p className="font-medium">{item.unit || "—"}</p></div>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 items-end">
         <div className="space-y-1">
           <Label className="text-xs">數量</Label>
           <Input className="h-8 text-sm" type="number" min="0.01" step="0.01" value={item.quantity}
             onChange={e => onChange({ ...item, quantity: parseFloat(e.target.value) || 0 })} />
-        </div>
-        <div className="space-y-1">
-          <Label className="text-xs">單位</Label>
-          <Select value={item.unit} onValueChange={v => onChange({ ...item, unit: v })}>
-            <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
-            <SelectContent>{UNITS.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
-          </Select>
         </div>
         <div className="space-y-1">
           <Label className="text-xs">單價</Label>
@@ -346,6 +325,7 @@ export default function QuotesPage() {
   const { data: quotes, isLoading } = useListQuotes();
   const { data: customers } = useListCustomers();
   const { data: employees } = useListEmployees();
+  const { data: quoteProducts } = useListProducts({ usageType: "engineering_quote", isActive: "true" });
   const salesReps = employees?.filter((e: any) => e.position === "業務" && e.status !== "離職") ?? [];
 
   const updateCustomerMutation = useUpdateCustomer({
@@ -631,7 +611,7 @@ export default function QuotesPage() {
               ) : (
                 <div className="space-y-2">
                   {form.items.map((item, idx) => (
-                    <ItemCard key={idx} item={item} index={idx}
+                    <ItemCard key={idx} item={item} index={idx} products={quoteProducts ?? []}
                       onChange={updated => updateItem(idx, updated)}
                       onDelete={() => removeItem(idx)} />
                   ))}

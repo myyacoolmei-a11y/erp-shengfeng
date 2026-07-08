@@ -46,18 +46,26 @@ function formatItemLine(item: any, idx: number): string {
   return `${idx + 1}. ${item.category}/${item.brand || "—"}/${model} ×${item.quantity}${item.unit} @${Number(item.unitPrice).toLocaleString()} = ${subtotal.toLocaleString()}`;
 }
 
-/** Build a pre-filled work order form from a quote — no manual re-entry of quote fields. */
+/** Build a pre-filled work order form from a quote — copies all quote item fields to equipment items. */
 export function buildWorkOrderFormFromQuote(q: any): WOForm {
   const items: any[] = q.items ?? [];
   const firstCategory = items[0]?.category ?? "裝新機";
   const equipmentItems = items.length > 0
     ? items.map((it: any) => ({
+        productId: it.productId ?? undefined,
+        quoteItemId: it.id ?? undefined,
+        category: it.category ?? "",
+        itemName: it.itemName ?? "",
         brand: it.brand ?? "",
-        model: it.model || it.itemName || "",
+        model: it.model ?? "",
         quantity: Number(it.quantity ?? 1),
+        unit: it.unit ?? "台",
+        unitPrice: Number(it.unitPrice ?? 0),
+        notes: it.notes ?? "",
         indoorUnits: undefined,
         outdoorUnits: undefined,
         floor: "",
+        fromQuote: true,
       }))
     : [defaultEquipmentItem()];
 

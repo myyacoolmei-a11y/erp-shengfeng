@@ -19,6 +19,12 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Pencil, Trash2, Search, Package, ChevronLeft, ChevronRight, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
+import { Checkbox } from "@/components/ui/checkbox";
+import {
+  PRODUCT_USAGE_TYPES,
+  PRODUCT_USAGE_LABELS,
+  type ProductUsageType,
+} from "@/lib/productUsageTypes";
 
 const WRITE_ROLES = ["super_admin", "owner", "admin"] as const;
 
@@ -46,7 +52,6 @@ function makeEmpty() {
     isActive: true,
     costPrice: "",
     retailPrice: "",
-    wholesalePrice: "",
     minPrice: "",
     taxIncluded: false,
     stockQty: 0,
@@ -60,12 +65,19 @@ function makeEmpty() {
     refrigerant: "",
     warrantyMonths: "",
     notes: "",
+    usageTypes: ["engineering_quote"] as ProductUsageType[],
+    wholesalePrice: "",
+    minQuantity: "1",
+    wholesaleNote: "",
+    wholesaleEnabled: true,
+    wholesaleSortOrder: "0",
   };
 }
 
 type PForm = ReturnType<typeof makeEmpty>;
 
 function formFromProduct(p: any): PForm {
+  const ws = p.wholesaleSettings;
   return {
     brand: p.brand ?? "",
     category: p.category ?? "",
@@ -77,7 +89,6 @@ function formFromProduct(p: any): PForm {
     isActive: p.isActive ?? true,
     costPrice: p.costPrice != null ? String(p.costPrice) : "",
     retailPrice: p.retailPrice != null ? String(p.retailPrice) : "",
-    wholesalePrice: p.wholesalePrice != null ? String(p.wholesalePrice) : "",
     minPrice: p.minPrice != null ? String(p.minPrice) : "",
     taxIncluded: p.taxIncluded ?? false,
     stockQty: p.stockQty ?? 0,
@@ -91,10 +102,17 @@ function formFromProduct(p: any): PForm {
     refrigerant: p.refrigerant ?? "",
     warrantyMonths: p.warrantyMonths != null ? String(p.warrantyMonths) : "",
     notes: p.notes ?? "",
+    usageTypes: (p.usageTypes?.length ? p.usageTypes : ["engineering_quote"]) as ProductUsageType[],
+    wholesalePrice: ws?.wholesalePrice != null ? String(ws.wholesalePrice) : "",
+    minQuantity: ws?.minQuantity != null ? String(ws.minQuantity) : "1",
+    wholesaleNote: ws?.wholesaleNote ?? "",
+    wholesaleEnabled: ws?.isEnabled ?? true,
+    wholesaleSortOrder: ws?.sortOrder != null ? String(ws.sortOrder) : "0",
   };
 }
 
 function buildPayload(f: PForm) {
+  const hasWholesale = f.usageTypes.includes("wholesale_sale");
   return {
     brand: f.brand || undefined,
     category: f.category || undefined,
@@ -106,7 +124,6 @@ function buildPayload(f: PForm) {
     isActive: f.isActive,
     costPrice: f.costPrice !== "" ? parseFloat(f.costPrice) : null,
     retailPrice: f.retailPrice !== "" ? parseFloat(f.retailPrice) : null,
-    wholesalePrice: f.wholesalePrice !== "" ? parseFloat(f.wholesalePrice) : null,
     minPrice: f.minPrice !== "" ? parseFloat(f.minPrice) : null,
     taxIncluded: f.taxIncluded,
     stockQty: f.stockQty,
@@ -120,6 +137,14 @@ function buildPayload(f: PForm) {
     refrigerant: f.refrigerant || undefined,
     warrantyMonths: f.warrantyMonths !== "" ? parseInt(f.warrantyMonths) : null,
     notes: f.notes || undefined,
+    usageTypes: f.usageTypes,
+    wholesaleSettings: {
+      wholesalePrice: f.wholesalePrice !== "" ? parseFloat(f.wholesalePrice) : null,
+      minQuantity: parseInt(f.minQuantity) || 1,
+      wholesaleNote: f.wholesaleNote || null,
+      isEnabled: hasWholesale ? f.wholesaleEnabled : false,
+      sortOrder: parseInt(f.wholesaleSortOrder) || 0,
+    },
   };
 }
 
@@ -300,8 +325,17 @@ export default function Products() {
                     </div>
 
                     <div className="flex flex-wrap gap-x-6 gap-y-0.5 mt-1 text-sm text-muted-foreground">
-                      {p.retailPrice && <span>售價：{fmtPrice(p.retailPrice)}{p.taxIncluded ? "（含稅）" : ""}</span>}
-                      {p.wholesalePrice && <span>批發：{fmtPrice(p.wholesalePrice)}</span>}
+                      {p.retailPrice && <span>一般單價：{fmtPrice(p.retailPrice)}{p.taxIncluded ? "（含稅）" : ""}</span>}
+                      {p.wholesaleSettings?.wholesalePrice && <span>批發：{fmtPrice(p.wholesaleSettings.wholesalePrice)}</span>}
+                      {(p.usageTypes ?? []).length > 0 && (
+                        <span className="flex gap-1 flex-wrap">
+                          {(p.usageTypes as string[]).map((u: string) => (
+                            <Badge key={u} variant="secondary" className="text-[10px] px-1 py-0">
+                              {PRODUCT_USAGE_LABELS[u as ProductUsageType] ?? u}
+                            </Badge>
+                          ))}
+                        </span>
+                      )}
                       <span>庫存：<span className={isLowStock(p) ? "text-destructive font-medium" : ""}>{p.stockQty} {p.unit ?? "台"}</span>{p.safetyStock != null ? `（安全庫存 ${p.safetyStock}）` : ""}</span>
                       {p.warehouseLocation && <span>位置：{p.warehouseLocation}</span>}
                       {p.spec && <span>規格：{p.spec}</span>}
@@ -413,18 +447,14 @@ export default function Products() {
 
             {/* ── 價格 ── */}
             <SectionHeading>價格</SectionHeading>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               <div className="space-y-1">
                 <Label>成本</Label>
                 <Input type="number" min="0" step="1" placeholder="0" value={form.costPrice} onChange={e => setForm(f => ({ ...f, costPrice: e.target.value }))} />
               </div>
               <div className="space-y-1">
-                <Label>一般售價</Label>
+                <Label>一般單價</Label>
                 <Input type="number" min="0" step="1" placeholder="0" value={form.retailPrice} onChange={e => setForm(f => ({ ...f, retailPrice: e.target.value }))} />
-              </div>
-              <div className="space-y-1">
-                <Label>批發價</Label>
-                <Input type="number" min="0" step="1" placeholder="0" value={form.wholesalePrice} onChange={e => setForm(f => ({ ...f, wholesalePrice: e.target.value }))} />
               </div>
               <div className="space-y-1">
                 <Label>最低售價</Label>
@@ -439,6 +469,66 @@ export default function Products() {
               />
               <Label htmlFor="taxIncluded">價格已含稅（含 5% 營業稅）</Label>
             </div>
+
+            {/* ── 商品用途 ── */}
+            <SectionHeading>商品用途</SectionHeading>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {PRODUCT_USAGE_TYPES.map(usage => (
+                <label key={usage} className="flex items-center gap-2 text-sm cursor-pointer">
+                  <Checkbox
+                    checked={form.usageTypes.includes(usage)}
+                    onCheckedChange={checked => {
+                      setForm(f => ({
+                        ...f,
+                        usageTypes: checked
+                          ? [...f.usageTypes, usage]
+                          : f.usageTypes.filter(u => u !== usage),
+                      }));
+                    }}
+                  />
+                  {PRODUCT_USAGE_LABELS[usage]}
+                </label>
+              ))}
+            </div>
+
+            {form.usageTypes.includes("wholesale_sale") && (
+              <>
+                <SectionHeading>批發設定</SectionHeading>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div className="space-y-1">
+                    <Label>批發價</Label>
+                    <Input type="number" min="0" step="1" placeholder="0" value={form.wholesalePrice}
+                      onChange={e => setForm(f => ({ ...f, wholesalePrice: e.target.value }))} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>批發最小數量</Label>
+                    <Input type="number" min="1" step="1" value={form.minQuantity}
+                      onChange={e => setForm(f => ({ ...f, minQuantity: e.target.value }))} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>批發排序</Label>
+                    <Input type="number" min="0" step="1" value={form.wholesaleSortOrder}
+                      onChange={e => setForm(f => ({ ...f, wholesaleSortOrder: e.target.value }))} />
+                  </div>
+                  <div className="flex items-center gap-3 pt-6">
+                    <Switch id="wholesaleEnabled" checked={form.wholesaleEnabled}
+                      onCheckedChange={v => setForm(f => ({ ...f, wholesaleEnabled: v }))} />
+                    <Label htmlFor="wholesaleEnabled">啟用於批發</Label>
+                  </div>
+                  <div className="space-y-1 sm:col-span-4">
+                    <Label>批發備註</Label>
+                    <Textarea rows={2} value={form.wholesaleNote}
+                      onChange={e => setForm(f => ({ ...f, wholesaleNote: e.target.value }))} placeholder="批發專用說明…" />
+                  </div>
+                </div>
+              </>
+            )}
+
+            {!form.usageTypes.includes("wholesale_sale") && editItem?.wholesaleSettings && (
+              <p className="text-xs text-muted-foreground bg-muted/40 rounded-md p-2">
+                已取消「批發銷售」用途，批發設定已保留但不啟用。
+              </p>
+            )}
 
             {/* ── 庫存 ── */}
             <SectionHeading>庫存</SectionHeading>

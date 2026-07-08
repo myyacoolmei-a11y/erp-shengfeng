@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import {
   useListWholesaleOrders, useCreateWholesaleOrder, useUpdateWholesaleOrder,
   useDeleteWholesaleOrder, useGetWholesaleOrder,
-  useListWholesaleCustomers, useListProducts, useListWholesaleReceivables,
+  useListWholesaleCustomers, useListWholesaleProducts, useListWholesaleReceivables,
   getListWholesaleOrdersQueryKey, getListWholesaleReceivablesQueryKey,
   getGetWholesaleOrderQueryKey,
 } from "@workspace/api-client-react";
@@ -174,7 +174,7 @@ export default function WholesaleOrders() {
   );
 
   const { data: customers } = useListWholesaleCustomers({});
-  const { data: products } = useListProducts({ isActive: "true" });
+  const { data: products } = useListWholesaleProducts({ forSelection: "true" });
 
   useEffect(() => {
     if (editData && editId) setForm(fromData(editData));
@@ -362,7 +362,14 @@ export default function WholesaleOrders() {
                                     const name = e.target.value;
                                     const found = (products ?? []).find((p: any) => p.name === name);
                                     updateItem(idx, found
-                                      ? { productName: found.name, productId: found.id, brand: found.brand ?? "", model: found.model ?? "", unit: found.unit ?? "台", unitPrice: parseFloat(found.wholesalePrice ?? "0") }
+                                      ? {
+                                          productName: found.name,
+                                          productId: found.id,
+                                          brand: found.brand ?? "",
+                                          model: found.model ?? "",
+                                          unit: found.unit ?? "台",
+                                          unitPrice: found.effectivePrice ?? parseFloat(found.wholesalePrice ?? found.retailPrice ?? "0"),
+                                        }
                                       : { productName: name });
                                   }} />
                                 <datalist id={`oprod-list-${idx}`}>

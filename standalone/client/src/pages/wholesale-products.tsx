@@ -1,30 +1,92 @@
 import { useState } from "react";
 import { Link } from "wouter";
-import { useListProducts } from "@workspace/api-client-react";
+import {
+  useListWholesaleProducts,
+  useUpdateWholesaleProduct,
+  getListWholesaleProductsQueryKey,
+} from "@workspace/api-client-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Package, ExternalLink, AlertTriangle } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import { Search, Package, ExternalLink, Pencil, AlertTriangle } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/auth-context";
 
-function fmtPrice(v: string | null | undefined) {
-  if (!v) return "—";
-  const n = parseFloat(v);
+const WRITE_ROLES = ["super_admin", "owner", "admin"] as const;
+
+function fmtPrice(v: string | number | null | undefined) {
+  if (v == null || v === "") return "—";
+  const n = typeof v === "number" ? v : parseFloat(v);
   return isNaN(n) ? "—" : `NT$${n.toLocaleString()}`;
 }
 
 export default function WholesaleProducts() {
+  const { toast } = useToast();
+  const { user } = useAuth();
+  const qc = useQueryClient();
+  const canWrite = user && WRITE_ROLES.includes(user.role as any);
+
   const [search, setSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState("啟用");
+  const [editItem, setEditItem] = useState<any>(null);
+  const [form, setForm] = useState({
+    wholesalePrice: "",
+    minQuantity: "1",
+    wholesaleNote: "",
+    isEnabled: true,
+    sortOrder: "0",
+  });
 
-  const { data: products, isLoading } = useListProducts({
+  const queryParams = {
     ...(search ? { search } : {}),
-    isActive: activeFilter !== "全部" ? (activeFilter === "啟用" ? "true" : "false") : undefined,
+    ...(activeFilter === "啟用" ? { isEnabled: "true" } : activeFilter === "停用" ? { isEnabled: "false" } : {}),
+  };
+
+  const { data: products, isLoading } = useListWholesaleProducts(queryParams);
+  const updateMutation = useUpdateWholesaleProduct({
+    mutation: {
+      onSuccess: () => {
+        qc.invalidateQueries({ queryKey: getListWholesaleProductsQueryKey() });
+        setEditItem(null);
+        toast({ title: "批發設定已更新" });
+      },
+    },
   });
 
   const list = products ?? [];
+
+  function openEdit(p: any) {
+    setEditItem(p);
+    setForm({
+      wholesalePrice: p.wholesalePrice != null ? String(p.wholesalePrice) : "",
+      minQuantity: String(p.minQuantity ?? 1),
+      wholesaleNote: p.wholesaleNote ?? "",
+      isEnabled: p.isEnabled ?? true,
+      sortOrder: String(p.sortOrder ?? 0),
+    });
+  }
+
+  function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editItem) return;
+    updateMutation.mutate({
+      productId: editItem.id,
+      data: {
+        wholesalePrice: form.wholesalePrice !== "" ? parseFloat(form.wholesalePrice) : null,
+        minQuantity: parseInt(form.minQuantity) || 1,
+        wholesaleNote: form.wholesaleNote || null,
+        isEnabled: form.isEnabled,
+        sortOrder: parseInt(form.sortOrder) || 0,
+      },
+    });
+  }
 
   function isLowStock(p: any) {
     return p.safetyStock != null && p.stockQty <= p.safetyStock;
@@ -35,7 +97,7 @@ export default function WholesaleProducts() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold">批發商品</h1>
-          <p className="text-sm text-muted-foreground">共 {list.length} 筆・價格資料來自商品管理</p>
+          <p className="text-sm text-muted-foreground">共 {list.length} 筆・主檔來自商品管理，此處僅管理批發設定</p>
         </div>
         <Link href="/products">
           <Button variant="outline" className="shrink-0 gap-1.5">
@@ -71,42 +133,49 @@ export default function WholesaleProducts() {
                   <th className="text-left p-3 font-medium">商品名稱</th>
                   <th className="text-left p-3 font-medium">品牌</th>
                   <th className="text-left p-3 font-medium hidden sm:table-cell">型號</th>
-                  <th className="text-right p-3 font-medium">成本</th>
                   <th className="text-right p-3 font-medium">批發價</th>
-                  <th className="text-right p-3 font-medium">零售價</th>
+                  <th className="text-right p-3 font-medium">一般單價</th>
+                  <th className="text-right p-3 font-medium">最小量</th>
                   <th className="text-right p-3 font-medium">庫存</th>
                   <th className="text-center p-3 font-medium">狀態</th>
+                  {canWrite && <th className="p-3 w-10" />}
                 </tr>
               </thead>
               <tbody>
                 {list.length === 0 ? (
-                  <tr><td colSpan={8} className="text-center py-12 text-muted-foreground">
+                  <tr><td colSpan={canWrite ? 9 : 8} className="text-center py-12 text-muted-foreground">
                     <Package className="h-8 w-8 mx-auto mb-2 text-muted-foreground/40" />
-                    尚無商品資料，請至商品管理新增
+                    尚無批發商品，請至商品管理勾選「批發銷售」用途
                   </td></tr>
                 ) : list.map((p: any) => (
-                  <tr key={p.id} className={`border-b last:border-0 hover:bg-muted/30 ${!p.isActive ? "opacity-50" : ""}`}>
+                  <tr key={p.id} className={`border-b last:border-0 hover:bg-muted/30 ${!p.isEnabled ? "opacity-50" : ""}`}>
                     <td className="p-3">
                       <div className="font-medium">{p.name}</div>
                       {p.category && <div className="text-xs text-muted-foreground">{p.category}</div>}
                     </td>
                     <td className="p-3 text-muted-foreground">{p.brand ?? "—"}</td>
                     <td className="p-3 text-muted-foreground hidden sm:table-cell">{p.model ?? "—"}</td>
-                    <td className="p-3 text-right font-mono text-xs">{fmtPrice(p.costPrice)}</td>
-                    <td className="p-3 text-right font-mono text-xs font-medium">{fmtPrice(p.wholesalePrice)}</td>
+                    <td className="p-3 text-right font-mono text-xs font-medium">{fmtPrice(p.wholesalePrice ?? p.effectivePrice)}</td>
                     <td className="p-3 text-right font-mono text-xs">{fmtPrice(p.retailPrice)}</td>
+                    <td className="p-3 text-right">{p.minQuantity}</td>
                     <td className="p-3 text-right">
                       <span className={isLowStock(p) ? "text-destructive font-medium flex items-center justify-end gap-1" : ""}>
                         {isLowStock(p) && <AlertTriangle className="h-3 w-3" />}
                         {p.stockQty} {p.unit ?? "台"}
                       </span>
-                      {p.safetyStock != null && <div className="text-xs text-muted-foreground">安全：{p.safetyStock}</div>}
                     </td>
                     <td className="p-3 text-center">
-                      <Badge variant={p.isActive ? "default" : "secondary"} className="text-xs">
-                        {p.isActive ? "啟用" : "停用"}
+                      <Badge variant={p.isEnabled ? "default" : "secondary"} className="text-xs">
+                        {p.isEnabled ? "啟用" : "停用"}
                       </Badge>
                     </td>
+                    {canWrite && (
+                      <td className="p-3">
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(p)}>
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -114,6 +183,47 @@ export default function WholesaleProducts() {
           </div>
         </div>
       )}
+
+      <Dialog open={!!editItem} onOpenChange={open => !open && setEditItem(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>編輯批發設定</DialogTitle></DialogHeader>
+          {editItem && (
+            <form onSubmit={handleSave} className="space-y-3">
+              <p className="text-sm font-medium">{editItem.brand ? `${editItem.brand} ` : ""}{editItem.name}</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label>批發價</Label>
+                  <Input type="number" min="0" value={form.wholesalePrice}
+                    onChange={e => setForm(f => ({ ...f, wholesalePrice: e.target.value }))} />
+                </div>
+                <div className="space-y-1">
+                  <Label>最小數量</Label>
+                  <Input type="number" min="1" value={form.minQuantity}
+                    onChange={e => setForm(f => ({ ...f, minQuantity: e.target.value }))} />
+                </div>
+                <div className="space-y-1">
+                  <Label>排序</Label>
+                  <Input type="number" min="0" value={form.sortOrder}
+                    onChange={e => setForm(f => ({ ...f, sortOrder: e.target.value }))} />
+                </div>
+                <div className="flex items-center gap-2 pt-6">
+                  <Switch checked={form.isEnabled} onCheckedChange={v => setForm(f => ({ ...f, isEnabled: v }))} />
+                  <Label>啟用於批發</Label>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label>批發備註</Label>
+                <Textarea rows={2} value={form.wholesaleNote}
+                  onChange={e => setForm(f => ({ ...f, wholesaleNote: e.target.value }))} />
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setEditItem(null)}>取消</Button>
+                <Button type="submit" disabled={updateMutation.isPending}>儲存</Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

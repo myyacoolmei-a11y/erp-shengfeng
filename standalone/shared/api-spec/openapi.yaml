@@ -1490,6 +1490,11 @@ paths:
         - name: isActive
           in: query
           schema: { type: string }
+        - name: usageType
+          in: query
+          schema:
+            type: string
+            enum: [engineering_quote, wholesale_sale, repair_part, maintenance_service]
       responses:
         "200":
           description: 商品列表
@@ -1574,6 +1579,55 @@ paths:
           description: 刪除成功
         "404":
           description: 找不到商品
+
+  /wholesale/products:
+    get:
+      operationId: listWholesaleProducts
+      tags: [wholesale-products]
+      summary: 列出批發商品（JOIN 商品主檔）
+      parameters:
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: isEnabled
+          in: query
+          schema: { type: string }
+        - name: forSelection
+          in: query
+          schema: { type: string }
+      responses:
+        "200":
+          description: 批發商品列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WholesaleProductListItem"
+
+  /wholesale/products/{productId}:
+    patch:
+      operationId: updateWholesaleProduct
+      tags: [wholesale-products]
+      summary: 更新批發商品設定
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateWholesaleProductInput"
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WholesaleProductListItem"
 
   /wholesale/customers:
     get:
@@ -2110,6 +2164,7 @@ components:
       type: object
       required: [category, itemName, quantity, unit, unitPrice]
       properties:
+        productId: { type: ["integer", "null"] }
         category: { type: string }
         itemName: { type: string }
         brand: { type: string }
@@ -2126,6 +2181,7 @@ components:
       properties:
         id: { type: integer }
         quoteId: { type: integer }
+        productId: { type: ["integer", "null"] }
         category: { type: string }
         itemName: { type: string }
         brand: { type: ["string", "null"] }
@@ -2840,10 +2896,21 @@ components:
         isActive: { type: boolean }
         costPrice: { type: ["string", "null"] }
         retailPrice: { type: ["string", "null"] }
-        wholesalePrice: { type: ["string", "null"] }
+        defaultPrice: { type: ["string", "null"] }
         minPrice: { type: ["string", "null"] }
         taxIncluded: { type: boolean }
         stockQty: { type: integer }
+        usageTypes:
+          type: array
+          items: { type: string }
+        wholesaleSettings:
+          type: ["object", "null"]
+          properties:
+            wholesalePrice: { type: ["string", "null"] }
+            minQuantity: { type: integer }
+            wholesaleNote: { type: ["string", "null"] }
+            isEnabled: { type: boolean }
+            sortOrder: { type: integer }
         safetyStock: { type: ["integer", "null"] }
         warehouseLocation: { type: ["string", "null"] }
         coolingCapacity: { type: ["string", "null"] }
@@ -2913,6 +2980,29 @@ components:
         refrigerant: { type: string }
         warrantyMonths: { type: ["integer", "null"] }
         notes: { type: string }
+
+    WholesaleProductListItem:
+      allOf:
+        - $ref: "#/components/schemas/Product"
+        - type: object
+          required: [wholesaleProductId, minQuantity, isEnabled, sortOrder, effectivePrice]
+          properties:
+            wholesaleProductId: { type: integer }
+            wholesalePrice: { type: ["string", "null"] }
+            minQuantity: { type: integer }
+            wholesaleNote: { type: ["string", "null"] }
+            isEnabled: { type: boolean }
+            sortOrder: { type: integer }
+            effectivePrice: { type: number }
+
+    UpdateWholesaleProductInput:
+      type: object
+      properties:
+        wholesalePrice: { type: ["number", "null"] }
+        minQuantity: { type: integer }
+        wholesaleNote: { type: ["string", "null"] }
+        isEnabled: { type: boolean }
+        sortOrder: { type: integer }
 
     WholesaleCustomer:
       type: object

@@ -2,10 +2,12 @@ import { pgTable, text, serial, integer, numeric } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { quotesTable } from "./quotes";
+import { productsTable } from "./products";
 
 export const quoteItemsTable = pgTable("quote_items", {
   id: serial("id").primaryKey(),
   quoteId: integer("quote_id").notNull().references(() => quotesTable.id, { onDelete: "cascade" }),
+  productId: integer("product_id").references(() => productsTable.id, { onDelete: "set null" }),
   category: text("category").notNull().default("其他"),
   itemName: text("item_name").notNull().default(""),
   brand: text("brand"),

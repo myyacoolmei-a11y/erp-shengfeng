@@ -743,6 +743,7 @@ export const CreateQuoteBody = zod.object({
   "taxType": zod.string().optional(),
   "salesRepId": zod.number().optional(),
   "items": zod.array(zod.object({
+  "productId": zod.number().nullish(),
   "category": zod.string(),
   "itemName": zod.string(),
   "brand": zod.string().optional(),
@@ -863,6 +864,7 @@ export const UpdateQuoteBody = zod.object({
   "taxType": zod.string().optional(),
   "salesRepId": zod.number().optional(),
   "items": zod.array(zod.object({
+  "productId": zod.number().nullish(),
   "category": zod.string(),
   "itemName": zod.string(),
   "brand": zod.string().optional(),

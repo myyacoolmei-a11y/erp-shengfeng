@@ -2,6 +2,7 @@ import app from "./app";
 import { logger } from "./lib/logger";
 import { seedDefaultUser, ensureSuperAdmin, migrateUserRoles } from "./routes/auth";
 import { ensureQuoteDispatchColumn } from "./lib/migrations/ensureQuoteDispatchColumn";
+import { ensureProductCatalogMigration } from "./lib/migrations/ensureProductCatalogMigration";
 
 const rawPort = process.env["PORT"];
 
@@ -29,4 +30,5 @@ app.listen(port, async (err) => {
   await ensureSuperAdmin();
   await migrateUserRoles();
   await ensureQuoteDispatchColumn();
+  await ensureProductCatalogMigration();
 });
