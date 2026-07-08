@@ -4,7 +4,7 @@ import {
   useListQuotes, useCreateQuote, useUpdateQuote, useDeleteQuote,
   useListCustomers, useUpdateCustomer, useCreateWorkOrder, useListEmployees,
   useListProducts,
-  getListWorkOrdersQueryKey, getListCustomersQueryKey,
+  getListWorkOrdersQueryKey, getListCustomersQueryKey, getListProductsQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { X, Plus, Pencil, Trash2, Printer, Wrench, Copy, Share2, Download, FileText } from "lucide-react";
@@ -16,6 +16,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { makeEmpty, buildPayload, hasWorkOrderCustomer, type WOForm } from "@/components/work-order-form";
@@ -61,8 +62,14 @@ function quoteMatchesFilter(q: any, filter: string): boolean {
 }
 
 // ── Types ──────────────────────────────────────────────────────────────────
+const UNITS = ["台", "式", "個", "組", "套", "次", "公尺", "公斤"];
+
+type ItemInputMode = "catalog" | "manual";
+
 interface QuoteItem {
   productId: number | null;
+  inputMode: ItemInputMode;
+  addToCatalog: boolean;
   category: string;
   itemName: string;
   brand: string;
@@ -90,7 +97,8 @@ interface QuoteForm {
 }
 
 const DEFAULT_ITEM = (): QuoteItem => ({
-  productId: null, category: "", itemName: "", brand: "", model: "",
+  productId: null, inputMode: "catalog", addToCatalog: false,
+  category: "", itemName: "", brand: "", model: "",
   quantity: 1, unit: "台", unitPrice: 0, notes: "", sortOrder: 0,
 });
 const emptyForm = (): QuoteForm => ({
@@ -125,7 +133,7 @@ function formToApi(f: QuoteForm) {
     ...(f.salesRepId > 0 ? { salesRepId: f.salesRepId } : {}),
     items: f.items.map((item, idx) => ({
       productId: item.productId ?? undefined,
-      category: item.category,
+      category: item.category || "其他",
       itemName: item.itemName,
       brand: item.brand || undefined,
       model: item.model || undefined,
@@ -133,6 +141,7 @@ function formToApi(f: QuoteForm) {
       unit: item.unit,
       unitPrice: item.unitPrice,
       notes: item.notes || undefined,
+      addToCatalog: item.inputMode === "manual" && !item.productId ? item.addToCatalog : undefined,
       sortOrder: idx,
     })),
   };
@@ -154,6 +163,8 @@ function quoteToForm(q: any): QuoteForm {
     discountAmount: Number(q.discountAmount ?? 0),
     items: (q.items ?? []).map((item: any, idx: number) => ({
       productId: item.productId ?? null,
+      inputMode: item.productId != null ? "catalog" as const : "manual" as const,
+      addToCatalog: false,
       category: item.category ?? "其他",
       itemName: item.itemName ?? "",
       brand: item.brand ?? "",
@@ -219,20 +230,45 @@ function ItemCard({ item, index, products, onChange, onDelete }: {
   item: QuoteItem; index: number; products: any[];
   onChange: (u: QuoteItem) => void; onDelete: () => void;
 }) {
+  const [productSearch, setProductSearch] = useState("");
   const productOptions = products ?? [];
-  const selectedId = item.productId != null ? String(item.productId) : "";
 
-  function applyProduct(productId: string) {
-    if (!productId) {
-      onChange({ ...DEFAULT_ITEM(), sortOrder: item.sortOrder });
-      return;
+  const filteredProducts = productOptions.filter((p: any) => {
+    if (!productSearch.trim()) return true;
+    const q = productSearch.trim().toLowerCase();
+    const hay = [p.brand, p.name, p.model, p.category, p.productNumber].filter(Boolean).join(" ").toLowerCase();
+    return hay.includes(q);
+  });
+
+  function switchMode(mode: ItemInputMode) {
+    if (mode === item.inputMode) return;
+    if (mode === "catalog") {
+      onChange({
+        ...DEFAULT_ITEM(),
+        inputMode: "catalog",
+        sortOrder: item.sortOrder,
+        quantity: item.quantity,
+        notes: item.notes,
+      });
+    } else {
+      onChange({
+        ...item,
+        inputMode: "manual",
+        productId: null,
+        addToCatalog: false,
+      });
     }
-    const found = productOptions.find((p: any) => String(p.id) === productId);
+  }
+
+  function applyProduct(productId: number) {
+    const found = productOptions.find((p: any) => p.id === productId);
     if (!found) return;
     const price = found.retailPrice != null ? parseFloat(found.retailPrice) : 0;
     onChange({
       ...item,
+      inputMode: "catalog",
       productId: found.id,
+      addToCatalog: false,
       category: found.category ?? "其他",
       itemName: found.name ?? "",
       brand: found.brand ?? "",
@@ -243,35 +279,108 @@ function ItemCard({ item, index, products, onChange, onDelete }: {
   }
 
   return (
-    <div className="border rounded-lg p-3 space-y-2 bg-card/50">
-      <div className="flex items-center justify-between">
+    <div className="border rounded-lg p-3 space-y-3 bg-card/50">
+      <div className="flex items-center justify-between gap-2">
         <span className="text-xs font-semibold text-muted-foreground">項目 {index + 1}</span>
-        <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground" onClick={onDelete}>
+        <div className="flex rounded-md border overflow-hidden text-xs">
+          <button
+            type="button"
+            onClick={() => switchMode("catalog")}
+            className={`px-2.5 py-1 font-medium transition-colors ${item.inputMode === "catalog" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-muted"}`}
+          >
+            從商品管理
+          </button>
+          <button
+            type="button"
+            onClick={() => switchMode("manual")}
+            className={`px-2.5 py-1 font-medium transition-colors ${item.inputMode === "manual" ? "bg-primary text-primary-foreground" : "bg-background text-muted-foreground hover:bg-muted"}`}
+          >
+            自行輸入
+          </button>
+        </div>
+        <Button type="button" variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground shrink-0" onClick={onDelete}>
           <X className="h-3.5 w-3.5" />
         </Button>
       </div>
 
-      <div className="space-y-1">
-        <Label className="text-xs">商品（工程報價）</Label>
-        <Select value={selectedId || undefined} onValueChange={applyProduct}>
-          <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="選擇商品…" /></SelectTrigger>
-          <SelectContent>
-            {productOptions.map((p: any) => (
-              <SelectItem key={p.id} value={String(p.id)}>
-                {[p.brand, p.name, p.model].filter(Boolean).join(" · ")}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      {item.productId != null && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs bg-muted/30 rounded-md p-2">
-          <div><span className="text-muted-foreground">類別</span><p className="font-medium">{item.category || "—"}</p></div>
-          <div><span className="text-muted-foreground">品牌</span><p className="font-medium">{item.brand || "—"}</p></div>
-          <div><span className="text-muted-foreground">品項</span><p className="font-medium">{item.itemName || "—"}</p></div>
-          <div><span className="text-muted-foreground">型號</span><p className="font-medium">{item.model || "—"}</p></div>
-          <div><span className="text-muted-foreground">單位</span><p className="font-medium">{item.unit || "—"}</p></div>
+      {item.inputMode === "catalog" ? (
+        <div className="space-y-2">
+          <div className="space-y-1">
+            <Label className="text-xs">搜尋商品（工程報價）</Label>
+            <Input
+              className="h-8 text-xs"
+              placeholder="搜尋品牌、品項、型號…"
+              value={productSearch}
+              onChange={e => setProductSearch(e.target.value)}
+            />
+          </div>
+          {item.productId != null ? (
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs bg-muted/30 rounded-md p-2">
+              <div><span className="text-muted-foreground">品牌</span><p className="font-medium">{item.brand || "—"}</p></div>
+              <div><span className="text-muted-foreground">品項</span><p className="font-medium">{item.itemName || "—"}</p></div>
+              <div><span className="text-muted-foreground">型號</span><p className="font-medium">{item.model || "—"}</p></div>
+              <div><span className="text-muted-foreground">單位</span><p className="font-medium">{item.unit || "—"}</p></div>
+              <div><span className="text-muted-foreground">單價</span><p className="font-medium">NT${item.unitPrice.toLocaleString()}</p></div>
+            </div>
+          ) : (
+            <div className="max-h-36 overflow-y-auto border rounded-md divide-y">
+              {filteredProducts.length === 0 ? (
+                <p className="text-xs text-muted-foreground p-3 text-center">找不到符合的商品，可改用「自行輸入」</p>
+              ) : filteredProducts.slice(0, 20).map((p: any) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  className="w-full text-left px-3 py-2 text-xs hover:bg-muted/60 transition-colors"
+                  onClick={() => applyProduct(p.id)}
+                >
+                  <span className="font-medium">{[p.brand, p.name].filter(Boolean).join(" ")}</span>
+                  {p.model && <span className="text-muted-foreground ml-1">· {p.model}</span>}
+                  {p.retailPrice && <span className="float-right text-muted-foreground">NT${parseFloat(p.retailPrice).toLocaleString()}</span>}
+                </button>
+              ))}
+            </div>
+          )}
+          {item.productId != null && (
+            <Button type="button" variant="ghost" size="sm" className="h-7 text-xs" onClick={() => onChange({ ...item, productId: null })}>
+              重新選擇商品
+            </Button>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            <div className="space-y-1">
+              <Label className="text-xs">品牌</Label>
+              <Input className="h-8 text-xs" value={item.brand} onChange={e => onChange({ ...item, brand: e.target.value })} placeholder="品牌" />
+            </div>
+            <div className="space-y-1 sm:col-span-2">
+              <Label className="text-xs">品項 *</Label>
+              <Input className="h-8 text-xs" value={item.itemName} onChange={e => onChange({ ...item, itemName: e.target.value })} placeholder="品項名稱" required />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">型號</Label>
+              <Input className="h-8 text-xs" value={item.model} onChange={e => onChange({ ...item, model: e.target.value })} placeholder="型號" />
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">單位</Label>
+              <Select value={item.unit} onValueChange={v => onChange({ ...item, unit: v })}>
+                <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>{UNITS.map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">單價</Label>
+              <Input className="h-8 text-xs" type="number" min="0" value={item.unitPrice}
+                onChange={e => onChange({ ...item, unitPrice: parseFloat(e.target.value) || 0 })} />
+            </div>
+          </div>
+          <label className="flex items-center gap-2 text-xs cursor-pointer">
+            <Checkbox
+              checked={item.addToCatalog}
+              onCheckedChange={v => onChange({ ...item, addToCatalog: v === true })}
+            />
+            加入商品管理（儲存報價時同步建立商品主檔，用途：工程報價）
+          </label>
         </div>
       )}
 
@@ -281,11 +390,13 @@ function ItemCard({ item, index, products, onChange, onDelete }: {
           <Input className="h-8 text-sm" type="number" min="0.01" step="0.01" value={item.quantity}
             onChange={e => onChange({ ...item, quantity: parseFloat(e.target.value) || 0 })} />
         </div>
-        <div className="space-y-1">
-          <Label className="text-xs">單價</Label>
-          <Input className="h-8 text-sm" type="number" min="0" value={item.unitPrice}
-            onChange={e => onChange({ ...item, unitPrice: parseFloat(e.target.value) || 0 })} />
-        </div>
+        {item.inputMode === "catalog" && (
+          <div className="space-y-1">
+            <Label className="text-xs">單價</Label>
+            <Input className="h-8 text-sm" type="number" min="0" value={item.unitPrice}
+              onChange={e => onChange({ ...item, unitPrice: parseFloat(e.target.value) || 0 })} />
+          </div>
+        )}
         <div className="space-y-1">
           <Label className="text-xs text-muted-foreground">小計</Label>
           <div className="h-8 flex items-center px-2 bg-muted/50 rounded-md border text-xs font-semibold">
@@ -366,8 +477,8 @@ export default function QuotesPage() {
   });
 
   const invQuotes = () => invalidateStatistics(qc);
-  const createMutation = useCreateQuote({ mutation: { onSuccess: () => { invQuotes(); setShowCreate(false); toast({ title: "報價單已新增" }); } } });
-  const updateMutation = useUpdateQuote({ mutation: { onSuccess: () => { invQuotes(); setEditItem(null); toast({ title: "報價單已更新" }); } } });
+  const createMutation = useCreateQuote({ mutation: { onSuccess: () => { invQuotes(); qc.invalidateQueries({ queryKey: getListProductsQueryKey() }); setShowCreate(false); toast({ title: "報價單已新增" }); } } });
+  const updateMutation = useUpdateQuote({ mutation: { onSuccess: () => { invQuotes(); qc.invalidateQueries({ queryKey: getListProductsQueryKey() }); setEditItem(null); toast({ title: "報價單已更新" }); } } });
   const deleteMutation = useDeleteQuote({ mutation: { onSuccess: () => { invQuotes(); setDeleteId(null); toast({ title: "報價單已刪除" }); } } });
   const createWoMutation = useCreateWorkOrder({
     mutation: {
@@ -512,6 +623,13 @@ export default function QuotesPage() {
           </DialogHeader>
           <form onSubmit={e => {
             e.preventDefault();
+            const invalidManual = form.items.some(
+              it => it.inputMode === "manual" && !it.itemName.trim(),
+            );
+            if (invalidManual) {
+              toast({ title: "請填寫自行輸入項目的品項名稱", variant: "destructive" });
+              return;
+            }
             const data = formToApi(form) as any;
             if (editItem) updateMutation.mutate({ id: editItem.id, data });
             else createMutation.mutate({ data });

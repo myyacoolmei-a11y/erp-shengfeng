@@ -5,6 +5,7 @@ import { CreateQuoteBody, UpdateQuoteBody } from "@workspace/api-zod";
 import { requireRole } from "../lib/auth";
 import { syncQuoteDispatchBatch, syncQuoteDispatchStatus } from "../lib/quoteWorkflow";
 import { normalizeQuoteStatus } from "../lib/quoteStatus";
+import { resolveQuoteItemsForSave } from "../lib/productCatalog";
 
 const router: IRouter = Router();
 
@@ -174,7 +175,8 @@ router.post("/quotes", requireRole(...WRITE_ROLES), async (req, res): Promise<vo
 
   let insertedItems: any[] = [];
   if (itemInputs.length > 0) {
-    const rows = await buildItemsInsert(itemInputs, quote.id);
+    const resolvedItems = await resolveQuoteItemsForSave(itemInputs);
+    const rows = await buildItemsInsert(resolvedItems, quote.id);
     insertedItems = await db.insert(quoteItemsTable).values(rows).returning();
   }
 
@@ -240,7 +242,8 @@ router.patch("/quotes/:id", requireRole(...WRITE_ROLES), async (req, res): Promi
     await db.delete(quoteItemsTable).where(eq(quoteItemsTable.quoteId, id));
 
     if (itemArr.length > 0) {
-      const rows = await buildItemsInsert(itemArr, id);
+      const resolvedItems = await resolveQuoteItemsForSave(itemArr);
+      const rows = await buildItemsInsert(resolvedItems, id);
       await db.insert(quoteItemsTable).values(rows);
     }
   }

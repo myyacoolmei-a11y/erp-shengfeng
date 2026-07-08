@@ -212,4 +212,75 @@ export function resolveWholesaleUnitPrice(
   return 0;
 }
 
+function generateProductNumber(id: number): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  return `PRD-${y}${m}-${String(id).padStart(4, "0")}`;
+}
+
+/** Create a product master record from a manually entered quote line item. */
+export async function createProductFromQuoteItem(item: {
+  category?: string | null;
+  itemName: string;
+  brand?: string | null;
+  model?: string | null;
+  unit?: string | null;
+  unitPrice?: number | null;
+}): Promise<number> {
+  const name = item.itemName.trim();
+  const [product] = await db
+    .insert(productsTable)
+    .values({
+      name,
+      brand: item.brand?.trim() || null,
+      category: item.category?.trim() || "其他",
+      model: item.model?.trim() || null,
+      unit: item.unit?.trim() || "台",
+      retailPrice: item.unitPrice != null ? String(item.unitPrice) : null,
+      isActive: true,
+    })
+    .returning();
+
+  const productNumber = generateProductNumber(product.id);
+  await db
+    .update(productsTable)
+    .set({ productNumber })
+    .where(eq(productsTable.id, product.id));
+
+  await setProductUsageTypes(product.id, ["engineering_quote"]);
+  return product.id;
+}
+
+export type QuoteItemInputForSave = {
+  productId?: number | null;
+  addToCatalog?: boolean;
+  category?: string;
+  itemName?: string;
+  brand?: string | null;
+  model?: string | null;
+  unit?: string;
+  unitPrice?: number;
+  quantity?: number;
+  notes?: string | null;
+  sortOrder?: number;
+};
+
+/** If addToCatalog is set on a manual line, create product and attach productId. */
+export async function resolveQuoteItemsForSave(items: QuoteItemInputForSave[]): Promise<QuoteItemInputForSave[]> {
+  const resolved: QuoteItemInputForSave[] = [];
+  for (const item of items) {
+    let productId = item.productId ?? null;
+    if (!productId && item.addToCatalog && String(item.itemName ?? "").trim()) {
+      productId = await createProductFromQuoteItem({
+        ...item,
+        itemName: String(item.itemName).trim(),
+      });
+    }
+    const { addToCatalog: _omit, ...rest } = item;
+    resolved.push({ ...rest, productId });
+  }
+  return resolved;
+}
+
 export { PRODUCT_USAGE_TYPES };

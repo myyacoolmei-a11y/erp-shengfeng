@@ -752,6 +752,7 @@ export const CreateQuoteBody = zod.object({
   "unit": zod.string(),
   "unitPrice": zod.number(),
   "notes": zod.string().optional(),
+  "addToCatalog": zod.boolean().optional(),
   "sortOrder": zod.number().optional()
 })).optional()
 })
@@ -873,6 +874,7 @@ export const UpdateQuoteBody = zod.object({
   "unit": zod.string(),
   "unitPrice": zod.number(),
   "notes": zod.string().optional(),
+  "addToCatalog": zod.boolean().optional(),
   "sortOrder": zod.number().optional()
 })).optional()
 })

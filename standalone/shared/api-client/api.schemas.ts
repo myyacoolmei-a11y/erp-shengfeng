@@ -150,6 +150,7 @@ export interface QuoteItemInput {
   unit: string;
   unitPrice: number;
   notes?: string;
+  addToCatalog?: boolean;
   sortOrder?: number;
 }
 
