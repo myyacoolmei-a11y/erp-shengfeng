@@ -3,7 +3,9 @@ import { logger } from "./lib/logger";
 import { seedDefaultUser, ensureSuperAdmin, migrateUserRoles } from "./routes/auth";
 import { ensureQuoteDispatchColumn } from "./lib/migrations/ensureQuoteDispatchColumn";
 import { ensureProductCatalogMigration } from "./lib/migrations/ensureProductCatalogMigration";
+import { ensureNotificationSettingsMigration } from "./lib/migrations/ensureNotificationSettingsMigration";
 import { getSpeechService, resolveActiveSpeechProviderId } from "./lib/voice/speech/speechServiceFactory.ts";
+import { startReminderScheduler } from "./lib/reminders/scheduler.ts";
 
 const rawPort = process.env["PORT"];
 
@@ -42,4 +44,6 @@ app.listen(port, async (err) => {
   await migrateUserRoles();
   await ensureQuoteDispatchColumn();
   await ensureProductCatalogMigration();
+  await ensureNotificationSettingsMigration();
+  startReminderScheduler();
 });

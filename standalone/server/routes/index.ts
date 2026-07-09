@@ -22,12 +22,15 @@ import wholesaleOrdersRouter from "./wholesale-orders";
 import wholesaleReceivablesRouter from "./wholesale-receivables";
 import wholesaleSettlementsRouter from "./wholesale-settlements";
 import voiceRouter from "./voice";
+import reminderSettingsRouter from "./reminderSettings";
+import jobsRouter from "./jobs";
 import { authenticate } from "../lib/auth";
 
 const router: IRouter = Router();
 
 router.use(healthRouter);
 router.use(authRouter);
+router.use(jobsRouter);
 
 router.use(authenticate);
 
@@ -52,5 +55,6 @@ router.use(wholesaleOrdersRouter);
 router.use(wholesaleReceivablesRouter);
 router.use(wholesaleSettlementsRouter);
 router.use(voiceRouter);
+router.use(reminderSettingsRouter);
 
 export default router;

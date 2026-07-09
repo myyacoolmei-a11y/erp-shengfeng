@@ -21,3 +21,5 @@ export * from "./wholesaleCustomers";
 export * from "./wholesaleQuotes";
 export * from "./wholesaleOrders";
 export * from "./wholesaleReceivables";
+export * from "./notificationSettings";
+export * from "./notificationLogs";

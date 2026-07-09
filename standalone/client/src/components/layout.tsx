@@ -19,6 +19,7 @@ import {
   Building2,
   ClipboardList,
   ReceiptText,
+  Bell,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -101,6 +102,12 @@ const NAV_ITEMS: NavItem[] = [
     roles: ["super_admin", "owner", "admin"],
   },
   {
+    href: "/reminder-settings",
+    label: "AI 收款秘書",
+    icon: Bell,
+    roles: ["super_admin", "owner", "admin"],
+  },
+  {
     href: "/users",
     label: "用戶管理",
     icon: UserCog,
@@ -141,10 +148,10 @@ function NavContent() {
   );
 
   const topItems = visibleItems.filter(
-    (item) => !(["/inventory", "/warranties", "/employees", "/users"].includes(item.href))
+    (item) => !(["/inventory", "/warranties", "/employees", "/users", "/reminder-settings"].includes(item.href))
   );
   const bottomItems = visibleItems.filter(
-    (item) => ["/warranties", "/employees", "/users", "/inventory"].includes(item.href)
+    (item) => ["/warranties", "/employees", "/users", "/inventory", "/reminder-settings"].includes(item.href)
   );
 
   function NavLink({ item }: { item: NavItem }) {

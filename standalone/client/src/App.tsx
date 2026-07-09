@@ -27,6 +27,7 @@ import WholesaleCustomers from "@/pages/wholesale-customers";
 import WholesaleProducts from "@/pages/wholesale-products";
 import WholesaleOrders from "@/pages/wholesale-orders";
 import WholesaleSettlements from "@/pages/wholesale-settlements";
+import ReminderSettings from "@/pages/reminder-settings";
 
 function ComingSoon({ title }: { title: string }) {
   return (
@@ -210,6 +211,11 @@ function AppRoutes() {
             <Route path="/employees">
               <RoleGuard roles={["super_admin", "owner", "admin"]}>
                 <Employees />
+              </RoleGuard>
+            </Route>
+            <Route path="/reminder-settings">
+              <RoleGuard roles={["super_admin", "owner", "admin"]}>
+                <ReminderSettings />
               </RoleGuard>
             </Route>
             <Route path="/users">

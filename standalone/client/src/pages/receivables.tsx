@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useSearch, useLocation } from "wouter";
 import {
   useListReceivables, useCreateReceivable, useUpdateReceivable, useDeleteReceivable,
@@ -68,6 +68,7 @@ export default function Receivables() {
   const urlParams = new URLSearchParams(search);
   const filterCustomerId = parseInt(urlParams.get("customerId") ?? "0", 10) || null;
   const filterCustomerName = urlParams.get("customerName") ?? "";
+  const focusReceivableId = parseInt(urlParams.get("receivableId") ?? "0", 10) || null;
 
   const [tabFilter, setTabFilter] = useState<TabFilter>("全部");
   const [deleteId, setDeleteId] = useState<number | null>(null);
@@ -91,6 +92,12 @@ export default function Receivables() {
 
   const { data: items = [], isLoading } = useListReceivables(apiFilter as any);
   const { data: customers = [] } = useListCustomers({ includeOld: "true" });
+
+  useEffect(() => {
+    if (!focusReceivableId || !items.length || viewItem) return;
+    const target = items.find(i => i.id === focusReceivableId);
+    if (target) setViewItem(target);
+  }, [focusReceivableId, items, viewItem]);
 
   const invalidate = () => invalidateStatistics(queryClient);
 
