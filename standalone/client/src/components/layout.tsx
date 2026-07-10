@@ -111,7 +111,7 @@ const NAV_ITEMS: NavItem[] = [
   },
   {
     href: "/reminder-settings",
-    label: "AI 收款秘書",
+    label: "AI 小秘書",
     icon: Bell,
     roles: ["super_admin", "owner", "admin", "sales", "engineer", "technician", "accountant", "distributor"],
   },

@@ -260,7 +260,7 @@ export async function sendReceivableCollectionTestMessage(userId: number) {
   const message =
     summary.total > 0
       ? buildReceivableCollectionMessage(summary, appBaseUrl)
-      : "💰【晟風 AI 收款秘書 — 測試】\n\nLINE 推播連線正常。\n目前沒有到期或未收的應收款。";
+      : "🤖 晟風 AI 小秘書 — 測試\n\nLINE 推播連線正常。\n目前沒有到期或未收的應收款。";
 
   const result = await pushLineMessageToRecipients({
     kind: RECEIVABLE_COLLECTION_KIND,

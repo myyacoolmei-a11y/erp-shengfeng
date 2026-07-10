@@ -193,7 +193,7 @@ export async function bindLineUserByCode(opts: {
   if (opts.replyToken) {
     await replyLineMessage({
       replyToken: opts.replyToken,
-      text: "✅ LINE 綁定成功！您可在 ERP「AI 收款秘書」設定要接收的推播項目。",
+      text: "✅ LINE 綁定成功！您可在 ERP「AI 小秘書」設定要接收的推播項目。",
     }).catch(err => logger.warn({ err }, "LINE binding reply failed"));
   }
 
@@ -346,6 +346,6 @@ export function parseLineBindingMessage(text: string): string | null {
 export async function replyLineFollowInstructions(replyToken: string): Promise<void> {
   await replyLineMessage({
     replyToken,
-    text: "您好！請先在 ERP「AI 收款秘書」按「立即綁定 LINE」取得綁定碼，加入好友後在對話輸入：綁定 XXXXX",
+    text: "您好！請先在 ERP「AI 小秘書」按「立即綁定 LINE」取得綁定碼，加入好友後在對話輸入：綁定 XXXXX",
   }).catch(err => logger.warn({ err }, "LINE follow reply failed"));
 }

@@ -35,7 +35,7 @@ export function buildReceivableCollectionMessage(
   appBaseUrl: string,
 ): string {
   const lines: string[] = [
-    "💰【晟風 AI 收款秘書】",
+    "🤖 晟風 AI 小秘書",
     "",
     `今日共有 ${summary.total} 筆款項需要追蹤。`,
     "",

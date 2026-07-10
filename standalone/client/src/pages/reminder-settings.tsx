@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { APP_BRAND } from "@/lib/appBrand";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Bell, Loader2, Send, Eye, Save, Link2, CheckCircle2, Sunrise, Moon, Users, Unlink, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -140,6 +141,14 @@ export default function ReminderSettingsPage() {
     queryFn: listReceivableReminderLogs,
     enabled: isAdmin,
   });
+
+  useEffect(() => {
+    const previousTitle = document.title;
+    document.title = `AI 小秘書 — ${APP_BRAND.pwaName}`;
+    return () => {
+      document.title = previousTitle;
+    };
+  }, []);
 
   useEffect(() => {
     if (!data) return;
@@ -367,10 +376,10 @@ export default function ReminderSettingsPage() {
       <div>
         <h1 className="text-2xl font-bold flex items-center gap-2">
           <Bell className="h-6 w-6" />
-          AI 收款秘書
+          AI 小秘書
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
-          晟風小秘書 LINE 推播：每日晨報、收款提醒、晚間提醒。
+          AI 小秘書可協助每日晨報、待派工提醒、應收帳款提醒、報價追蹤、晚間提醒等智慧通知。
         </p>
       </div>
 
