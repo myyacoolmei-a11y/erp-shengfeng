@@ -12,7 +12,8 @@
     "db:migrate-dispatch": "node scripts/db-migrate-dispatch.mjs",
     "db:migrate-product-catalog": "node scripts/db-migrate-product-catalog.mjs",
     "db:studio": "drizzle-kit studio --config drizzle.config.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "pwa:icons": "node scripts/generate-pwa-icons.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -87,6 +88,7 @@
     "typescript": "5.9.3",
     "vaul": "^1.1.2",
     "vite": "^7.3.2",
+    "vite-plugin-pwa": "^1.3.0",
     "wouter": "^3.3.5",
     "zod": "3.25.76"
   },

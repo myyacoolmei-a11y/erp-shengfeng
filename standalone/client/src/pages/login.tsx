@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Wind, AlertCircle, Loader2 } from "lucide-react";
 import { APP_BRAND } from "@/lib/appBrand";
+import { PwaInstallBanner } from "@/components/pwa/PwaInstallBanner";
 
 export default function LoginPage() {
   const { login, isAuthenticated } = useAuth();
@@ -42,6 +43,8 @@ export default function LoginPage() {
           <h1 className="text-xl font-bold tracking-tight text-primary text-center leading-snug">{APP_BRAND.nameZh}</h1>
           <p className="text-xs text-muted-foreground text-center max-w-xs">{APP_BRAND.nameEn}</p>
         </div>
+
+        <PwaInstallBanner />
 
         <Card className="shadow-md">
           <CardHeader className="space-y-1 pb-4">

@@ -5,6 +5,11 @@ export const APP_BRAND = {
   brandEn: "Cheng Feng",
   logoAlt: "晟風空調",
   dashboardSubtitleZh: "系統總覽",
+  /** PWA install name (home screen) */
+  pwaName: "晟風工程管理助手",
+  pwaShortName: "晟風 ERP",
+  themeColor: "#334155",
+  backgroundColor: "#ffffff",
 } as const;
 
 export function browserTitle(page?: string): string {

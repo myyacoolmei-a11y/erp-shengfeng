@@ -27,6 +27,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { useAuth, effectiveRoles, type UserRole } from "@/contexts/auth-context";
 import { ROLE_LABELS } from "@/lib/role-labels";
 import { APP_BRAND } from "@/lib/appBrand";
+import { PwaInstallBanner } from "@/components/pwa/PwaInstallBanner";
 
 interface NavItem {
   href: string;
@@ -329,7 +330,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
           )}
         </header>
         <main className="flex-1 overflow-y-auto p-4 md:p-8">
-          <div className="mx-auto max-w-6xl w-full">{children}</div>
+          <div className="mx-auto max-w-6xl w-full space-y-4">
+            {user && <PwaInstallBanner compact />}
+            {children}
+          </div>
         </main>
       </div>
     </div>

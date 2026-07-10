@@ -12,6 +12,11 @@ globalThis.require = createRequire(import.meta.url);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 async function buildClient() {
+  console.log("🖼️  Generating PWA icons...");
+  execSync("node scripts/generate-pwa-icons.mjs", {
+    cwd: __dirname,
+    stdio: "inherit",
+  });
   console.log("📦  Building client (Vite)...");
   execSync("npx vite build --config vite.config.ts", {
     cwd: __dirname,
