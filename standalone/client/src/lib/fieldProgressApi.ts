@@ -47,15 +47,30 @@ export function taipeiToday(): string {
 }
 
 export function isWorkOrderAssignedToUser(
-  order: { assignedTo?: string | null; assistantTo?: string | null; technicians?: string | null },
-  displayName: string,
+  order: {
+    assignedTo?: string | null;
+    assistantTo?: string | null;
+    technicians?: string | null;
+  },
+  user: { id: number; displayName: string; username?: string },
 ): boolean {
-  if (!displayName) return false;
-  if (order.assignedTo === displayName || order.assistantTo === displayName) return true;
+  const keys = new Set<string>();
+  const displayName = user.displayName?.trim();
+  const username = user.username?.trim();
+  if (displayName) keys.add(displayName);
+  if (username) keys.add(username);
+  keys.add(String(user.id));
+
+  const assignedTo = order.assignedTo?.trim();
+  const assistantTo = order.assistantTo?.trim();
+  if (assignedTo && keys.has(assignedTo)) return true;
+  if (assistantTo && keys.has(assistantTo)) return true;
+
   if (!order.technicians) return false;
   try {
     const techs = JSON.parse(order.technicians);
-    return Array.isArray(techs) && techs.includes(displayName);
+    if (!Array.isArray(techs)) return false;
+    return techs.some((t) => keys.has(String(t).trim()));
   } catch {
     return false;
   }

@@ -40,7 +40,11 @@ export default function EngineerDashboard() {
             assistantTo: wo.assistantTo,
             technicians: wo.technicians as string | null | undefined,
           },
-          user?.displayName ?? "",
+          {
+            id: user?.id ?? 0,
+            displayName: user?.displayName ?? "",
+            username: user?.username,
+          },
         );
       })
       .sort((a, b) => (a.scheduledTime ?? "").localeCompare(b.scheduledTime ?? ""));

@@ -9,8 +9,10 @@ import {
 import { requireRole } from "../lib/auth";
 import {
   UNABLE_REASONS,
-  isWorkOrderAssignedToUser,
+  buildUserAssignmentContext,
+  isWorkOrderAssignedToContext,
   isFieldProgressOperator,
+  isWorkOrderListAdmin,
   isFieldProgressAdmin,
   diffMinutes,
   serializeFieldProgress,
@@ -48,12 +50,10 @@ async function fetchWorkOrder(id: number): Promise<WoRow | null> {
 function assertWorkOrderAccess(
   user: NonNullable<Request["user"]>,
   order: WoRow,
+  ctx: Awaited<ReturnType<typeof buildUserAssignmentContext>>,
 ): { ok: true } | { ok: false; status: number; message: string } {
-  if (isFieldProgressAdmin(user)) return { ok: true };
-  if (
-    isFieldProgressOperator(user) &&
-    isWorkOrderAssignedToUser(order, user.displayName)
-  ) {
+  if (isWorkOrderListAdmin(user)) return { ok: true };
+  if (isFieldProgressOperator(user) && isWorkOrderAssignedToContext(order, ctx)) {
     return { ok: true };
   }
   return { ok: false, status: 403, message: "您沒有權限操作此派工單" };
@@ -106,7 +106,8 @@ router.get(
       return;
     }
 
-    const access = assertWorkOrderAccess(req.user!, order);
+    const ctx = await buildUserAssignmentContext(req.user!);
+    const access = assertWorkOrderAccess(req.user!, order, ctx);
     if (!access.ok) {
       res.status(access.status).json({ error: access.message });
       return;
@@ -162,7 +163,8 @@ async function handleFieldAction(
     return;
   }
 
-  const access = assertWorkOrderAccess(req.user!, order);
+  const ctx = await buildUserAssignmentContext(req.user!);
+  const access = assertWorkOrderAccess(req.user!, order, ctx);
   if (!access.ok) {
     res.status(access.status).json({ error: access.message });
     return;
@@ -295,7 +297,8 @@ router.post(
       return;
     }
 
-    const access = assertWorkOrderAccess(req.user!, order);
+    const ctx = await buildUserAssignmentContext(req.user!);
+    const access = assertWorkOrderAccess(req.user!, order, ctx);
     if (!access.ok) {
       res.status(access.status).json({ error: access.message });
       return;

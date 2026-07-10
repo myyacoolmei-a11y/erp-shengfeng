@@ -1,33 +1,21 @@
 import type { JwtPayload } from "../auth.ts";
-import { effectiveRoles } from "../auth.ts";
 
 export const UNABLE_REASONS = ["客戶不在", "客戶要求改期", "缺料", "其他"] as const;
 export type UnableReason = (typeof UNABLE_REASONS)[number];
 
-export function isWorkOrderAssignedToUser(
-  order: { assignedTo: string | null; assistantTo: string | null; technicians: string | null },
-  displayName: string,
-): boolean {
-  if (!displayName) return false;
-  if (order.assignedTo === displayName || order.assistantTo === displayName) return true;
-  if (!order.technicians) return false;
-  try {
-    const techs = JSON.parse(order.technicians);
-    return Array.isArray(techs) && techs.includes(displayName);
-  } catch {
-    return false;
-  }
-}
-
-export function isFieldProgressOperator(user: JwtPayload): boolean {
-  const roles = effectiveRoles(user);
-  return roles.includes("engineer") || roles.includes("technician");
-}
-
-export function isFieldProgressAdmin(user: JwtPayload): boolean {
-  const roles = effectiveRoles(user);
-  return roles.includes("super_admin") || roles.includes("owner") || roles.includes("admin") || roles.includes("accountant");
-}
+export {
+  buildUserAssignmentContext,
+  isWorkOrderAssignedToContext,
+  isWorkOrderAssignedToUser,
+  isFieldProgressOperator,
+  isFieldProgressAdmin,
+  isWorkOrderListAdmin,
+  describeWorkOrderListQuery,
+  explainEmptyWorkOrderList,
+  deriveAssignedFromTechnicians,
+  type UserAssignmentContext,
+  type WorkOrderAssignmentFields,
+} from "./workOrderAssignment.ts";
 
 export function diffMinutes(start: Date, end: Date): number {
   return Math.max(0, Math.round((end.getTime() - start.getTime()) / 60000));

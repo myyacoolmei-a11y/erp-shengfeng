@@ -158,6 +158,8 @@ export function buildPayload(f: WOForm) {
     scheduledDate: f.scheduledDate || undefined,
     scheduledTime: f.scheduledTime || undefined,
     completedDate: f.completedDate || undefined,
+    assignedTo: f.technicians[0] || undefined,
+    assistantTo: f.technicians[1] || undefined,
     technicians: f.technicians.length > 0 ? JSON.stringify(f.technicians) : undefined,
     projectType: f.projectType || undefined,
     hasElevator: f.hasElevator || undefined,
