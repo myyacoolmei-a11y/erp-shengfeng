@@ -1,6 +1,14 @@
-import { useState } from "react";
+import { useState, type ElementType } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Check, Loader2, AlertTriangle } from "lucide-react";
+import {
+  Check,
+  Loader2,
+  AlertTriangle,
+  Car,
+  MapPin,
+  Flag,
+  ChevronDown,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -54,8 +62,30 @@ interface WorkOrderCardData {
   status?: string | null;
 }
 
+type StepVisualState = "done" | "active" | "pending";
+
+interface StepConfig {
+  key: "depart" | "arrive" | "complete";
+  stepNum: 1 | 2 | 3;
+  label: string;
+  doneLabel: string;
+  icon: ElementType;
+  done: boolean;
+  active: boolean;
+  doneTime?: string | null;
+  loading: boolean;
+  onClick: () => void;
+}
+
 function phoneDisplay(order: WorkOrderCardData): string {
   return [order.mobilePhone, order.telephone].filter(Boolean).join(" / ") || "—";
+}
+
+function nextStepHint(hasDeparted: boolean, hasArrived: boolean, isCompleted: boolean): string {
+  if (isCompleted) return "施工流程已完成";
+  if (!hasDeparted) return "下一步：請按「前往案場」";
+  if (!hasArrived) return "下一步：請按「到達施工」";
+  return "下一步：請按「完工離場」";
 }
 
 interface Props {
@@ -141,7 +171,48 @@ export function EngineerWorkOrderCard({ order, progress, onProgressUpdated }: Pr
   const hasArrived = !!progress?.arrivedAt;
   const hasUnable = !!progress?.unableToCompleteAt;
 
+  const flowBusy = departMut.isPending || arriveMut.isPending || completeMut.isPending;
+
   const statusLabel = order.status === "已完成" || isCompleted ? "已完成" : "待施工";
+
+  const steps: StepConfig[] = [
+    {
+      key: "depart",
+      stepNum: 1,
+      label: "前往案場",
+      doneLabel: "已前往案場",
+      icon: Car,
+      done: hasDeparted,
+      active: !hasDeparted && !isCompleted,
+      doneTime: progress?.departedAt,
+      loading: departMut.isPending,
+      onClick: () => departMut.mutate(),
+    },
+    {
+      key: "arrive",
+      stepNum: 2,
+      label: "到達施工",
+      doneLabel: "已到達施工",
+      icon: MapPin,
+      done: hasArrived,
+      active: hasDeparted && !hasArrived && !isCompleted,
+      doneTime: progress?.arrivedAt,
+      loading: arriveMut.isPending,
+      onClick: () => arriveMut.mutate(),
+    },
+    {
+      key: "complete",
+      stepNum: 3,
+      label: "完工離場",
+      doneLabel: "已完工離場",
+      icon: Flag,
+      done: isCompleted,
+      active: hasArrived && !isCompleted,
+      doneTime: progress?.completedAt,
+      loading: completeMut.isPending,
+      onClick: () => setConfirmComplete(true),
+    },
+  ];
 
   return (
     <div className="rounded-xl border bg-card p-4 shadow-sm space-y-3">
@@ -181,49 +252,59 @@ export function EngineerWorkOrderCard({ order, progress, onProgressUpdated }: Pr
         </div>
       )}
 
-      {!isCompleted && (
-        <div className="grid grid-cols-1 gap-2 pt-1">
-          <ProgressActionButton
-            label="前往案場"
-            done={hasDeparted}
-            doneTime={progress?.departedAt}
-            disabled={hasDeparted || departMut.isPending}
-            loading={departMut.isPending}
-            onClick={() => departMut.mutate()}
-          />
-          <ProgressActionButton
-            label="到達施工"
-            done={hasArrived}
-            doneTime={progress?.arrivedAt}
-            disabled={!hasDeparted || hasArrived || arriveMut.isPending}
-            loading={arriveMut.isPending}
-            onClick={() => arriveMut.mutate()}
-          />
-          <ProgressActionButton
-            label="完工離場"
-            done={isCompleted}
-            doneTime={progress?.completedAt}
-            disabled={!hasArrived || isCompleted || completeMut.isPending}
-            loading={completeMut.isPending}
-            variant="default"
-            onClick={() => setConfirmComplete(true)}
-          />
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-9 text-xs text-amber-700 border-amber-300"
-            disabled={(!hasDeparted && !hasArrived) || unableMut.isPending}
-            onClick={() => setUnableOpen(true)}
-          >
-            {unableMut.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : null}
-            無法完成
-          </Button>
+      <div className="pt-1 space-y-3">
+        <div className="rounded-lg bg-muted/40 border border-border/60 px-3 py-2.5 text-sm text-foreground/80">
+          {nextStepHint(hasDeparted, hasArrived, isCompleted)}
         </div>
-      )}
+
+        <div>
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">
+            施工流程
+          </p>
+          <div className="space-y-0">
+            {steps.map((step, index) => (
+              <div key={step.key}>
+                <ProgressStepCard
+                  step={step}
+                  flowBusy={flowBusy}
+                />
+                {index < steps.length - 1 && (
+                  <div className="flex pl-[1.375rem] py-1" aria-hidden>
+                    <div className="flex flex-col items-center w-6">
+                      <div className="w-0.5 h-2 bg-border" />
+                      <ChevronDown className="h-4 w-4 text-muted-foreground/70 shrink-0" />
+                      <div className="w-0.5 h-2 bg-border" />
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {!isCompleted && (
+          <div className="pt-4 mt-4 border-t space-y-3">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+              特殊狀況
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              className="h-12 w-full text-base font-medium bg-white border-2 border-orange-400 text-orange-600 hover:bg-orange-50 hover:text-orange-700 hover:border-orange-500"
+              disabled={(!hasDeparted && !hasArrived) || unableMut.isPending || flowBusy}
+              onClick={() => setUnableOpen(true)}
+            >
+              {unableMut.isPending ? (
+                <Loader2 className="h-5 w-5 animate-spin mr-2" />
+              ) : null}
+              無法完成
+            </Button>
+          </div>
+        )}
+      </div>
 
       {isCompleted && progress && (
-        <div className="text-xs text-muted-foreground space-y-0.5 border-t pt-2">
+        <div className="text-xs text-muted-foreground space-y-0.5 border-t pt-3">
           <p>前往：{formatTaipeiDateTime(progress.departedAt)}</p>
           <p>到達：{formatTaipeiDateTime(progress.arrivedAt)}</p>
           <p>完工：{formatTaipeiDateTime(progress.completedAt)}</p>
@@ -240,7 +321,7 @@ export function EngineerWorkOrderCard({ order, progress, onProgressUpdated }: Pr
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogCancel disabled={completeMut.isPending}>取消</AlertDialogCancel>
             <AlertDialogAction onClick={() => completeMut.mutate()} disabled={completeMut.isPending}>
               {completeMut.isPending ? "處理中…" : "確認完工"}
             </AlertDialogAction>
@@ -287,45 +368,72 @@ export function EngineerWorkOrderCard({ order, progress, onProgressUpdated }: Pr
   );
 }
 
-function ProgressActionButton({
-  label,
-  done,
-  doneTime,
-  disabled,
-  loading,
-  onClick,
-  variant = "outline",
+function ProgressStepCard({
+  step,
+  flowBusy,
 }: {
-  label: string;
-  done: boolean;
-  doneTime?: string | null;
-  disabled: boolean;
-  loading: boolean;
-  onClick: () => void;
-  variant?: "default" | "outline";
+  step: StepConfig;
+  flowBusy: boolean;
 }) {
+  const visual: StepVisualState = step.done ? "done" : step.active ? "active" : "pending";
+  const Icon = step.icon;
+  const clickable = visual === "active" && !flowBusy;
+
+  const ballClass =
+    visual === "done"
+      ? "bg-green-600 text-white border-green-600"
+      : visual === "active"
+        ? "bg-lime-400 text-gray-900 border-lime-500"
+        : "bg-white text-muted-foreground border-gray-300";
+
+  const cardClass =
+    visual === "done"
+      ? "bg-green-50 border-green-200 text-green-800 cursor-default"
+      : visual === "active"
+        ? "bg-lime-400 border-lime-500 text-gray-900 cursor-pointer hover:bg-lime-300 active:bg-lime-500 shadow-sm"
+        : "bg-white border-gray-200 text-muted-foreground cursor-not-allowed";
+
+  const titleClass =
+    visual === "done"
+      ? "font-semibold text-green-800"
+      : visual === "active"
+        ? "font-bold text-gray-900"
+        : "font-medium text-muted-foreground";
+
   return (
-    <Button
+    <button
       type="button"
-      variant={done ? "secondary" : variant}
-      className="h-12 w-full text-base justify-between px-4"
-      disabled={disabled || done}
-      onClick={onClick}
+      disabled={!clickable}
+      onClick={clickable ? step.onClick : undefined}
+      className={`w-full min-h-[60px] rounded-xl border-2 px-3 py-3 flex items-center gap-3 text-left transition-colors ${cardClass}`}
     >
-      <span className="flex items-center gap-2">
-        {loading ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
-        ) : done ? (
-          <Check className="h-4 w-4 text-green-600" />
-        ) : null}
-        {label}
+      <span
+        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full border-2 text-base font-bold ${ballClass}`}
+        aria-hidden
+      >
+        {visual === "done" ? (
+          <Check className="h-5 w-5" strokeWidth={3} />
+        ) : (
+          step.stepNum
+        )}
       </span>
-      {done && doneTime && (
-        <span className="text-xs font-normal text-muted-foreground">
-          {formatTaipeiDateTime(doneTime)}
+
+      <span className="flex-1 min-w-0">
+        <span className={`flex items-center gap-2 text-lg leading-tight ${titleClass}`}>
+          {step.loading ? (
+            <Loader2 className="h-5 w-5 animate-spin shrink-0" />
+          ) : visual === "active" ? (
+            <Icon className="h-5 w-5 shrink-0" strokeWidth={2.5} />
+          ) : null}
+          {visual === "done" ? step.doneLabel : step.label}
         </span>
-      )}
-    </Button>
+        {visual === "done" && step.doneTime && (
+          <span className="block mt-1 text-sm font-normal text-green-700/80">
+            {formatTaipeiDateTime(step.doneTime)}
+          </span>
+        )}
+      </span>
+    </button>
   );
 }
 
