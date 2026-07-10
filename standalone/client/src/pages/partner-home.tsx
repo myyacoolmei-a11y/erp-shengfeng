@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
-import { MessageCircleHeart, Sparkles } from "lucide-react";
+import { Heart, Sparkles } from "lucide-react";
 
 const PARTNER_HOME_KEY = ["partner-home"];
 
@@ -76,7 +76,7 @@ export default function PartnerHome() {
     <div className="max-w-lg mx-auto md:max-w-xl space-y-5 pb-8">
       <div className="rounded-2xl bg-gradient-to-br from-rose-50 via-amber-50 to-orange-50 border border-rose-100/80 p-5">
         <div className="flex items-center gap-2 text-rose-600 mb-1">
-          <MessageCircleHeart className="h-5 w-5" />
+          <Heart className="h-5 w-5" />
           <span className="text-sm font-medium">❤️ 晟風夥伴</span>
         </div>
         <h1 className="text-xl font-bold tracking-tight text-foreground">
