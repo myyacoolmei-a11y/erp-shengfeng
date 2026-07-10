@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { useListWorkOrders } from "@workspace/api-client-react";
@@ -6,14 +6,8 @@ import { useAuth } from "@/contexts/auth-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { CalendarClock } from "lucide-react";
-import {
-  EngineerWorkOrderCard,
-} from "@/components/field-progress/EngineerWorkOrderCard";
-import {
-  listMyFieldProgress,
-  taipeiToday,
-  isWorkOrderAssignedToUser,
-} from "@/lib/fieldProgressApi";
+import { EngineerWorkOrderCard } from "@/components/field-progress/EngineerWorkOrderCard";
+import { listMyFieldProgress, taipeiToday } from "@/lib/fieldProgressApi";
 
 export default function EngineerDashboard() {
   const { user } = useAuth();
@@ -32,23 +26,9 @@ export default function EngineerDashboard() {
 
   const todayOrders = useMemo(() => {
     return workOrders
-      .filter((wo) => {
-        if (wo.scheduledDate !== today) return false;
-        return isWorkOrderAssignedToUser(
-          {
-            assignedTo: wo.assignedTo,
-            assistantTo: wo.assistantTo,
-            technicians: wo.technicians as string | null | undefined,
-          },
-          {
-            id: user?.id ?? 0,
-            displayName: user?.displayName ?? "",
-            username: user?.username,
-          },
-        );
-      })
+      .filter((wo) => wo.scheduledDate === today)
       .sort((a, b) => (a.scheduledTime ?? "").localeCompare(b.scheduledTime ?? ""));
-  }, [workOrders, today, user?.displayName]);
+  }, [workOrders, today]);
 
   const isLoading = ordersLoading || progressLoading;
 
@@ -81,7 +61,7 @@ export default function EngineerDashboard() {
               <Skeleton className="h-40 w-full" />
             </>
           ) : todayOrders.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-8">今日沒有分派給您的派工</p>
+            <p className="text-sm text-muted-foreground text-center py-8">今日沒有施工日期為今天的派工</p>
           ) : (
             todayOrders.map((wo) => (
               <EngineerWorkOrderCard

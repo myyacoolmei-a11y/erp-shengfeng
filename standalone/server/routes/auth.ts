@@ -121,6 +121,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
     role: user.role,
     roles: userRoles,
     mustChangePassword: user.mustChangePassword,
+    linkedEmployeeId: user.linkedEmployeeId ?? null,
   });
 
   res.json({
@@ -132,6 +133,7 @@ router.post("/auth/login", async (req, res): Promise<void> => {
       role: user.role,
       roles: userRoles,
       mustChangePassword: user.mustChangePassword,
+      linkedEmployeeId: user.linkedEmployeeId ?? null,
     },
   });
 });
@@ -140,11 +142,21 @@ router.post("/auth/logout", (_req, res): void => {
   res.json({ ok: true });
 });
 
-router.get("/auth/me", authenticate, (req, res): void => {
-  const u = req.user!;
+router.get("/auth/me", authenticate, async (req, res): Promise<void> => {
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.id));
+  if (!user) {
+    res.status(404).json({ error: "找不到使用者" });
+    return;
+  }
+  const userRoles = user.roles?.length ? user.roles : [user.role];
   res.json({
-    ...u,
-    roles: u.roles?.length ? u.roles : [u.role],
+    id: user.id,
+    username: user.username,
+    displayName: user.displayName,
+    role: user.role,
+    roles: userRoles,
+    mustChangePassword: user.mustChangePassword,
+    linkedEmployeeId: user.linkedEmployeeId ?? null,
   });
 });
 
@@ -184,6 +196,7 @@ router.patch("/auth/password", authenticate, async (req, res): Promise<void> => 
     role: user.role,
     roles: userRoles,
     mustChangePassword: false,
+    linkedEmployeeId: user.linkedEmployeeId ?? null,
   });
 
   res.json({
@@ -195,6 +208,7 @@ router.patch("/auth/password", authenticate, async (req, res): Promise<void> => 
       role: user.role,
       roles: userRoles,
       mustChangePassword: false,
+      linkedEmployeeId: user.linkedEmployeeId ?? null,
     },
   });
 });

@@ -9,21 +9,19 @@ import {
   quotesTable,
 } from "@workspace/db";
 import { CreateWorkOrderBody, UpdateWorkOrderBody, CreateProgressBody } from "@workspace/api-zod";
-import { requireRole, effectiveRoles } from "../lib/auth";
+import { requireRole } from "../lib/auth";
 import { syncQuoteDispatchStatus } from "../lib/quoteWorkflow";
 import { formatQuoteNumber } from "../lib/quoteStatus";
 import { stripQuotePricingFromNotes } from "../../shared/workOrderNotes.ts";
-import { logger } from "../lib/logger";
 import {
   buildUserAssignmentContext,
-  isWorkOrderAssignedToContext,
-  isFieldProgressOperator,
-  isWorkOrderListAdmin,
+  shouldFilterWorkOrdersByAssignment,
+  canUserAccessWorkOrder,
   describeWorkOrderListQuery,
   explainEmptyWorkOrderList,
+  logWorkOrderAccess,
   deriveAssignedFromTechnicians,
 } from "../lib/workOrders/workOrderAssignment.ts";
-import { isFieldProgressAdmin } from "../lib/workOrders/fieldProgressUtils.ts";
 
 const router: IRouter = Router();
 
@@ -217,16 +215,14 @@ router.get("/work-orders", requireRole(...WO_READ_ROLES), async (req, res): Prom
     conditions.push(eq(workOrdersTable.status, status));
   }
 
-  const applyAssignmentFilter = !!(
-    req.user &&
-    isFieldProgressOperator(req.user) &&
-    !isWorkOrderListAdmin(req.user)
-  );
+  const applyAssignmentFilter = !!(req.user && shouldFilterWorkOrdersByAssignment(req.user));
+  const filterMode = applyAssignmentFilter ? "linked_employee" as const : "all" as const;
 
   const queryDescription = describeWorkOrderListQuery({
     customerId,
     status,
-    applyAssignmentFilter,
+    filterMode,
+    linkedEmployeeId: req.user?.linkedEmployeeId ?? null,
   });
 
   let orders = await db
@@ -243,7 +239,8 @@ router.get("/work-orders", requireRole(...WO_READ_ROLES), async (req, res): Prom
   if (applyAssignmentFilter && req.user) {
     assignmentContext = await buildUserAssignmentContext(req.user);
     orders = orders.filter((o) =>
-      isWorkOrderAssignedToContext(
+      canUserAccessWorkOrder(
+        req.user!,
         { assignedTo: o.assignedTo, assistantTo: o.assistantTo, technicians: o.technicians },
         assignmentContext!,
       ),
@@ -254,44 +251,19 @@ router.get("/work-orders", requireRole(...WO_READ_ROLES), async (req, res): Prom
   const zeroReason = explainEmptyWorkOrderList({
     totalBeforeFilter,
     totalAfterFilter,
-    applyAssignmentFilter,
+    filterMode,
     assignmentContext: assignmentContext ?? undefined,
-    sampleAssignments: totalBeforeFilter > 0
-      ? orders.length > 0
-        ? orders.slice(0, 3).map((o) => ({
-            id: o.id,
-            assignedTo: o.assignedTo,
-            assistantTo: o.assistantTo,
-            technicians: o.technicians,
-          }))
-        : (await db
-            .select({
-              id: workOrdersTable.id,
-              assignedTo: workOrdersTable.assignedTo,
-              assistantTo: workOrdersTable.assistantTo,
-              technicians: workOrdersTable.technicians,
-            })
-            .from(workOrdersTable)
-            .limit(5))
-      : undefined,
   });
 
-  logger.info({
-    event: "work_orders_list",
-    userId: req.user?.id,
-    userRole: req.user?.role,
-    userRoles: req.user ? effectiveRoles(req.user) : [],
-    displayName: req.user?.displayName,
-    username: req.user?.username,
+  logWorkOrderAccess("GET /work-orders", req.user, {
     queryWhere: queryDescription,
     queryParams: { customerId: customerId ?? null, status: status ?? null },
-    applyAssignmentFilter,
-    matchKeys: assignmentContext?.matchKeys ?? null,
+    filterMode,
     employeeNames: assignmentContext?.employeeNames ?? null,
     totalBeforeFilter,
-    totalAfterFilter,
+    resultCount: totalAfterFilter,
     zeroReason: totalAfterFilter === 0 ? zeroReason : undefined,
-  }, "GET /work-orders");
+  });
 
   const orderIds = orders.map(o => o.id);
   const equipmentByOrder = await fetchEquipmentByWorkOrderIds(orderIds);
@@ -353,17 +325,24 @@ router.get("/work-orders/:id", requireRole(...WO_READ_ROLES), async (req, res): 
 
   if (!order) { res.status(404).json({ error: "找不到派工單" }); return; }
 
-  if (
-    req.user &&
-    isFieldProgressOperator(req.user) &&
-    !isWorkOrderListAdmin(req.user)
-  ) {
+  if (req.user && shouldFilterWorkOrdersByAssignment(req.user)) {
     const ctx = await buildUserAssignmentContext(req.user);
-    if (!isWorkOrderAssignedToContext(order, ctx)) {
+    if (!canUserAccessWorkOrder(req.user, order, ctx)) {
+      logWorkOrderAccess("GET /work-orders/:id", req.user, {
+        workOrderId: id,
+        allowed: false,
+        reason: "linkedEmployeeId 指派不符",
+      });
       res.status(403).json({ error: "您沒有權限查看此派工單" });
       return;
     }
   }
+
+  logWorkOrderAccess("GET /work-orders/:id", req.user, {
+    workOrderId: id,
+    allowed: true,
+    resultCount: 1,
+  });
 
   const equipmentByOrder = await fetchEquipmentByWorkOrderIds([id]);
   res.json(formatOrder(order, equipmentByOrder[id] ?? []));
@@ -426,7 +405,7 @@ router.get("/work-orders/:workOrderId/progress", requireRole(...PROGRESS_ROLES),
   const workOrderId = parseInt(raw, 10);
   if (isNaN(workOrderId)) { res.status(400).json({ error: "Invalid workOrderId" }); return; }
 
-  if (req.user && isFieldProgressOperator(req.user) && !isWorkOrderListAdmin(req.user)) {
+  if (req.user && shouldFilterWorkOrdersByAssignment(req.user)) {
     const [order] = await db
       .select({
         assignedTo: workOrdersTable.assignedTo,
@@ -436,7 +415,7 @@ router.get("/work-orders/:workOrderId/progress", requireRole(...PROGRESS_ROLES),
       .from(workOrdersTable)
       .where(eq(workOrdersTable.id, workOrderId));
     const ctx = await buildUserAssignmentContext(req.user);
-    if (!order || !isWorkOrderAssignedToContext(order, ctx)) {
+    if (!order || !canUserAccessWorkOrder(req.user, order, ctx)) {
       res.status(403).json({ error: "您沒有權限查看此工程進度" });
       return;
     }
@@ -455,7 +434,7 @@ router.post("/work-orders/:workOrderId/progress", requireRole(...PROGRESS_ROLES)
   const workOrderId = parseInt(raw, 10);
   if (isNaN(workOrderId)) { res.status(400).json({ error: "Invalid workOrderId" }); return; }
 
-  if (req.user && isFieldProgressOperator(req.user) && !isWorkOrderListAdmin(req.user)) {
+  if (req.user && shouldFilterWorkOrdersByAssignment(req.user)) {
     const [order] = await db
       .select({
         assignedTo: workOrdersTable.assignedTo,
@@ -465,7 +444,7 @@ router.post("/work-orders/:workOrderId/progress", requireRole(...PROGRESS_ROLES)
       .from(workOrdersTable)
       .where(eq(workOrdersTable.id, workOrderId));
     const ctx = await buildUserAssignmentContext(req.user);
-    if (!order || !isWorkOrderAssignedToContext(order, ctx)) {
+    if (!order || !canUserAccessWorkOrder(req.user, order, ctx)) {
       res.status(403).json({ error: "您沒有權限新增此工程進度" });
       return;
     }

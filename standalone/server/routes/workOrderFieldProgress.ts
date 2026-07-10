@@ -10,9 +10,8 @@ import { requireRole } from "../lib/auth";
 import {
   UNABLE_REASONS,
   buildUserAssignmentContext,
-  isWorkOrderAssignedToContext,
+  canUserAccessWorkOrder,
   isFieldProgressOperator,
-  isWorkOrderListAdmin,
   isFieldProgressAdmin,
   diffMinutes,
   serializeFieldProgress,
@@ -52,8 +51,7 @@ function assertWorkOrderAccess(
   order: WoRow,
   ctx: Awaited<ReturnType<typeof buildUserAssignmentContext>>,
 ): { ok: true } | { ok: false; status: number; message: string } {
-  if (isWorkOrderListAdmin(user)) return { ok: true };
-  if (isFieldProgressOperator(user) && isWorkOrderAssignedToContext(order, ctx)) {
+  if (canUserAccessWorkOrder(user, order, ctx)) {
     return { ok: true };
   }
   return { ok: false, status: 403, message: "您沒有權限操作此派工單" };

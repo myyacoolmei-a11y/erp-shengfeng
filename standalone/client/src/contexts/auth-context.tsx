@@ -18,6 +18,7 @@ export interface AuthUser {
   role: UserRole;
   roles: UserRole[];
   mustChangePassword: boolean;
+  linkedEmployeeId?: number | null;
 }
 
 /** Returns effective roles — falls back to [role] when roles array is empty (old tokens) */

@@ -9,6 +9,7 @@ export interface JwtPayload {
   role: string;
   roles: string[];
   mustChangePassword: boolean;
+  linkedEmployeeId?: number | null;
 }
 
 declare global {
