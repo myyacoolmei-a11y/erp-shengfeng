@@ -1,6 +1,28 @@
 import { logger } from "../logger.ts";
 import { getLineChannelAccessToken } from "./lineConfig.ts";
 
+function maskLineUserId(id: string): string {
+  if (id.length <= 8) return `${id.slice(0, 2)}…`;
+  return `${id.slice(0, 4)}…${id.slice(-4)}`;
+}
+
+export function formatLineApiError(status: number, body: string): string {
+  const snippet = body.slice(0, 300).trim();
+  if (status === 401) {
+    return "Token 無效：LINE API 拒絕請求（401）";
+  }
+  if (status === 400) {
+    if (/invalid user|user id|not found/i.test(snippet)) {
+      return "LINE User ID 無效：請重新綁定 LINE";
+    }
+    return snippet ? `LINE API 拒絕請求（400）：${snippet}` : "LINE API 拒絕請求（400）";
+  }
+  if (status === 403) {
+    return "LINE API 拒絕請求：權限不足（403）";
+  }
+  return snippet ? `LINE API 拒絕請求（${status}）：${snippet}` : `LINE API 拒絕請求（${status}）`;
+}
+
 async function lineApiPost(path: string, body: unknown): Promise<Response> {
   const token = getLineChannelAccessToken();
   if (!token) {
@@ -38,10 +60,26 @@ export async function sendLinePushMessage(opts: {
 
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`LINE push failed (${res.status}): ${body.slice(0, 300)}`);
+    const errorMessage = formatLineApiError(res.status, body);
+    logger.error(
+      {
+        lineUserIdMasked: maskLineUserId(opts.userId),
+        httpStatus: res.status,
+        lineApiError: body.slice(0, 500),
+      },
+      "LINE push API error",
+    );
+    throw new Error(errorMessage);
   }
 
-  logger.info({ userId: opts.userId, chars: opts.text.length }, "LINE push sent");
+  logger.info(
+    {
+      lineUserIdMasked: maskLineUserId(opts.userId),
+      httpStatus: res.status,
+      chars: opts.text.length,
+    },
+    "LINE push sent",
+  );
 }
 
 export async function replyLineMessage(opts: {

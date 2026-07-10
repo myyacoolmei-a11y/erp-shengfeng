@@ -3,6 +3,8 @@ import { db, notificationLogsTable, notificationSettingsTable } from "@workspace
 import { logger } from "../logger.ts";
 import { sendLinePushMessage } from "../line/lineMessaging.ts";
 import { isLineMessagingConfigured } from "../line/lineConfig.ts";
+import { maskLineUserId } from "../line/lineUserBinding.ts";
+import { formatLinePushError, sendLineTestPushToUser } from "../line/lineTestPush.ts";
 import { getNotificationSettings } from "./reminderSettingsService.ts";
 import { taipeiToday } from "./dateUtils.ts";
 
@@ -41,6 +43,17 @@ export async function pushLineMessageToRecipients(opts: {
   const errors: string[] = [];
 
   for (const recipient of opts.recipients) {
+    const lineUserIdMasked = maskLineUserId(recipient.lineUserId);
+    logger.info(
+      {
+        kind: opts.kind,
+        targetUserId: recipient.userId,
+        targetDisplayName: recipient.displayName,
+        lineUserIdMasked,
+      },
+      "LINE push: recipient",
+    );
+
     try {
       await sendLinePushMessage({ userId: recipient.lineUserId, text: opts.message });
       sentCount += 1;
@@ -53,8 +66,18 @@ export async function pushLineMessageToRecipients(opts: {
       });
     } catch (err) {
       failedCount += 1;
-      const errorMessage = err instanceof Error ? err.message : String(err);
-      errors.push(`${recipient.displayName ?? recipient.lineUserId}: ${errorMessage}`);
+      const errorMessage = formatLinePushError(err instanceof Error ? err.message : String(err));
+      errors.push(`${recipient.displayName ?? lineUserIdMasked}: ${errorMessage}`);
+      logger.error(
+        {
+          kind: opts.kind,
+          targetUserId: recipient.userId,
+          targetDisplayName: recipient.displayName,
+          lineUserIdMasked,
+          errorMessage,
+        },
+        "LINE push: delivery failed",
+      );
       await writeLog({
         kind: opts.kind,
         recipient: recipient.lineUserId,
@@ -132,24 +155,7 @@ export async function runScheduledLineNotification(opts: {
 
 export async function sendTestLineNotification(opts: {
   kind: string;
-  message: string;
-  itemCount: number;
-  recipient: LinePushRecipient;
+  userId: number;
 }) {
-  if (!isLineMessagingConfigured()) {
-    throw new Error("請先在 Railway 設定 LINE_CHANNEL_ACCESS_TOKEN 與 LINE_CHANNEL_SECRET");
-  }
-
-  const result = await pushLineMessageToRecipients({
-    kind: opts.kind,
-    message: opts.message,
-    itemCount: opts.itemCount,
-    recipients: [opts.recipient],
-  });
-
-  if (result.sentCount === 0) {
-    throw new Error(result.errors[0] ?? "測試推播失敗");
-  }
-
-  return { sent: true, message: opts.message, test: true };
+  return sendLineTestPushToUser(opts.userId, opts.kind);
 }

@@ -11,7 +11,6 @@ import { fetchReceivableCollectionReminders } from "./receivableCollectionServic
 import { buildReceivableCollectionMessage } from "./receivableCollectionMessage.ts";
 import {
   buildLineAddFriendUrl,
-  getLineChannelAccessToken,
   isLineMessagingConfigured,
   defaultLineWebhookUrl,
 } from "../line/lineConfig.ts";
@@ -21,7 +20,8 @@ import {
   getLineBindingStatusForUser,
   maskLineUserId,
 } from "../line/lineUserBinding.ts";
-import { listSubscribersForReceivableCollection, getSubscriberForUser } from "../line/lineSubscriptionService.ts";
+import { sendLineTestPushToUser } from "../line/lineTestPush.ts";
+import { listSubscribersForReceivableCollection } from "../line/lineSubscriptionService.ts";
 import { pushLineMessageToRecipients } from "./scheduledNotificationRunner.ts";
 import { taipeiToday } from "./dateUtils.ts";
 
@@ -238,46 +238,14 @@ export async function runReceivableCollectionReminder(opts?: { force?: boolean }
   }
 }
 
-/** Test push via LINE Messaging API — sends to current user's LINE if bound. */
+/** Test push via LINE Messaging API — always sends a fixed test message to the current user. */
 export async function sendReceivableCollectionTestMessage(userId: number) {
   const settings = await getNotificationSettings(RECEIVABLE_COLLECTION_KIND);
   if (!settings) {
     throw new Error("Reminder settings not initialized");
   }
 
-  if (!isLineMessagingConfigured()) {
-    throw new Error("請先在 Railway 設定 LINE_CHANNEL_ACCESS_TOKEN 與 LINE_CHANNEL_SECRET");
-  }
-
-  const subscriber = await getSubscriberForUser(userId);
-  if (!subscriber) {
-    throw new Error("請先完成 LINE 綁定");
-  }
-
-  const appBaseUrl = resolveAppBaseUrl(settings);
-  const summary = await fetchReceivableCollectionReminders(appBaseUrl);
-
-  const message =
-    summary.total > 0
-      ? buildReceivableCollectionMessage(summary, appBaseUrl)
-      : "🤖 晟風 AI 小秘書 — 測試\n\nLINE 推播連線正常。\n目前沒有到期或未收的應收款。";
-
-  const result = await pushLineMessageToRecipients({
-    kind: RECEIVABLE_COLLECTION_KIND,
-    message,
-    itemCount: summary.total,
-    recipients: [{
-      lineUserId: subscriber.lineUserId,
-      userId: subscriber.userId,
-      displayName: subscriber.displayName,
-    }],
-  });
-
-  if (result.sentCount === 0) {
-    throw new Error(result.errors[0] ?? "測試推播失敗");
-  }
-
-  return { sent: true, summary, message, test: true };
+  return sendLineTestPushToUser(userId, RECEIVABLE_COLLECTION_KIND);
 }
 
 export async function listRecentNotificationLogs(kind: string, limit = 20) {

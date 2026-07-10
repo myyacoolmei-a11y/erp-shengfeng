@@ -268,7 +268,13 @@ export default function ReminderSettingsPage() {
       qc.invalidateQueries({ queryKey: ["receivable-reminder-logs"] });
       qc.invalidateQueries({ queryKey: SETTINGS_KEY });
       if (result?.sent) {
-        toast({ title: "測試推播已透過 LINE Messaging API 送出" });
+        toast({ title: "測試訊息已成功送出" });
+      } else {
+        toast({
+          title: "測試推播失敗",
+          description: result?.error ?? "LINE 未回傳成功狀態",
+          variant: "destructive",
+        });
       }
     },
     onError: (err: Error) => {
@@ -293,7 +299,17 @@ export default function ReminderSettingsPage() {
 
   const testMorningMutation = useMutation({
     mutationFn: testDailyMorningBriefingPush,
-    onSuccess: () => toast({ title: "每日晨報測試推播已送出" }),
+    onSuccess: result => {
+      if (result?.sent) {
+        toast({ title: "測試訊息已成功送出" });
+      } else {
+        toast({
+          title: "測試推播失敗",
+          description: "LINE 未回傳成功狀態",
+          variant: "destructive",
+        });
+      }
+    },
     onError: (err: Error) => toast({ title: "測試推播失敗", description: err.message, variant: "destructive" }),
   });
 
@@ -314,7 +330,17 @@ export default function ReminderSettingsPage() {
 
   const testEveningMutation = useMutation({
     mutationFn: testEveningReceivableReminderPush,
-    onSuccess: () => toast({ title: "晚間提醒測試推播已送出" }),
+    onSuccess: result => {
+      if (result?.sent) {
+        toast({ title: "測試訊息已成功送出" });
+      } else {
+        toast({
+          title: "測試推播失敗",
+          description: "LINE 未回傳成功狀態",
+          variant: "destructive",
+        });
+      }
+    },
     onError: (err: Error) => toast({ title: "測試推播失敗", description: err.message, variant: "destructive" }),
   });
 

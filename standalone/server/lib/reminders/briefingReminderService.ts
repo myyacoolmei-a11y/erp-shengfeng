@@ -116,41 +116,15 @@ export async function runEveningReceivableReminder(opts?: { force?: boolean }) {
 }
 
 export async function sendDailyMorningBriefingTest(userId: number) {
-  const subscriber = await getSubscriberForUser(userId);
-  if (!subscriber) {
-    throw new Error("請先完成 LINE 綁定");
-  }
-
-  const payload = await buildMorningBriefingPayload(userId);
-  const message = payload.message ?? "📊 晟風 AI 每日晨報\n\n✅ 今日沒有需要提醒的案件。";
-
   return sendTestLineNotification({
     kind: DAILY_MORNING_BRIEFING_KIND,
-    message,
-    itemCount: payload.itemCount,
-    recipient: {
-      lineUserId: subscriber.lineUserId,
-      userId: subscriber.userId,
-      displayName: subscriber.displayName,
-    },
+    userId,
   });
 }
 
 export async function sendEveningReceivableReminderTest(userId: number) {
-  const subscriber = await getSubscriberForUser(userId);
-  if (!subscriber) {
-    throw new Error("請先完成 LINE 綁定");
-  }
-
-  const payload = await buildEveningReminderPayload();
   return sendTestLineNotification({
     kind: EVENING_RECEIVABLE_REMINDER_KIND,
-    message: payload.message,
-    itemCount: payload.itemCount,
-    recipient: {
-      lineUserId: subscriber.lineUserId,
-      userId: subscriber.userId,
-      displayName: subscriber.displayName,
-    },
+    userId,
   });
 }
