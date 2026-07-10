@@ -74,8 +74,10 @@ export async function previewReceivableReminder(): Promise<{
 export async function testReceivableReminderPush(): Promise<{
   sent?: boolean;
   test?: boolean;
-  summary?: ReceivableReminderSummary;
   message?: string;
+  sentCount?: number;
+  failedCount?: number;
+  errors?: string[];
   error?: string;
 }> {
   return customFetch("/api/reminder-settings/receivable-collection/test", {

@@ -20,7 +20,7 @@ import {
   getLineBindingStatusForUser,
   maskLineUserId,
 } from "../line/lineUserBinding.ts";
-import { sendLineTestPushToUser } from "../line/lineTestPush.ts";
+import { sendLineTestPushToSubscribers } from "../line/lineTestPush.ts";
 import { listSubscribersForReceivableCollection } from "../line/lineSubscriptionService.ts";
 import { pushLineMessageToRecipients } from "./scheduledNotificationRunner.ts";
 import { taipeiToday } from "./dateUtils.ts";
@@ -238,14 +238,15 @@ export async function runReceivableCollectionReminder(opts?: { force?: boolean }
   }
 }
 
-/** Test push via LINE Messaging API — always sends a fixed test message to the current user. */
-export async function sendReceivableCollectionTestMessage(userId: number) {
+/** Test push — sends to all bound users with receivable collection reminder enabled. */
+export async function sendReceivableCollectionTestMessage(_userId: number) {
   const settings = await getNotificationSettings(RECEIVABLE_COLLECTION_KIND);
   if (!settings) {
     throw new Error("Reminder settings not initialized");
   }
 
-  return sendLineTestPushToUser(userId, RECEIVABLE_COLLECTION_KIND);
+  const subscribers = await listSubscribersForReceivableCollection();
+  return sendLineTestPushToSubscribers(RECEIVABLE_COLLECTION_KIND, subscribers);
 }
 
 export async function listRecentNotificationLogs(kind: string, limit = 20) {

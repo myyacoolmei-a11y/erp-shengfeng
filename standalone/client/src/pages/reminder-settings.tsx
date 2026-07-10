@@ -268,7 +268,16 @@ export default function ReminderSettingsPage() {
       qc.invalidateQueries({ queryKey: ["receivable-reminder-logs"] });
       qc.invalidateQueries({ queryKey: SETTINGS_KEY });
       if (result?.sent) {
-        toast({ title: "測試訊息已成功送出" });
+        const partial = result.failedCount && result.failedCount > 0;
+        toast({
+          title: "測試訊息已成功送出",
+          description: partial
+            ? `已送達 ${result.sentCount} 人，${result.failedCount} 人失敗：${result.errors?.join("；")}`
+            : result.sentCount
+              ? `已送達 ${result.sentCount} 位已綁定使用者`
+              : undefined,
+          variant: partial ? "destructive" : undefined,
+        });
       } else {
         toast({
           title: "測試推播失敗",

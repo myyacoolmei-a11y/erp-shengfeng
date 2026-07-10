@@ -1,4 +1,5 @@
 import { getLineChannelAccessToken, isLineMessagingConfigured } from "./lineConfig.ts";
+import type { LineSubscriber } from "./lineSubscriptionService.ts";
 import { getSubscriberForUser } from "./lineSubscriptionService.ts";
 import { maskLineUserId } from "./lineUserBinding.ts";
 import { pushLineMessageToRecipients } from "../reminders/scheduledNotificationRunner.ts";
@@ -44,63 +45,73 @@ export function assertLineMessagingReady(): void {
   }
 }
 
-export async function sendLineTestPushToUser(userId: number, kind: string) {
+function subscriberLabel(subscriber: Pick<LineSubscriber, "username" | "displayName">): string {
+  return subscriber.username?.trim() || subscriber.displayName?.trim() || "unknown";
+}
+
+export async function sendLineTestPushToSubscribers(kind: string, subscribers: LineSubscriber[]) {
   assertLineMessagingReady();
 
-  const subscriber = await getSubscriberForUser(userId);
-  if (!subscriber?.lineUserId?.trim()) {
-    logger.warn({ userId, kind }, "LINE test push: binding not found");
-    throw new Error("找不到 LINE 綁定：請先完成 LINE 綁定");
+  if (subscribers.length === 0) {
+    throw new Error("找不到 LINE 綁定：尚無已綁定且啟用提醒的使用者");
   }
 
-  const lineUserIdMasked = maskLineUserId(subscriber.lineUserId);
   logger.info(
     {
       kind,
-      targetUserId: subscriber.userId,
-      targetDisplayName: subscriber.displayName,
-      lineUserIdMasked,
+      recipientCount: subscribers.length,
+      recipients: subscribers.map(s => ({
+        userId: s.userId,
+        label: subscriberLabel(s),
+        lineUserIdMasked: maskLineUserId(s.lineUserId),
+      })),
       tokenLoaded: Boolean(getLineChannelAccessToken()),
     },
-    "LINE test push: dispatching",
+    "開始推播",
   );
 
   const result = await pushLineMessageToRecipients({
     kind,
     message: LINE_TEST_PUSH_MESSAGE,
     itemCount: 0,
-    recipients: [{
-      lineUserId: subscriber.lineUserId,
-      userId: subscriber.userId,
-      displayName: subscriber.displayName,
-    }],
+    recipients: subscribers.map(s => ({
+      lineUserId: s.lineUserId,
+      userId: s.userId,
+      displayName: subscriberLabel(s),
+    })),
   });
-
-  if (result.sentCount === 0) {
-    const errorMessage = formatLinePushError(result.errors[0] ?? "測試推播失敗");
-    logger.error(
-      {
-        kind,
-        targetUserId: subscriber.userId,
-        targetDisplayName: subscriber.displayName,
-        lineUserIdMasked,
-        errors: result.errors,
-      },
-      "LINE test push failed",
-    );
-    throw new Error(errorMessage);
-  }
 
   logger.info(
     {
       kind,
-      targetUserId: subscriber.userId,
-      targetDisplayName: subscriber.displayName,
-      lineUserIdMasked,
       sentCount: result.sentCount,
+      failedCount: result.failedCount,
+      errors: result.errors,
     },
-    "LINE test push succeeded",
+    "全部完成",
   );
 
-  return { sent: true, message: LINE_TEST_PUSH_MESSAGE, test: true };
+  if (result.sentCount === 0) {
+    throw new Error(formatLinePushError(result.errors.join("；") || "測試推播失敗"));
+  }
+
+  return {
+    sent: true,
+    message: LINE_TEST_PUSH_MESSAGE,
+    test: true,
+    sentCount: result.sentCount,
+    failedCount: result.failedCount,
+    errors: result.errors.length > 0 ? result.errors : undefined,
+  };
+}
+
+/** Single-user test push (morning/evening briefing buttons). */
+export async function sendLineTestPushToUser(userId: number, kind: string) {
+  const subscriber = await getSubscriberForUser(userId);
+  if (!subscriber?.lineUserId?.trim()) {
+    logger.warn({ userId, kind }, "LINE test push: binding not found");
+    throw new Error("找不到 LINE 綁定：請先完成 LINE 綁定");
+  }
+
+  return sendLineTestPushToSubscribers(kind, [subscriber]);
 }

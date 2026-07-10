@@ -44,19 +44,22 @@ export async function pushLineMessageToRecipients(opts: {
 
   for (const recipient of opts.recipients) {
     const lineUserIdMasked = maskLineUserId(recipient.lineUserId);
-    logger.info(
-      {
-        kind: opts.kind,
-        targetUserId: recipient.userId,
-        targetDisplayName: recipient.displayName,
-        lineUserIdMasked,
-      },
-      "LINE push: recipient",
-    );
+    const label = recipient.displayName ?? lineUserIdMasked;
+
+    logger.info({ kind: opts.kind, label, lineUserIdMasked }, `推播給 ${label}`);
 
     try {
       await sendLinePushMessage({ userId: recipient.lineUserId, text: opts.message });
       sentCount += 1;
+      logger.info(
+        {
+          kind: opts.kind,
+          label,
+          targetUserId: recipient.userId,
+          lineUserIdMasked,
+        },
+        `推播給 ${label}：成功`,
+      );
       await writeLog({
         kind: opts.kind,
         recipient: recipient.lineUserId,
@@ -66,24 +69,26 @@ export async function pushLineMessageToRecipients(opts: {
       });
     } catch (err) {
       failedCount += 1;
-      const errorMessage = formatLinePushError(err instanceof Error ? err.message : String(err));
-      errors.push(`${recipient.displayName ?? lineUserIdMasked}: ${errorMessage}`);
+      const rawError = err instanceof Error ? err.message : String(err);
+      const errorMessage = formatLinePushError(rawError);
+      errors.push(`${label}: ${errorMessage}`);
       logger.error(
         {
           kind: opts.kind,
+          label,
           targetUserId: recipient.userId,
-          targetDisplayName: recipient.displayName,
           lineUserIdMasked,
-          errorMessage,
+          errorMessage: rawError,
+          lineApiResponse: rawError,
         },
-        "LINE push: delivery failed",
+        `推播給 ${label}：失敗`,
       );
       await writeLog({
         kind: opts.kind,
         recipient: recipient.lineUserId,
         itemCount: opts.itemCount,
         success: false,
-        errorMessage,
+        errorMessage: rawError,
         messagePreview: opts.message,
       });
     }

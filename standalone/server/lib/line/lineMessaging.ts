@@ -65,11 +65,11 @@ export async function sendLinePushMessage(opts: {
       {
         lineUserIdMasked: maskLineUserId(opts.userId),
         httpStatus: res.status,
-        lineApiError: body.slice(0, 500),
+        lineApiResponse: body,
       },
       "LINE push API error",
     );
-    throw new Error(errorMessage);
+    throw new Error(`${errorMessage} | LINE API Response: ${body}`);
   }
 
   logger.info(
