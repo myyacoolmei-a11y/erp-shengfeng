@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Bell, Loader2, Send, Eye, Save, Link2, CheckCircle2 } from "lucide-react";
+import { Bell, Loader2, Send, Eye, Save, Link2, CheckCircle2, Sunrise, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,9 +17,19 @@ import {
   listReceivableReminderLogs,
   generateReceivableLineBindingCode,
   getReceivableLineBindingStatus,
+  getDailyMorningBriefingSettings,
+  updateDailyMorningBriefingSettings,
+  previewDailyMorningBriefing,
+  testDailyMorningBriefingPush,
+  getEveningReceivableReminderSettings,
+  updateEveningReceivableReminderSettings,
+  previewEveningReceivableReminder,
+  testEveningReceivableReminderPush,
 } from "@/lib/reminderSettingsApi";
 
 const SETTINGS_KEY = ["receivable-reminder-settings"];
+const MORNING_SETTINGS_KEY = ["daily-morning-briefing-settings"];
+const EVENING_SETTINGS_KEY = ["evening-receivable-reminder-settings"];
 const BINDING_STATUS_KEY = ["receivable-line-binding-status"];
 const POLL_INTERVAL_MS = 3000;
 const POLL_MAX_MS = 10 * 60 * 1000;
@@ -38,10 +48,24 @@ export default function ReminderSettingsPage() {
     queryFn: getReceivableReminderSettings,
   });
 
+  const { data: morningData } = useQuery({
+    queryKey: MORNING_SETTINGS_KEY,
+    queryFn: getDailyMorningBriefingSettings,
+  });
+
+  const { data: eveningData } = useQuery({
+    queryKey: EVENING_SETTINGS_KEY,
+    queryFn: getEveningReceivableReminderSettings,
+  });
+
   const [enabled, setEnabled] = useState(false);
+  const [morningEnabled, setMorningEnabled] = useState(false);
+  const [eveningEnabled, setEveningEnabled] = useState(false);
   const [reminderTime, setReminderTime] = useState("09:00");
   const [appBaseUrl, setAppBaseUrl] = useState("");
   const [previewMessage, setPreviewMessage] = useState("");
+  const [morningPreviewMessage, setMorningPreviewMessage] = useState("");
+  const [eveningPreviewMessage, setEveningPreviewMessage] = useState("");
   const [previewSummary, setPreviewSummary] = useState<{ total: number; overdue: number; dueToday: number; dueSoon: number } | null>(null);
   const [lineLinkError, setLineLinkError] = useState<string | null>(null);
   const [lineLinkLoading, setLineLinkLoading] = useState(false);
@@ -71,6 +95,14 @@ export default function ReminderSettingsPage() {
     setReminderTime(data.reminderTime || "09:00");
     setAppBaseUrl(data.appBaseUrl || window.location.origin);
   }, [data]);
+
+  useEffect(() => {
+    if (morningData) setMorningEnabled(morningData.enabled);
+  }, [morningData]);
+
+  useEffect(() => {
+    if (eveningData) setEveningEnabled(eveningData.enabled);
+  }, [eveningData]);
 
   useEffect(() => {
     void getReceivableLineBindingStatus()
@@ -182,6 +214,48 @@ export default function ReminderSettingsPage() {
     },
   });
 
+  const saveMorningMutation = useMutation({
+    mutationFn: () => updateDailyMorningBriefingSettings({ enabled: morningEnabled }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: MORNING_SETTINGS_KEY });
+      toast({ title: "每日晨報設定已儲存" });
+    },
+    onError: (err: Error) => toast({ title: "儲存失敗", description: err.message, variant: "destructive" }),
+  });
+
+  const previewMorningMutation = useMutation({
+    mutationFn: previewDailyMorningBriefing,
+    onSuccess: result => setMorningPreviewMessage(result.message),
+    onError: (err: Error) => toast({ title: "預覽失敗", description: err.message, variant: "destructive" }),
+  });
+
+  const testMorningMutation = useMutation({
+    mutationFn: testDailyMorningBriefingPush,
+    onSuccess: () => toast({ title: "每日晨報測試推播已送出" }),
+    onError: (err: Error) => toast({ title: "測試推播失敗", description: err.message, variant: "destructive" }),
+  });
+
+  const saveEveningMutation = useMutation({
+    mutationFn: () => updateEveningReceivableReminderSettings({ enabled: eveningEnabled }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: EVENING_SETTINGS_KEY });
+      toast({ title: "晚間提醒設定已儲存" });
+    },
+    onError: (err: Error) => toast({ title: "儲存失敗", description: err.message, variant: "destructive" }),
+  });
+
+  const previewEveningMutation = useMutation({
+    mutationFn: previewEveningReceivableReminder,
+    onSuccess: result => setEveningPreviewMessage(result.message),
+    onError: (err: Error) => toast({ title: "預覽失敗", description: err.message, variant: "destructive" }),
+  });
+
+  const testEveningMutation = useMutation({
+    mutationFn: testEveningReceivableReminderPush,
+    onSuccess: () => toast({ title: "晚間提醒測試推播已送出" }),
+    onError: (err: Error) => toast({ title: "測試推播失敗", description: err.message, variant: "destructive" }),
+  });
+
   const { data: logs = [] } = useQuery({
     queryKey: ["receivable-reminder-logs"],
     queryFn: listReceivableReminderLogs,
@@ -205,7 +279,7 @@ export default function ReminderSettingsPage() {
           AI 收款秘書
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
-          每天 09:00 自動檢查到期/逾期應收款，透過 LINE 推播提醒老闆，無需登入 ERP。
+          晟風小秘書 LINE 推播：每日晨報、收款提醒、晚間提醒。
         </p>
       </div>
 
@@ -355,6 +429,72 @@ export default function ReminderSettingsPage() {
               立即測試推播
             </Button>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><Sunrise className="h-5 w-5" />AI 每日晨報</CardTitle>
+          <CardDescription>每天上午 09:00 自動推播：待派工、應收帳款、報價追蹤。</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between rounded-lg border p-4">
+            <div>
+              <p className="font-medium">啟用每日晨報</p>
+              <p className="text-sm text-muted-foreground">固定 09:00 發送（Asia/Taipei）</p>
+            </div>
+            <Switch checked={morningEnabled} onCheckedChange={setMorningEnabled} />
+          </div>
+          {morningData?.lastSentDate && (
+            <p className="text-xs text-muted-foreground">上次推播日期：{morningData.lastSentDate}</p>
+          )}
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={() => saveMorningMutation.mutate()} disabled={saveMorningMutation.isPending}>
+              <Save className="h-4 w-4 mr-1" />儲存
+            </Button>
+            <Button variant="outline" onClick={() => previewMorningMutation.mutate()} disabled={previewMorningMutation.isPending}>
+              <Eye className="h-4 w-4 mr-1" />預覽晨報
+            </Button>
+            <Button variant="outline" onClick={() => testMorningMutation.mutate()} disabled={testMorningMutation.isPending || !lineLinked}>
+              <Send className="h-4 w-4 mr-1" />測試推播
+            </Button>
+          </div>
+          {morningPreviewMessage && (
+            <Textarea readOnly value={morningPreviewMessage} rows={18} className="font-mono text-xs" />
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2"><Moon className="h-5 w-5" />AI 晚間提醒</CardTitle>
+          <CardDescription>每天晚上 21:00 自動推播未收款應收帳款摘要。</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center justify-between rounded-lg border p-4">
+            <div>
+              <p className="font-medium">啟用晚間提醒</p>
+              <p className="text-sm text-muted-foreground">固定 21:00 發送（Asia/Taipei）</p>
+            </div>
+            <Switch checked={eveningEnabled} onCheckedChange={setEveningEnabled} />
+          </div>
+          {eveningData?.lastSentDate && (
+            <p className="text-xs text-muted-foreground">上次推播日期：{eveningData.lastSentDate}</p>
+          )}
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={() => saveEveningMutation.mutate()} disabled={saveEveningMutation.isPending}>
+              <Save className="h-4 w-4 mr-1" />儲存
+            </Button>
+            <Button variant="outline" onClick={() => previewEveningMutation.mutate()} disabled={previewEveningMutation.isPending}>
+              <Eye className="h-4 w-4 mr-1" />預覽晚報
+            </Button>
+            <Button variant="outline" onClick={() => testEveningMutation.mutate()} disabled={testEveningMutation.isPending || !lineLinked}>
+              <Send className="h-4 w-4 mr-1" />測試推播
+            </Button>
+          </div>
+          {eveningPreviewMessage && (
+            <Textarea readOnly value={eveningPreviewMessage} rows={14} className="font-mono text-xs" />
+          )}
         </CardContent>
       </Card>
 

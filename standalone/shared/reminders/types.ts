@@ -1,4 +1,6 @@
 export const RECEIVABLE_COLLECTION_KIND = "receivable_collection" as const;
+export const DAILY_MORNING_BRIEFING_KIND = "daily_morning_briefing" as const;
+export const EVENING_RECEIVABLE_REMINDER_KIND = "evening_receivable_reminder" as const;
 
 export type ReceivableReminderCategory = "overdue" | "due_today" | "due_soon";
 
