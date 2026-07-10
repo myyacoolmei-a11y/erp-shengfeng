@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Bell, Loader2, Send, Eye, Save } from "lucide-react";
+import { Bell, Loader2, Send, Eye, Save, Link2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,6 +15,7 @@ import {
   previewReceivableReminder,
   testReceivableReminderPush,
   listReceivableReminderLogs,
+  prepareReceivableLineLink,
 } from "@/lib/reminderSettingsApi";
 
 const SETTINGS_KEY = ["receivable-reminder-settings"];
@@ -26,12 +27,12 @@ export default function ReminderSettingsPage() {
   const { data, isLoading } = useQuery({
     queryKey: SETTINGS_KEY,
     queryFn: getReceivableReminderSettings,
+    refetchInterval: query =>
+      query.state.data?.pendingLineLink ? 5000 : false,
   });
 
   const [enabled, setEnabled] = useState(false);
   const [reminderTime, setReminderTime] = useState("09:00");
-  const [lineToken, setLineToken] = useState("");
-  const [lineUserId, setLineUserId] = useState("");
   const [appBaseUrl, setAppBaseUrl] = useState("");
   const [previewMessage, setPreviewMessage] = useState("");
   const [previewSummary, setPreviewSummary] = useState<{ total: number; overdue: number; dueToday: number; dueSoon: number } | null>(null);
@@ -40,9 +41,7 @@ export default function ReminderSettingsPage() {
     if (!data) return;
     setEnabled(data.enabled);
     setReminderTime(data.reminderTime || "09:00");
-    setLineUserId(data.lineUserId || "");
     setAppBaseUrl(data.appBaseUrl || window.location.origin);
-    setLineToken("");
   }, [data]);
 
   const saveMutation = useMutation({
@@ -50,17 +49,28 @@ export default function ReminderSettingsPage() {
       updateReceivableReminderSettings({
         enabled,
         reminderTime,
-        lineUserId,
         appBaseUrl,
-        ...(lineToken.trim() ? { lineChannelAccessToken: lineToken.trim() } : {}),
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: SETTINGS_KEY });
-      setLineToken("");
       toast({ title: "設定已儲存" });
     },
     onError: (err: Error) => {
       toast({ title: "儲存失敗", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const linkMutation = useMutation({
+    mutationFn: prepareReceivableLineLink,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: SETTINGS_KEY });
+      toast({
+        title: "已準備 LINE 連結",
+        description: "請用手機加入官方帳號好友，系統會自動綁定",
+      });
+    },
+    onError: (err: Error) => {
+      toast({ title: "連結失敗", description: err.message, variant: "destructive" });
     },
   });
 
@@ -82,14 +92,11 @@ export default function ReminderSettingsPage() {
 
   const testMutation = useMutation({
     mutationFn: testReceivableReminderPush,
-    onSuccess: (result: any) => {
+    onSuccess: result => {
       qc.invalidateQueries({ queryKey: ["receivable-reminder-logs"] });
+      qc.invalidateQueries({ queryKey: SETTINGS_KEY });
       if (result?.sent) {
-        toast({ title: "測試推播已送出" });
-      } else if (result?.reason === "no_items") {
-        toast({ title: "今日無需追蹤的款項", description: "未發送 LINE" });
-      } else {
-        toast({ title: "未發送", description: result?.reason ?? result?.error ?? "請檢查設定" });
+        toast({ title: "測試推播已透過 LINE Messaging API 送出" });
       }
     },
     onError: (err: Error) => {
@@ -118,15 +125,57 @@ export default function ReminderSettingsPage() {
           AI 收款秘書
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
-          每天自動檢查應收款並透過 LINE 推播提醒，老闆無需登入 ERP。
+          每天 09:00 自動檢查到期/逾期應收款，透過 LINE 推播提醒老闆，無需登入 ERP。
         </p>
       </div>
 
       <Card>
         <CardHeader>
+          <CardTitle>LINE Messaging API</CardTitle>
+          <CardDescription>
+            Token 與 Secret 請在 Railway 環境變數設定。Webhook 由後端自動接收 Follow 事件完成綁定。
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap gap-2 text-sm">
+            <Badge variant={data?.hasLineEnvConfig ? "default" : "destructive"}>
+              {data?.hasLineEnvConfig ? "LINE 環境變數已設定" : "LINE 環境變數未設定"}
+            </Badge>
+            <Badge variant={data?.lineLinked ? "default" : "outline"}>
+              {data?.lineLinked
+                ? `已連結：${data.linkedErpUserName ?? "ERP 使用者"} (${data.lineUserIdMasked})`
+                : "尚未連結 LINE"}
+            </Badge>
+            {data?.pendingLineLink && (
+              <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">等待加入好友…</Badge>
+            )}
+          </div>
+
+          <div className="rounded-lg border bg-muted/30 p-3 text-xs space-y-1">
+            <p><span className="font-medium">Webhook URL：</span>{data?.lineWebhookUrl ?? "—"}</p>
+            <p className="text-muted-foreground">請在 LINE Developers Console 貼上此 URL 並按 Verify</p>
+          </div>
+
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => linkMutation.mutate()}
+            disabled={linkMutation.isPending || !data?.hasLineEnvConfig}
+          >
+            <Link2 className="h-4 w-4 mr-1" />
+            連結我的 LINE
+          </Button>
+          <p className="text-xs text-muted-foreground">
+            按此按鈕後，用手機加入 LINE 官方帳號為好友，系統會自動綁定您的 User ID（無需手動輸入）。
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle>收款提醒設定</CardTitle>
           <CardDescription>
-            預設每天 09:00（台北時間）執行。若今日無需追蹤款項，不會發送 LINE。
+            條件：到期日 ≤ 今天、未全額收款、狀態 ≠ 已收款。若無符合項目，不發送 LINE。
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
@@ -149,36 +198,14 @@ export default function ReminderSettingsPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="appBaseUrl">ERP 網址（LINE 連結用）</Label>
+              <Label htmlFor="appBaseUrl">ERP 網址（LINE 訊息連結用）</Label>
               <Input
                 id="appBaseUrl"
                 value={appBaseUrl}
                 onChange={e => setAppBaseUrl(e.target.value)}
-                placeholder="https://your-erp.example.com"
+                placeholder="https://bountiful-vitality-production-76ab.up.railway.app"
               />
             </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="lineToken">LINE Channel Access Token</Label>
-            <Input
-              id="lineToken"
-              type="password"
-              value={lineToken}
-              onChange={e => setLineToken(e.target.value)}
-              placeholder={data?.hasLineToken ? `已設定（${data.lineChannelAccessToken}）— 留空表示不變更` : "請貼上 Messaging API Token"}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="lineUserId">LINE User ID（推播對象）</Label>
-            <Input
-              id="lineUserId"
-              value={lineUserId}
-              onChange={e => setLineUserId(e.target.value)}
-              placeholder="Uxxxxxxxx..."
-            />
-            <p className="text-xs text-muted-foreground">通常是老闆或主管的 LINE User ID</p>
           </div>
 
           {data?.lastSentDate && (
@@ -194,7 +221,11 @@ export default function ReminderSettingsPage() {
               <Eye className="h-4 w-4 mr-1" />
               預覽今日訊息
             </Button>
-            <Button variant="outline" onClick={() => testMutation.mutate()} disabled={testMutation.isPending}>
+            <Button
+              variant="outline"
+              onClick={() => testMutation.mutate()}
+              disabled={testMutation.isPending || !data?.lineLinked}
+            >
               <Send className="h-4 w-4 mr-1" />
               立即測試推播
             </Button>
@@ -211,13 +242,12 @@ export default function ReminderSettingsPage() {
             <div className="flex flex-wrap gap-2 text-sm">
               <Badge variant="outline">共 {previewSummary.total} 筆</Badge>
               <Badge className="bg-red-100 text-red-700 hover:bg-red-100">逾期 {previewSummary.overdue}</Badge>
-              <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-100">今日 {previewSummary.dueToday}</Badge>
-              <Badge className="bg-green-100 text-green-700 hover:bg-green-100">三天內 {previewSummary.dueSoon}</Badge>
+              <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-100">今日到期 {previewSummary.dueToday}</Badge>
             </div>
             {previewMessage ? (
               <Textarea readOnly value={previewMessage} rows={16} className="font-mono text-xs" />
             ) : (
-              <p className="text-sm text-muted-foreground">今日無需追蹤的款項，不會發送 LINE。</p>
+              <p className="text-sm text-muted-foreground">今日無到期或逾期應收款，不會發送 LINE。</p>
             )}
           </CardContent>
         </Card>

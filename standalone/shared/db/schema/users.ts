@@ -23,6 +23,7 @@ export const usersTable = pgTable("users", {
   roles: text("roles").array().notNull().default([]),
   isActive: boolean("is_active").notNull().default(true),
   mustChangePassword: boolean("must_change_password").notNull().default(false),
+  lineUserId: text("line_user_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

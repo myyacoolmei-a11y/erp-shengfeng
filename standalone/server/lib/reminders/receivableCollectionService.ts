@@ -7,7 +7,7 @@ import {
 } from "@workspace/db";
 import { RECEIVABLE_COLLECTION_KIND } from "../../../shared/reminders/types.ts";
 import type { ReceivableReminderSummary } from "../../../shared/reminders/types.ts";
-import { addDays, taipeiToday } from "./dateUtils.ts";
+import { taipeiToday } from "./dateUtils.ts";
 import {
   mapReceivableRow,
   summarizeItems,
@@ -31,7 +31,6 @@ export async function fetchReceivableCollectionReminders(
   appBaseUrl: string,
 ): Promise<ReceivableReminderSummary> {
   const today = taipeiToday();
-  const horizon = addDays(today, 3);
 
   const rows = await db
     .select(REMINDER_SELECT)
@@ -42,7 +41,7 @@ export async function fetchReceivableCollectionReminders(
       and(
         ne(receivablesTable.paymentStatus, "已收款"),
         isNotNull(receivablesTable.expectedPaymentDate),
-        lte(receivablesTable.expectedPaymentDate, horizon),
+        lte(receivablesTable.expectedPaymentDate, today),
       ),
     )
     .orderBy(receivablesTable.expectedPaymentDate);

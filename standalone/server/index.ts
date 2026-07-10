@@ -4,6 +4,7 @@ import { seedDefaultUser, ensureSuperAdmin, migrateUserRoles } from "./routes/au
 import { ensureQuoteDispatchColumn } from "./lib/migrations/ensureQuoteDispatchColumn";
 import { ensureProductCatalogMigration } from "./lib/migrations/ensureProductCatalogMigration";
 import { ensureNotificationSettingsMigration } from "./lib/migrations/ensureNotificationSettingsMigration";
+import { ensureLineIntegrationMigration } from "./lib/migrations/ensureLineIntegrationMigration";
 import { getSpeechService, resolveActiveSpeechProviderId } from "./lib/voice/speech/speechServiceFactory.ts";
 import { startReminderScheduler } from "./lib/reminders/scheduler.ts";
 
@@ -45,5 +46,6 @@ app.listen(port, async (err) => {
   await ensureQuoteDispatchColumn();
   await ensureProductCatalogMigration();
   await ensureNotificationSettingsMigration();
+  await ensureLineIntegrationMigration();
   startReminderScheduler();
 });

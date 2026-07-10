@@ -8,6 +8,7 @@ import {
   previewReceivableCollectionReminder,
   sendReceivableCollectionTestMessage,
   listRecentNotificationLogs,
+  prepareReceivableLineLink,
 } from "../lib/reminders/reminderSettingsService.ts";
 import { RECEIVABLE_COLLECTION_KIND } from "../../shared/reminders/types.ts";
 
@@ -18,8 +19,6 @@ const ADMIN_ROLES = ["super_admin", "owner", "admin"] as const;
 const UpdateSchema = z.object({
   enabled: z.boolean().optional(),
   reminderTime: z.string().optional(),
-  lineChannelAccessToken: z.string().optional(),
-  lineUserId: z.string().optional(),
   appBaseUrl: z.string().optional(),
 });
 
@@ -52,6 +51,19 @@ router.patch("/reminder-settings/receivable-collection", requireRole(...ADMIN_RO
   }
 });
 
+router.post("/reminder-settings/receivable-collection/prepare-line-link", requireRole(...ADMIN_ROLES), async (req, res) => {
+  if (!req.user) {
+    res.status(401).json({ error: "請先登入" });
+    return;
+  }
+  try {
+    const result = await prepareReceivableLineLink(req.user.id);
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "無法準備 LINE 連結" });
+  }
+});
+
 router.get("/reminder-settings/receivable-collection/preview", requireRole(...ADMIN_ROLES), async (_req, res) => {
   try {
     const preview = await previewReceivableCollectionReminder();
@@ -66,7 +78,7 @@ router.post("/reminder-settings/receivable-collection/test", requireRole(...ADMI
     const result = await sendReceivableCollectionTestMessage();
     res.json(result);
   } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : "測試推播失敗" });
+    res.status(400).json({ error: err instanceof Error ? err.message : "測試推播失敗" });
   }
 });
 

@@ -11,13 +11,21 @@ export async function getReceivableReminderSettings(): Promise<NotificationSetti
 export async function updateReceivableReminderSettings(data: {
   enabled?: boolean;
   reminderTime?: string;
-  lineChannelAccessToken?: string;
-  lineUserId?: string;
   appBaseUrl?: string;
 }): Promise<NotificationSettingsDto> {
   return customFetch("/api/reminder-settings/receivable-collection", {
     method: "PATCH",
     body: JSON.stringify(data),
+  });
+}
+
+export async function prepareReceivableLineLink(): Promise<{
+  pending: boolean;
+  webhookUrl: string;
+  instructions: string;
+}> {
+  return customFetch("/api/reminder-settings/receivable-collection/prepare-line-link", {
+    method: "POST",
   });
 }
 
@@ -29,7 +37,13 @@ export async function previewReceivableReminder(): Promise<{
   return customFetch("/api/reminder-settings/receivable-collection/preview");
 }
 
-export async function testReceivableReminderPush(): Promise<unknown> {
+export async function testReceivableReminderPush(): Promise<{
+  sent?: boolean;
+  test?: boolean;
+  summary?: ReceivableReminderSummary;
+  message?: string;
+  error?: string;
+}> {
   return customFetch("/api/reminder-settings/receivable-collection/test", {
     method: "POST",
   });

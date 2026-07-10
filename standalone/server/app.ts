@@ -1,6 +1,7 @@
 import express, { type Express, type NextFunction, type Request, type Response } from "express";
 import cors from "cors";
 import pinoHttp from "pino-http";
+import { handleLineWebhook } from "./routes/lineWebhook.ts";
 import router from "./routes";
 import { logger } from "./lib/logger";
 import path from "node:path";
@@ -43,6 +44,16 @@ app.use(
 const JSON_BODY_LIMIT = "20mb";
 
 app.use(cors());
+
+/** LINE webhook requires raw body for signature verification — register before express.json(). */
+app.post(
+  "/api/line/webhook",
+  express.raw({ type: "application/json" }),
+  (req, res) => {
+    void handleLineWebhook(req, res);
+  },
+);
+
 app.use(express.json({ limit: JSON_BODY_LIMIT }));
 app.use(express.urlencoded({ extended: true, limit: JSON_BODY_LIMIT }));
 

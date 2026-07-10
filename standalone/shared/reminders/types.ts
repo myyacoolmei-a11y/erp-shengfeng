@@ -32,10 +32,13 @@ export interface NotificationSettingsDto {
   kind: string;
   enabled: boolean;
   reminderTime: string;
-  lineChannelAccessToken: string;
-  lineUserId: string;
   appBaseUrl: string;
-  hasLineToken: boolean;
   lastSentDate: string | null;
   updatedAt: string | null;
+  hasLineEnvConfig: boolean;
+  lineWebhookUrl: string;
+  lineLinked: boolean;
+  lineUserIdMasked: string;
+  linkedErpUserName: string | null;
+  pendingLineLink: boolean;
 }

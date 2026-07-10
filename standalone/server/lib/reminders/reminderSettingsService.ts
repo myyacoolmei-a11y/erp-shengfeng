@@ -9,30 +9,42 @@ import type { NotificationSettingsDto } from "../../../shared/reminders/types.ts
 import { logger } from "../logger.ts";
 import { fetchReceivableCollectionReminders } from "./receivableCollectionService.ts";
 import { buildReceivableCollectionMessage } from "./receivableCollectionMessage.ts";
-import { sendLinePushMessage } from "./lineMessaging.ts";
+import { sendLinePushMessage } from "../line/lineMessaging.ts";
+import {
+  getLineChannelAccessToken,
+  isLineMessagingConfigured,
+  defaultLineWebhookUrl,
+} from "../line/lineConfig.ts";
+import {
+  getLineBindingInfo,
+  maskLineUserId,
+  prepareLineLinkForUser,
+} from "../line/lineUserBinding.ts";
 import { taipeiToday } from "./dateUtils.ts";
-
-function maskToken(token: string | null | undefined): string {
-  if (!token) return "";
-  if (token.length <= 8) return "********";
-  return `${token.slice(0, 4)}…${token.slice(-4)}`;
-}
 
 function resolveAppBaseUrl(settings: { appBaseUrl: string | null }): string {
   return (settings.appBaseUrl ?? process.env.APP_BASE_URL ?? "").trim();
 }
 
-export function toSettingsDto(row: typeof notificationSettingsTable.$inferSelect): NotificationSettingsDto {
+export async function toSettingsDto(
+  row: typeof notificationSettingsTable.$inferSelect,
+): Promise<NotificationSettingsDto> {
+  const binding = await getLineBindingInfo();
+  const token = getLineChannelAccessToken();
+
   return {
     kind: row.kind,
     enabled: row.enabled,
     reminderTime: row.reminderTime,
-    lineChannelAccessToken: maskToken(row.lineChannelAccessToken),
-    lineUserId: row.lineUserId ?? "",
     appBaseUrl: row.appBaseUrl ?? "",
-    hasLineToken: Boolean(row.lineChannelAccessToken?.trim()),
     lastSentDate: row.lastSentDate ?? null,
     updatedAt: row.updatedAt?.toISOString?.() ?? null,
+    hasLineEnvConfig: isLineMessagingConfigured(),
+    lineWebhookUrl: defaultLineWebhookUrl(),
+    lineLinked: Boolean(binding.lineUserId),
+    lineUserIdMasked: binding.lineUserId ? maskLineUserId(binding.lineUserId) : "",
+    linkedErpUserName: binding.linkedDisplayName,
+    pendingLineLink: Boolean(binding.pendingLinkUserId),
   };
 }
 
@@ -53,8 +65,6 @@ export async function getReceivableCollectionSettingsDto() {
 export async function updateReceivableCollectionSettings(input: {
   enabled?: boolean;
   reminderTime?: string;
-  lineChannelAccessToken?: string;
-  lineUserId?: string;
   appBaseUrl?: string;
 }) {
   const existing = await getNotificationSettings(RECEIVABLE_COLLECTION_KIND);
@@ -65,12 +75,7 @@ export async function updateReceivableCollectionSettings(input: {
   const data: Partial<typeof notificationSettingsTable.$inferInsert> = {};
   if (input.enabled != null) data.enabled = input.enabled;
   if (input.reminderTime != null) data.reminderTime = input.reminderTime;
-  if (input.lineUserId != null) data.lineUserId = input.lineUserId || null;
   if (input.appBaseUrl != null) data.appBaseUrl = input.appBaseUrl || null;
-
-  if (input.lineChannelAccessToken != null && input.lineChannelAccessToken.trim()) {
-    data.lineChannelAccessToken = input.lineChannelAccessToken.trim();
-  }
 
   const [updated] = await db
     .update(notificationSettingsTable)
@@ -79,6 +84,19 @@ export async function updateReceivableCollectionSettings(input: {
     .returning();
 
   return toSettingsDto(updated);
+}
+
+export async function prepareReceivableLineLink(erpUserId: number) {
+  if (!isLineMessagingConfigured()) {
+    throw new Error("請先在 Railway 設定 LINE_CHANNEL_ACCESS_TOKEN 與 LINE_CHANNEL_SECRET");
+  }
+  await prepareLineLinkForUser(erpUserId);
+  return {
+    pending: true,
+    webhookUrl: defaultLineWebhookUrl(),
+    instructions:
+      "請用手機加入 LINE 官方帳號為好友。加入後系統會自動綁定，無需手動輸入 User ID。",
+  };
 }
 
 async function writeLog(opts: {
@@ -99,6 +117,17 @@ async function writeLog(opts: {
   });
 }
 
+function resolveRecipientLineUserId(settings: { lineUserId: string | null }): string {
+  const userId = settings.lineUserId?.trim();
+  if (!userId) {
+    throw new Error("尚未連結 LINE，請在「AI 收款秘書」按「連結我的 LINE」後加入官方帳號好友");
+  }
+  if (!getLineChannelAccessToken()) {
+    throw new Error("LINE_CHANNEL_ACCESS_TOKEN 未設定");
+  }
+  return userId;
+}
+
 export async function previewReceivableCollectionReminder() {
   const settings = await getNotificationSettings(RECEIVABLE_COLLECTION_KIND);
   if (!settings) throw new Error("Reminder settings not initialized");
@@ -110,7 +139,7 @@ export async function previewReceivableCollectionReminder() {
       ? buildReceivableCollectionMessage(summary, appBaseUrl)
       : "";
 
-  return { summary, message, settings: toSettingsDto(settings) };
+  return { summary, message, settings: await toSettingsDto(settings) };
 }
 
 export async function runReceivableCollectionReminder(opts?: { force?: boolean }) {
@@ -128,10 +157,16 @@ export async function runReceivableCollectionReminder(opts?: { force?: boolean }
     return { skipped: true, reason: "already_sent_today" as const };
   }
 
-  const token = settings.lineChannelAccessToken?.trim();
-  const userId = settings.lineUserId?.trim();
-  if (!token || !userId) {
-    return { skipped: true, reason: "line_not_configured" as const };
+  if (!isLineMessagingConfigured()) {
+    return { skipped: true, reason: "line_env_not_configured" as const };
+  }
+
+  let userId: string;
+  try {
+    userId = resolveRecipientLineUserId(settings);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { skipped: true, reason: "line_not_linked" as const, error: message };
   }
 
   const appBaseUrl = resolveAppBaseUrl(settings);
@@ -145,7 +180,7 @@ export async function runReceivableCollectionReminder(opts?: { force?: boolean }
   const message = buildReceivableCollectionMessage(summary, appBaseUrl);
 
   try {
-    await sendLinePushMessage({ channelAccessToken: token, userId, text: message });
+    await sendLinePushMessage({ userId, text: message });
 
     if (!opts?.force) {
       await db
@@ -180,8 +215,50 @@ export async function runReceivableCollectionReminder(opts?: { force?: boolean }
   }
 }
 
+/** Test push via LINE Messaging API — sends preview or connectivity test message. */
 export async function sendReceivableCollectionTestMessage() {
-  return runReceivableCollectionReminder({ force: true });
+  const settings = await getNotificationSettings(RECEIVABLE_COLLECTION_KIND);
+  if (!settings) {
+    throw new Error("Reminder settings not initialized");
+  }
+
+  if (!isLineMessagingConfigured()) {
+    throw new Error("請先在 Railway 設定 LINE_CHANNEL_ACCESS_TOKEN 與 LINE_CHANNEL_SECRET");
+  }
+
+  const userId = resolveRecipientLineUserId(settings);
+  const appBaseUrl = resolveAppBaseUrl(settings);
+  const summary = await fetchReceivableCollectionReminders(appBaseUrl);
+
+  const message =
+    summary.total > 0
+      ? buildReceivableCollectionMessage(summary, appBaseUrl)
+      : "💰【晟風 AI 收款秘書 — 測試】\n\nLINE 推播連線正常。\n目前沒有到期或未收的應收款。";
+
+  try {
+    await sendLinePushMessage({ userId, text: message });
+
+    await writeLog({
+      kind: RECEIVABLE_COLLECTION_KIND,
+      recipient: userId,
+      itemCount: summary.total,
+      success: true,
+      messagePreview: message,
+    });
+
+    return { sent: true, summary, message, test: true };
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    await writeLog({
+      kind: RECEIVABLE_COLLECTION_KIND,
+      recipient: userId,
+      itemCount: summary.total,
+      success: false,
+      errorMessage,
+      messagePreview: message,
+    });
+    throw new Error(errorMessage);
+  }
 }
 
 export async function listRecentNotificationLogs(kind: string, limit = 20) {
