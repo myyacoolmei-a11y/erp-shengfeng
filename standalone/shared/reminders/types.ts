@@ -43,6 +43,30 @@ export interface NotificationSettingsDto {
   lineUserIdMasked: string;
   linkedErpUserName: string | null;
   pendingLineLink: boolean;
+  boundSubscriberCount: number;
+}
+
+export interface UserLineNotificationPrefsDto {
+  lineLinked: boolean;
+  receiveMorningBriefing: boolean;
+  receiveEveningReminder: boolean;
+  receivePendingDispatch: boolean;
+  receiveQuoteFollowUp: boolean;
+  receiveReceivableCollection: boolean;
+}
+
+export interface LineSubscriptionAdminDto {
+  userId: number;
+  displayName: string;
+  username: string;
+  lineUserIdMasked: string;
+  prefs: {
+    receiveMorningBriefing: boolean;
+    receiveEveningReminder: boolean;
+    receivePendingDispatch: boolean;
+    receiveQuoteFollowUp: boolean;
+    receiveReceivableCollection: boolean;
+  };
 }
 
 export interface LineBindingCodeResponse {

@@ -27,6 +27,12 @@ import {
   EVENING_RECEIVABLE_REMINDER_KIND,
   RECEIVABLE_COLLECTION_KIND,
 } from "../../shared/reminders/types.ts";
+import {
+  getMyLineNotificationPrefsDto,
+  updateMyLineNotificationPrefs,
+  listLineSubscribersForAdmin,
+  adminUnbindLineUser,
+} from "../lib/line/lineSubscriptionService.ts";
 
 const router: IRouter = Router();
 
@@ -34,6 +40,14 @@ const ADMIN_ROLES = ["super_admin", "owner", "admin"] as const;
 
 const EnableSchema = z.object({
   enabled: z.boolean().optional(),
+});
+
+const LineNotificationPrefsSchema = z.object({
+  receiveMorningBriefing: z.boolean().optional(),
+  receiveEveningReminder: z.boolean().optional(),
+  receivePendingDispatch: z.boolean().optional(),
+  receiveQuoteFollowUp: z.boolean().optional(),
+  receiveReceivableCollection: z.boolean().optional(),
 });
 
 router.get("/reminder-settings/receivable-collection", requireRole(...ADMIN_ROLES), async (req, res) => {
@@ -63,7 +77,7 @@ router.patch("/reminder-settings/receivable-collection", requireRole(...ADMIN_RO
   }
 
   try {
-    const updated = await updateReceivableCollectionSettings(parsed.data);
+    const updated = await updateReceivableCollectionSettings(parsed.data, req.user?.id);
     res.json(updated);
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : "更新失敗" });
@@ -114,9 +128,13 @@ router.get("/reminder-settings/receivable-collection/preview", requireRole(...AD
   }
 });
 
-router.post("/reminder-settings/receivable-collection/test", requireRole(...ADMIN_ROLES), async (_req, res) => {
+router.post("/reminder-settings/receivable-collection/test", requireRole(...ADMIN_ROLES), async (req, res) => {
+  if (!req.user) {
+    res.status(401).json({ error: "請先登入" });
+    return;
+  }
   try {
-    const result = await sendReceivableCollectionTestMessage();
+    const result = await sendReceivableCollectionTestMessage(req.user.id);
     res.json(result);
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : "測試推播失敗" });
@@ -133,8 +151,8 @@ router.get("/reminder-settings/receivable-collection/logs", requireRole(...ADMIN
   );
 });
 
-router.get("/reminder-settings/daily-morning-briefing", requireRole(...ADMIN_ROLES), async (_req, res) => {
-  const settings = await getDailyMorningBriefingSettingsDto();
+router.get("/reminder-settings/daily-morning-briefing", requireRole(...ADMIN_ROLES), async (req, res) => {
+  const settings = await getDailyMorningBriefingSettingsDto(req.user?.id);
   if (!settings) { res.status(404).json({ error: "找不到提醒設定" }); return; }
   res.json(settings);
 });
@@ -143,7 +161,7 @@ router.patch("/reminder-settings/daily-morning-briefing", requireRole(...ADMIN_R
   const parsed = EnableSchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   try {
-    res.json(await updateDailyMorningBriefingSettings(parsed.data));
+    res.json(await updateDailyMorningBriefingSettings(parsed.data, req.user?.id));
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : "更新失敗" });
   }
@@ -157,16 +175,20 @@ router.get("/reminder-settings/daily-morning-briefing/preview", requireRole(...A
   }
 });
 
-router.post("/reminder-settings/daily-morning-briefing/test", requireRole(...ADMIN_ROLES), async (_req, res) => {
+router.post("/reminder-settings/daily-morning-briefing/test", requireRole(...ADMIN_ROLES), async (req, res) => {
+  if (!req.user) {
+    res.status(401).json({ error: "請先登入" });
+    return;
+  }
   try {
-    res.json(await sendDailyMorningBriefingTest());
+    res.json(await sendDailyMorningBriefingTest(req.user.id));
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : "測試推播失敗" });
   }
 });
 
-router.get("/reminder-settings/evening-receivable-reminder", requireRole(...ADMIN_ROLES), async (_req, res) => {
-  const settings = await getEveningReceivableReminderSettingsDto();
+router.get("/reminder-settings/evening-receivable-reminder", requireRole(...ADMIN_ROLES), async (req, res) => {
+  const settings = await getEveningReceivableReminderSettingsDto(req.user?.id);
   if (!settings) { res.status(404).json({ error: "找不到提醒設定" }); return; }
   res.json(settings);
 });
@@ -175,7 +197,7 @@ router.patch("/reminder-settings/evening-receivable-reminder", requireRole(...AD
   const parsed = EnableSchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   try {
-    res.json(await updateEveningReceivableReminderSettings(parsed.data));
+    res.json(await updateEveningReceivableReminderSettings(parsed.data, req.user?.id));
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : "更新失敗" });
   }
@@ -189,11 +211,58 @@ router.get("/reminder-settings/evening-receivable-reminder/preview", requireRole
   }
 });
 
-router.post("/reminder-settings/evening-receivable-reminder/test", requireRole(...ADMIN_ROLES), async (_req, res) => {
+router.post("/reminder-settings/evening-receivable-reminder/test", requireRole(...ADMIN_ROLES), async (req, res) => {
+  if (!req.user) {
+    res.status(401).json({ error: "請先登入" });
+    return;
+  }
   try {
-    res.json(await sendEveningReceivableReminderTest());
+    res.json(await sendEveningReceivableReminderTest(req.user.id));
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : "測試推播失敗" });
+  }
+});
+
+router.get("/reminder-settings/my-line-notifications", requireRole(...ADMIN_ROLES), async (req, res) => {
+  if (!req.user) {
+    res.status(401).json({ error: "請先登入" });
+    return;
+  }
+  res.json(await getMyLineNotificationPrefsDto(req.user.id));
+});
+
+router.patch("/reminder-settings/my-line-notifications", requireRole(...ADMIN_ROLES), async (req, res) => {
+  if (!req.user) {
+    res.status(401).json({ error: "請先登入" });
+    return;
+  }
+  const parsed = LineNotificationPrefsSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  try {
+    res.json(await updateMyLineNotificationPrefs(req.user.id, parsed.data));
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "更新失敗" });
+  }
+});
+
+router.get("/reminder-settings/line-subscriptions", requireRole(...ADMIN_ROLES), async (_req, res) => {
+  res.json(await listLineSubscribersForAdmin());
+});
+
+router.delete("/reminder-settings/line-subscriptions/:userId", requireRole(...ADMIN_ROLES), async (req, res) => {
+  const userId = Number(req.params.userId);
+  if (!Number.isFinite(userId) || userId <= 0) {
+    res.status(400).json({ error: "無效的使用者 ID" });
+    return;
+  }
+  try {
+    await adminUnbindLineUser(userId);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "解除綁定失敗" });
   }
 });
 

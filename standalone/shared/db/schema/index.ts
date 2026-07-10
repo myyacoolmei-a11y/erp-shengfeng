@@ -25,4 +25,5 @@ export * from "./notificationSettings";
 export * from "./notificationLogs";
 export * from "./lineBindingCodes";
 export * from "./auditLogs";
+export * from "./userLineNotificationPrefs";
 export * from "./workOrderFieldProgress";

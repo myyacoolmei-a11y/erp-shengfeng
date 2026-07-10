@@ -3,26 +3,40 @@ import {
   EVENING_RECEIVABLE_REMINDER_KIND,
 } from "../../../shared/reminders/types.ts";
 import {
+  listSubscribersForEveningReminder,
+  listSubscribersForMorningBriefing,
+  getSubscriberForUser,
+} from "../line/lineSubscriptionService.ts";
+import {
   fetchPendingDispatchQuotes,
   fetchQuoteFollowUps,
   fetchUnpaidReceivables,
 } from "./briefingDataService.ts";
-import { buildMorningBriefingMessage, buildEveningReminderMessage } from "./briefingMessage.ts";
+import {
+  buildMorningBriefingMessage,
+  buildEveningReminderMessage,
+  buildPersonalizedMorningBriefingMessage,
+} from "./briefingMessage.ts";
 import { runScheduledLineNotification, sendTestLineNotification } from "./scheduledNotificationRunner.ts";
 
-export async function buildMorningBriefingPayload() {
+export async function buildMorningBriefingPayload(forUserId?: number) {
   const pendingDispatch = await fetchPendingDispatchQuotes();
   const receivables = await fetchUnpaidReceivables();
   const quoteFollowUps = await fetchQuoteFollowUps();
-
-  const message = buildMorningBriefingMessage({ pendingDispatch, receivables, quoteFollowUps });
+  const data = { pendingDispatch, receivables, quoteFollowUps };
   const itemCount = pendingDispatch.length + receivables.length + quoteFollowUps.length;
 
+  if (forUserId) {
+    const subscriber = await getSubscriberForUser(forUserId);
+    const message = subscriber
+      ? buildPersonalizedMorningBriefingMessage(subscriber.prefs, data)
+      : buildMorningBriefingMessage(data);
+    return { ...data, message: message ?? buildMorningBriefingMessage(data), itemCount };
+  }
+
   return {
-    pendingDispatch,
-    receivables,
-    quoteFollowUps,
-    message,
+    ...data,
+    message: buildMorningBriefingMessage(data),
     itemCount,
   };
 }
@@ -34,41 +48,109 @@ export async function buildEveningReminderPayload() {
 }
 
 export async function runDailyMorningBriefing(opts?: { force?: boolean }) {
-  const payload = await buildMorningBriefingPayload();
+  const pendingDispatch = await fetchPendingDispatchQuotes();
+  const receivables = await fetchUnpaidReceivables();
+  const quoteFollowUps = await fetchQuoteFollowUps();
+  const data = { pendingDispatch, receivables, quoteFollowUps };
+  const itemCount = pendingDispatch.length + receivables.length + quoteFollowUps.length;
+
   const result = await runScheduledLineNotification({
     kind: DAILY_MORNING_BRIEFING_KIND,
-    message: payload.message,
-    itemCount: payload.itemCount,
+    itemCount,
     force: opts?.force,
+    buildMessages: async () => {
+      const subscribers = await listSubscribersForMorningBriefing();
+      const deliveries: Array<{ recipient: { lineUserId: string; userId: number; displayName: string }; message: string; itemCount: number }> = [];
+
+      for (const subscriber of subscribers) {
+        const message = buildPersonalizedMorningBriefingMessage(subscriber.prefs, data);
+        if (!message) continue;
+        deliveries.push({
+          recipient: {
+            lineUserId: subscriber.lineUserId,
+            userId: subscriber.userId,
+            displayName: subscriber.displayName,
+          },
+          message,
+          itemCount,
+        });
+      }
+
+      return deliveries;
+    },
   });
-  return { ...result, ...payload };
+
+  return {
+    ...result,
+    pendingDispatch,
+    receivables,
+    quoteFollowUps,
+    itemCount,
+  };
 }
 
 export async function runEveningReceivableReminder(opts?: { force?: boolean }) {
-  const payload = await buildEveningReminderPayload();
+  const receivables = await fetchUnpaidReceivables();
+  const message = buildEveningReminderMessage(receivables);
+  const itemCount = receivables.length;
+
   const result = await runScheduledLineNotification({
     kind: EVENING_RECEIVABLE_REMINDER_KIND,
-    message: payload.message,
-    itemCount: payload.itemCount,
+    itemCount,
     force: opts?.force,
+    buildMessages: async () => {
+      const subscribers = await listSubscribersForEveningReminder();
+      return subscribers.map(subscriber => ({
+        recipient: {
+          lineUserId: subscriber.lineUserId,
+          userId: subscriber.userId,
+          displayName: subscriber.displayName,
+        },
+        message,
+        itemCount,
+      }));
+    },
   });
-  return { ...result, ...payload };
+
+  return { ...result, receivables, message, itemCount };
 }
 
-export async function sendDailyMorningBriefingTest() {
-  const payload = await buildMorningBriefingPayload();
+export async function sendDailyMorningBriefingTest(userId: number) {
+  const subscriber = await getSubscriberForUser(userId);
+  if (!subscriber) {
+    throw new Error("請先完成 LINE 綁定");
+  }
+
+  const payload = await buildMorningBriefingPayload(userId);
+  const message = payload.message ?? "📊 晟風 AI 每日晨報\n\n✅ 今日沒有需要提醒的案件。";
+
   return sendTestLineNotification({
     kind: DAILY_MORNING_BRIEFING_KIND,
-    message: payload.message,
+    message,
     itemCount: payload.itemCount,
+    recipient: {
+      lineUserId: subscriber.lineUserId,
+      userId: subscriber.userId,
+      displayName: subscriber.displayName,
+    },
   });
 }
 
-export async function sendEveningReceivableReminderTest() {
+export async function sendEveningReceivableReminderTest(userId: number) {
+  const subscriber = await getSubscriberForUser(userId);
+  if (!subscriber) {
+    throw new Error("請先完成 LINE 綁定");
+  }
+
   const payload = await buildEveningReminderPayload();
   return sendTestLineNotification({
     kind: EVENING_RECEIVABLE_REMINDER_KIND,
     message: payload.message,
     itemCount: payload.itemCount,
+    recipient: {
+      lineUserId: subscriber.lineUserId,
+      userId: subscriber.userId,
+      displayName: subscriber.displayName,
+    },
   });
 }

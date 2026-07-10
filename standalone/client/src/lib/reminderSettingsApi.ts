@@ -2,8 +2,10 @@ import { customFetch } from "../../../shared/api-client/custom-fetch.ts";
 import type {
   LineBindingCodeResponse,
   LineBindingStatusResponse,
+  LineSubscriptionAdminDto,
   NotificationSettingsDto,
   ReceivableReminderSummary,
+  UserLineNotificationPrefsDto,
 } from "../../../shared/reminders/types.ts";
 
 export async function getReceivableReminderSettings(): Promise<NotificationSettingsDto> {
@@ -108,9 +110,32 @@ export async function testEveningReceivableReminderPush(): Promise<{ sent?: bool
   return customFetch("/api/reminder-settings/evening-receivable-reminder/test", { method: "POST" });
 }
 
+export async function getMyLineNotificationPrefs(): Promise<UserLineNotificationPrefsDto> {
+  return customFetch("/api/reminder-settings/my-line-notifications");
+}
+
+export async function updateMyLineNotificationPrefs(data: Partial<Omit<UserLineNotificationPrefsDto, "lineLinked">>): Promise<UserLineNotificationPrefsDto> {
+  return customFetch("/api/reminder-settings/my-line-notifications", {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function listLineSubscriptions(): Promise<LineSubscriptionAdminDto[]> {
+  return customFetch("/api/reminder-settings/line-subscriptions");
+}
+
+export async function unbindLineSubscription(userId: number): Promise<{ ok: boolean }> {
+  return customFetch(`/api/reminder-settings/line-subscriptions/${userId}`, {
+    method: "DELETE",
+  });
+}
+
 export type {
   LineBindingCodeResponse,
   LineBindingStatusResponse,
+  LineSubscriptionAdminDto,
   NotificationSettingsDto,
   ReceivableReminderSummary,
+  UserLineNotificationPrefsDto,
 };

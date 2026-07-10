@@ -9,7 +9,6 @@ import type { NotificationSettingsDto } from "../../../shared/reminders/types.ts
 import { logger } from "../logger.ts";
 import { fetchReceivableCollectionReminders } from "./receivableCollectionService.ts";
 import { buildReceivableCollectionMessage } from "./receivableCollectionMessage.ts";
-import { sendLinePushMessage } from "../line/lineMessaging.ts";
 import {
   buildLineAddFriendUrl,
   getLineChannelAccessToken,
@@ -18,10 +17,12 @@ import {
 } from "../line/lineConfig.ts";
 import {
   createLineBindingCode,
-  getLineBindingInfo,
+  getLineBindingInfoForUser,
   getLineBindingStatusForUser,
   maskLineUserId,
 } from "../line/lineUserBinding.ts";
+import { listSubscribersForReceivableCollection, getSubscriberForUser } from "../line/lineSubscriptionService.ts";
+import { pushLineMessageToRecipients } from "./scheduledNotificationRunner.ts";
 import { taipeiToday } from "./dateUtils.ts";
 
 function resolveAppBaseUrl(settings: { appBaseUrl: string | null }): string {
@@ -32,8 +33,9 @@ export async function toSettingsDto(
   row: typeof notificationSettingsTable.$inferSelect,
   erpUserId?: number,
 ): Promise<NotificationSettingsDto> {
-  const binding = await getLineBindingInfo();
-  const token = getLineChannelAccessToken();
+  const binding = erpUserId != null
+    ? await getLineBindingInfoForUser(erpUserId)
+    : { lineUserId: null, linkedUserId: null, linkedDisplayName: null, boundSubscriberCount: 0 };
   const pendingLineLink =
     erpUserId != null
       ? (await getLineBindingStatusForUser(erpUserId)).status === "pending"
@@ -52,6 +54,7 @@ export async function toSettingsDto(
     lineUserIdMasked: binding.lineUserId ? maskLineUserId(binding.lineUserId) : "",
     linkedErpUserName: binding.linkedDisplayName,
     pendingLineLink,
+    boundSubscriberCount: binding.boundSubscriberCount,
   };
 }
 
@@ -69,11 +72,14 @@ export async function getReceivableCollectionSettingsDto(erpUserId?: number) {
   return toSettingsDto(row, erpUserId);
 }
 
-export async function updateReceivableCollectionSettings(input: {
-  enabled?: boolean;
-  reminderTime?: string;
-  appBaseUrl?: string;
-}) {
+export async function updateReceivableCollectionSettings(
+  input: {
+    enabled?: boolean;
+    reminderTime?: string;
+    appBaseUrl?: string;
+  },
+  erpUserId?: number,
+) {
   const existing = await getNotificationSettings(RECEIVABLE_COLLECTION_KIND);
   if (!existing) {
     throw new Error("Reminder settings not initialized");
@@ -90,7 +96,7 @@ export async function updateReceivableCollectionSettings(input: {
     .where(eq(notificationSettingsTable.kind, RECEIVABLE_COLLECTION_KIND))
     .returning();
 
-  return toSettingsDto(updated);
+  return toSettingsDto(updated, erpUserId);
 }
 
 export async function generateReceivableLineBindingCode(erpUserId: number) {
@@ -129,33 +135,28 @@ export async function prepareReceivableLineLink(erpUserId: number) {
   };
 }
 
-async function writeLog(opts: {
-  kind: string;
-  recipient: string;
-  itemCount: number;
-  success: boolean;
-  errorMessage?: string;
-  messagePreview?: string;
+async function sendCollectionMessageToSubscribers(opts: {
+  message: string;
+  summaryTotal: number;
+  force?: boolean;
 }) {
-  await db.insert(notificationLogsTable).values({
-    kind: opts.kind,
-    recipient: opts.recipient,
-    itemCount: opts.itemCount,
-    success: opts.success,
-    errorMessage: opts.errorMessage ?? null,
-    messagePreview: opts.messagePreview?.slice(0, 2000) ?? null,
-  });
-}
+  const subscribers = await listSubscribersForReceivableCollection();
+  if (subscribers.length === 0) {
+    return { skipped: true, reason: "line_not_linked" as const, sentCount: 0 };
+  }
 
-function resolveRecipientLineUserId(settings: { lineUserId: string | null }): string {
-  const userId = settings.lineUserId?.trim();
-  if (!userId) {
-    throw new Error("尚未連結 LINE，請在「AI 收款秘書」按「連結我的 LINE」後加入官方帳號好友");
-  }
-  if (!getLineChannelAccessToken()) {
-    throw new Error("LINE_CHANNEL_ACCESS_TOKEN 未設定");
-  }
-  return userId;
+  const result = await pushLineMessageToRecipients({
+    kind: RECEIVABLE_COLLECTION_KIND,
+    message: opts.message,
+    itemCount: opts.summaryTotal,
+    recipients: subscribers.map(s => ({
+      lineUserId: s.lineUserId,
+      userId: s.userId,
+      displayName: s.displayName,
+    })),
+  });
+
+  return { skipped: false, ...result };
 }
 
 export async function previewReceivableCollectionReminder() {
@@ -191,14 +192,6 @@ export async function runReceivableCollectionReminder(opts?: { force?: boolean }
     return { skipped: true, reason: "line_env_not_configured" as const };
   }
 
-  let userId: string;
-  try {
-    userId = resolveRecipientLineUserId(settings);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return { skipped: true, reason: "line_not_linked" as const, error: message };
-  }
-
   const appBaseUrl = resolveAppBaseUrl(settings);
   const summary = await fetchReceivableCollectionReminders(appBaseUrl);
 
@@ -210,7 +203,25 @@ export async function runReceivableCollectionReminder(opts?: { force?: boolean }
   const message = buildReceivableCollectionMessage(summary, appBaseUrl);
 
   try {
-    await sendLinePushMessage({ userId, text: message });
+    const pushResult = await sendCollectionMessageToSubscribers({
+      message,
+      summaryTotal: summary.total,
+      force: opts?.force,
+    });
+
+    if (pushResult.skipped) {
+      return { skipped: true, reason: "line_not_linked" as const, summary };
+    }
+
+    if (pushResult.sentCount === 0) {
+      const errors = "errors" in pushResult ? pushResult.errors : [];
+      return {
+        skipped: false,
+        sent: false,
+        error: errors.join("; ") || "推播失敗",
+        summary,
+      };
+    }
 
     if (!opts?.force) {
       await db
@@ -219,34 +230,16 @@ export async function runReceivableCollectionReminder(opts?: { force?: boolean }
         .where(eq(notificationSettingsTable.kind, RECEIVABLE_COLLECTION_KIND));
     }
 
-    await writeLog({
-      kind: RECEIVABLE_COLLECTION_KIND,
-      recipient: userId,
-      itemCount: summary.total,
-      success: true,
-      messagePreview: message,
-    });
-
-    return { skipped: false, sent: true, summary, message };
+    return { skipped: false, sent: true, summary, message, sentCount: pushResult.sentCount };
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
     logger.error({ err: errorMessage }, "Receivable collection reminder failed");
-
-    await writeLog({
-      kind: RECEIVABLE_COLLECTION_KIND,
-      recipient: userId,
-      itemCount: summary.total,
-      success: false,
-      errorMessage,
-      messagePreview: message,
-    });
-
     return { skipped: false, sent: false, error: errorMessage, summary };
   }
 }
 
-/** Test push via LINE Messaging API — sends preview or connectivity test message. */
-export async function sendReceivableCollectionTestMessage() {
+/** Test push via LINE Messaging API — sends to current user's LINE if bound. */
+export async function sendReceivableCollectionTestMessage(userId: number) {
   const settings = await getNotificationSettings(RECEIVABLE_COLLECTION_KIND);
   if (!settings) {
     throw new Error("Reminder settings not initialized");
@@ -256,7 +249,11 @@ export async function sendReceivableCollectionTestMessage() {
     throw new Error("請先在 Railway 設定 LINE_CHANNEL_ACCESS_TOKEN 與 LINE_CHANNEL_SECRET");
   }
 
-  const userId = resolveRecipientLineUserId(settings);
+  const subscriber = await getSubscriberForUser(userId);
+  if (!subscriber) {
+    throw new Error("請先完成 LINE 綁定");
+  }
+
   const appBaseUrl = resolveAppBaseUrl(settings);
   const summary = await fetchReceivableCollectionReminders(appBaseUrl);
 
@@ -265,30 +262,22 @@ export async function sendReceivableCollectionTestMessage() {
       ? buildReceivableCollectionMessage(summary, appBaseUrl)
       : "💰【晟風 AI 收款秘書 — 測試】\n\nLINE 推播連線正常。\n目前沒有到期或未收的應收款。";
 
-  try {
-    await sendLinePushMessage({ userId, text: message });
+  const result = await pushLineMessageToRecipients({
+    kind: RECEIVABLE_COLLECTION_KIND,
+    message,
+    itemCount: summary.total,
+    recipients: [{
+      lineUserId: subscriber.lineUserId,
+      userId: subscriber.userId,
+      displayName: subscriber.displayName,
+    }],
+  });
 
-    await writeLog({
-      kind: RECEIVABLE_COLLECTION_KIND,
-      recipient: userId,
-      itemCount: summary.total,
-      success: true,
-      messagePreview: message,
-    });
-
-    return { sent: true, summary, message, test: true };
-  } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : String(err);
-    await writeLog({
-      kind: RECEIVABLE_COLLECTION_KIND,
-      recipient: userId,
-      itemCount: summary.total,
-      success: false,
-      errorMessage,
-      messagePreview: message,
-    });
-    throw new Error(errorMessage);
+  if (result.sentCount === 0) {
+    throw new Error(result.errors[0] ?? "測試推播失敗");
   }
+
+  return { sent: true, summary, message, test: true };
 }
 
 export async function listRecentNotificationLogs(kind: string, limit = 20) {

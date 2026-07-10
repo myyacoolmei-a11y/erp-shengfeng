@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { and, desc, eq, gt, isNull } from "drizzle-orm";
+import { and, desc, eq, gt, isNotNull, isNull, ne } from "drizzle-orm";
 import {
   db,
   lineBindingCodesTable,
@@ -9,6 +9,7 @@ import {
 import { RECEIVABLE_COLLECTION_KIND } from "../../../shared/reminders/types.ts";
 import { logger } from "../logger.ts";
 import { getLineUserProfile, replyLineMessage } from "./lineMessaging.ts";
+import { clearLineUserFromOthers, ensureDefaultPrefsForUser } from "./lineSubscriptionService.ts";
 
 const BINDING_CODE_TTL_MS = 10 * 60 * 1000;
 
@@ -29,17 +30,18 @@ async function persistLineBinding(opts: {
     throw new Error("ERP user not found");
   }
 
+  await clearLineUserFromOthers(opts.lineUserId, opts.erpUserId);
+
   await db
     .update(usersTable)
     .set({ lineUserId: opts.lineUserId })
     .where(eq(usersTable.id, erpUser.id));
 
+  await ensureDefaultPrefsForUser(erpUser.id);
+
   await db
     .update(notificationSettingsTable)
-    .set({
-      lineUserId: opts.lineUserId,
-      pendingLinkUserId: null,
-    })
+    .set({ pendingLinkUserId: null })
     .where(eq(notificationSettingsTable.kind, RECEIVABLE_COLLECTION_KIND));
 
   return { displayName: erpUser.displayName };
@@ -140,7 +142,7 @@ export async function bindLineUserByCode(opts: {
   if (opts.replyToken) {
     await replyLineMessage({
       replyToken: opts.replyToken,
-      text: "✅ LINE 綁定成功，之後收款提醒會傳送到這裡。",
+      text: "✅ LINE 綁定成功！您可在 ERP「AI 收款秘書」設定要接收的推播項目。",
     }).catch(err => logger.warn({ err }, "LINE binding reply failed"));
   }
 
@@ -179,17 +181,23 @@ export async function getLineBindingStatusForUser(erpUserId: number): Promise<{
   linkedErpUserName: string | null;
   lineUserIdMasked: string | null;
 }> {
-  const binding = await getLineBindingInfo();
-  const isBoundToCurrentUser = binding.lineUserId != null && binding.linkedUserId === erpUserId;
+  const [user] = await db
+    .select({
+      id: usersTable.id,
+      displayName: usersTable.displayName,
+      lineUserId: usersTable.lineUserId,
+    })
+    .from(usersTable)
+    .where(eq(usersTable.id, erpUserId));
 
-  if (isBoundToCurrentUser) {
+  if (user?.lineUserId?.trim()) {
     return {
       status: "bound",
       lineLinked: true,
       code: null,
       expiresAt: null,
-      linkedErpUserName: binding.linkedDisplayName,
-      lineUserIdMasked: binding.lineUserId ? maskLineUserId(binding.lineUserId) : null,
+      linkedErpUserName: user.displayName,
+      lineUserIdMasked: maskLineUserId(user.lineUserId.trim()),
     };
   }
 
@@ -207,44 +215,70 @@ export async function getLineBindingStatusForUser(erpUserId: number): Promise<{
 
   return {
     status: "none",
-    lineLinked: Boolean(binding.lineUserId),
+    lineLinked: false,
     code: null,
     expiresAt: null,
-    linkedErpUserName: binding.linkedDisplayName,
-    lineUserIdMasked: binding.lineUserId ? maskLineUserId(binding.lineUserId) : null,
+    linkedErpUserName: null,
+    lineUserIdMasked: null,
   };
 }
 
+export async function getLineBindingInfoForUser(erpUserId: number): Promise<{
+  lineUserId: string | null;
+  linkedUserId: number | null;
+  linkedDisplayName: string | null;
+  boundSubscriberCount: number;
+}> {
+  const [user] = await db
+    .select({
+      id: usersTable.id,
+      displayName: usersTable.displayName,
+      lineUserId: usersTable.lineUserId,
+    })
+    .from(usersTable)
+    .where(eq(usersTable.id, erpUserId));
+
+  const boundRows = await db
+    .select({ id: usersTable.id })
+    .from(usersTable)
+    .where(and(isNotNull(usersTable.lineUserId), ne(usersTable.lineUserId, "")));
+
+  return {
+    lineUserId: user?.lineUserId?.trim() || null,
+    linkedUserId: user?.lineUserId ? user.id : null,
+    linkedDisplayName: user?.lineUserId ? user.displayName : null,
+    boundSubscriberCount: boundRows.length,
+  };
+}
+
+/** @deprecated Use getLineBindingInfoForUser */
 export async function getLineBindingInfo(): Promise<{
   lineUserId: string | null;
   linkedUserId: number | null;
   linkedDisplayName: string | null;
   pendingLinkUserId: number | null;
 }> {
+  const boundRows = await db
+    .select({
+      id: usersTable.id,
+      displayName: usersTable.displayName,
+      lineUserId: usersTable.lineUserId,
+    })
+    .from(usersTable)
+    .where(and(isNotNull(usersTable.lineUserId), ne(usersTable.lineUserId, "")))
+    .limit(1);
+
+  const first = boundRows[0];
   const [settings] = await db
     .select()
     .from(notificationSettingsTable)
     .where(eq(notificationSettingsTable.kind, RECEIVABLE_COLLECTION_KIND));
 
-  if (!settings?.lineUserId) {
-    return {
-      lineUserId: null,
-      linkedUserId: settings?.pendingLinkUserId ?? null,
-      linkedDisplayName: null,
-      pendingLinkUserId: settings?.pendingLinkUserId ?? null,
-    };
-  }
-
-  const [user] = await db
-    .select({ id: usersTable.id, displayName: usersTable.displayName })
-    .from(usersTable)
-    .where(eq(usersTable.lineUserId, settings.lineUserId));
-
   return {
-    lineUserId: settings.lineUserId,
-    linkedUserId: user?.id ?? null,
-    linkedDisplayName: user?.displayName ?? null,
-    pendingLinkUserId: settings.pendingLinkUserId ?? null,
+    lineUserId: first?.lineUserId ?? null,
+    linkedUserId: first?.id ?? null,
+    linkedDisplayName: first?.displayName ?? null,
+    pendingLinkUserId: settings?.pendingLinkUserId ?? null,
   };
 }
 

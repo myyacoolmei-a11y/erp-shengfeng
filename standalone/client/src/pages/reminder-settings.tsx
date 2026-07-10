@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Bell, Loader2, Send, Eye, Save, Link2, CheckCircle2, Sunrise, Moon } from "lucide-react";
+import { Bell, Loader2, Send, Eye, Save, Link2, CheckCircle2, Sunrise, Moon, Users, Unlink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,6 +9,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { useAuth, hasRole } from "@/contexts/auth-context";
 import {
   getReceivableReminderSettings,
   updateReceivableReminderSettings,
@@ -25,12 +34,19 @@ import {
   updateEveningReceivableReminderSettings,
   previewEveningReceivableReminder,
   testEveningReceivableReminderPush,
+  getMyLineNotificationPrefs,
+  updateMyLineNotificationPrefs,
+  listLineSubscriptions,
+  unbindLineSubscription,
+  type UserLineNotificationPrefsDto,
 } from "@/lib/reminderSettingsApi";
 
 const SETTINGS_KEY = ["receivable-reminder-settings"];
 const MORNING_SETTINGS_KEY = ["daily-morning-briefing-settings"];
 const EVENING_SETTINGS_KEY = ["evening-receivable-reminder-settings"];
 const BINDING_STATUS_KEY = ["receivable-line-binding-status"];
+const LINE_PREFS_KEY = ["my-line-notification-prefs"];
+const LINE_SUBSCRIPTIONS_KEY = ["line-subscriptions"];
 const POLL_INTERVAL_MS = 3000;
 const POLL_MAX_MS = 10 * 60 * 1000;
 
@@ -40,8 +56,10 @@ function isDesktopBrowser(): boolean {
 
 export default function ReminderSettingsPage() {
   const { toast } = useToast();
+  const { user } = useAuth();
   const qc = useQueryClient();
   const pollStartedAtRef = useRef<number | null>(null);
+  const isAdmin = hasRole(user, "super_admin", "owner", "admin");
 
   const { data, isLoading } = useQuery({
     queryKey: SETTINGS_KEY,
@@ -130,6 +148,7 @@ export default function ReminderSettingsPage() {
       setBindingInstruction(null);
       setBindingCode(null);
       qc.invalidateQueries({ queryKey: SETTINGS_KEY });
+      qc.invalidateQueries({ queryKey: LINE_PREFS_KEY });
     }
   }, [bindingStatus, qc]);
 
@@ -261,7 +280,54 @@ export default function ReminderSettingsPage() {
     queryFn: listReceivableReminderLogs,
   });
 
-  const lineLinked = bindingComplete || bindingStatus?.status === "bound";
+  const lineLinked = bindingComplete || bindingStatus?.status === "bound" || Boolean(data?.lineLinked);
+
+  const { data: linePrefs, isLoading: linePrefsLoading } = useQuery({
+    queryKey: LINE_PREFS_KEY,
+    queryFn: getMyLineNotificationPrefs,
+    enabled: lineLinked,
+  });
+
+  const { data: lineSubscriptions = [] } = useQuery({
+    queryKey: LINE_SUBSCRIPTIONS_KEY,
+    queryFn: listLineSubscriptions,
+    enabled: isAdmin,
+  });
+
+  const saveLinePrefsMutation = useMutation({
+    mutationFn: updateMyLineNotificationPrefs,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: LINE_PREFS_KEY });
+      toast({ title: "推播偏好已儲存" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "儲存失敗", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const unbindMutation = useMutation({
+    mutationFn: unbindLineSubscription,
+    onSuccess: (_data, userId) => {
+      if (userId === user?.id) {
+        setBindingComplete(false);
+      }
+      qc.invalidateQueries({ queryKey: LINE_SUBSCRIPTIONS_KEY });
+      qc.invalidateQueries({ queryKey: SETTINGS_KEY });
+      qc.invalidateQueries({ queryKey: BINDING_STATUS_KEY });
+      qc.invalidateQueries({ queryKey: LINE_PREFS_KEY });
+      toast({ title: "已解除 LINE 綁定" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "解除綁定失敗", description: err.message, variant: "destructive" });
+    },
+  });
+
+  function handlePrefChange(
+    key: keyof Omit<UserLineNotificationPrefsDto, "lineLinked">,
+    checked: boolean,
+  ) {
+    saveLinePrefsMutation.mutate({ [key]: checked });
+  }
 
   if (isLoading) {
     return (
@@ -298,12 +364,18 @@ export default function ReminderSettingsPage() {
             {lineLinked ? (
               <Badge className="bg-green-100 text-green-800 hover:bg-green-100">
                 <CheckCircle2 className="h-3 w-3 mr-1" />
-                LINE 已連結
+                我的 LINE 已連結
                 {data?.linkedErpUserName ? `：${data.linkedErpUserName}` : ""}
                 {data?.lineUserIdMasked ? ` (${data.lineUserIdMasked})` : ""}
               </Badge>
             ) : (
               <Badge variant="outline">尚未連結 LINE</Badge>
+            )}
+            {(data?.boundSubscriberCount ?? 0) > 0 && (
+              <Badge variant="secondary">
+                <Users className="h-3 w-3 mr-1" />
+                共 {data?.boundSubscriberCount} 人已綁定
+              </Badge>
             )}
             {isPollingBinding && bindingStatus?.status === "pending" && (
               <Badge className="bg-amber-100 text-amber-800 hover:bg-amber-100">等待 LINE 輸入綁定碼…</Badge>
@@ -369,6 +441,111 @@ export default function ReminderSettingsPage() {
           </p>
         </CardContent>
       </Card>
+
+      {lineLinked && (
+        <Card>
+          <CardHeader>
+            <CardTitle>我的 LINE 推播偏好</CardTitle>
+            <CardDescription>
+              依個人設定接收推播。系統排程啟用時，只會推播給有開啟對應項目的使用者。
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {linePrefsLoading || !linePrefs ? (
+              <p className="text-sm text-muted-foreground flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />載入偏好設定…
+              </p>
+            ) : (
+              <>
+                {[
+                  { key: "receiveMorningBriefing" as const, label: "AI 每日晨報（應收摘要）", desc: "晨報中的應收帳款區塊" },
+                  { key: "receivePendingDispatch" as const, label: "待派工提醒", desc: "晨報中的待派工區塊" },
+                  { key: "receiveQuoteFollowUp" as const, label: "報價追蹤", desc: "晨報中的報價追蹤區塊" },
+                  { key: "receiveEveningReminder" as const, label: "晚間收款提醒", desc: "每天 21:00 未收款摘要" },
+                  { key: "receiveReceivableCollection" as const, label: "收款提醒", desc: "依排程時間的到期應收提醒" },
+                ].map(item => (
+                  <div key={item.key} className="flex items-center justify-between rounded-lg border p-4">
+                    <div>
+                      <p className="font-medium">{item.label}</p>
+                      <p className="text-sm text-muted-foreground">{item.desc}</p>
+                    </div>
+                    <Switch
+                      checked={linePrefs[item.key]}
+                      disabled={saveLinePrefsMutation.isPending}
+                      onCheckedChange={checked => handlePrefChange(item.key, checked)}
+                    />
+                  </div>
+                ))}
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {isAdmin && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5" />
+              LINE 綁定管理
+            </CardTitle>
+            <CardDescription>查看所有已綁定 LINE 的 ERP 使用者，必要時可解除綁定。</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {lineSubscriptions.length === 0 ? (
+              <p className="text-sm text-muted-foreground">目前沒有使用者綁定 LINE</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>使用者</TableHead>
+                    <TableHead>LINE ID</TableHead>
+                    <TableHead>推播項目</TableHead>
+                    <TableHead className="text-right">操作</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {lineSubscriptions.map(sub => {
+                    const activePrefs = [
+                      sub.prefs.receiveMorningBriefing && "晨報",
+                      sub.prefs.receivePendingDispatch && "待派工",
+                      sub.prefs.receiveQuoteFollowUp && "報價",
+                      sub.prefs.receiveEveningReminder && "晚間",
+                      sub.prefs.receiveReceivableCollection && "收款",
+                    ].filter(Boolean).join("、");
+
+                    return (
+                      <TableRow key={sub.userId}>
+                        <TableCell>
+                          <div className="font-medium">{sub.displayName}</div>
+                          <div className="text-xs text-muted-foreground">{sub.username}</div>
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">{sub.lineUserIdMasked}</TableCell>
+                        <TableCell className="text-sm">{activePrefs || "—"}</TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={unbindMutation.isPending}
+                            onClick={() => {
+                              if (window.confirm(`確定要解除「${sub.displayName}」的 LINE 綁定？`)) {
+                                unbindMutation.mutate(sub.userId);
+                              }
+                            }}
+                          >
+                            <Unlink className="h-3 w-3 mr-1" />
+                            解除綁定
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

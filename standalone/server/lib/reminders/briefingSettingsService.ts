@@ -18,6 +18,7 @@ import {
 async function updateBriefingSettings(
   kind: string,
   input: { enabled?: boolean },
+  erpUserId?: number,
 ): Promise<NotificationSettingsDto> {
   const existing = await getNotificationSettings(kind);
   if (!existing) {
@@ -33,17 +34,20 @@ async function updateBriefingSettings(
     .where(eq(notificationSettingsTable.kind, kind))
     .returning();
 
-  return toSettingsDto(updated);
+  return toSettingsDto(updated, erpUserId);
 }
 
-export async function getDailyMorningBriefingSettingsDto() {
+export async function getDailyMorningBriefingSettingsDto(erpUserId?: number) {
   const row = await getNotificationSettings(DAILY_MORNING_BRIEFING_KIND);
   if (!row) return null;
-  return toSettingsDto(row);
+  return toSettingsDto(row, erpUserId);
 }
 
-export async function updateDailyMorningBriefingSettings(input: { enabled?: boolean }) {
-  return updateBriefingSettings(DAILY_MORNING_BRIEFING_KIND, input);
+export async function updateDailyMorningBriefingSettings(
+  input: { enabled?: boolean },
+  erpUserId?: number,
+) {
+  return updateBriefingSettings(DAILY_MORNING_BRIEFING_KIND, input, erpUserId);
 }
 
 export async function previewDailyMorningBriefing() {
@@ -53,14 +57,17 @@ export async function previewDailyMorningBriefing() {
   return { ...payload, settings: await toSettingsDto(settings) };
 }
 
-export async function getEveningReceivableReminderSettingsDto() {
+export async function getEveningReceivableReminderSettingsDto(erpUserId?: number) {
   const row = await getNotificationSettings(EVENING_RECEIVABLE_REMINDER_KIND);
   if (!row) return null;
-  return toSettingsDto(row);
+  return toSettingsDto(row, erpUserId);
 }
 
-export async function updateEveningReceivableReminderSettings(input: { enabled?: boolean }) {
-  return updateBriefingSettings(EVENING_RECEIVABLE_REMINDER_KIND, input);
+export async function updateEveningReceivableReminderSettings(
+  input: { enabled?: boolean },
+  erpUserId?: number,
+) {
+  return updateBriefingSettings(EVENING_RECEIVABLE_REMINDER_KIND, input, erpUserId);
 }
 
 export async function previewEveningReceivableReminder() {
