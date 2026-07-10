@@ -16,9 +16,14 @@ import {
   testReceivableReminderPush,
   listReceivableReminderLogs,
   prepareReceivableLineLink,
+  getLinePublicConfig,
 } from "@/lib/reminderSettingsApi";
 
 const SETTINGS_KEY = ["receivable-reminder-settings"];
+
+function isDesktopBrowser(): boolean {
+  return typeof window !== "undefined" && window.matchMedia("(min-width: 768px)").matches;
+}
 
 export default function ReminderSettingsPage() {
   const { toast } = useToast();
@@ -36,6 +41,9 @@ export default function ReminderSettingsPage() {
   const [appBaseUrl, setAppBaseUrl] = useState("");
   const [previewMessage, setPreviewMessage] = useState("");
   const [previewSummary, setPreviewSummary] = useState<{ total: number; overdue: number; dueToday: number; dueSoon: number } | null>(null);
+  const [lineLinkError, setLineLinkError] = useState<string | null>(null);
+  const [lineLinkLoading, setLineLinkLoading] = useState(false);
+  const [lineQrUrl, setLineQrUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (!data) return;
@@ -64,15 +72,45 @@ export default function ReminderSettingsPage() {
     mutationFn: prepareReceivableLineLink,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: SETTINGS_KEY });
-      toast({
-        title: "已準備 LINE 連結",
-        description: "請用手機加入官方帳號好友，系統會自動綁定",
-      });
-    },
-    onError: (err: Error) => {
-      toast({ title: "連結失敗", description: err.message, variant: "destructive" });
     },
   });
+
+  async function handleLineLinkClick() {
+    console.log("[LINE Link] button clicked");
+    setLineLinkError(null);
+    setLineLinkLoading(true);
+
+    try {
+      const config = await getLinePublicConfig();
+      const addFriendUrl = config.addFriendUrl?.trim() || null;
+      console.log("[LINE Link] addFriendUrl:", addFriendUrl);
+
+      if (!addFriendUrl) {
+        setLineLinkError("尚未設定 LINE 官方帳號 ID");
+        return;
+      }
+
+      if (data?.hasLineEnvConfig) {
+        try {
+          await linkMutation.mutateAsync();
+        } catch (prepareErr) {
+          console.warn("[LINE Link] prepare binding failed (continuing to add-friend):", prepareErr);
+        }
+      }
+
+      if (isDesktopBrowser()) {
+        setLineQrUrl(addFriendUrl);
+        window.open(addFriendUrl, "_blank", "noopener,noreferrer");
+      } else {
+        window.location.href = addFriendUrl;
+      }
+    } catch (err) {
+      console.error("[LINE Link] failed:", err);
+      setLineLinkError("無法取得 LINE 連結，請稍後再試");
+    } finally {
+      setLineLinkLoading(false);
+    }
+  }
 
   const previewMutation = useMutation({
     mutationFn: previewReceivableReminder,
@@ -159,12 +197,44 @@ export default function ReminderSettingsPage() {
           <Button
             type="button"
             variant="outline"
-            onClick={() => linkMutation.mutate()}
-            disabled={linkMutation.isPending || !data?.hasLineEnvConfig}
+            onClick={() => void handleLineLinkClick()}
+            disabled={lineLinkLoading}
           >
-            <Link2 className="h-4 w-4 mr-1" />
+            {lineLinkLoading ? (
+              <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+            ) : (
+              <Link2 className="h-4 w-4 mr-1" />
+            )}
             連結我的 LINE
           </Button>
+
+          {lineLinkError && (
+            <p className="text-sm text-destructive font-medium" role="alert">
+              {lineLinkError}
+            </p>
+          )}
+
+          {lineQrUrl && (
+            <div className="rounded-lg border bg-muted/20 p-4 space-y-3 max-w-xs">
+              <p className="text-sm font-medium">用手機掃描 QR Code 加入好友</p>
+              <img
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(lineQrUrl)}`}
+                alt="LINE 加好友 QR Code"
+                width={180}
+                height={180}
+                className="rounded-md border bg-white"
+              />
+              <a
+                href={lineQrUrl}
+                className="text-sm text-primary underline break-all"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                或在電腦開啟 LINE 加好友頁面
+              </a>
+            </div>
+          )}
+
           <p className="text-xs text-muted-foreground">
             按此按鈕後，用手機加入 LINE 官方帳號為好友，系統會自動綁定您的 User ID（無需手動輸入）。
           </p>

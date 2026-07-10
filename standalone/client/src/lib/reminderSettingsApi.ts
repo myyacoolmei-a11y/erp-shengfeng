@@ -29,6 +29,10 @@ export async function prepareReceivableLineLink(): Promise<{
   });
 }
 
+export async function getLinePublicConfig(): Promise<{ addFriendUrl: string | null }> {
+  return customFetch("/api/line/public-config");
+}
+
 export async function previewReceivableReminder(): Promise<{
   summary: ReceivableReminderSummary;
   message: string;
