@@ -3,8 +3,15 @@ import { useSearch, useLocation } from "wouter";
 import {
   useListReceivables, useCreateReceivable, useUpdateReceivable, useDeleteReceivable,
   useRecordReceivablePayment, useListCustomers, getListReceivablesQueryKey,
+  useGetWorkOrder, useGetQuote,
 } from "@workspace/api-client-react";
 import type { Receivable } from "@workspace/api-client-react";
+import { equipmentItemsFromOrder } from "@/components/work-order-form";
+import { buildReceivableSummaryHtml } from "@/components/pdf/templates/ReceivableSummaryTemplate";
+import { openPrintWindow, isMobileDevice, handlePdfAction } from "@/components/pdf/pdf-service";
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from "@/components/ui/table";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
 import { invalidateStatistics } from "@/lib/invalidateStatistics";
 import { reverseReceivablePayment } from "@/lib/receivablesApi";
@@ -19,7 +26,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Plus, Pencil, Trash2, CreditCard, FileText, Bell, Copy, X, Undo2 } from "lucide-react";
+import { Plus, Pencil, Trash2, CreditCard, FileText, Bell, Copy, X, Undo2, Printer, ExternalLink, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth, hasRole } from "@/contexts/auth-context";
 
@@ -611,50 +618,12 @@ export default function Receivables() {
       </Dialog>
 
       {/* View Details Dialog */}
-      <Dialog open={!!viewItem} onOpenChange={open => { if (!open) setViewItem(null); }}>
-        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>應收帳款詳情</DialogTitle>
-          </DialogHeader>
-          {viewItem && (
-            <div className="space-y-3 text-sm">
-              <div className="grid grid-cols-2 gap-y-2 gap-x-4">
-                <DetailRow label="客戶" value={viewItem.customerName ?? "—"} />
-                <DetailRow label="派工單號" value={viewItem.workOrderNumber ?? "—"} />
-                <DetailRow label="工程名稱" value={viewItem.projectName ?? "—"} />
-                <DetailRow label="工程類別" value={viewItem.projectType ?? "—"} />
-                <DetailRow label="完工日期" value={viewItem.completionDate ?? "—"} />
-                <DetailRow label="預計收款" value={viewItem.expectedPaymentDate ?? "—"} />
-              </div>
-              <Separator />
-              <div className="grid grid-cols-3 gap-2">
-                <AmtCard label="應收" amount={viewItem.totalAmount} color="text-foreground" />
-                <AmtCard label="已收" amount={viewItem.receivedAmount} color="text-green-700" />
-                <AmtCard label="未收" amount={viewItem.totalAmount - viewItem.receivedAmount} color="text-red-600" />
-              </div>
-              <div className="flex gap-2">
-                <Badge className={STATUS_COLORS[viewItem.paymentStatus] ?? "bg-gray-100"}>{viewItem.paymentStatus}</Badge>
-                {viewItem.paymentMethod && <Badge variant="outline">{viewItem.paymentMethod}</Badge>}
-                {viewItem.actualPaymentDate && <span className="text-xs text-muted-foreground self-center">完款：{viewItem.actualPaymentDate}</span>}
-              </div>
-              {overdueDays(viewItem.expectedPaymentDate) > 0 && viewItem.paymentStatus !== "已收款" && (
-                <div className="text-xs text-red-600 font-medium">⚠ 已逾期 {overdueDays(viewItem.expectedPaymentDate)} 天</div>
-              )}
-              {viewItem.notes && <div className="text-xs text-muted-foreground bg-muted rounded p-2">{viewItem.notes}</div>}
-              <Separator />
-              <div className="grid grid-cols-2 gap-y-2 gap-x-4">
-                <DetailRow label="發票狀態" value={viewItem.invoiceStatus} />
-                <DetailRow label="發票類型" value={viewItem.invoiceType ?? "—"} />
-                <DetailRow label="統一編號" value={viewItem.taxId ?? "—"} />
-                <DetailRow label="發票抬頭" value={viewItem.invoiceTitle ?? "—"} />
-                <DetailRow label="發票號碼" value={viewItem.invoiceNumber ?? "—"} />
-                <DetailRow label="開立日期" value={viewItem.invoiceDate ?? "—"} />
-              </div>
-              {viewItem.invoiceNotes && <div className="text-xs text-muted-foreground bg-muted rounded p-2">{viewItem.invoiceNotes}</div>}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      {viewItem && (
+        <ReceivableDetailDialog
+          item={viewItem}
+          onClose={() => setViewItem(null)}
+        />
+      )}
 
       {/* Delete confirm */}
       <AlertDialog open={!!deleteId} onOpenChange={open => { if (!open) setDeleteId(null); }}>
@@ -670,6 +639,238 @@ export default function Receivables() {
         </AlertDialogContent>
       </AlertDialog>
     </div>
+  );
+}
+
+function equipmentModelCells(it: ReturnType<typeof equipmentItemsFromOrder>[number]): { indoor: string; outdoor: string } {
+  const modelText = it.model || it.itemName || "—";
+  const hasIndoor = it.indoorUnits != null && it.indoorUnits > 0;
+  const hasOutdoor = it.outdoorUnits != null && it.outdoorUnits > 0;
+  if (hasIndoor || hasOutdoor) {
+    return {
+      indoor: hasIndoor ? modelText : "—",
+      outdoor: hasOutdoor ? (it.model || "—") : "—",
+    };
+  }
+  if (it.model || it.itemName) {
+    return { indoor: modelText, outdoor: "—" };
+  }
+  return { indoor: "—", outdoor: "—" };
+}
+
+function ReceivableDetailDialog({ item, onClose }: { item: Receivable; onClose: () => void }) {
+  const { toast } = useToast();
+  const [, navigate] = useLocation();
+  const workOrderId = item.workOrderId ?? 0;
+
+  const { data: workOrder, isLoading: woLoading } = useGetWorkOrder(workOrderId, {
+    query: { enabled: workOrderId > 0 },
+  });
+  const quoteId = workOrder?.quoteId ?? 0;
+  const { data: quote, isLoading: quoteLoading } = useGetQuote(quoteId, {
+    query: { enabled: quoteId > 0 },
+  });
+
+  const equipment = workOrder ? equipmentItemsFromOrder(workOrder) : [];
+  const visibleEquipment = equipment.filter(it => it.brand || it.itemName || it.model || it.quantity);
+  const quoteItems = quote?.items ?? [];
+  const relatedLoading = (workOrderId > 0 && woLoading) || (quoteId > 0 && quoteLoading);
+
+  const projectType = workOrder?.projectType || item.projectType || "—";
+  const projectName = workOrder?.title || item.projectName || "—";
+  const installAddress = workOrder?.installAddress || quote?.address || "—";
+
+  async function handlePrintSummary() {
+    const html = buildReceivableSummaryHtml({ receivable: item, workOrder, quote, equipment });
+    const title = `施工摘要 — ${item.customerName ?? ""}`;
+    if (isMobileDevice()) {
+      await handlePdfAction({
+        html,
+        docNo: String(item.id),
+        filename: `施工摘要_${item.id}.pdf`,
+        title,
+        action: "download",
+        setPdfPreview: () => {},
+        toast,
+        pageFormat: "a4",
+      });
+    } else {
+      openPrintWindow(html, title);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={open => { if (!open) onClose(); }}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <div className="flex items-start justify-between gap-3 pr-6">
+            <DialogTitle>應收帳款詳情</DialogTitle>
+            <Button variant="outline" size="sm" className="shrink-0" onClick={() => void handlePrintSummary()}>
+              <Printer className="h-4 w-4 mr-1.5" />
+              列印施工摘要
+            </Button>
+          </div>
+        </DialogHeader>
+
+        <div className="space-y-4 text-sm">
+          <div className="grid grid-cols-2 gap-y-2 gap-x-4">
+            <DetailRow label="客戶" value={item.customerName ?? "—"} />
+            <DetailRow label="派工單號" value={item.workOrderNumber ?? "—"} />
+            <DetailRow label="完工日期" value={item.completionDate ?? "—"} />
+            <DetailRow label="預計收款" value={item.expectedPaymentDate ?? "—"} />
+          </div>
+
+          <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">施工內容</p>
+            {relatedLoading ? (
+              <p className="text-xs text-muted-foreground flex items-center gap-2">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />載入施工資料…
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-2 gap-x-4">
+                <DetailRow label="工程類型" value={projectType} />
+                <DetailRow label="工程名稱" value={projectName} />
+                <div className="sm:col-span-2">
+                  <DetailRow label="施工地址" value={installAddress} />
+                </div>
+                {workOrder?.description && (
+                  <div className="sm:col-span-2">
+                    <p className="text-xs text-muted-foreground">施工說明</p>
+                    <p className="text-sm whitespace-pre-wrap mt-0.5">{workOrder.description}</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">設備明細</p>
+            {relatedLoading ? (
+              <p className="text-xs text-muted-foreground flex items-center gap-2">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />載入設備資料…
+              </p>
+            ) : visibleEquipment.length === 0 ? (
+              <p className="text-xs text-muted-foreground">無設備明細</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>品牌</TableHead>
+                    <TableHead>室內機型號</TableHead>
+                    <TableHead>室外機型號</TableHead>
+                    <TableHead className="text-right">數量</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {visibleEquipment.map((it, i) => {
+                    const { indoor, outdoor } = equipmentModelCells(it);
+                    const qty = it.quantity != null ? `${it.quantity}${it.unit ? ` ${it.unit}` : ""}` : "—";
+                    return (
+                      <TableRow key={i}>
+                        <TableCell>{it.brand || "—"}</TableCell>
+                        <TableCell>{indoor}</TableCell>
+                        <TableCell>{outdoor}</TableCell>
+                        <TableCell className="text-right">{qty}</TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">報價明細</p>
+            {quoteId <= 0 ? (
+              <p className="text-xs text-muted-foreground">無關聯報價單</p>
+            ) : quoteLoading ? (
+              <p className="text-xs text-muted-foreground flex items-center gap-2">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />載入報價資料…
+              </p>
+            ) : quoteItems.length === 0 ? (
+              <p className="text-xs text-muted-foreground">無報價明細</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>品項</TableHead>
+                    <TableHead className="text-right">數量</TableHead>
+                    <TableHead className="text-right">單價</TableHead>
+                    <TableHead className="text-right">小計</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {quoteItems.map(it => (
+                    <TableRow key={it.id}>
+                      <TableCell>{it.itemName}</TableCell>
+                      <TableCell className="text-right">{it.quantity}{it.unit ? ` ${it.unit}` : ""}</TableCell>
+                      <TableCell className="text-right">{fmtAmt(it.unitPrice)}</TableCell>
+                      <TableCell className="text-right">{fmtAmt(it.subtotal)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </div>
+
+          <Separator />
+
+          <div className="grid grid-cols-3 gap-2">
+            <AmtCard label="應收金額" amount={item.totalAmount} color="text-foreground" />
+            <AmtCard label="已收金額" amount={item.receivedAmount} color="text-green-700" />
+            <AmtCard label="未收金額" amount={item.totalAmount - item.receivedAmount} color="text-red-600" />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Badge className={STATUS_COLORS[item.paymentStatus] ?? "bg-gray-100"}>{item.paymentStatus}</Badge>
+            {item.paymentMethod && <Badge variant="outline">{item.paymentMethod}</Badge>}
+            {item.actualPaymentDate && <span className="text-xs text-muted-foreground self-center">完款：{item.actualPaymentDate}</span>}
+          </div>
+          {overdueDays(item.expectedPaymentDate) > 0 && item.paymentStatus !== "已收款" && (
+            <div className="text-xs text-red-600 font-medium">⚠ 已逾期 {overdueDays(item.expectedPaymentDate)} 天</div>
+          )}
+          {item.notes && <div className="text-xs text-muted-foreground bg-muted rounded p-2">{item.notes}</div>}
+
+          <Separator />
+
+          <div className="grid grid-cols-2 gap-y-2 gap-x-4">
+            <DetailRow label="發票狀態" value={item.invoiceStatus} />
+            <DetailRow label="發票類型" value={item.invoiceType ?? "—"} />
+            <DetailRow label="統一編號" value={item.taxId ?? "—"} />
+            <DetailRow label="發票抬頭" value={item.invoiceTitle ?? "—"} />
+            <DetailRow label="發票號碼" value={item.invoiceNumber ?? "—"} />
+            <DetailRow label="開立日期" value={item.invoiceDate ?? "—"} />
+          </div>
+          {item.invoiceNotes && <div className="text-xs text-muted-foreground bg-muted rounded p-2">{item.invoiceNotes}</div>}
+
+          <div className="flex flex-wrap gap-2 pt-1">
+            <Button
+              variant="outline"
+              className="flex-1 min-w-[140px]"
+              disabled={quoteId <= 0}
+              onClick={() => {
+                onClose();
+                navigate(`/quotes?focusId=${quoteId}`);
+              }}
+            >
+              <ExternalLink className="h-4 w-4 mr-1.5" />
+              查看報價單
+            </Button>
+            <Button
+              variant="outline"
+              className="flex-1 min-w-[140px]"
+              disabled={workOrderId <= 0}
+              onClick={() => {
+                onClose();
+                navigate(`/work-orders?expand=${workOrderId}`);
+              }}
+            >
+              <ExternalLink className="h-4 w-4 mr-1.5" />
+              查看派工單
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
