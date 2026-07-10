@@ -24,9 +24,8 @@ export function getLineOfficialAccountId(): string {
 
 /** Build add-friend URL for LINE Official Account. Returns null when env is unset. */
 export function buildLineAddFriendUrl(accountId?: string): string | null {
-  const raw = (accountId ?? getLineOfficialAccountId()).trim();
-  if (!raw) return null;
+  const cleanId = (accountId ?? getLineOfficialAccountId()).trim().replace(/^@/, "");
+  if (!cleanId) return null;
 
-  const basicId = raw.startsWith("@") ? raw : `@${raw}`;
-  return `https://line.me/R/ti/p/${encodeURIComponent(basicId)}`;
+  return `https://line.me/R/ti/p/~${cleanId}`;
 }
