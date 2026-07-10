@@ -1,14 +1,19 @@
 import { Router, type IRouter } from "express";
 import { eq, and, lt } from "drizzle-orm";
-import { db, receivablesTable, customersTable, paymentsTable } from "@workspace/db";
+import { db, receivablesTable, customersTable } from "@workspace/db";
 import { requireRole } from "../lib/auth";
 import { z } from "zod/v4";
+import {
+  recordReceivablePayment,
+  reverseReceivablePayment,
+} from "../lib/receivables/receivablePaymentService.ts";
 
 const router: IRouter = Router();
 
 const READ_ROLES = ["super_admin", "owner", "admin", "accountant"];
 const WRITE_ROLES = ["super_admin", "owner", "admin", "accountant"];
 const DELETE_ROLES = ["super_admin", "owner", "admin"];
+const REVERSE_ROLES = ["super_admin", "owner", "admin"];
 
 function parseId(raw: unknown): number | null {
   const id = parseInt(String(Array.isArray(raw) ? raw[0] : raw), 10);
@@ -185,6 +190,7 @@ router.patch("/receivables/:id", requireRole(...WRITE_ROLES), async (req, res): 
 router.post("/receivables/:id/payment", requireRole(...WRITE_ROLES), async (req, res): Promise<void> => {
   const id = parseId(req.params.id);
   if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
+  if (!req.user) { res.status(401).json({ error: "請先登入" }); return; }
 
   const PaymentSchema = z.object({
     amount: z.number().positive(),
@@ -195,42 +201,51 @@ router.post("/receivables/:id/payment", requireRole(...WRITE_ROLES), async (req,
   const parsed = PaymentSchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
-  const [current] = await db.select().from(receivablesTable).where(eq(receivablesTable.id, id));
-  if (!current) { res.status(404).json({ error: "找不到應收帳款" }); return; }
-
-  const newReceived = parseFloat(String(current.receivedAmount ?? "0")) + parsed.data.amount;
-  const total = parseFloat(String(current.totalAmount ?? "0"));
-  const remaining = total - newReceived;
-
-  let paymentStatus = "部分收款";
-  if (newReceived <= 0) paymentStatus = "未收款";
-  else if (remaining <= 0) paymentStatus = "已收款";
-
-  const updateData: Record<string, unknown> = {
-    receivedAmount: String(newReceived),
-    paymentStatus,
-    paymentMethod: parsed.data.paymentMethod ?? current.paymentMethod,
-  };
-  if (remaining <= 0) {
-    updateData["actualPaymentDate"] = parsed.data.paymentDate;
+  try {
+    await recordReceivablePayment({
+      receivableId: id,
+      amount: parsed.data.amount,
+      paymentDate: parsed.data.paymentDate,
+      paymentMethod: parsed.data.paymentMethod,
+      notes: parsed.data.notes,
+      user: req.user,
+    });
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "收款失敗" });
+    return;
   }
 
-  const receivableRef = `應收帳款 #${id}`;
-  const paymentNotes = parsed.data.notes?.trim()
-    ? `${parsed.data.notes.trim()} (${receivableRef})`
-    : receivableRef;
+  const [updated] = await db
+    .select(REC_SELECT)
+    .from(receivablesTable)
+    .leftJoin(customersTable, eq(receivablesTable.customerId, customersTable.id))
+    .where(eq(receivablesTable.id, id));
+  res.json(fmt(updated as Record<string, unknown>));
+});
 
-  await db.transaction(async (tx) => {
-    await tx.update(receivablesTable).set(updateData).where(eq(receivablesTable.id, id));
-    await tx.insert(paymentsTable).values({
-      customerId: current.customerId,
-      workOrderId: current.workOrderId ?? undefined,
-      amount: String(parsed.data.amount),
-      paymentDate: parsed.data.paymentDate,
-      paymentMethod: parsed.data.paymentMethod ?? current.paymentMethod ?? undefined,
-      notes: paymentNotes,
-    });
+router.post("/receivables/:id/reverse-payment", requireRole(...REVERSE_ROLES), async (req, res): Promise<void> => {
+  const id = parseId(req.params.id);
+  if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
+  if (!req.user) { res.status(401).json({ error: "請先登入" }); return; }
+
+  const ReverseSchema = z.object({
+    reason: z.string().trim().min(1, "請填寫撤銷原因"),
+    paymentId: z.number().int().optional(),
   });
+  const parsed = ReverseSchema.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+
+  try {
+    await reverseReceivablePayment({
+      receivableId: id,
+      reason: parsed.data.reason,
+      paymentId: parsed.data.paymentId,
+      user: req.user,
+    });
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "撤銷收款失敗" });
+    return;
+  }
 
   const [updated] = await db
     .select(REC_SELECT)

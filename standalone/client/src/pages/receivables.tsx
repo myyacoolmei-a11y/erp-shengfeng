@@ -2,11 +2,12 @@ import { useState, useEffect } from "react";
 import { useSearch, useLocation } from "wouter";
 import {
   useListReceivables, useCreateReceivable, useUpdateReceivable, useDeleteReceivable,
-  useRecordReceivablePayment, useListCustomers,
+  useRecordReceivablePayment, useListCustomers, getListReceivablesQueryKey,
 } from "@workspace/api-client-react";
 import type { Receivable } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useMutation } from "@tanstack/react-query";
 import { invalidateStatistics } from "@/lib/invalidateStatistics";
+import { reverseReceivablePayment } from "@/lib/receivablesApi";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -18,9 +19,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Plus, Pencil, Trash2, CreditCard, FileText, Bell, CheckCircle, Copy, X } from "lucide-react";
+import { Plus, Pencil, Trash2, CreditCard, FileText, Bell, Copy, X, Undo2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/contexts/auth-context";
+import { useAuth, hasRole } from "@/contexts/auth-context";
 
 const PAYMENT_STATUSES = ["未收款", "部分收款", "已收款"];
 const PAYMENT_METHODS = ["現金", "銀行轉帳", "支票", "信用卡", "LINE Pay", "其他"];
@@ -59,8 +60,9 @@ type TabFilter = typeof FILTER_TABS[number];
 export default function Receivables() {
   const { toast } = useToast();
   const { user } = useAuth();
-  const canWrite = user?.role === "owner" || user?.role === "admin" || user?.role === "accountant";
-  const canDelete = user?.role === "owner" || user?.role === "admin";
+  const canWrite = hasRole(user, "owner", "admin", "accountant", "super_admin");
+  const canDelete = hasRole(user, "owner", "admin", "super_admin");
+  const canReverse = hasRole(user, "owner", "admin", "super_admin");
   const queryClient = useQueryClient();
 
   const search = useSearch();
@@ -76,6 +78,8 @@ export default function Receivables() {
   const [paymentModal, setPaymentModal] = useState<Receivable | null>(null);
   const [invoiceModal, setInvoiceModal] = useState<Receivable | null>(null);
   const [lineModal, setLineModal] = useState<Receivable | null>(null);
+  const [reverseItem, setReverseItem] = useState<Receivable | null>(null);
+  const [reverseReason, setReverseReason] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [editItem, setEditItem] = useState<Receivable | null>(null);
   const [copied, setCopied] = useState(false);
@@ -99,12 +103,40 @@ export default function Receivables() {
     if (target) setViewItem(target);
   }, [focusReceivableId, items, viewItem]);
 
-  const invalidate = () => invalidateStatistics(queryClient);
+  const invalidate = () => {
+    invalidateStatistics(queryClient);
+    void queryClient.invalidateQueries({ queryKey: getListReceivablesQueryKey() });
+  };
 
   const createMutation = useCreateReceivable({ mutation: { onSuccess: () => { invalidate(); setShowCreate(false); toast({ title: "應收帳款已建立" }); } } });
   const updateMutation = useUpdateReceivable({ mutation: { onSuccess: () => { invalidate(); setEditItem(null); toast({ title: "已更新" }); } } });
   const deleteMutation = useDeleteReceivable({ mutation: { onSuccess: () => { invalidate(); setDeleteId(null); toast({ title: "已刪除" }); } } });
-  const paymentMutation = useRecordReceivablePayment({ mutation: { onSuccess: () => { invalidate(); setPaymentModal(null); toast({ title: "收款記錄已更新" }); } } });
+  const paymentMutation = useRecordReceivablePayment({
+    mutation: {
+      onSuccess: (_data, variables) => {
+        invalidate();
+        setPaymentModal(null);
+        setViewItem(prev => (prev?.id === variables.id ? { ...prev, ..._data } : prev));
+        toast({ title: "收款已記錄" });
+      },
+      onError: (err: Error) => {
+        toast({ title: "收款失敗", description: err.message, variant: "destructive" });
+      },
+    },
+  });
+  const reverseMutation = useMutation({
+    mutationFn: ({ id, reason }: { id: number; reason: string }) => reverseReceivablePayment(id, { reason }),
+    onSuccess: (updated, variables) => {
+      invalidate();
+      setReverseItem(null);
+      setReverseReason("");
+      setViewItem(prev => (prev?.id === variables.id ? updated : prev));
+      toast({ title: "已撤銷收款" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "撤銷失敗", description: err.message, variant: "destructive" });
+    },
+  });
 
   function openCreate() { setForm(makeEmptyForm()); setShowCreate(true); }
   function openEdit(item: Receivable) {
@@ -135,7 +167,13 @@ export default function Receivables() {
   }
 
   function openPayment(item: Receivable) {
-    setPayForm({ amount: "", paymentDate: new Date().toISOString().split("T")[0], paymentMethod: item.paymentMethod ?? "", notes: "" });
+    const remaining = Math.max(0, item.totalAmount - item.receivedAmount);
+    setPayForm({
+      amount: remaining > 0 ? String(remaining) : "",
+      paymentDate: new Date().toISOString().split("T")[0],
+      paymentMethod: item.paymentMethod ?? "",
+      notes: "",
+    });
     setPaymentModal(item);
   }
 
@@ -169,13 +207,25 @@ export default function Receivables() {
     e.preventDefault();
     if (!paymentModal) return;
     const amount = parseFloat(payForm.amount);
+    const remaining = paymentModal.totalAmount - paymentModal.receivedAmount;
     if (!amount || amount <= 0) { toast({ title: "請輸入有效金額", variant: "destructive" }); return; }
+    if (amount > remaining) {
+      toast({ title: "收款金額不可超過未收金額", description: fmtAmt(remaining), variant: "destructive" });
+      return;
+    }
     paymentMutation.mutate({ id: paymentModal.id, data: {
       amount,
       paymentDate: payForm.paymentDate,
       paymentMethod: payForm.paymentMethod || undefined,
       notes: payForm.notes || undefined,
     }});
+  }
+
+  function handleReverseConfirm() {
+    if (!reverseItem) return;
+    const reason = reverseReason.trim();
+    if (!reason) { toast({ title: "請填寫撤銷原因", variant: "destructive" }); return; }
+    reverseMutation.mutate({ id: reverseItem.id, reason });
   }
 
   function handleInvoice(e: React.FormEvent) {
@@ -190,15 +240,6 @@ export default function Receivables() {
       invoiceDate: invForm.invoiceDate || undefined,
       invoiceNotes: invForm.invoiceNotes || undefined,
     } as any }, { onSuccess: () => { invalidate(); setInvoiceModal(null); toast({ title: "發票資料已更新" }); } });
-  }
-
-  function handleMarkPaid(item: Receivable) {
-    const remaining = item.totalAmount - item.receivedAmount;
-    if (remaining <= 0) { toast({ title: "此筆已全額收款" }); return; }
-    paymentMutation.mutate({ id: item.id, data: {
-      amount: remaining,
-      paymentDate: new Date().toISOString().split("T")[0],
-    }});
   }
 
   function buildLineMessage(item: Receivable): string {
@@ -310,7 +351,12 @@ export default function Receivables() {
                     </Button>
                     {canWrite && item.paymentStatus !== "已收款" && (
                       <Button size="sm" variant="outline" className="h-7 text-xs px-2 text-green-700 border-green-300 hover:bg-green-50" onClick={() => openPayment(item)}>
-                        <CreditCard className="h-3 w-3 mr-1" />記錄收款
+                        <CreditCard className="h-3 w-3 mr-1" />收款
+                      </Button>
+                    )}
+                    {canReverse && item.paymentStatus === "已收款" && (
+                      <Button size="sm" variant="outline" className="h-7 text-xs px-2 text-orange-700 border-orange-300 hover:bg-orange-50" onClick={() => { setReverseItem(item); setReverseReason(""); }}>
+                        <Undo2 className="h-3 w-3 mr-1" />↩ 撤銷收款
                       </Button>
                     )}
                     {canWrite && (
@@ -321,11 +367,6 @@ export default function Receivables() {
                     <Button size="sm" variant="outline" className="h-7 text-xs px-2 text-emerald-700 border-emerald-300 hover:bg-emerald-50" onClick={() => setLineModal(item)}>
                       <Bell className="h-3 w-3 mr-1" />LINE 提醒
                     </Button>
-                    {canWrite && item.paymentStatus !== "已收款" && (
-                      <Button size="sm" variant="outline" className="h-7 text-xs px-2 text-gray-600" onClick={() => handleMarkPaid(item)}>
-                        <CheckCircle className="h-3 w-3 mr-1" />標記已付清
-                      </Button>
-                    )}
                     {canWrite && (
                       <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => openEdit(item)}>
                         <Pencil className="h-3 w-3" />
@@ -406,19 +447,27 @@ export default function Receivables() {
       <Dialog open={!!paymentModal} onOpenChange={open => { if (!open) setPaymentModal(null); }}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>記錄收款</DialogTitle>
+            <DialogTitle>收款</DialogTitle>
           </DialogHeader>
           {paymentModal && (
-            <div className="text-xs text-muted-foreground mb-2">
-              <span>{paymentModal.customerName}</span>
-              {paymentModal.projectName && <span> · {paymentModal.projectName}</span>}
-              <div className="mt-1">未收金額：<strong className="text-red-600">{fmtAmt(paymentModal.totalAmount - paymentModal.receivedAmount)}</strong></div>
+            <div className="text-xs text-muted-foreground mb-2 space-y-1">
+              <div><span>{paymentModal.customerName}</span>{paymentModal.projectName && <span> · {paymentModal.projectName}</span>}</div>
+              <div>應收：<strong>{fmtAmt(paymentModal.totalAmount)}</strong> · 已收：<strong className="text-green-700">{fmtAmt(paymentModal.receivedAmount)}</strong></div>
+              <div>未收金額：<strong className="text-red-600">{fmtAmt(paymentModal.totalAmount - paymentModal.receivedAmount)}</strong></div>
             </div>
           )}
           <form onSubmit={handlePayment} className="space-y-3">
             <div className="space-y-1">
               <Label>收款金額 *</Label>
-              <Input type="number" value={payForm.amount} onChange={e => setPayForm(f => ({ ...f, amount: e.target.value }))} placeholder="0" required />
+              <Input
+                type="number"
+                min="0"
+                step="1"
+                value={payForm.amount}
+                onChange={e => setPayForm(f => ({ ...f, amount: e.target.value }))}
+                placeholder="0"
+                required
+              />
             </div>
             <div className="space-y-1">
               <Label>收款日期 *</Label>
@@ -432,16 +481,57 @@ export default function Receivables() {
               </Select>
             </div>
             <div className="space-y-1">
-              <Label>備註</Label>
+              <Label>備註（選填）</Label>
               <Input value={payForm.notes} onChange={e => setPayForm(f => ({ ...f, notes: e.target.value }))} />
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setPaymentModal(null)}>取消</Button>
-              <Button type="submit">確認收款</Button>
+              <Button type="submit" disabled={paymentMutation.isPending}>確認收款</Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Reverse Payment Dialog */}
+      <AlertDialog open={!!reverseItem} onOpenChange={open => { if (!open) { setReverseItem(null); setReverseReason(""); } }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>確定撤銷收款？</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-sm">
+                <p>此操作會沖銷收款紀錄並重新計算應收狀態，AI 收款提醒也會重新納入此案件。</p>
+                {reverseItem && (
+                  <div className="rounded-md border bg-muted/40 p-3 text-xs space-y-1">
+                    <p><span className="text-muted-foreground">客戶：</span>{reverseItem.customerName ?? "—"}</p>
+                    <p><span className="text-muted-foreground">已收：</span>{fmtAmt(reverseItem.receivedAmount)}</p>
+                    <p><span className="text-muted-foreground">狀態：</span>{reverseItem.paymentStatus}</p>
+                  </div>
+                )}
+                <div className="space-y-1">
+                  <Label htmlFor="reverseReason">撤銷原因 *</Label>
+                  <Textarea
+                    id="reverseReason"
+                    value={reverseReason}
+                    onChange={e => setReverseReason(e.target.value)}
+                    placeholder="例：誤登收款、客戶退刷"
+                    rows={3}
+                  />
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-orange-600 hover:bg-orange-700"
+              disabled={reverseMutation.isPending}
+              onClick={e => { e.preventDefault(); handleReverseConfirm(); }}
+            >
+              確認撤銷
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Edit Invoice Dialog */}
       <Dialog open={!!invoiceModal} onOpenChange={open => { if (!open) setInvoiceModal(null); }}>
