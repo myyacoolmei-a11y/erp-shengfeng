@@ -1,4 +1,4 @@
-import { customFetch } from "../../../shared/api-client/custom-fetch.ts";
+import { customFetch, ApiError } from "../../../shared/api-client/custom-fetch.ts";
 import type {
   LineBindingCodeResponse,
   LineBindingOverviewAdminDto,
@@ -24,13 +24,29 @@ export async function updateReceivableReminderSettings(data: {
 }
 
 export async function generateLineBindingCode(): Promise<LineBindingCodeResponse> {
-  return customFetch("/api/reminder-settings/line-binding/code", {
-    method: "POST",
-  });
+  try {
+    return await customFetch("/api/reminder-settings/line-binding/code", {
+      method: "POST",
+    });
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) {
+      return customFetch("/api/reminder-settings/receivable-collection/line-binding-code", {
+        method: "POST",
+      });
+    }
+    throw err;
+  }
 }
 
 export async function getLineBindingStatus(): Promise<LineBindingStatusResponse> {
-  return customFetch("/api/reminder-settings/line-binding/status");
+  try {
+    return await customFetch("/api/reminder-settings/line-binding/status");
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) {
+      return customFetch("/api/reminder-settings/receivable-collection/line-binding-status");
+    }
+    throw err;
+  }
 }
 
 /** @deprecated Use generateLineBindingCode */
@@ -132,7 +148,17 @@ export async function updateMyLineNotificationPrefs(data: Partial<Omit<UserLineN
 }
 
 export async function listLineBindingOverview(): Promise<LineBindingOverviewAdminDto[]> {
-  return customFetch("/api/reminder-settings/line-subscriptions");
+  const rows = await customFetch<LineBindingOverviewAdminDto[]>("/api/reminder-settings/line-subscriptions");
+  return rows.map(row => ({
+    ...row,
+    bindingStatus:
+      row.bindingStatus ??
+      (row.lineUserIdMasked ? "bound" : row.pendingCode ? "pending" : "none"),
+    lineUserIdMasked: row.lineUserIdMasked ?? null,
+    pendingCode: row.pendingCode ?? null,
+    pendingExpiresAt: row.pendingExpiresAt ?? null,
+    prefs: row.prefs ?? null,
+  }));
 }
 
 /** @deprecated Use listLineBindingOverview */

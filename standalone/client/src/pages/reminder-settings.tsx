@@ -62,7 +62,24 @@ export default function ReminderSettingsPage() {
   const pollStartedAtRef = useRef<number | null>(null);
   const isAdmin = hasRole(user, "super_admin", "owner", "admin");
 
-  const { data, isLoading: adminSettingsLoading } = useQuery({
+  const [enabled, setEnabled] = useState(false);
+  const [morningEnabled, setMorningEnabled] = useState(false);
+  const [eveningEnabled, setEveningEnabled] = useState(false);
+  const [reminderTime, setReminderTime] = useState("09:00");
+  const [appBaseUrl, setAppBaseUrl] = useState("");
+  const [previewMessage, setPreviewMessage] = useState("");
+  const [morningPreviewMessage, setMorningPreviewMessage] = useState("");
+  const [eveningPreviewMessage, setEveningPreviewMessage] = useState("");
+  const [previewSummary, setPreviewSummary] = useState<{ total: number; overdue: number; dueToday: number; dueSoon: number } | null>(null);
+  const [lineLinkError, setLineLinkError] = useState<string | null>(null);
+  const [lineLinkLoading, setLineLinkLoading] = useState(false);
+  const [bindingInstruction, setBindingInstruction] = useState<string | null>(null);
+  const [bindingCode, setBindingCode] = useState<string | null>(null);
+  const [addFriendUrl, setAddFriendUrl] = useState<string | null>(null);
+  const [isPollingBinding, setIsPollingBinding] = useState(false);
+  const [bindingComplete, setBindingComplete] = useState(false);
+
+  const { data, isLoading: adminSettingsLoading, isError: adminSettingsError, error: adminSettingsErrorObj } = useQuery({
     queryKey: SETTINGS_KEY,
     queryFn: getReceivableReminderSettings,
     enabled: isAdmin,
@@ -83,9 +100,10 @@ export default function ReminderSettingsPage() {
     retry: false,
   });
 
-  const { data: bindingStatus, isLoading: bindingLoading } = useQuery({
+  const { data: bindingStatus, isLoading: bindingLoading, isError: bindingError, error: bindingErrorObj } = useQuery({
     queryKey: BINDING_STATUS_KEY,
     queryFn: getLineBindingStatus,
+    retry: 1,
     refetchInterval: query => {
       const status = query.state.data?.status;
       if (status === "bound") return false;
@@ -100,22 +118,28 @@ export default function ReminderSettingsPage() {
     },
   });
 
-  const [enabled, setEnabled] = useState(false);
-  const [morningEnabled, setMorningEnabled] = useState(false);
-  const [eveningEnabled, setEveningEnabled] = useState(false);
-  const [reminderTime, setReminderTime] = useState("09:00");
-  const [appBaseUrl, setAppBaseUrl] = useState("");
-  const [previewMessage, setPreviewMessage] = useState("");
-  const [morningPreviewMessage, setMorningPreviewMessage] = useState("");
-  const [eveningPreviewMessage, setEveningPreviewMessage] = useState("");
-  const [previewSummary, setPreviewSummary] = useState<{ total: number; overdue: number; dueToday: number; dueSoon: number } | null>(null);
-  const [lineLinkError, setLineLinkError] = useState<string | null>(null);
-  const [lineLinkLoading, setLineLinkLoading] = useState(false);
-  const [bindingInstruction, setBindingInstruction] = useState<string | null>(null);
-  const [bindingCode, setBindingCode] = useState<string | null>(null);
-  const [addFriendUrl, setAddFriendUrl] = useState<string | null>(null);
-  const [isPollingBinding, setIsPollingBinding] = useState(false);
-  const [bindingComplete, setBindingComplete] = useState(false);
+  const lineLinked = bindingStatus?.status === "bound" || bindingComplete || Boolean(data?.lineLinked);
+
+  const { data: linePrefs, isLoading: linePrefsLoading } = useQuery({
+    queryKey: LINE_PREFS_KEY,
+    queryFn: getMyLineNotificationPrefs,
+    enabled: lineLinked,
+  });
+
+  const { data: lineBindingOverview = [], isLoading: overviewLoading, isError: overviewError, error: overviewErrorObj } = useQuery({
+    queryKey: LINE_SUBSCRIPTIONS_KEY,
+    queryFn: listLineBindingOverview,
+    enabled: isAdmin,
+    retry: false,
+  });
+
+  const boundSubscriberCount = lineBindingOverview.filter(row => row.bindingStatus === "bound").length;
+
+  const { data: logs = [] } = useQuery({
+    queryKey: ["receivable-reminder-logs"],
+    queryFn: listReceivableReminderLogs,
+    enabled: isAdmin,
+  });
 
   useEffect(() => {
     if (!data) return;
@@ -285,28 +309,6 @@ export default function ReminderSettingsPage() {
     onError: (err: Error) => toast({ title: "測試推播失敗", description: err.message, variant: "destructive" }),
   });
 
-  const { data: logs = [] } = useQuery({
-    queryKey: ["receivable-reminder-logs"],
-    queryFn: listReceivableReminderLogs,
-    enabled: isAdmin,
-  });
-
-  const lineLinked = bindingStatus?.status === "bound" || bindingComplete;
-
-  const { data: linePrefs, isLoading: linePrefsLoading } = useQuery({
-    queryKey: LINE_PREFS_KEY,
-    queryFn: getMyLineNotificationPrefs,
-    enabled: lineLinked,
-  });
-
-  const { data: lineBindingOverview = [] } = useQuery({
-    queryKey: LINE_SUBSCRIPTIONS_KEY,
-    queryFn: listLineBindingOverview,
-    enabled: isAdmin,
-  });
-
-  const boundSubscriberCount = lineBindingOverview.filter(row => row.bindingStatus === "bound").length;
-
   const saveLinePrefsMutation = useMutation({
     mutationFn: updateMyLineNotificationPrefs,
     onSuccess: () => {
@@ -356,12 +358,8 @@ export default function ReminderSettingsPage() {
     saveLinePrefsMutation.mutate({ [key]: checked });
   }
 
-  if (bindingLoading || (isAdmin && adminSettingsLoading)) {
-    return (
-      <div className="flex items-center justify-center py-20 text-muted-foreground">
-        <Loader2 className="h-5 w-5 animate-spin mr-2" />載入中…
-      </div>
-    );
+  function errorMessage(err: unknown): string {
+    return err instanceof Error ? err.message : "載入失敗";
   }
 
   return (
@@ -372,24 +370,36 @@ export default function ReminderSettingsPage() {
           AI 收款秘書
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
-          綁定 LINE 後可接收每日晨報、收款提醒、晚間提醒等推播。
+          晟風小秘書 LINE 推播：每日晨報、收款提醒、晚間提醒。
         </p>
       </div>
 
+      {bindingError && (
+        <Card className="border-destructive/50">
+          <CardContent className="py-4 text-sm text-destructive">
+            無法載入 LINE 綁定狀態：{errorMessage(bindingErrorObj)}
+          </CardContent>
+        </Card>
+      )}
+
       <Card>
         <CardHeader>
-          <CardTitle>綁定 LINE 官方帳號</CardTitle>
+          <CardTitle>LINE Messaging API</CardTitle>
           <CardDescription>
-            每位 ERP 使用者可綁定自己的 LINE。加入「晟風小秘書」好友後，在 LINE 對話輸入綁定碼即可完成連結。
+            Token 與 Secret 請在 Railway 環境變數設定。加入好友後，請在 LINE 對話輸入綁定碼完成連結。
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {bindingLoading ? (
+            <p className="text-sm text-muted-foreground flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" />載入 LINE 綁定狀態…
+            </p>
+          ) : (
+          <>
           <div className="flex flex-wrap gap-2 text-sm">
-            {isAdmin && (
-              <Badge variant={bindingStatus?.hasLineEnvConfig ?? data?.hasLineEnvConfig ? "default" : "destructive"}>
-                {bindingStatus?.hasLineEnvConfig ?? data?.hasLineEnvConfig ? "LINE 環境變數已設定" : "LINE 環境變數未設定"}
-              </Badge>
-            )}
+            <Badge variant={bindingStatus?.hasLineEnvConfig ?? data?.hasLineEnvConfig ? "default" : "destructive"}>
+              {bindingStatus?.hasLineEnvConfig ?? data?.hasLineEnvConfig ? "LINE 環境變數已設定" : "LINE 環境變數未設定"}
+            </Badge>
             {lineLinked ? (
               <Badge className="bg-green-100 text-green-800 hover:bg-green-100">
                 <CheckCircle2 className="h-3 w-3 mr-1" />
@@ -420,7 +430,7 @@ export default function ReminderSettingsPage() {
 
           <Button
             type="button"
-            variant="default"
+            variant="outline"
             onClick={() => void handleLineLinkClick()}
             disabled={lineLinkLoading || lineLinked}
           >
@@ -468,8 +478,10 @@ export default function ReminderSettingsPage() {
           )}
 
           <p className="text-xs text-muted-foreground">
-            按此按鈕會產生一次性綁定碼（5~8 位）並開啟 LINE 官方帳號。加入好友後，請在 LINE 對話輸入「綁定 XXXXX」完成連結。一個 ERP 帳號只能綁定一個 LINE，且不可與其他 ERP 帳號共用。
+            按此按鈕會產生一次性綁定碼（5~8 位）並開啟 LINE 官方帳號。加入好友後，請在 LINE 對話輸入「綁定 XXXXX」完成連結。
           </p>
+          </>
+          )}
         </CardContent>
       </Card>
 
@@ -523,7 +535,13 @@ export default function ReminderSettingsPage() {
             <CardDescription>查看所有 ERP 使用者的 LINE 綁定狀態，可解除綁定或重新產生綁定碼。</CardDescription>
           </CardHeader>
           <CardContent>
-            {lineBindingOverview.length === 0 ? (
+            {overviewLoading ? (
+              <p className="text-sm text-muted-foreground flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />載入綁定列表…
+              </p>
+            ) : overviewError ? (
+              <p className="text-sm text-destructive">無法載入綁定列表：{errorMessage(overviewErrorObj)}</p>
+            ) : lineBindingOverview.length === 0 ? (
               <p className="text-sm text-muted-foreground">尚無使用者資料</p>
             ) : (
               <Table>
@@ -625,7 +643,15 @@ export default function ReminderSettingsPage() {
         </Card>
       )}
 
-      {isAdmin && (
+      {isAdmin && adminSettingsError && (
+        <Card className="border-destructive/50">
+          <CardContent className="py-4 text-sm text-destructive">
+            無法載入收款提醒設定：{errorMessage(adminSettingsErrorObj)}
+          </CardContent>
+        </Card>
+      )}
+
+      {isAdmin && !adminSettingsError && (
       <>
       <Card>
         <CardHeader>
@@ -635,6 +661,12 @@ export default function ReminderSettingsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-5">
+          {adminSettingsLoading ? (
+            <p className="text-sm text-muted-foreground flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" />載入設定…
+            </p>
+          ) : (
+          <>
           <div className="flex items-center justify-between rounded-lg border p-4">
             <div>
               <p className="font-medium">啟用收款提醒</p>
@@ -686,9 +718,13 @@ export default function ReminderSettingsPage() {
               立即測試推播
             </Button>
           </div>
+          </>
+          )}
         </CardContent>
       </Card>
 
+      {!adminSettingsLoading && (
+      <>
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2"><Sunrise className="h-5 w-5" />AI 每日晨報</CardTitle>
@@ -803,6 +839,8 @@ export default function ReminderSettingsPage() {
           )}
         </CardContent>
       </Card>
+      </>
+      )}
       </>
       )}
     </div>
