@@ -55,19 +55,25 @@ export interface UserLineNotificationPrefsDto {
   receiveReceivableCollection: boolean;
 }
 
-export interface LineSubscriptionAdminDto {
+export interface LineBindingOverviewAdminDto {
   userId: number;
   displayName: string;
   username: string;
-  lineUserIdMasked: string;
+  bindingStatus: "none" | "pending" | "bound";
+  lineUserIdMasked: string | null;
+  pendingCode: string | null;
+  pendingExpiresAt: string | null;
   prefs: {
     receiveMorningBriefing: boolean;
     receiveEveningReminder: boolean;
     receivePendingDispatch: boolean;
     receiveQuoteFollowUp: boolean;
     receiveReceivableCollection: boolean;
-  };
+  } | null;
 }
+
+/** @deprecated Use LineBindingOverviewAdminDto */
+export type LineSubscriptionAdminDto = LineBindingOverviewAdminDto;
 
 export interface LineBindingCodeResponse {
   code: string;
@@ -83,4 +89,6 @@ export interface LineBindingStatusResponse {
   expiresAt: string | null;
   linkedErpUserName: string | null;
   lineUserIdMasked: string | null;
+  hasLineEnvConfig?: boolean;
+  addFriendUrl?: string | null;
 }

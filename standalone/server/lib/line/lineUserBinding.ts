@@ -9,12 +9,31 @@ import {
 import { RECEIVABLE_COLLECTION_KIND } from "../../../shared/reminders/types.ts";
 import { logger } from "../logger.ts";
 import { getLineUserProfile, replyLineMessage } from "./lineMessaging.ts";
-import { clearLineUserFromOthers, ensureDefaultPrefsForUser } from "./lineSubscriptionService.ts";
+import { ensureDefaultPrefsForUser } from "./lineSubscriptionService.ts";
 
 const BINDING_CODE_TTL_MS = 10 * 60 * 1000;
+const BINDING_CODE_MIN_LEN = 5;
+const BINDING_CODE_MAX_LEN = 8;
 
-function generateSixDigitCode(): string {
-  return String(crypto.randomInt(100000, 1_000_000));
+function generateBindingCode(): string {
+  const length = crypto.randomInt(BINDING_CODE_MIN_LEN, BINDING_CODE_MAX_LEN + 1);
+  const min = 10 ** (length - 1);
+  const max = 10 ** length;
+  return String(crypto.randomInt(min, max));
+}
+
+async function findErpUserBoundToLine(lineUserId: string, exceptUserId?: number) {
+  const [row] = await db
+    .select({
+      id: usersTable.id,
+      displayName: usersTable.displayName,
+    })
+    .from(usersTable)
+    .where(eq(usersTable.lineUserId, lineUserId));
+
+  if (!row) return null;
+  if (exceptUserId != null && row.id === exceptUserId) return null;
+  return row;
 }
 
 async function persistLineBinding(opts: {
@@ -22,7 +41,11 @@ async function persistLineBinding(opts: {
   lineUserId: string;
 }): Promise<{ displayName: string }> {
   const [erpUser] = await db
-    .select({ id: usersTable.id, displayName: usersTable.displayName })
+    .select({
+      id: usersTable.id,
+      displayName: usersTable.displayName,
+      lineUserId: usersTable.lineUserId,
+    })
     .from(usersTable)
     .where(eq(usersTable.id, opts.erpUserId));
 
@@ -30,7 +53,14 @@ async function persistLineBinding(opts: {
     throw new Error("ERP user not found");
   }
 
-  await clearLineUserFromOthers(opts.lineUserId, opts.erpUserId);
+  if (erpUser.lineUserId?.trim() && erpUser.lineUserId.trim() !== opts.lineUserId) {
+    throw new Error("此 ERP 帳號已綁定其他 LINE");
+  }
+
+  const lineTakenBy = await findErpUserBoundToLine(opts.lineUserId, opts.erpUserId);
+  if (lineTakenBy) {
+    throw new Error("此 LINE 已綁定其他 ERP 帳號");
+  }
 
   await db
     .update(usersTable)
@@ -51,6 +81,15 @@ export async function createLineBindingCode(erpUserId: number): Promise<{
   code: string;
   expiresAt: Date;
 }> {
+  const [existingUser] = await db
+    .select({ lineUserId: usersTable.lineUserId })
+    .from(usersTable)
+    .where(eq(usersTable.id, erpUserId));
+
+  if (existingUser?.lineUserId?.trim()) {
+    throw new Error("此帳號已綁定 LINE，請先解除綁定再重新綁定");
+  }
+
   const now = new Date();
 
   await db
@@ -63,7 +102,7 @@ export async function createLineBindingCode(erpUserId: number): Promise<{
       ),
     );
 
-  let code = generateSixDigitCode();
+  let code = generateBindingCode();
   let expiresAt = new Date(now.getTime() + BINDING_CODE_TTL_MS);
 
   for (let attempt = 0; attempt < 5; attempt += 1) {
@@ -76,7 +115,7 @@ export async function createLineBindingCode(erpUserId: number): Promise<{
       return { code, expiresAt };
     } catch (err) {
       if (attempt === 4) throw err;
-      code = generateSixDigitCode();
+      code = generateBindingCode();
       expiresAt = new Date(now.getTime() + BINDING_CODE_TTL_MS);
     }
   }
@@ -119,10 +158,22 @@ export async function bindLineUserByCode(opts: {
     "[LINE Binding] matched ERP user",
   );
 
-  await persistLineBinding({
-    erpUserId: row.userId,
-    lineUserId: opts.lineUserId,
-  });
+  try {
+    await persistLineBinding({
+      erpUserId: row.userId,
+      lineUserId: opts.lineUserId,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "綁定失敗";
+    logger.info({ err: message, lineUserId: opts.lineUserId }, "[LINE Binding] persist failed");
+    if (opts.replyToken) {
+      await replyLineMessage({
+        replyToken: opts.replyToken,
+        text: `❌ ${message}`,
+      }).catch(replyErr => logger.warn({ err: replyErr }, "LINE binding reply failed"));
+    }
+    return { bound: false };
+  }
 
   await db
     .update(lineBindingCodesTable)
@@ -288,13 +339,13 @@ export function maskLineUserId(id: string): string {
 }
 
 export function parseLineBindingMessage(text: string): string | null {
-  const match = text.trim().match(/^綁定\s*(\d{6})$/);
+  const match = text.trim().match(/^綁定\s*(\d{5,8})$/);
   return match?.[1] ?? null;
 }
 
 export async function replyLineFollowInstructions(replyToken: string): Promise<void> {
   await replyLineMessage({
     replyToken,
-    text: "您好！請先在 ERP「AI 收款秘書」按「連結我的 LINE」取得綁定碼，加入好友後在對話輸入：綁定 XXXXXX",
+    text: "您好！請先在 ERP「AI 收款秘書」按「立即綁定 LINE」取得綁定碼，加入好友後在對話輸入：綁定 XXXXX",
   }).catch(err => logger.warn({ err }, "LINE follow reply failed"));
 }

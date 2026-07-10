@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Bell, Loader2, Send, Eye, Save, Link2, CheckCircle2, Sunrise, Moon, Users, Unlink } from "lucide-react";
+import { Bell, Loader2, Send, Eye, Save, Link2, CheckCircle2, Sunrise, Moon, Users, Unlink, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,8 +24,8 @@ import {
   previewReceivableReminder,
   testReceivableReminderPush,
   listReceivableReminderLogs,
-  generateReceivableLineBindingCode,
-  getReceivableLineBindingStatus,
+  generateLineBindingCode,
+  getLineBindingStatus,
   getDailyMorningBriefingSettings,
   updateDailyMorningBriefingSettings,
   previewDailyMorningBriefing,
@@ -36,8 +36,9 @@ import {
   testEveningReceivableReminderPush,
   getMyLineNotificationPrefs,
   updateMyLineNotificationPrefs,
-  listLineSubscriptions,
+  listLineBindingOverview,
   unbindLineSubscription,
+  adminRegenerateLineBindingCode,
   type UserLineNotificationPrefsDto,
 } from "@/lib/reminderSettingsApi";
 
@@ -61,19 +62,42 @@ export default function ReminderSettingsPage() {
   const pollStartedAtRef = useRef<number | null>(null);
   const isAdmin = hasRole(user, "super_admin", "owner", "admin");
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading: adminSettingsLoading } = useQuery({
     queryKey: SETTINGS_KEY,
     queryFn: getReceivableReminderSettings,
+    enabled: isAdmin,
+    retry: false,
   });
 
   const { data: morningData } = useQuery({
     queryKey: MORNING_SETTINGS_KEY,
     queryFn: getDailyMorningBriefingSettings,
+    enabled: isAdmin,
+    retry: false,
   });
 
   const { data: eveningData } = useQuery({
     queryKey: EVENING_SETTINGS_KEY,
     queryFn: getEveningReceivableReminderSettings,
+    enabled: isAdmin,
+    retry: false,
+  });
+
+  const { data: bindingStatus, isLoading: bindingLoading } = useQuery({
+    queryKey: BINDING_STATUS_KEY,
+    queryFn: getLineBindingStatus,
+    refetchInterval: query => {
+      const status = query.state.data?.status;
+      if (status === "bound") return false;
+      if (isPollingBinding) {
+        if (pollStartedAtRef.current && Date.now() - pollStartedAtRef.current > POLL_MAX_MS) {
+          return false;
+        }
+        return POLL_INTERVAL_MS;
+      }
+      if (status === "pending") return POLL_INTERVAL_MS;
+      return false;
+    },
   });
 
   const [enabled, setEnabled] = useState(false);
@@ -93,20 +117,6 @@ export default function ReminderSettingsPage() {
   const [isPollingBinding, setIsPollingBinding] = useState(false);
   const [bindingComplete, setBindingComplete] = useState(false);
 
-  const { data: bindingStatus } = useQuery({
-    queryKey: BINDING_STATUS_KEY,
-    queryFn: getReceivableLineBindingStatus,
-    enabled: isPollingBinding,
-    refetchInterval: query => {
-      if (!isPollingBinding) return false;
-      if (query.state.data?.status === "bound") return false;
-      if (pollStartedAtRef.current && Date.now() - pollStartedAtRef.current > POLL_MAX_MS) {
-        return false;
-      }
-      return POLL_INTERVAL_MS;
-    },
-  });
-
   useEffect(() => {
     if (!data) return;
     setEnabled(data.enabled);
@@ -123,34 +133,32 @@ export default function ReminderSettingsPage() {
   }, [eveningData]);
 
   useEffect(() => {
-    void getReceivableLineBindingStatus()
-      .then(status => {
-        if (status.status === "bound") {
-          setBindingComplete(true);
-          return;
-        }
-        if (status.status === "pending" && status.code) {
-          setBindingCode(status.code);
-          setBindingInstruction(`請先加入「晟風小秘書」好友，然後在 LINE 對話輸入：綁定 ${status.code}`);
-          pollStartedAtRef.current = Date.now();
-          setIsPollingBinding(true);
-        }
-      })
-      .catch(() => {
-        // ignore initial status load errors
-      });
-  }, []);
-
-  useEffect(() => {
-    if (bindingStatus?.status === "bound") {
-      setIsPollingBinding(false);
+    if (!bindingStatus) return;
+    if (bindingStatus.status === "bound") {
       setBindingComplete(true);
       setBindingInstruction(null);
       setBindingCode(null);
-      qc.invalidateQueries({ queryKey: SETTINGS_KEY });
+      setIsPollingBinding(false);
+      return;
+    }
+    if (bindingStatus.status === "pending" && bindingStatus.code) {
+      setBindingCode(bindingStatus.code);
+      setBindingInstruction(`請先加入「晟風小秘書」好友，然後在 LINE 對話輸入：綁定 ${bindingStatus.code}`);
+      if (bindingStatus.addFriendUrl) {
+        setAddFriendUrl(bindingStatus.addFriendUrl);
+      }
+    }
+  }, [bindingStatus]);
+
+  useEffect(() => {
+    if (bindingStatus?.status === "bound") {
+      if (isAdmin) {
+        qc.invalidateQueries({ queryKey: SETTINGS_KEY });
+        qc.invalidateQueries({ queryKey: LINE_SUBSCRIPTIONS_KEY });
+      }
       qc.invalidateQueries({ queryKey: LINE_PREFS_KEY });
     }
-  }, [bindingStatus, qc]);
+  }, [bindingStatus?.status, qc, isAdmin]);
 
   const saveMutation = useMutation({
     mutationFn: () =>
@@ -175,7 +183,7 @@ export default function ReminderSettingsPage() {
     setBindingComplete(false);
 
     try {
-      const result = await generateReceivableLineBindingCode();
+      const result = await generateLineBindingCode();
       console.log("[LINE Link] addFriendUrl:", result.addFriendUrl);
 
       setBindingCode(result.code);
@@ -184,7 +192,9 @@ export default function ReminderSettingsPage() {
       pollStartedAtRef.current = Date.now();
       setIsPollingBinding(true);
       qc.invalidateQueries({ queryKey: BINDING_STATUS_KEY });
-      qc.invalidateQueries({ queryKey: SETTINGS_KEY });
+      if (isAdmin) {
+        qc.invalidateQueries({ queryKey: SETTINGS_KEY });
+      }
 
       if (isDesktopBrowser()) {
         window.open(result.addFriendUrl, "_blank", "noopener,noreferrer");
@@ -278,9 +288,10 @@ export default function ReminderSettingsPage() {
   const { data: logs = [] } = useQuery({
     queryKey: ["receivable-reminder-logs"],
     queryFn: listReceivableReminderLogs,
+    enabled: isAdmin,
   });
 
-  const lineLinked = bindingComplete || bindingStatus?.status === "bound" || Boolean(data?.lineLinked);
+  const lineLinked = bindingStatus?.status === "bound" || bindingComplete;
 
   const { data: linePrefs, isLoading: linePrefsLoading } = useQuery({
     queryKey: LINE_PREFS_KEY,
@@ -288,11 +299,13 @@ export default function ReminderSettingsPage() {
     enabled: lineLinked,
   });
 
-  const { data: lineSubscriptions = [] } = useQuery({
+  const { data: lineBindingOverview = [] } = useQuery({
     queryKey: LINE_SUBSCRIPTIONS_KEY,
-    queryFn: listLineSubscriptions,
+    queryFn: listLineBindingOverview,
     enabled: isAdmin,
   });
+
+  const boundSubscriberCount = lineBindingOverview.filter(row => row.bindingStatus === "bound").length;
 
   const saveLinePrefsMutation = useMutation({
     mutationFn: updateMyLineNotificationPrefs,
@@ -322,6 +335,20 @@ export default function ReminderSettingsPage() {
     },
   });
 
+  const regenerateMutation = useMutation({
+    mutationFn: adminRegenerateLineBindingCode,
+    onSuccess: result => {
+      qc.invalidateQueries({ queryKey: LINE_SUBSCRIPTIONS_KEY });
+      toast({
+        title: "已重新產生綁定碼",
+        description: `${result.instruction}（10 分鐘內有效）`,
+      });
+    },
+    onError: (err: Error) => {
+      toast({ title: "產生綁定碼失敗", description: err.message, variant: "destructive" });
+    },
+  });
+
   function handlePrefChange(
     key: keyof Omit<UserLineNotificationPrefsDto, "lineLinked">,
     checked: boolean,
@@ -329,7 +356,7 @@ export default function ReminderSettingsPage() {
     saveLinePrefsMutation.mutate({ [key]: checked });
   }
 
-  if (isLoading) {
+  if (bindingLoading || (isAdmin && adminSettingsLoading)) {
     return (
       <div className="flex items-center justify-center py-20 text-muted-foreground">
         <Loader2 className="h-5 w-5 animate-spin mr-2" />載入中…
@@ -345,36 +372,38 @@ export default function ReminderSettingsPage() {
           AI 收款秘書
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
-          晟風小秘書 LINE 推播：每日晨報、收款提醒、晚間提醒。
+          綁定 LINE 後可接收每日晨報、收款提醒、晚間提醒等推播。
         </p>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>LINE Messaging API</CardTitle>
+          <CardTitle>綁定 LINE 官方帳號</CardTitle>
           <CardDescription>
-            Token 與 Secret 請在 Railway 環境變數設定。加入好友後，請在 LINE 對話輸入綁定碼完成連結。
+            每位 ERP 使用者可綁定自己的 LINE。加入「晟風小秘書」好友後，在 LINE 對話輸入綁定碼即可完成連結。
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex flex-wrap gap-2 text-sm">
-            <Badge variant={data?.hasLineEnvConfig ? "default" : "destructive"}>
-              {data?.hasLineEnvConfig ? "LINE 環境變數已設定" : "LINE 環境變數未設定"}
-            </Badge>
+            {isAdmin && (
+              <Badge variant={bindingStatus?.hasLineEnvConfig ?? data?.hasLineEnvConfig ? "default" : "destructive"}>
+                {bindingStatus?.hasLineEnvConfig ?? data?.hasLineEnvConfig ? "LINE 環境變數已設定" : "LINE 環境變數未設定"}
+              </Badge>
+            )}
             {lineLinked ? (
               <Badge className="bg-green-100 text-green-800 hover:bg-green-100">
                 <CheckCircle2 className="h-3 w-3 mr-1" />
                 我的 LINE 已連結
-                {data?.linkedErpUserName ? `：${data.linkedErpUserName}` : ""}
-                {data?.lineUserIdMasked ? ` (${data.lineUserIdMasked})` : ""}
+                {bindingStatus?.linkedErpUserName ? `：${bindingStatus.linkedErpUserName}` : ""}
+                {bindingStatus?.lineUserIdMasked ? ` (${bindingStatus.lineUserIdMasked})` : ""}
               </Badge>
             ) : (
               <Badge variant="outline">尚未連結 LINE</Badge>
             )}
-            {(data?.boundSubscriberCount ?? 0) > 0 && (
+            {isAdmin && boundSubscriberCount > 0 && (
               <Badge variant="secondary">
                 <Users className="h-3 w-3 mr-1" />
-                共 {data?.boundSubscriberCount} 人已綁定
+                共 {boundSubscriberCount} 人已綁定
               </Badge>
             )}
             {isPollingBinding && bindingStatus?.status === "pending" && (
@@ -382,14 +411,16 @@ export default function ReminderSettingsPage() {
             )}
           </div>
 
-          <div className="rounded-lg border bg-muted/30 p-3 text-xs space-y-1">
-            <p><span className="font-medium">Webhook URL：</span>{data?.lineWebhookUrl ?? "—"}</p>
-            <p className="text-muted-foreground">請在 LINE Developers Console 貼上此 URL，並啟用 Message 事件</p>
-          </div>
+          {isAdmin && (
+            <div className="rounded-lg border bg-muted/30 p-3 text-xs space-y-1">
+              <p><span className="font-medium">Webhook URL：</span>{data?.lineWebhookUrl ?? "—"}</p>
+              <p className="text-muted-foreground">請在 LINE Developers Console 貼上此 URL，並啟用 Message 事件</p>
+            </div>
+          )}
 
           <Button
             type="button"
-            variant="outline"
+            variant="default"
             onClick={() => void handleLineLinkClick()}
             disabled={lineLinkLoading || lineLinked}
           >
@@ -398,7 +429,7 @@ export default function ReminderSettingsPage() {
             ) : (
               <Link2 className="h-4 w-4 mr-1" />
             )}
-            連結我的 LINE
+            立即綁定 LINE
           </Button>
 
           {lineLinkError && (
@@ -411,7 +442,7 @@ export default function ReminderSettingsPage() {
             <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-3">
               <p className="text-sm font-medium text-primary">{bindingInstruction}</p>
               <p className="text-3xl font-bold tracking-widest font-mono">{bindingCode}</p>
-              <p className="text-xs text-muted-foreground">綁定碼 10 分鐘內有效，請在 LINE 對話輸入「綁定 {bindingCode}」</p>
+              <p className="text-xs text-muted-foreground">綁定碼 10 分鐘內有效，請在 LINE 對話輸入「綁定 {bindingCode}」（5~8 位數字）</p>
             </div>
           )}
 
@@ -437,7 +468,7 @@ export default function ReminderSettingsPage() {
           )}
 
           <p className="text-xs text-muted-foreground">
-            按此按鈕會產生綁定碼並開啟 LINE 官方帳號。加入好友後，請在 LINE 對話輸入「綁定 XXXXXX」完成連結。
+            按此按鈕會產生一次性綁定碼（5~8 位）並開啟 LINE 官方帳號。加入好友後，請在 LINE 對話輸入「綁定 XXXXX」完成連結。一個 ERP 帳號只能綁定一個 LINE，且不可與其他 ERP 帳號共用。
           </p>
         </CardContent>
       </Card>
@@ -489,53 +520,100 @@ export default function ReminderSettingsPage() {
               <Users className="h-5 w-5" />
               LINE 綁定管理
             </CardTitle>
-            <CardDescription>查看所有已綁定 LINE 的 ERP 使用者，必要時可解除綁定。</CardDescription>
+            <CardDescription>查看所有 ERP 使用者的 LINE 綁定狀態，可解除綁定或重新產生綁定碼。</CardDescription>
           </CardHeader>
           <CardContent>
-            {lineSubscriptions.length === 0 ? (
-              <p className="text-sm text-muted-foreground">目前沒有使用者綁定 LINE</p>
+            {lineBindingOverview.length === 0 ? (
+              <p className="text-sm text-muted-foreground">尚無使用者資料</p>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
                     <TableHead>使用者</TableHead>
-                    <TableHead>LINE ID</TableHead>
+                    <TableHead>狀態</TableHead>
+                    <TableHead>LINE / 綁定碼</TableHead>
                     <TableHead>推播項目</TableHead>
                     <TableHead className="text-right">操作</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {lineSubscriptions.map(sub => {
-                    const activePrefs = [
-                      sub.prefs.receiveMorningBriefing && "晨報",
-                      sub.prefs.receivePendingDispatch && "待派工",
-                      sub.prefs.receiveQuoteFollowUp && "報價",
-                      sub.prefs.receiveEveningReminder && "晚間",
-                      sub.prefs.receiveReceivableCollection && "收款",
-                    ].filter(Boolean).join("、");
+                  {lineBindingOverview.map(row => {
+                    const activePrefs = row.prefs
+                      ? [
+                          row.prefs.receiveMorningBriefing && "晨報",
+                          row.prefs.receivePendingDispatch && "待派工",
+                          row.prefs.receiveQuoteFollowUp && "報價",
+                          row.prefs.receiveEveningReminder && "晚間",
+                          row.prefs.receiveReceivableCollection && "收款",
+                        ].filter(Boolean).join("、")
+                      : "—";
+
+                    const statusLabel =
+                      row.bindingStatus === "bound"
+                        ? "已綁定"
+                        : row.bindingStatus === "pending"
+                          ? "待綁定"
+                          : "未綁定";
 
                     return (
-                      <TableRow key={sub.userId}>
+                      <TableRow key={row.userId}>
                         <TableCell>
-                          <div className="font-medium">{sub.displayName}</div>
-                          <div className="text-xs text-muted-foreground">{sub.username}</div>
+                          <div className="font-medium">{row.displayName}</div>
+                          <div className="text-xs text-muted-foreground">{row.username}</div>
                         </TableCell>
-                        <TableCell className="font-mono text-xs">{sub.lineUserIdMasked}</TableCell>
-                        <TableCell className="text-sm">{activePrefs || "—"}</TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={unbindMutation.isPending}
-                            onClick={() => {
-                              if (window.confirm(`確定要解除「${sub.displayName}」的 LINE 綁定？`)) {
-                                unbindMutation.mutate(sub.userId);
-                              }
-                            }}
+                        <TableCell>
+                          <Badge
+                            variant={row.bindingStatus === "bound" ? "default" : "outline"}
+                            className={
+                              row.bindingStatus === "pending"
+                                ? "bg-amber-100 text-amber-800 hover:bg-amber-100"
+                                : undefined
+                            }
                           >
-                            <Unlink className="h-3 w-3 mr-1" />
-                            解除綁定
-                          </Button>
+                            {statusLabel}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">
+                          {row.bindingStatus === "bound" && row.lineUserIdMasked}
+                          {row.bindingStatus === "pending" && (
+                            <div>
+                              <div>{row.pendingCode}</div>
+                              {row.pendingExpiresAt && (
+                                <div className="text-muted-foreground font-sans">
+                                  至 {new Date(row.pendingExpiresAt).toLocaleString("zh-TW")}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          {row.bindingStatus === "none" && "—"}
+                        </TableCell>
+                        <TableCell className="text-sm">{activePrefs}</TableCell>
+                        <TableCell className="text-right space-x-2">
+                          {row.bindingStatus === "bound" ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={unbindMutation.isPending}
+                              onClick={() => {
+                                if (window.confirm(`確定要解除「${row.displayName}」的 LINE 綁定？`)) {
+                                  unbindMutation.mutate(row.userId);
+                                }
+                              }}
+                            >
+                              <Unlink className="h-3 w-3 mr-1" />
+                              解除綁定
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={regenerateMutation.isPending}
+                              onClick={() => regenerateMutation.mutate(row.userId)}
+                            >
+                              <RefreshCw className="h-3 w-3 mr-1" />
+                              重新產生綁定碼
+                            </Button>
+                          )}
                         </TableCell>
                       </TableRow>
                     );
@@ -547,6 +625,8 @@ export default function ReminderSettingsPage() {
         </Card>
       )}
 
+      {isAdmin && (
+      <>
       <Card>
         <CardHeader>
           <CardTitle>收款提醒設定</CardTitle>
@@ -723,6 +803,8 @@ export default function ReminderSettingsPage() {
           )}
         </CardContent>
       </Card>
+      </>
+      )}
     </div>
   );
 }

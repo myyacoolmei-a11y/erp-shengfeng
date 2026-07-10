@@ -1,8 +1,8 @@
 import { customFetch } from "../../../shared/api-client/custom-fetch.ts";
 import type {
   LineBindingCodeResponse,
+  LineBindingOverviewAdminDto,
   LineBindingStatusResponse,
-  LineSubscriptionAdminDto,
   NotificationSettingsDto,
   ReceivableReminderSummary,
   UserLineNotificationPrefsDto,
@@ -23,14 +23,24 @@ export async function updateReceivableReminderSettings(data: {
   });
 }
 
-export async function generateReceivableLineBindingCode(): Promise<LineBindingCodeResponse> {
-  return customFetch("/api/reminder-settings/receivable-collection/line-binding-code", {
+export async function generateLineBindingCode(): Promise<LineBindingCodeResponse> {
+  return customFetch("/api/reminder-settings/line-binding/code", {
     method: "POST",
   });
 }
 
+export async function getLineBindingStatus(): Promise<LineBindingStatusResponse> {
+  return customFetch("/api/reminder-settings/line-binding/status");
+}
+
+/** @deprecated Use generateLineBindingCode */
+export async function generateReceivableLineBindingCode(): Promise<LineBindingCodeResponse> {
+  return generateLineBindingCode();
+}
+
+/** @deprecated Use getLineBindingStatus */
 export async function getReceivableLineBindingStatus(): Promise<LineBindingStatusResponse> {
-  return customFetch("/api/reminder-settings/receivable-collection/line-binding-status");
+  return getLineBindingStatus();
 }
 
 export async function getLinePublicConfig(): Promise<{ addFriendUrl: string | null }> {
@@ -121,8 +131,24 @@ export async function updateMyLineNotificationPrefs(data: Partial<Omit<UserLineN
   });
 }
 
-export async function listLineSubscriptions(): Promise<LineSubscriptionAdminDto[]> {
+export async function listLineBindingOverview(): Promise<LineBindingOverviewAdminDto[]> {
   return customFetch("/api/reminder-settings/line-subscriptions");
+}
+
+/** @deprecated Use listLineBindingOverview */
+export async function listLineSubscriptions(): Promise<LineBindingOverviewAdminDto[]> {
+  return listLineBindingOverview();
+}
+
+export async function adminRegenerateLineBindingCode(userId: number): Promise<{
+  userId: number;
+  code: string;
+  expiresAt: string;
+  instruction: string;
+}> {
+  return customFetch(`/api/reminder-settings/line-subscriptions/${userId}/regenerate-code`, {
+    method: "POST",
+  });
 }
 
 export async function unbindLineSubscription(userId: number): Promise<{ ok: boolean }> {
@@ -133,8 +159,8 @@ export async function unbindLineSubscription(userId: number): Promise<{ ok: bool
 
 export type {
   LineBindingCodeResponse,
+  LineBindingOverviewAdminDto,
   LineBindingStatusResponse,
-  LineSubscriptionAdminDto,
   NotificationSettingsDto,
   ReceivableReminderSummary,
   UserLineNotificationPrefsDto,

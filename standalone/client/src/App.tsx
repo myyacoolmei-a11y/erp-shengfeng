@@ -219,7 +219,7 @@ function AppRoutes() {
               </RoleGuard>
             </Route>
             <Route path="/reminder-settings">
-              <RoleGuard roles={["super_admin", "owner", "admin"]}>
+              <RoleGuard roles={["super_admin", "owner", "admin", "sales", "engineer", "technician", "accountant", "distributor"]}>
                 <ReminderSettings />
               </RoleGuard>
             </Route>

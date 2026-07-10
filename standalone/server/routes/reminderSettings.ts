@@ -1,4 +1,4 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response } from "express";
 import { z } from "zod";
 import { requireRole } from "../lib/auth";
 import { parseReminderTime } from "../lib/reminders/dateUtils.ts";
@@ -30,13 +30,26 @@ import {
 import {
   getMyLineNotificationPrefsDto,
   updateMyLineNotificationPrefs,
-  listLineSubscribersForAdmin,
+  listLineBindingOverviewForAdmin,
   adminUnbindLineUser,
+  adminRegenerateBindingCode,
 } from "../lib/line/lineSubscriptionService.ts";
+import {
+  buildLineAddFriendUrl,
+  isLineMessagingConfigured,
+} from "../lib/line/lineConfig.ts";
 
 const router: IRouter = Router();
 
 const ADMIN_ROLES = ["super_admin", "owner", "admin"] as const;
+
+function requireUser(req: Request, res: Response): boolean {
+  if (!req.user) {
+    res.status(401).json({ error: "請先登入" });
+    return false;
+  }
+  return true;
+}
 
 const EnableSchema = z.object({
   enabled: z.boolean().optional(),
@@ -48,6 +61,45 @@ const LineNotificationPrefsSchema = z.object({
   receivePendingDispatch: z.boolean().optional(),
   receiveQuoteFollowUp: z.boolean().optional(),
   receiveReceivableCollection: z.boolean().optional(),
+});
+
+router.post("/reminder-settings/line-binding/code", async (req, res) => {
+  if (!requireUser(req, res)) return;
+  try {
+    const result = await generateReceivableLineBindingCode(req.user!.id);
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : "無法產生綁定碼" });
+  }
+});
+
+router.get("/reminder-settings/line-binding/status", async (req, res) => {
+  if (!requireUser(req, res)) return;
+  const status = await getReceivableLineBindingStatus(req.user!.id);
+  res.json({
+    ...status,
+    hasLineEnvConfig: isLineMessagingConfigured(),
+    addFriendUrl: buildLineAddFriendUrl(),
+  });
+});
+
+router.get("/reminder-settings/my-line-notifications", async (req, res) => {
+  if (!requireUser(req, res)) return;
+  res.json(await getMyLineNotificationPrefsDto(req.user!.id));
+});
+
+router.patch("/reminder-settings/my-line-notifications", async (req, res) => {
+  if (!requireUser(req, res)) return;
+  const parsed = LineNotificationPrefsSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  try {
+    res.json(await updateMyLineNotificationPrefs(req.user!.id, parsed.data));
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "更新失敗" });
+  }
 });
 
 router.get("/reminder-settings/receivable-collection", requireRole(...ADMIN_ROLES), async (req, res) => {
@@ -84,25 +136,19 @@ router.patch("/reminder-settings/receivable-collection", requireRole(...ADMIN_RO
   }
 });
 
-router.post("/reminder-settings/receivable-collection/line-binding-code", requireRole(...ADMIN_ROLES), async (req, res) => {
-  if (!req.user) {
-    res.status(401).json({ error: "請先登入" });
-    return;
-  }
+router.post("/reminder-settings/receivable-collection/line-binding-code", async (req, res) => {
+  if (!requireUser(req, res)) return;
   try {
-    const result = await generateReceivableLineBindingCode(req.user.id);
+    const result = await generateReceivableLineBindingCode(req.user!.id);
     res.json(result);
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : "無法產生綁定碼" });
   }
 });
 
-router.get("/reminder-settings/receivable-collection/line-binding-status", requireRole(...ADMIN_ROLES), async (req, res) => {
-  if (!req.user) {
-    res.status(401).json({ error: "請先登入" });
-    return;
-  }
-  const status = await getReceivableLineBindingStatus(req.user.id);
+router.get("/reminder-settings/receivable-collection/line-binding-status", async (req, res) => {
+  if (!requireUser(req, res)) return;
+  const status = await getReceivableLineBindingStatus(req.user!.id);
   res.json(status);
 });
 
@@ -223,33 +269,21 @@ router.post("/reminder-settings/evening-receivable-reminder/test", requireRole(.
   }
 });
 
-router.get("/reminder-settings/my-line-notifications", requireRole(...ADMIN_ROLES), async (req, res) => {
-  if (!req.user) {
-    res.status(401).json({ error: "請先登入" });
-    return;
-  }
-  res.json(await getMyLineNotificationPrefsDto(req.user.id));
+router.get("/reminder-settings/line-subscriptions", requireRole(...ADMIN_ROLES), async (_req, res) => {
+  res.json(await listLineBindingOverviewForAdmin());
 });
 
-router.patch("/reminder-settings/my-line-notifications", requireRole(...ADMIN_ROLES), async (req, res) => {
-  if (!req.user) {
-    res.status(401).json({ error: "請先登入" });
-    return;
-  }
-  const parsed = LineNotificationPrefsSchema.safeParse(req.body);
-  if (!parsed.success) {
-    res.status(400).json({ error: parsed.error.message });
+router.post("/reminder-settings/line-subscriptions/:userId/regenerate-code", requireRole(...ADMIN_ROLES), async (req, res) => {
+  const userId = Number(req.params.userId);
+  if (!Number.isFinite(userId) || userId <= 0) {
+    res.status(400).json({ error: "無效的使用者 ID" });
     return;
   }
   try {
-    res.json(await updateMyLineNotificationPrefs(req.user.id, parsed.data));
+    res.json(await adminRegenerateBindingCode(userId));
   } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : "更新失敗" });
+    res.status(400).json({ error: err instanceof Error ? err.message : "無法產生綁定碼" });
   }
-});
-
-router.get("/reminder-settings/line-subscriptions", requireRole(...ADMIN_ROLES), async (_req, res) => {
-  res.json(await listLineSubscribersForAdmin());
 });
 
 router.delete("/reminder-settings/line-subscriptions/:userId", requireRole(...ADMIN_ROLES), async (req, res) => {

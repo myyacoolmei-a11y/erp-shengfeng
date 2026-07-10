@@ -1,6 +1,10 @@
-import { and, eq, isNotNull, ne } from "drizzle-orm";
+import { and, asc, eq, isNotNull, ne } from "drizzle-orm";
 import { db, userLineNotificationPrefsTable, usersTable } from "@workspace/db";
-import { maskLineUserId } from "./lineUserBinding.ts";
+import {
+  createLineBindingCode,
+  getActiveBindingCodeForUser,
+  maskLineUserId,
+} from "./lineUserBinding.ts";
 
 export type LineNotificationPreferenceKey =
   | "receiveMorningBriefing"
@@ -97,15 +101,114 @@ async function loadSubscribers(): Promise<LineSubscriber[]> {
     }));
 }
 
+export async function listLineBindingOverviewForAdmin() {
+  const users = await db
+    .select({
+      userId: usersTable.id,
+      displayName: usersTable.displayName,
+      username: usersTable.username,
+      lineUserId: usersTable.lineUserId,
+      receiveMorningBriefing: userLineNotificationPrefsTable.receiveMorningBriefing,
+      receiveEveningReminder: userLineNotificationPrefsTable.receiveEveningReminder,
+      receivePendingDispatch: userLineNotificationPrefsTable.receivePendingDispatch,
+      receiveQuoteFollowUp: userLineNotificationPrefsTable.receiveQuoteFollowUp,
+      receiveReceivableCollection: userLineNotificationPrefsTable.receiveReceivableCollection,
+    })
+    .from(usersTable)
+    .leftJoin(
+      userLineNotificationPrefsTable,
+      eq(userLineNotificationPrefsTable.userId, usersTable.id),
+    )
+    .orderBy(asc(usersTable.displayName));
+
+  const rows = await Promise.all(
+    users.map(async user => {
+      const lineUserId = user.lineUserId?.trim() || null;
+      if (lineUserId) {
+        return {
+          userId: user.userId,
+          displayName: user.displayName,
+          username: user.username,
+          bindingStatus: "bound" as const,
+          lineUserIdMasked: maskLineUserId(lineUserId),
+          pendingCode: null,
+          pendingExpiresAt: null,
+          prefs: {
+            receiveMorningBriefing: user.receiveMorningBriefing ?? DEFAULT_PREFS.receiveMorningBriefing,
+            receiveEveningReminder: user.receiveEveningReminder ?? DEFAULT_PREFS.receiveEveningReminder,
+            receivePendingDispatch: user.receivePendingDispatch ?? DEFAULT_PREFS.receivePendingDispatch,
+            receiveQuoteFollowUp: user.receiveQuoteFollowUp ?? DEFAULT_PREFS.receiveQuoteFollowUp,
+            receiveReceivableCollection: user.receiveReceivableCollection ?? DEFAULT_PREFS.receiveReceivableCollection,
+          },
+        };
+      }
+
+      const pending = await getActiveBindingCodeForUser(user.userId);
+      if (pending) {
+        return {
+          userId: user.userId,
+          displayName: user.displayName,
+          username: user.username,
+          bindingStatus: "pending" as const,
+          lineUserIdMasked: null,
+          pendingCode: pending.code,
+          pendingExpiresAt: pending.expiresAt.toISOString(),
+          prefs: null,
+        };
+      }
+
+      return {
+        userId: user.userId,
+        displayName: user.displayName,
+        username: user.username,
+        bindingStatus: "none" as const,
+        lineUserIdMasked: null,
+        pendingCode: null,
+        pendingExpiresAt: null,
+        prefs: null,
+      };
+    }),
+  );
+
+  return rows;
+}
+
+/** @deprecated Use listLineBindingOverviewForAdmin */
 export async function listLineSubscribersForAdmin() {
   const subscribers = await loadSubscribers();
   return subscribers.map(subscriber => ({
     userId: subscriber.userId,
     displayName: subscriber.displayName,
     username: subscriber.username,
+    bindingStatus: "bound" as const,
     lineUserIdMasked: maskLineUserId(subscriber.lineUserId),
+    pendingCode: null,
+    pendingExpiresAt: null,
     prefs: subscriber.prefs,
   }));
+}
+
+export async function adminRegenerateBindingCode(targetUserId: number) {
+  const [user] = await db
+    .select({ lineUserId: usersTable.lineUserId })
+    .from(usersTable)
+    .where(eq(usersTable.id, targetUserId));
+
+  if (!user) {
+    throw new Error("找不到使用者");
+  }
+
+  if (user.lineUserId?.trim()) {
+    throw new Error("使用者已綁定 LINE，請先解除綁定");
+  }
+
+  const { code, expiresAt } = await createLineBindingCode(targetUserId);
+  return {
+    userId: targetUserId,
+    code,
+    expiresAt: expiresAt.toISOString(),
+    instruction: `請在 LINE 對話輸入：綁定 ${code}`,
+  };
 }
 
 export async function listSubscribersForMorningBriefing(): Promise<LineSubscriber[]> {
