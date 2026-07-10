@@ -27,3 +27,5 @@ export * from "./lineBindingCodes";
 export * from "./auditLogs";
 export * from "./userLineNotificationPrefs";
 export * from "./workOrderFieldProgress";
+export * from "./partnerBoard";
+export * from "./partnerSuggestions";

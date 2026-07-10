@@ -26,6 +26,8 @@ import voiceRouter from "./voice";
 import reminderSettingsRouter from "./reminderSettings";
 import workOrderFieldProgressRouter from "./workOrderFieldProgress";
 import jobsRouter from "./jobs";
+import partnerRouter from "./partner";
+
 import { authenticate } from "../lib/auth";
 
 const router: IRouter = Router();
@@ -59,6 +61,7 @@ router.use(wholesaleReceivablesRouter);
 router.use(wholesaleSettlementsRouter);
 router.use(voiceRouter);
 router.use(reminderSettingsRouter);
+router.use(partnerRouter);
 router.use(workOrderFieldProgressRouter);
 
 export default router;

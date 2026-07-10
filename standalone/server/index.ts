@@ -11,6 +11,7 @@ import { ensureAiBriefingMigration } from "./lib/migrations/ensureAiBriefingMigr
 import { ensureUserLineNotificationPrefsMigration } from "./lib/migrations/ensureUserLineNotificationPrefsMigration";
 import { ensureWorkOrderFieldProgressMigration } from "./lib/migrations/ensureWorkOrderFieldProgressMigration";
 import { ensureLinkedEmployeeIdMigration } from "./lib/migrations/ensureLinkedEmployeeIdMigration";
+import { ensurePartnerBoardMigration } from "./lib/migrations/ensurePartnerBoardMigration";
 import { getSpeechService, resolveActiveSpeechProviderId } from "./lib/voice/speech/speechServiceFactory.ts";
 import { startReminderScheduler } from "./lib/reminders/scheduler.ts";
 
@@ -59,5 +60,6 @@ app.listen(port, async (err) => {
   await ensureUserLineNotificationPrefsMigration();
   await ensureWorkOrderFieldProgressMigration();
   await ensureLinkedEmployeeIdMigration();
+  await ensurePartnerBoardMigration();
   startReminderScheduler();
 });

@@ -20,7 +20,7 @@ import {
   ClipboardList,
   ReceiptText,
   Bell,
-  Clock,
+  Heart,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -104,6 +104,12 @@ const NAV_ITEMS: NavItem[] = [
     roles: ["super_admin", "owner", "admin"],
   },
   {
+    href: "/partner-home",
+    label: "❤️ 晟風夥伴",
+    icon: Heart,
+    roles: ["engineer", "technician"],
+  },
+  {
     href: "/work-hours-stats",
     label: "工時統計",
     icon: Clock,
@@ -113,7 +119,7 @@ const NAV_ITEMS: NavItem[] = [
     href: "/reminder-settings",
     label: "AI 小秘書",
     icon: Bell,
-    roles: ["super_admin", "owner", "admin", "sales", "engineer", "technician", "accountant", "distributor"],
+    roles: ["super_admin", "owner", "admin", "sales", "accountant", "distributor"],
   },
   {
     href: "/users",

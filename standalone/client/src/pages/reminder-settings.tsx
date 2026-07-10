@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
+import { Link } from "wouter";
 import { APP_BRAND } from "@/lib/appBrand";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Bell, Loader2, Send, Eye, Save, Link2, CheckCircle2, Sunrise, Moon, Users, Unlink, RefreshCw } from "lucide-react";
+import { Bell, Loader2, Send, Eye, Save, Link2, CheckCircle2, Sunrise, Moon, Users, Unlink, RefreshCw, Heart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -417,6 +418,20 @@ export default function ReminderSettingsPage() {
           AI 小秘書可協助每日晨報、待派工提醒、應收帳款提醒、報價追蹤、晚間提醒等智慧通知。
         </p>
       </div>
+
+      {isAdmin && (
+        <Card className="border-rose-100 bg-gradient-to-r from-rose-50/80 to-amber-50/60">
+          <CardContent className="py-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-sm">
+              <Heart className="h-4 w-4 text-rose-500" />
+              <span>管理工程師首頁「晟風夥伴」的今日一句、公告與掌聲</span>
+            </div>
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/partner-admin">晟風夥伴管理</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {bindingError && (
         <Card className="border-destructive/50">

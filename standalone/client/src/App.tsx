@@ -27,6 +27,8 @@ import WholesaleCustomers from "@/pages/wholesale-customers";
 import WholesaleProducts from "@/pages/wholesale-products";
 import WholesaleOrders from "@/pages/wholesale-orders";
 import WholesaleSettlements from "@/pages/wholesale-settlements";
+import PartnerHome from "@/pages/partner-home";
+import PartnerAdmin from "@/pages/partner-admin";
 import ReminderSettings from "@/pages/reminder-settings";
 import WorkHoursStats from "@/pages/work-hours-stats";
 
@@ -78,7 +80,7 @@ function defaultPathForRole(user: AuthUser): string {
   if (roles.includes("owner") || roles.includes("admin")) return "/";
   if (roles.includes("accountant")) return "/receivables";
   if (roles.includes("sales")) return "/customers";
-  if (roles.includes("engineer") || roles.includes("technician")) return "/engineer-dashboard";
+  if (roles.includes("engineer") || roles.includes("technician")) return "/partner-home";
   if (roles.includes("distributor")) return "/quotes";
   return "/";
 }
@@ -218,8 +220,18 @@ function AppRoutes() {
                 <Employees />
               </RoleGuard>
             </Route>
+            <Route path="/partner-home">
+              <RoleGuard roles={["engineer", "technician"]}>
+                <PartnerHome />
+              </RoleGuard>
+            </Route>
+            <Route path="/partner-admin">
+              <RoleGuard roles={["super_admin", "owner", "admin"]}>
+                <PartnerAdmin />
+              </RoleGuard>
+            </Route>
             <Route path="/reminder-settings">
-              <RoleGuard roles={["super_admin", "owner", "admin", "sales", "engineer", "technician", "accountant", "distributor"]}>
+              <RoleGuard roles={["super_admin", "owner", "admin", "sales", "accountant", "distributor"]}>
                 <ReminderSettings />
               </RoleGuard>
             </Route>
