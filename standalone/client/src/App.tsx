@@ -28,6 +28,7 @@ import WholesaleProducts from "@/pages/wholesale-products";
 import WholesaleOrders from "@/pages/wholesale-orders";
 import WholesaleSettlements from "@/pages/wholesale-settlements";
 import ReminderSettings from "@/pages/reminder-settings";
+import WorkHoursStats from "@/pages/work-hours-stats";
 
 function ComingSoon({ title }: { title: string }) {
   return (
@@ -77,8 +78,7 @@ function defaultPathForRole(user: AuthUser): string {
   if (roles.includes("owner") || roles.includes("admin")) return "/";
   if (roles.includes("accountant")) return "/receivables";
   if (roles.includes("sales")) return "/customers";
-  if (roles.includes("engineer")) return "/engineer-dashboard";
-  if (roles.includes("technician")) return "/work-orders";
+  if (roles.includes("engineer") || roles.includes("technician")) return "/engineer-dashboard";
   if (roles.includes("distributor")) return "/quotes";
   return "/";
 }
@@ -174,8 +174,13 @@ function AppRoutes() {
               </RoleGuard>
             </Route>
             <Route path="/engineer-dashboard">
-              <RoleGuard roles={["super_admin", "owner", "admin", "engineer"]}>
+              <RoleGuard roles={["super_admin", "owner", "admin", "engineer", "technician"]}>
                 <EngineerDashboard />
+              </RoleGuard>
+            </Route>
+            <Route path="/work-hours-stats">
+              <RoleGuard roles={["super_admin", "owner", "admin", "accountant"]}>
+                <WorkHoursStats />
               </RoleGuard>
             </Route>
             <Route path="/products">

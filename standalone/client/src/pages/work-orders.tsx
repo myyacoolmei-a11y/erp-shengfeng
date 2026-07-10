@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useSearch, useLocation } from "wouter";
 import {
   useListWorkOrders, useCreateWorkOrder, useUpdateWorkOrder, useDeleteWorkOrder,
@@ -32,6 +32,7 @@ import type { VoiceAssistantApplyPayload } from "@/components/voice-assistant/ty
 import { PdfPreviewDialog } from "@/components/pdf/pdf-preview-dialog";
 import { handlePdfAction, isMobileDevice, openPrintWindow } from "@/components/pdf/pdf-service";
 import { buildWorkOrderHtml } from "@/components/pdf/templates/WorkOrderTemplate";
+import { FieldProgressDetailSection } from "@/components/field-progress/FieldProgressDetailSection";
 
 const STATUSES = WO_STATUSES;
 
@@ -294,12 +295,13 @@ export default function WorkOrders() {
   const urlParams = new URLSearchParams(search);
   const filterCustomerId = parseInt(urlParams.get("customerId") ?? "0", 10) || null;
   const filterCustomerName = urlParams.get("customerName") ?? "";
+  const expandParam = parseInt(urlParams.get("expand") ?? "0", 10) || null;
 
   const [statusFilter, setStatusFilter] = useState("全部");
   const [showCreate, setShowCreate] = useState(false);
   const [editItem, setEditItem] = useState<any>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
-  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [expandedId, setExpandedId] = useState<number | null>(expandParam);
   const [form, setForm] = useState<WOForm>(makeEmpty());
   const [arModal, setArModal] = useState<{ order: any; amount: string } | null>(null);
   const [pdfPreview, setPdfPreview] = useState<{ url: string; filename: string } | null>(null);
@@ -315,6 +317,10 @@ export default function WorkOrders() {
 
   // Technician options: employees whose position contains "技師" and are active
   const technicianOptions = (employees ?? []).filter(e => e.position?.includes("技師") && e.status !== "離職");
+
+  useEffect(() => {
+    if (expandParam) setExpandedId(expandParam);
+  }, [expandParam]);
 
   const createMutation = useCreateWorkOrder({
     mutation: {
@@ -586,6 +592,7 @@ export default function WorkOrders() {
                   {expandedId === o.id && (
                     <div className="mt-3 space-y-3 border-t pt-3">
                       <WorkOrderDetailSummary order={o} />
+                      <FieldProgressDetailSection workOrderId={o.id} />
                       <ProgressPanel workOrderId={o.id} customerId={o.customerId ?? 0} workOrderTitle={o.workOrderNumber || o.title} />
                     </div>
                   )}

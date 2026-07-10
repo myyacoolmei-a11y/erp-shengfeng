@@ -23,6 +23,7 @@ import wholesaleReceivablesRouter from "./wholesale-receivables";
 import wholesaleSettlementsRouter from "./wholesale-settlements";
 import voiceRouter from "./voice";
 import reminderSettingsRouter from "./reminderSettings";
+import workOrderFieldProgressRouter from "./workOrderFieldProgress";
 import jobsRouter from "./jobs";
 import { authenticate } from "../lib/auth";
 
@@ -56,5 +57,6 @@ router.use(wholesaleReceivablesRouter);
 router.use(wholesaleSettlementsRouter);
 router.use(voiceRouter);
 router.use(reminderSettingsRouter);
+router.use(workOrderFieldProgressRouter);
 
 export default router;

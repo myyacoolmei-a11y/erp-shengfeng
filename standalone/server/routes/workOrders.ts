@@ -13,6 +13,7 @@ import { requireRole } from "../lib/auth";
 import { syncQuoteDispatchStatus } from "../lib/quoteWorkflow";
 import { formatQuoteNumber } from "../lib/quoteStatus";
 import { stripQuotePricingFromNotes } from "../../shared/workOrderNotes.ts";
+import { isWorkOrderAssignedToUser, isFieldProgressOperator, isFieldProgressAdmin } from "../lib/workOrders/fieldProgressUtils.ts";
 
 const router: IRouter = Router();
 
@@ -205,17 +206,27 @@ router.get("/work-orders", requireRole(...WO_READ_ROLES), async (req, res): Prom
   if (status) {
     conditions.push(eq(workOrdersTable.status, status));
   }
-  if (req.user?.role === "technician") {
-    conditions.push(eq(workOrdersTable.assignedTo, req.user.displayName));
-  }
 
-  const orders = await db
+  let orders = await db
     .select(WO_SELECT)
     .from(workOrdersTable)
     .leftJoin(customersTable, eq(workOrdersTable.customerId, customersTable.id))
     .leftJoin(quotesTable, eq(workOrdersTable.quoteId, quotesTable.id))
     .where(conditions.length > 0 ? and(...conditions) : undefined)
     .orderBy(workOrdersTable.createdAt);
+
+  if (
+    req.user &&
+    isFieldProgressOperator(req.user) &&
+    !isFieldProgressAdmin(req.user)
+  ) {
+    orders = orders.filter((o) =>
+      isWorkOrderAssignedToUser(
+        { assignedTo: o.assignedTo, assistantTo: o.assistantTo, technicians: o.technicians },
+        req.user!.displayName,
+      ),
+    );
+  }
 
   const orderIds = orders.map(o => o.id);
   const equipmentByOrder = await fetchEquipmentByWorkOrderIds(orderIds);
@@ -277,7 +288,12 @@ router.get("/work-orders/:id", requireRole(...WO_READ_ROLES), async (req, res): 
 
   if (!order) { res.status(404).json({ error: "找不到派工單" }); return; }
 
-  if (req.user?.role === "technician" && order.assignedTo !== req.user.displayName) {
+  if (
+    req.user &&
+    isFieldProgressOperator(req.user) &&
+    !isFieldProgressAdmin(req.user) &&
+    !isWorkOrderAssignedToUser(order, req.user.displayName)
+  ) {
     res.status(403).json({ error: "您沒有權限查看此派工單" });
     return;
   }
@@ -343,10 +359,21 @@ router.get("/work-orders/:workOrderId/progress", requireRole(...PROGRESS_ROLES),
   const workOrderId = parseInt(raw, 10);
   if (isNaN(workOrderId)) { res.status(400).json({ error: "Invalid workOrderId" }); return; }
 
-  if (req.user?.role === "technician") {
-    const [order] = await db.select({ assignedTo: workOrdersTable.assignedTo })
-      .from(workOrdersTable).where(eq(workOrdersTable.id, workOrderId));
-    if (!order || order.assignedTo !== req.user.displayName) {
+  if (req.user) {
+    const [order] = await db
+      .select({
+        assignedTo: workOrdersTable.assignedTo,
+        assistantTo: workOrdersTable.assistantTo,
+        technicians: workOrdersTable.technicians,
+      })
+      .from(workOrdersTable)
+      .where(eq(workOrdersTable.id, workOrderId));
+    if (
+      !order ||
+      (isFieldProgressOperator(req.user) &&
+        !isFieldProgressAdmin(req.user) &&
+        !isWorkOrderAssignedToUser(order, req.user.displayName))
+    ) {
       res.status(403).json({ error: "您沒有權限查看此工程進度" });
       return;
     }
@@ -365,10 +392,21 @@ router.post("/work-orders/:workOrderId/progress", requireRole(...PROGRESS_ROLES)
   const workOrderId = parseInt(raw, 10);
   if (isNaN(workOrderId)) { res.status(400).json({ error: "Invalid workOrderId" }); return; }
 
-  if (req.user?.role === "technician") {
-    const [order] = await db.select({ assignedTo: workOrdersTable.assignedTo })
-      .from(workOrdersTable).where(eq(workOrdersTable.id, workOrderId));
-    if (!order || order.assignedTo !== req.user.displayName) {
+  if (req.user) {
+    const [order] = await db
+      .select({
+        assignedTo: workOrdersTable.assignedTo,
+        assistantTo: workOrdersTable.assistantTo,
+        technicians: workOrdersTable.technicians,
+      })
+      .from(workOrdersTable)
+      .where(eq(workOrdersTable.id, workOrderId));
+    if (
+      !order ||
+      (isFieldProgressOperator(req.user) &&
+        !isFieldProgressAdmin(req.user) &&
+        !isWorkOrderAssignedToUser(order, req.user.displayName))
+    ) {
       res.status(403).json({ error: "您沒有權限新增此工程進度" });
       return;
     }

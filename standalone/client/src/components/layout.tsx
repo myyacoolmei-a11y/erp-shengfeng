@@ -20,6 +20,7 @@ import {
   ClipboardList,
   ReceiptText,
   Bell,
+  Clock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -45,7 +46,7 @@ const NAV_ITEMS: NavItem[] = [
     href: "/engineer-dashboard",
     label: "儀表板",
     icon: LayoutDashboard,
-    roles: ["engineer"],
+    roles: ["engineer", "technician"],
   },
   {
     href: "/customers",
@@ -102,6 +103,12 @@ const NAV_ITEMS: NavItem[] = [
     roles: ["super_admin", "owner", "admin"],
   },
   {
+    href: "/work-hours-stats",
+    label: "工時統計",
+    icon: Clock,
+    roles: ["super_admin", "owner", "admin", "accountant"],
+  },
+  {
     href: "/reminder-settings",
     label: "AI 收款秘書",
     icon: Bell,
@@ -148,10 +155,10 @@ function NavContent() {
   );
 
   const topItems = visibleItems.filter(
-    (item) => !(["/inventory", "/warranties", "/employees", "/users", "/reminder-settings"].includes(item.href))
+    (item) => !(["/inventory", "/warranties", "/employees", "/users", "/reminder-settings", "/work-hours-stats"].includes(item.href))
   );
   const bottomItems = visibleItems.filter(
-    (item) => ["/warranties", "/employees", "/users", "/inventory", "/reminder-settings"].includes(item.href)
+    (item) => ["/warranties", "/employees", "/users", "/inventory", "/reminder-settings", "/work-hours-stats"].includes(item.href)
   );
 
   function NavLink({ item }: { item: NavItem }) {
