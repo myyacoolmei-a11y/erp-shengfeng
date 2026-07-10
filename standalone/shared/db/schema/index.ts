@@ -23,4 +23,5 @@ export * from "./wholesaleOrders";
 export * from "./wholesaleReceivables";
 export * from "./notificationSettings";
 export * from "./notificationLogs";
+export * from "./lineBindingCodes";
 export * from "./workOrderFieldProgress";

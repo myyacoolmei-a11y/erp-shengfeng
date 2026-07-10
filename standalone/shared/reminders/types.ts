@@ -42,3 +42,19 @@ export interface NotificationSettingsDto {
   linkedErpUserName: string | null;
   pendingLineLink: boolean;
 }
+
+export interface LineBindingCodeResponse {
+  code: string;
+  expiresAt: string;
+  addFriendUrl: string;
+  instruction: string;
+}
+
+export interface LineBindingStatusResponse {
+  status: "none" | "pending" | "bound";
+  lineLinked: boolean;
+  code: string | null;
+  expiresAt: string | null;
+  linkedErpUserName: string | null;
+  lineUserIdMasked: string | null;
+}

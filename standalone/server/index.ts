@@ -5,6 +5,7 @@ import { ensureQuoteDispatchColumn } from "./lib/migrations/ensureQuoteDispatchC
 import { ensureProductCatalogMigration } from "./lib/migrations/ensureProductCatalogMigration";
 import { ensureNotificationSettingsMigration } from "./lib/migrations/ensureNotificationSettingsMigration";
 import { ensureLineIntegrationMigration } from "./lib/migrations/ensureLineIntegrationMigration";
+import { ensureLineBindingCodesMigration } from "./lib/migrations/ensureLineBindingCodesMigration";
 import { ensureWorkOrderFieldProgressMigration } from "./lib/migrations/ensureWorkOrderFieldProgressMigration";
 import { ensureLinkedEmployeeIdMigration } from "./lib/migrations/ensureLinkedEmployeeIdMigration";
 import { getSpeechService, resolveActiveSpeechProviderId } from "./lib/voice/speech/speechServiceFactory.ts";
@@ -49,6 +50,7 @@ app.listen(port, async (err) => {
   await ensureProductCatalogMigration();
   await ensureNotificationSettingsMigration();
   await ensureLineIntegrationMigration();
+  await ensureLineBindingCodesMigration();
   await ensureWorkOrderFieldProgressMigration();
   await ensureLinkedEmployeeIdMigration();
   startReminderScheduler();

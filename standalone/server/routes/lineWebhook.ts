@@ -1,6 +1,10 @@
 import type { Request, Response } from "express";
 import { verifyLineSignature } from "../lib/line/lineSignature.ts";
-import { bindLineUserOnFollow } from "../lib/line/lineUserBinding.ts";
+import {
+  bindLineUserByCode,
+  parseLineBindingMessage,
+  replyLineFollowInstructions,
+} from "../lib/line/lineUserBinding.ts";
 import { isLineMessagingConfigured } from "../lib/line/lineConfig.ts";
 import { logger } from "../lib/logger.ts";
 
@@ -8,6 +12,7 @@ interface LineWebhookEvent {
   type: string;
   replyToken?: string;
   source?: { type?: string; userId?: string };
+  message?: { type?: string; text?: string };
 }
 
 interface LineWebhookBody {
@@ -44,11 +49,22 @@ export async function handleLineWebhook(req: Request, res: Response): Promise<vo
 
   const events = payload.events ?? [];
   for (const event of events) {
-    if (event.type === "follow" && event.source?.userId) {
-      await bindLineUserOnFollow({
-        lineUserId: event.source.userId,
-        replyToken: event.replyToken,
-      });
+    logger.info({ eventType: event.type }, "[LINE Webhook] event type");
+
+    if (event.type === "message" && event.message?.type === "text" && event.source?.userId) {
+      const code = parseLineBindingMessage(event.message.text ?? "");
+      if (code) {
+        await bindLineUserByCode({
+          lineUserId: event.source.userId,
+          code,
+          replyToken: event.replyToken,
+        });
+      }
+      continue;
+    }
+
+    if (event.type === "follow" && event.replyToken) {
+      await replyLineFollowInstructions(event.replyToken);
     }
   }
 

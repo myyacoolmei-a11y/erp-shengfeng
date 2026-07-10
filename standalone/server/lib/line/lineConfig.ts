@@ -27,5 +27,5 @@ export function buildLineAddFriendUrl(accountId?: string): string | null {
   const cleanId = (accountId ?? getLineOfficialAccountId()).trim().replace(/^@/, "");
   if (!cleanId) return null;
 
-  return `https://line.me/R/ti/p/~${cleanId}`;
+  return `https://line.me/R/ti/p/%40${encodeURIComponent(cleanId)}`;
 }

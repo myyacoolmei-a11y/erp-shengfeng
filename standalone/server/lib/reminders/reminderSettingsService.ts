@@ -11,14 +11,16 @@ import { fetchReceivableCollectionReminders } from "./receivableCollectionServic
 import { buildReceivableCollectionMessage } from "./receivableCollectionMessage.ts";
 import { sendLinePushMessage } from "../line/lineMessaging.ts";
 import {
+  buildLineAddFriendUrl,
   getLineChannelAccessToken,
   isLineMessagingConfigured,
   defaultLineWebhookUrl,
 } from "../line/lineConfig.ts";
 import {
+  createLineBindingCode,
   getLineBindingInfo,
+  getLineBindingStatusForUser,
   maskLineUserId,
-  prepareLineLinkForUser,
 } from "../line/lineUserBinding.ts";
 import { taipeiToday } from "./dateUtils.ts";
 
@@ -28,9 +30,14 @@ function resolveAppBaseUrl(settings: { appBaseUrl: string | null }): string {
 
 export async function toSettingsDto(
   row: typeof notificationSettingsTable.$inferSelect,
+  erpUserId?: number,
 ): Promise<NotificationSettingsDto> {
   const binding = await getLineBindingInfo();
   const token = getLineChannelAccessToken();
+  const pendingLineLink =
+    erpUserId != null
+      ? (await getLineBindingStatusForUser(erpUserId)).status === "pending"
+      : false;
 
   return {
     kind: row.kind,
@@ -44,7 +51,7 @@ export async function toSettingsDto(
     lineLinked: Boolean(binding.lineUserId),
     lineUserIdMasked: binding.lineUserId ? maskLineUserId(binding.lineUserId) : "",
     linkedErpUserName: binding.linkedDisplayName,
-    pendingLineLink: Boolean(binding.pendingLinkUserId),
+    pendingLineLink,
   };
 }
 
@@ -56,10 +63,10 @@ export async function getNotificationSettings(kind: string) {
   return row ?? null;
 }
 
-export async function getReceivableCollectionSettingsDto() {
+export async function getReceivableCollectionSettingsDto(erpUserId?: number) {
   const row = await getNotificationSettings(RECEIVABLE_COLLECTION_KIND);
   if (!row) return null;
-  return toSettingsDto(row);
+  return toSettingsDto(row, erpUserId);
 }
 
 export async function updateReceivableCollectionSettings(input: {
@@ -86,16 +93,39 @@ export async function updateReceivableCollectionSettings(input: {
   return toSettingsDto(updated);
 }
 
-export async function prepareReceivableLineLink(erpUserId: number) {
+export async function generateReceivableLineBindingCode(erpUserId: number) {
   if (!isLineMessagingConfigured()) {
     throw new Error("請先在 Railway 設定 LINE_CHANNEL_ACCESS_TOKEN 與 LINE_CHANNEL_SECRET");
   }
-  await prepareLineLinkForUser(erpUserId);
+
+  const addFriendUrl = buildLineAddFriendUrl();
+  if (!addFriendUrl) {
+    throw new Error("尚未設定 LINE 官方帳號 ID");
+  }
+
+  const { code, expiresAt } = await createLineBindingCode(erpUserId);
+  const instruction = `請先加入「晟風小秘書」好友，然後在 LINE 對話輸入：綁定 ${code}`;
+
+  return {
+    code,
+    expiresAt: expiresAt.toISOString(),
+    addFriendUrl,
+    instruction,
+  };
+}
+
+export async function getReceivableLineBindingStatus(erpUserId: number) {
+  return getLineBindingStatusForUser(erpUserId);
+}
+
+/** @deprecated Use generateReceivableLineBindingCode instead. */
+export async function prepareReceivableLineLink(erpUserId: number) {
+  const result = await generateReceivableLineBindingCode(erpUserId);
   return {
     pending: true,
     webhookUrl: defaultLineWebhookUrl(),
-    instructions:
-      "請用手機加入 LINE 官方帳號為好友。加入後系統會自動綁定，無需手動輸入 User ID。",
+    instructions: result.instruction,
+    ...result,
   };
 }
 

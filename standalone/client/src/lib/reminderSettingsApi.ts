@@ -1,5 +1,7 @@
 import { customFetch } from "../../../shared/api-client/custom-fetch.ts";
 import type {
+  LineBindingCodeResponse,
+  LineBindingStatusResponse,
   NotificationSettingsDto,
   ReceivableReminderSummary,
 } from "../../../shared/reminders/types.ts";
@@ -19,14 +21,14 @@ export async function updateReceivableReminderSettings(data: {
   });
 }
 
-export async function prepareReceivableLineLink(): Promise<{
-  pending: boolean;
-  webhookUrl: string;
-  instructions: string;
-}> {
-  return customFetch("/api/reminder-settings/receivable-collection/prepare-line-link", {
+export async function generateReceivableLineBindingCode(): Promise<LineBindingCodeResponse> {
+  return customFetch("/api/reminder-settings/receivable-collection/line-binding-code", {
     method: "POST",
   });
+}
+
+export async function getReceivableLineBindingStatus(): Promise<LineBindingStatusResponse> {
+  return customFetch("/api/reminder-settings/receivable-collection/line-binding-status");
 }
 
 export async function getLinePublicConfig(): Promise<{ addFriendUrl: string | null }> {
@@ -68,4 +70,9 @@ export async function listReceivableReminderLogs(): Promise<NotificationLogItem[
   return customFetch("/api/reminder-settings/receivable-collection/logs");
 }
 
-export type { NotificationSettingsDto, ReceivableReminderSummary };
+export type {
+  LineBindingCodeResponse,
+  LineBindingStatusResponse,
+  NotificationSettingsDto,
+  ReceivableReminderSummary,
+};
