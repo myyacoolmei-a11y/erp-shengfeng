@@ -1,10 +1,15 @@
 import { eq } from "drizzle-orm";
-import { db, employeesTable } from "@workspace/db";
+import { db, employeesTable, workOrderFieldProgressTable } from "@workspace/db";
 import type { JwtPayload } from "../auth.ts";
 import { effectiveRoles } from "../auth.ts";
 import { logger } from "../logger";
+import {
+  isDataPermissionBypassRole,
+  shouldApplyOwnDataFilter,
+} from "../../../shared/userPermissions.ts";
 
 export interface WorkOrderAssignmentFields {
+  id?: number;
   assignedTo: string | null;
   assistantTo: string | null;
   technicians: string | null;
@@ -16,9 +21,12 @@ export interface UserAssignmentContext {
   username: string;
   roles: string[];
   linkedEmployeeId: number | null;
-  /** Employee name keys — only populated when linkedEmployeeId is set */
-  matchKeys: string[];
+  /** 關聯員工姓名 — own 權限主要比對依據 */
   employeeNames: string[];
+  /** 舊資料備援：僅在已關聯員工時，以 displayName 比對指派欄位 */
+  legacyNameKeys: string[];
+  /** 工程進度表中以 userId 綁定的派工單 */
+  progressWorkOrderIds: Set<number>;
 }
 
 function normalizeKey(value: unknown): string | null {
@@ -66,22 +74,17 @@ export function isFieldProgressAdmin(user: JwtPayload): boolean {
   return isWorkOrderListAdmin(user) || roles.includes("accountant");
 }
 
-/**
- * Only filter work orders when engineer/technician has linkedEmployeeId.
- * Shared engineer accounts (no link) see all work orders.
- */
+/** Filter work orders when dataPermission = own (admin roles bypass). */
 export function shouldFilterWorkOrdersByAssignment(user: JwtPayload): boolean {
-  if (isWorkOrderListAdmin(user)) return false;
-  if (!isEngineerRole(user)) return false;
-  return getLinkedEmployeeId(user) != null;
+  return shouldApplyOwnDataFilter(user);
 }
 
-/** Build assignment context — matchKeys only when linkedEmployeeId is set. */
+/** Build assignment context — linkedEmployeeId / userId 優先，姓名僅作舊資料備援 */
 export async function buildUserAssignmentContext(user: JwtPayload): Promise<UserAssignmentContext> {
   const roles = effectiveRoles(user);
   const linkedEmployeeId = getLinkedEmployeeId(user);
-  const matchKeys: string[] = [];
   const employeeNames: string[] = [];
+  const legacyNameKeys: string[] = [];
 
   if (linkedEmployeeId != null) {
     const [emp] = await db
@@ -92,9 +95,21 @@ export async function buildUserAssignmentContext(user: JwtPayload): Promise<User
     const name = normalizeKey(emp?.name);
     if (name) {
       employeeNames.push(name);
-      matchKeys.push(name);
+    }
+    // 舊資料備援：已關聯員工但派工單仍用 displayName 指派
+    if (shouldApplyOwnDataFilter(user)) {
+      const displayName = normalizeKey(user.displayName);
+      if (displayName && !employeeNames.includes(displayName)) {
+        legacyNameKeys.push(displayName);
+      }
     }
   }
+
+  const progressRows = await db
+    .select({ workOrderId: workOrderFieldProgressTable.workOrderId })
+    .from(workOrderFieldProgressTable)
+    .where(eq(workOrderFieldProgressTable.engineerUserId, user.id));
+  const progressWorkOrderIds = new Set(progressRows.map(r => r.workOrderId));
 
   return {
     userId: user.id,
@@ -102,8 +117,9 @@ export async function buildUserAssignmentContext(user: JwtPayload): Promise<User
     username: normalizeKey(user.username) ?? "",
     roles,
     linkedEmployeeId,
-    matchKeys,
     employeeNames,
+    legacyNameKeys,
+    progressWorkOrderIds,
   };
 }
 
@@ -125,8 +141,11 @@ export function isWorkOrderAssignedToContext(
   order: WorkOrderAssignmentFields,
   ctx: UserAssignmentContext,
 ): boolean {
-  for (const key of ctx.matchKeys) {
-    if (isWorkOrderAssignedToEmployeeName(order, key)) return true;
+  for (const name of ctx.employeeNames) {
+    if (isWorkOrderAssignedToEmployeeName(order, name)) return true;
+  }
+  for (const name of ctx.legacyNameKeys) {
+    if (isWorkOrderAssignedToEmployeeName(order, name)) return true;
   }
   return false;
 }
@@ -136,12 +155,19 @@ export function canUserAccessWorkOrder(
   order: WorkOrderAssignmentFields,
   ctx: UserAssignmentContext,
 ): boolean {
-  if (isWorkOrderListAdmin(user)) return true;
-  if (isEngineerRole(user) && getLinkedEmployeeId(user) == null) return true;
-  if (shouldFilterWorkOrdersByAssignment(user)) {
-    return isWorkOrderAssignedToContext(order, ctx);
+  if (isDataPermissionBypassRole(effectiveRoles(user))) return true;
+  if (!shouldApplyOwnDataFilter(user)) return true;
+
+  const workOrderId = order.id;
+  if (workOrderId != null && ctx.progressWorkOrderIds.has(workOrderId)) {
+    return true;
   }
-  return true;
+
+  if (ctx.linkedEmployeeId != null) {
+    if (isWorkOrderAssignedToContext(order, ctx)) return true;
+  }
+
+  return false;
 }
 
 export function describeWorkOrderListQuery(params: {

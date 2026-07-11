@@ -204,6 +204,17 @@ export function hasFeaturePermission(user: PermissionUserLike, feature: FeatureK
   return resolveFeaturePermissions(user).includes(feature);
 }
 
+export function isDataPermissionBypassRole(roles: string[]): boolean {
+  return roles.includes("super_admin") || roles.includes("owner") || roles.includes("admin");
+}
+
+/** dataPermission=own 且非 admin 角色時，僅能看自己的資料 */
+export function shouldApplyOwnDataFilter(user: PermissionUserLike): boolean {
+  const roles = effectiveRolesFromUser(user);
+  if (isDataPermissionBypassRole(roles)) return false;
+  return resolveDataPermission(user) === "own";
+}
+
 /** Map nav href to required feature (for sidebar filtering) */
 export const NAV_HREF_FEATURES: Record<string, FeatureKey | FeatureKey[]> = {
   "/": "home",

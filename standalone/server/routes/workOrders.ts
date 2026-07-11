@@ -22,6 +22,7 @@ import {
   logWorkOrderAccess,
   deriveAssignedFromTechnicians,
 } from "../lib/workOrders/workOrderAssignment.ts";
+import { assertWorkOrderDataAccess } from "../lib/dataPermissionAccess.ts";
 
 const router: IRouter = Router();
 
@@ -241,7 +242,7 @@ router.get("/work-orders", requireRole(...WO_READ_ROLES), async (req, res): Prom
     orders = orders.filter((o) =>
       canUserAccessWorkOrder(
         req.user!,
-        { assignedTo: o.assignedTo, assistantTo: o.assistantTo, technicians: o.technicians },
+        { id: o.id, assignedTo: o.assignedTo, assistantTo: o.assistantTo, technicians: o.technicians },
         assignmentContext!,
       ),
     );
@@ -353,6 +354,22 @@ router.patch("/work-orders/:id", requireRole(...WO_WRITE_ROLES), async (req, res
   const id = parseInt(raw, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
+  const [existing] = await db
+    .select({
+      id: workOrdersTable.id,
+      assignedTo: workOrdersTable.assignedTo,
+      assistantTo: workOrdersTable.assistantTo,
+      technicians: workOrdersTable.technicians,
+    })
+    .from(workOrdersTable)
+    .where(eq(workOrdersTable.id, id));
+  if (!existing) { res.status(404).json({ error: "找不到派工單" }); return; }
+
+  if (req.user) {
+    const access = await assertWorkOrderDataAccess(req.user, existing);
+    if (!access.ok) { res.status(403).json({ error: access.message }); return; }
+  }
+
   const parsed = UpdateWorkOrderBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
@@ -392,6 +409,22 @@ router.delete("/work-orders/:id", requireRole(...WO_DELETE_ROLES), async (req, r
   const id = parseInt(raw, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
+  const [existing] = await db
+    .select({
+      id: workOrdersTable.id,
+      assignedTo: workOrdersTable.assignedTo,
+      assistantTo: workOrdersTable.assistantTo,
+      technicians: workOrdersTable.technicians,
+    })
+    .from(workOrdersTable)
+    .where(eq(workOrdersTable.id, id));
+  if (!existing) { res.status(404).json({ error: "找不到派工單" }); return; }
+
+  if (req.user) {
+    const access = await assertWorkOrderDataAccess(req.user, existing);
+    if (!access.ok) { res.status(403).json({ error: access.message }); return; }
+  }
+
   const [order] = await db.delete(workOrdersTable).where(eq(workOrdersTable.id, id)).returning();
   if (!order) { res.status(404).json({ error: "找不到派工單" }); return; }
   if (order.quoteId) {
@@ -415,7 +448,7 @@ router.get("/work-orders/:workOrderId/progress", requireRole(...PROGRESS_ROLES),
       .from(workOrdersTable)
       .where(eq(workOrdersTable.id, workOrderId));
     const ctx = await buildUserAssignmentContext(req.user);
-    if (!order || !canUserAccessWorkOrder(req.user, order, ctx)) {
+    if (!order || !canUserAccessWorkOrder(req.user, { id: workOrderId, ...order }, ctx)) {
       res.status(403).json({ error: "您沒有權限查看此工程進度" });
       return;
     }
@@ -444,7 +477,7 @@ router.post("/work-orders/:workOrderId/progress", requireRole(...PROGRESS_ROLES)
       .from(workOrdersTable)
       .where(eq(workOrdersTable.id, workOrderId));
     const ctx = await buildUserAssignmentContext(req.user);
-    if (!order || !canUserAccessWorkOrder(req.user, order, ctx)) {
+    if (!order || !canUserAccessWorkOrder(req.user, { id: workOrderId, ...order }, ctx)) {
       res.status(403).json({ error: "您沒有權限新增此工程進度" });
       return;
     }

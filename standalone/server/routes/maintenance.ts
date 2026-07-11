@@ -1,8 +1,12 @@
 import { Router, type IRouter } from "express";
-import { eq, and, lte } from "drizzle-orm";
+import { eq, and, lte, inArray } from "drizzle-orm";
 import { db, maintenanceRemindersTable, customersTable } from "@workspace/db";
 import { CreateMaintenanceReminderBody, UpdateMaintenanceReminderBody } from "@workspace/api-zod";
 import { requireRole } from "../lib/auth";
+import {
+  getAssignedCustomerIds,
+  assertMaintenanceReminderDataAccess,
+} from "../lib/dataPermissionAccess.ts";
 
 const router: IRouter = Router();
 
@@ -25,6 +29,17 @@ router.get("/maintenance-reminders", requireRole(...READ_ROLES), async (req, res
     const inThirtyDays = new Date();
     inThirtyDays.setDate(inThirtyDays.getDate() + 30);
     conditions.push(lte(maintenanceRemindersTable.reminderDate, inThirtyDays.toISOString().split("T")[0]));
+  }
+
+  if (req.user) {
+    const allowedCustomerIds = await getAssignedCustomerIds(req.user);
+    if (allowedCustomerIds !== null) {
+      if (allowedCustomerIds.size === 0) {
+        res.json([]);
+        return;
+      }
+      conditions.push(inArray(maintenanceRemindersTable.customerId, [...allowedCustomerIds]));
+    }
   }
 
   const reminders = await db
@@ -91,6 +106,12 @@ router.get("/maintenance-reminders/:id", requireRole(...READ_ROLES), async (req,
     res.status(404).json({ error: "找不到保養提醒" });
     return;
   }
+
+  if (req.user) {
+    const access = await assertMaintenanceReminderDataAccess(req.user, reminder.customerId);
+    if (!access.ok) { res.status(403).json({ error: access.message }); return; }
+  }
+
   res.json({
     ...reminder,
     createdAt: reminder.createdAt instanceof Date ? reminder.createdAt.toISOString() : reminder.createdAt,
@@ -103,6 +124,20 @@ router.patch("/maintenance-reminders/:id", requireRole(...PATCH_ROLES), async (r
   if (isNaN(id)) {
     res.status(400).json({ error: "Invalid id" });
     return;
+  }
+
+  const [existing] = await db
+    .select({ customerId: maintenanceRemindersTable.customerId })
+    .from(maintenanceRemindersTable)
+    .where(eq(maintenanceRemindersTable.id, id));
+  if (!existing) {
+    res.status(404).json({ error: "找不到保養提醒" });
+    return;
+  }
+
+  if (req.user) {
+    const access = await assertMaintenanceReminderDataAccess(req.user, existing.customerId);
+    if (!access.ok) { res.status(403).json({ error: access.message }); return; }
   }
 
   const role = req.user?.role;
@@ -135,6 +170,21 @@ router.delete("/maintenance-reminders/:id", requireRole(...DELETE_ROLES), async 
     res.status(400).json({ error: "Invalid id" });
     return;
   }
+
+  const [existing] = await db
+    .select({ customerId: maintenanceRemindersTable.customerId })
+    .from(maintenanceRemindersTable)
+    .where(eq(maintenanceRemindersTable.id, id));
+  if (!existing) {
+    res.status(404).json({ error: "找不到保養提醒" });
+    return;
+  }
+
+  if (req.user) {
+    const access = await assertMaintenanceReminderDataAccess(req.user, existing.customerId);
+    if (!access.ok) { res.status(403).json({ error: access.message }); return; }
+  }
+
   const [reminder] = await db.delete(maintenanceRemindersTable).where(eq(maintenanceRemindersTable.id, id)).returning();
   if (!reminder) {
     res.status(404).json({ error: "找不到保養提醒" });

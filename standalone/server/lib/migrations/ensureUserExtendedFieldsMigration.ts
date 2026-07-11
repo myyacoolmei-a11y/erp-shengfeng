@@ -1,6 +1,6 @@
 import { pool } from "@workspace/db";
 import { logger } from "../logger";
-import { resolveFeaturePermissions, resolveDataPermission } from "../../shared/userPermissions.ts";
+import { resolveFeaturePermissions, resolveDataPermission } from "../../../shared/userPermissions.ts";
 
 /** Idempotent: extended user profile + permission columns */
 export async function ensureUserExtendedFieldsMigration(): Promise<boolean> {

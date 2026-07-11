@@ -9,6 +9,12 @@ import {
 } from "@workspace/db";
 import { CreateRepairCaseBody, UpdateRepairCaseBody } from "@workspace/api-zod";
 import { requireRole } from "../lib/auth";
+import { shouldApplyOwnDataFilter } from "../../shared/userPermissions.ts";
+import { buildUserAssignmentContext } from "../lib/workOrders/workOrderAssignment.ts";
+import {
+  canAccessRepairCase,
+  assertRepairCaseDataAccess,
+} from "../lib/dataPermissionAccess.ts";
 
 const router: IRouter = Router();
 
@@ -120,7 +126,13 @@ router.get("/repair-cases", requireRole(...READ_ROLES), async (req, res): Promis
     .where(conditions.length > 0 ? and(...conditions) : undefined)
     .orderBy(desc(repairCasesTable.createdAt));
 
-  res.json(rows.map(mapRepairCase));
+  let filtered = rows;
+  if (req.user && shouldApplyOwnDataFilter(req.user)) {
+    const ctx = await buildUserAssignmentContext(req.user);
+    filtered = rows.filter(r => canAccessRepairCase(req.user!, r, ctx));
+  }
+
+  res.json(filtered.map(mapRepairCase));
 });
 
 router.post("/repair-cases", requireRole(...WRITE_ROLES), async (req, res): Promise<void> => {
@@ -183,6 +195,11 @@ router.get("/repair-cases/:id", requireRole(...READ_ROLES), async (req, res): Pr
 
   if (!row) { res.status(404).json({ error: "找不到維修案件" }); return; }
 
+  if (req.user) {
+    const access = await assertRepairCaseDataAccess(req.user, row);
+    if (!access.ok) { res.status(403).json({ error: access.message }); return; }
+  }
+
   const photoRows = await loadPhotos(id);
   res.json({
     ...mapRepairCase(row),
@@ -200,6 +217,19 @@ router.patch("/repair-cases/:id", requireRole(...PATCH_ROLES), async (req, res):
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const [existing] = await db
+    .select(caseSelect)
+    .from(repairCasesTable)
+    .leftJoin(customersTable, eq(repairCasesTable.customerId, customersTable.id))
+    .leftJoin(employeesTable, eq(repairCasesTable.employeeId, employeesTable.id))
+    .where(eq(repairCasesTable.id, id));
+  if (!existing) { res.status(404).json({ error: "找不到維修案件" }); return; }
+
+  if (req.user) {
+    const access = await assertRepairCaseDataAccess(req.user, existing);
+    if (!access.ok) { res.status(403).json({ error: access.message }); return; }
+  }
 
   const parsed = UpdateRepairCaseBody.safeParse(req.body);
   if (!parsed.success) {
@@ -249,6 +279,19 @@ router.delete("/repair-cases/:id", requireRole(...DELETE_ROLES), async (req, res
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const [existing] = await db
+    .select(caseSelect)
+    .from(repairCasesTable)
+    .leftJoin(customersTable, eq(repairCasesTable.customerId, customersTable.id))
+    .leftJoin(employeesTable, eq(repairCasesTable.employeeId, employeesTable.id))
+    .where(eq(repairCasesTable.id, id));
+  if (!existing) { res.status(404).json({ error: "找不到維修案件" }); return; }
+
+  if (req.user) {
+    const access = await assertRepairCaseDataAccess(req.user, existing);
+    if (!access.ok) { res.status(403).json({ error: access.message }); return; }
+  }
 
   const [deleted] = await db.delete(repairCasesTable).where(eq(repairCasesTable.id, id)).returning();
   if (!deleted) { res.status(404).json({ error: "找不到維修案件" }); return; }
