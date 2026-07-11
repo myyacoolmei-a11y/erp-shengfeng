@@ -10,12 +10,14 @@ import {
   markAllNotificationsRead,
   upsertPushSubscription,
   deletePushSubscription,
+  listPushSubscriptionsForUser,
 } from "../lib/notifications/fieldProgressNotifyService";
 import {
   getUserNotificationPrefs,
   updateUserNotificationPrefs,
 } from "../lib/notifications/notificationService";
 import { getVapidPublicKey, isWebPushConfigured } from "../lib/notifications/webPushService";
+import { sendTestWebPushForUser } from "../lib/notifications/webPushTestService";
 
 const router: IRouter = Router();
 const ADMIN_ROLES = ["super_admin", "owner", "admin"];
@@ -104,14 +106,64 @@ router.post("/notifications/push/subscribe", async (req, res): Promise<void> => 
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  await upsertPushSubscription(req.user!.id, {
+  const userId = req.user!.id;
+  const saved = await upsertPushSubscription(userId, {
     endpoint: parsed.data.endpoint,
     p256dh: parsed.data.keys.p256dh,
     auth: parsed.data.keys.auth,
     userAgent: req.headers["user-agent"],
     deviceName: parsed.data.deviceName,
   });
-  res.status(201).json({ ok: true });
+
+  const all = await listPushSubscriptionsForUser(userId);
+  const verified = all.some(s => s.endpoint === parsed.data.endpoint && s.enabled);
+
+  res.status(201).json({
+    ok: true,
+    verified,
+    dbCount: all.filter(s => s.enabled).length,
+    subscription: {
+      id: saved.id,
+      endpoint: saved.endpoint.slice(0, 48) + "…",
+      deviceName: saved.deviceName,
+      enabled: saved.enabled,
+    },
+  });
+});
+
+router.get("/notifications/push/subscriptions", async (req, res): Promise<void> => {
+  const rows = await listPushSubscriptionsForUser(req.user!.id);
+  res.json({
+    subscriptions: rows.map(r => ({
+      id: r.id,
+      endpoint: r.endpoint,
+      deviceName: r.deviceName,
+      enabled: r.enabled,
+      createdAt: r.createdAt.toISOString(),
+      updatedAt: r.updatedAt.toISOString(),
+      lastUsedAt: r.lastUsedAt?.toISOString() ?? null,
+    })),
+  });
+});
+
+/** Server-side Web Push test — does NOT create in-app notifications */
+router.post("/notifications/push/test", async (req, res): Promise<void> => {
+  if (!isWebPushConfigured()) {
+    res.status(503).json({
+      vapidConfigured: false,
+      foundCount: 0,
+      sentCount: 0,
+      successCount: 0,
+      failCount: 0,
+      results: [],
+      overallSuccess: false,
+      message: "伺服器 VAPID 金鑰未設定，無法發送 Web Push",
+    });
+    return;
+  }
+
+  const result = await sendTestWebPushForUser(req.user!.id);
+  res.json(result);
 });
 
 router.delete("/notifications/push/subscribe", async (req, res): Promise<void> => {

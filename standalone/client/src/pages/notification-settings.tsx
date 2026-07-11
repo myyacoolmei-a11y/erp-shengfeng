@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { Bell, Smartphone, Loader2 } from "lucide-react";
+import { Bell, Smartphone, Loader2, RefreshCw, Send, Wrench } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -11,26 +11,119 @@ import { usePwaInstall } from "@/hooks/use-pwa-install";
 import {
   fetchNotificationPrefs,
   updateNotificationPrefs,
-  subscribeWebPush,
 } from "@/lib/notificationsApi";
+import {
+  collectWebPushDiagnostics,
+  runPushSubscribeFlow,
+  reregisterServiceWorker,
+  sendServerTestPush,
+  type WebPushDiagnosticState,
+  type WebPushTestResult,
+} from "@/lib/webPushDiagnostics";
 
 const PREFS_KEY = ["notification-prefs"];
 
-function isIosSafari(): boolean {
-  if (typeof navigator === "undefined") return false;
-  return /iPhone|iPad|iPod/i.test(navigator.userAgent) && !(window as unknown as { MSStream?: unknown }).MSStream;
+function yn(v: boolean): string {
+  return v ? "是" : "否";
 }
 
-function isStandalonePwa(): boolean {
-  return window.matchMedia("(display-mode: standalone)").matches
-    || (navigator as Navigator & { standalone?: boolean }).standalone === true;
+function DiagRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between gap-4 text-sm py-1 border-b border-border/50 last:border-0">
+      <span className="text-muted-foreground shrink-0">{label}</span>
+      <span className="font-medium text-right break-all">{value}</span>
+    </div>
+  );
+}
+
+function DiagnosticPanel({
+  diag,
+  testResult,
+}: {
+  diag: WebPushDiagnosticState | null;
+  testResult: WebPushTestResult | null;
+}) {
+  if (!diag) return <p className="text-sm text-muted-foreground">診斷載入中…</p>;
+
+  const pushSubLabel = diag.pushSubscriptionExists ? "存在" : "不存在";
+  const dbSavedLabel = diag.subscriptionSavedInDb ? "是" : "否";
+  const permLabel = diag.notificationPermission;
+
+  let sendResult = "尚未測試";
+  let statusCode = "—";
+  let errorContent = "—";
+
+  if (testResult) {
+    if (testResult.foundCount === 0) {
+      sendResult = "失敗";
+      errorContent = "此手機尚未完成推播訂閱";
+    } else if (testResult.overallSuccess) {
+      sendResult = "成功";
+    } else {
+      sendResult = "失敗";
+    }
+    const failed = testResult.results.find(r => !r.success);
+    statusCode = failed?.statusCode != null ? String(failed.statusCode) : (testResult.overallSuccess ? "201" : "—");
+    errorContent = failed?.errorMessage ?? (testResult.overallSuccess ? "—" : testResult.message);
+  }
+
+  return (
+    <div className="rounded-lg border bg-muted/30 p-4 space-y-1">
+      <p className="font-semibold text-sm mb-2">Web Push 診斷</p>
+      <DiagRow label="PWA standalone" value={yn(diag.pwaStandalone)} />
+      <DiagRow label="Service Worker ready" value={yn(diag.serviceWorkerReady)} />
+      <DiagRow label="Service Worker controller" value={yn(diag.serviceWorkerController)} />
+      <DiagRow label="push-sw.js 可載入" value={yn(diag.pushSwScriptReachable)} />
+      <DiagRow label="Notification permission" value={permLabel} />
+      <DiagRow label="Push subscription" value={pushSubLabel} />
+      <DiagRow label="Subscription 已存資料庫" value={dbSavedLabel} />
+      <DiagRow label="後端找到裝置數" value={String(diag.dbEnabledCount)} />
+      <DiagRow label="Web Push 發送結果" value={sendResult} />
+      <DiagRow label="錯誤狀態碼" value={statusCode} />
+      <DiagRow label="錯誤內容" value={errorContent} />
+      {testResult && testResult.foundCount > 0 && (
+        <div className="mt-3 pt-2 border-t text-xs space-y-1">
+          <p className="font-medium">測試推播明細</p>
+          <p>找到 {testResult.foundCount} 筆 · 發送 {testResult.sentCount} 筆 · 成功 {testResult.successCount} · 失敗 {testResult.failCount}</p>
+          {testResult.results.map(r => (
+            <p key={r.subscriptionId} className="text-muted-foreground break-all">
+              #{r.subscriptionId} {r.deviceName ?? "裝置"} — {r.success ? "成功" : `失敗 (${r.statusCode ?? "?"})`}{r.deleted ? " [已刪除失效訂閱]" : ""}
+              {r.errorMessage ? ` · ${r.errorMessage}` : ""}
+            </p>
+          ))}
+        </div>
+      )}
+      {diag.errors.length > 0 && (
+        <div className="mt-2 pt-2 border-t text-xs text-amber-800 space-y-0.5">
+          {diag.errors.map(e => <p key={e}>⚠ {e}</p>)}
+        </div>
+      )}
+      {diag.serviceWorkerScriptUrl && (
+        <p className="text-[10px] text-muted-foreground mt-2 break-all">SW: {diag.serviceWorkerScriptUrl}</p>
+      )}
+    </div>
+  );
 }
 
 export default function NotificationSettingsPage() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const { isIos } = usePwaInstall();
+  const [diag, setDiag] = useState<WebPushDiagnosticState | null>(null);
+  const [testResult, setTestResult] = useState<WebPushTestResult | null>(null);
   const [pushBusy, setPushBusy] = useState(false);
+  const [testBusy, setTestBusy] = useState(false);
+  const [swBusy, setSwBusy] = useState(false);
+
+  const refreshDiagnostics = useCallback(async () => {
+    const d = await collectWebPushDiagnostics();
+    setDiag(d);
+    return d;
+  }, []);
+
+  useEffect(() => {
+    void refreshDiagnostics();
+  }, [refreshDiagnostics]);
 
   const { data: prefs, isLoading } = useQuery({
     queryKey: PREFS_KEY,
@@ -48,23 +141,63 @@ export default function NotificationSettingsPage() {
 
   async function handleEnablePush() {
     setPushBusy(true);
+    setTestResult(null);
     try {
-      const result = await subscribeWebPush();
+      const result = await runPushSubscribeFlow(isIos ? "iPhone" : undefined);
+      setDiag(result.diagnostics);
       if (result.ok) {
-        toast({ title: "手機推播已開啟" });
+        toast({ title: result.message });
         qc.invalidateQueries({ queryKey: PREFS_KEY });
-      } else if (result.reason === "denied") {
-        toast({
-          title: "無法開啟通知",
-          description: result.message,
-          variant: "destructive",
-        });
       } else {
-        toast({ title: result.message ?? "推播設定失敗", variant: "destructive" });
+        toast({ title: result.message, variant: "destructive" });
       }
     } finally {
       setPushBusy(false);
     }
+  }
+
+  async function handleTestPush() {
+    setTestBusy(true);
+    try {
+      await refreshDiagnostics();
+      const result = await sendServerTestPush();
+      setTestResult(result);
+      await refreshDiagnostics();
+      qc.invalidateQueries({ queryKey: PREFS_KEY });
+
+      if (result.foundCount === 0) {
+        toast({
+          title: "此手機尚未完成推播訂閱",
+          description: "請先按「訂閱並儲存推播」",
+          variant: "destructive",
+        });
+      } else if (result.overallSuccess) {
+        toast({
+          title: "測試推播已發送",
+          description: `成功 ${result.successCount}/${result.sentCount} 筆。請關閉 ERP 後查看鎖定畫面。`,
+        });
+      } else {
+        toast({
+          title: "測試推播失敗",
+          description: result.results.find(r => !r.success)?.errorMessage ?? result.message,
+          variant: "destructive",
+        });
+      }
+    } catch (err) {
+      toast({
+        title: "測試推播失敗",
+        description: err instanceof Error ? err.message : String(err),
+        variant: "destructive",
+      });
+    } finally {
+      setTestBusy(false);
+    }
+  }
+
+  async function handleReregisterSw() {
+    setSwBusy(true);
+    toast({ title: "正在重新註冊 Service Worker…", description: "頁面將重新載入" });
+    await reregisterServiceWorker();
   }
 
   const permission = typeof Notification !== "undefined" ? Notification.permission : "default";
@@ -73,13 +206,83 @@ export default function NotificationSettingsPage() {
     <div className="space-y-6 max-w-2xl">
       <div>
         <h1 className="text-2xl font-bold tracking-tight">通知設定</h1>
-        <p className="text-muted-foreground text-sm mt-1">管理站內通知、手機推播與 LINE 通知偏好</p>
+        <p className="text-muted-foreground text-sm mt-1">Web Push 診斷、訂閱與伺服器測試推播</p>
       </div>
 
       <Card>
         <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Wrench className="h-4 w-4" />
+            Web Push 診斷與測試
+          </CardTitle>
+          <CardDescription>
+            測試推播由伺服器 web-push 發送，不會只新增站內小鈴鐺通知
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <DiagnosticPanel diag={diag} testResult={testResult} />
+
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" onClick={() => void refreshDiagnostics()}>
+              <RefreshCw className="h-4 w-4 mr-1" />重新診斷
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleEnablePush}
+              disabled={pushBusy || !prefs?.webPushConfigured}
+            >
+              {pushBusy ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Bell className="h-4 w-4 mr-1" />}
+              訂閱並儲存推播
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={handleTestPush}
+              disabled={testBusy || !prefs?.webPushConfigured}
+            >
+              {testBusy ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Send className="h-4 w-4 mr-1" />}
+              測試推播（伺服器）
+            </Button>
+            <Button size="sm" variant="outline" onClick={handleReregisterSw} disabled={swBusy}>
+              {swBusy ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <RefreshCw className="h-4 w-4 mr-1" />}
+              重載 Service Worker
+            </Button>
+          </div>
+
+          {!prefs?.webPushConfigured && (
+            <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
+              伺服器尚未設定 VAPID 金鑰（VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY / VAPID_SUBJECT）
+            </p>
+          )}
+
+          {(isIos || /iPhone|iPad/i.test(navigator.userAgent)) && !diag?.pwaStandalone && (
+            <div className="text-sm bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-2 text-blue-900">
+              <p className="font-semibold">iPhone 必要步驟（display: standalone）</p>
+              <ol className="list-decimal list-inside space-y-1 text-xs">
+                <li>使用 Safari 開啟 ERP</li>
+                <li>分享 → 加入主畫面</li>
+                <li>從主畫面圖示開啟（非 Safari 分頁）</li>
+                <li>按「訂閱並儲存推播」→ 允許通知</li>
+                <li>按「測試推播」後關閉 ERP 查看鎖定畫面</li>
+              </ol>
+            </div>
+          )}
+
+          {permission === "denied" && (
+            <div className="text-sm bg-red-50 border border-red-200 rounded-lg p-3 text-red-900">
+              <p className="font-semibold">通知權限已被拒絕</p>
+              <p className="text-xs mt-1">
+                iPhone：設定 → 通知 → 晟風 ERP → 允許通知<br />
+                Android：設定 → 應用程式 → Chrome / PWA → 通知
+              </p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle className="text-base">通知管道</CardTitle>
-          <CardDescription>依需求開啟或關閉各管道（不影響派工操作）</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {isLoading ? (
@@ -87,37 +290,19 @@ export default function NotificationSettingsPage() {
           ) : (
             <>
               <div className="flex items-center justify-between rounded-lg border p-3">
-                <div>
-                  <Label>ERP 站內通知</Label>
-                  <p className="text-xs text-muted-foreground">右上角鈴鐺顯示</p>
-                </div>
-                <Switch
-                  checked={prefs?.notifyInApp ?? true}
-                  onCheckedChange={v => updateMut.mutate({ notifyInApp: v })}
-                />
+                <div><Label>ERP 站內通知</Label></div>
+                <Switch checked={prefs?.notifyInApp ?? true} onCheckedChange={v => updateMut.mutate({ notifyInApp: v })} />
               </div>
               <div className="flex items-center justify-between rounded-lg border p-3">
-                <div>
-                  <Label>手機系統推播</Label>
-                  <p className="text-xs text-muted-foreground">鎖定畫面推播（需先訂閱）</p>
-                </div>
-                <Switch
-                  checked={prefs?.notifyWebPush ?? true}
-                  onCheckedChange={v => updateMut.mutate({ notifyWebPush: v })}
-                />
+                <div><Label>手機系統推播</Label></div>
+                <Switch checked={prefs?.notifyWebPush ?? true} onCheckedChange={v => updateMut.mutate({ notifyWebPush: v })} />
               </div>
               <div className="flex items-center justify-between rounded-lg border p-3">
                 <div>
                   <Label>LINE 通知</Label>
-                  <p className="text-xs text-muted-foreground">
-                    {prefs?.lineBound ? `已綁定：${prefs.lineDisplayName ?? "LINE"}` : "尚未綁定 LINE"}
-                  </p>
+                  <p className="text-xs text-muted-foreground">{prefs?.lineBound ? "已綁定" : "未綁定"}</p>
                 </div>
-                <Switch
-                  checked={prefs?.notifyLine ?? true}
-                  disabled={!prefs?.lineBound}
-                  onCheckedChange={v => updateMut.mutate({ notifyLine: v })}
-                />
+                <Switch checked={prefs?.notifyLine ?? true} disabled={!prefs?.lineBound} onCheckedChange={v => updateMut.mutate({ notifyLine: v })} />
               </div>
             </>
           )}
@@ -128,51 +313,18 @@ export default function NotificationSettingsPage() {
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
             <Smartphone className="h-4 w-4" />
-            手機系統推播
+            已訂閱裝置（資料庫）
           </CardTitle>
-          <CardDescription>點擊下方按鈕才會要求通知權限，不會自動跳出</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {!prefs?.webPushConfigured && (
-            <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
-              伺服器尚未設定 VAPID 金鑰，無法使用 Web Push。
-            </p>
-          )}
-
-          {(isIos || isIosSafari()) && !isStandalonePwa() && (
-            <div className="text-sm bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-2 text-blue-900">
-              <p className="font-semibold">iPhone 設定步驟：</p>
-              <ol className="list-decimal list-inside space-y-1 text-xs">
-                <li>使用 Safari 開啟 ERP</li>
-                <li>點「分享」→「加入主畫面」</li>
-                <li>從主畫面圖示開啟 ERP</li>
-                <li>再按下方「開啟手機通知」並允許</li>
-              </ol>
-            </div>
-          )}
-
-          {permission === "denied" && (
-            <div className="text-sm bg-red-50 border border-red-200 rounded-lg p-3 text-red-900">
-              <p className="font-semibold">通知權限已被拒絕</p>
-              <p className="text-xs mt-1">
-                iPhone：設定 → 通知 → 找到「晟風 ERP」→ 允許通知<br />
-                Android：設定 → 應用程式 → Chrome / PWA → 通知 → 允許
-              </p>
-            </div>
-          )}
-
-          <Button onClick={handleEnablePush} disabled={pushBusy || !prefs?.webPushConfigured}>
-            {pushBusy ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Bell className="h-4 w-4 mr-2" />}
-            開啟手機通知
-          </Button>
-
-          {prefs?.pushDevices && prefs.pushDevices.length > 0 && (
-            <div className="text-xs text-muted-foreground space-y-1">
-              <p className="font-medium text-foreground">已訂閱裝置：</p>
+        <CardContent>
+          {prefs?.pushDevices && prefs.pushDevices.length > 0 ? (
+            <ul className="text-sm space-y-1">
               {prefs.pushDevices.map(d => (
-                <p key={d.id}>• {d.deviceName ?? "裝置"}（{d.enabled ? "啟用" : "停用"}）</p>
+                <li key={d.id}>• {d.deviceName ?? "裝置"} — {d.enabled ? "啟用" : "停用"}</li>
               ))}
-            </div>
+            </ul>
+          ) : (
+            <p className="text-sm text-muted-foreground">此手機尚未完成推播訂閱</p>
           )}
         </CardContent>
       </Card>
@@ -180,7 +332,6 @@ export default function NotificationSettingsPage() {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">LINE 綁定</CardTitle>
-          <CardDescription>綁定 LINE 官方帳號以接收個人推播</CardDescription>
         </CardHeader>
         <CardContent>
           <Button asChild variant="outline">

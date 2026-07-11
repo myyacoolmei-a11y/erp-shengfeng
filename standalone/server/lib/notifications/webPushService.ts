@@ -12,6 +12,7 @@ export interface WebPushPayload {
 export interface WebPushResult {
   success: boolean;
   errorMessage?: string;
+  statusCode?: number;
   staleSubscription?: boolean;
 }
 
@@ -33,9 +34,18 @@ export function isWebPushConfigured(): boolean {
   return getVapidKeys() != null;
 }
 
-function isStalePushError(err: unknown): boolean {
-  if (!err || typeof err !== "object") return false;
-  const statusCode = (err as { statusCode?: number }).statusCode;
+function extractPushError(err: unknown): { statusCode?: number; errorMessage: string } {
+  if (!err || typeof err !== "object") {
+    return { errorMessage: String(err) };
+  }
+  const e = err as { statusCode?: number; message?: string; body?: string };
+  const statusCode = e.statusCode;
+  const bodySnippet = typeof e.body === "string" ? e.body.slice(0, 500) : "";
+  const errorMessage = [e.message, bodySnippet].filter(Boolean).join(" | ") || "Web Push delivery failed";
+  return { statusCode, errorMessage };
+}
+
+function isStalePushError(statusCode?: number): boolean {
   return statusCode === 404 || statusCode === 410;
 }
 
@@ -73,28 +83,27 @@ export async function sendWebPushToSubscription(
       }),
     );
 
-    await db
-      .update(userPushSubscriptionsTable)
-      .set({ lastUsedAt: new Date(), updatedAt: new Date() })
-      .where(eq(userPushSubscriptionsTable.id, subscription.id));
+    if (subscription.id > 0) {
+      await db
+        .update(userPushSubscriptionsTable)
+        .set({ lastUsedAt: new Date(), updatedAt: new Date() })
+        .where(eq(userPushSubscriptionsTable.id, subscription.id));
+    }
 
-    return { success: true };
+    return { success: true, statusCode: 201 };
   } catch (err) {
-    const errorMessage = err instanceof Error ? err.message : String(err);
+    const { statusCode, errorMessage } = extractPushError(err);
     logger.warn(
-      { err, endpoint: subscription.endpoint.slice(0, 48), statusCode: (err as { statusCode?: number }).statusCode },
+      { err, endpoint: subscription.endpoint.slice(0, 48), statusCode },
       "Web Push delivery failed",
     );
 
-    if (isStalePushError(err)) {
-      await db
-        .update(userPushSubscriptionsTable)
-        .set({ enabled: false, updatedAt: new Date() })
-        .where(eq(userPushSubscriptionsTable.id, subscription.id));
-      return { success: false, errorMessage, staleSubscription: true };
+    if (isStalePushError(statusCode) && subscription.id > 0) {
+      await db.delete(userPushSubscriptionsTable).where(eq(userPushSubscriptionsTable.id, subscription.id));
+      return { success: false, errorMessage, statusCode, staleSubscription: true };
     }
 
-    return { success: false, errorMessage };
+    return { success: false, errorMessage, statusCode };
   }
 }
 

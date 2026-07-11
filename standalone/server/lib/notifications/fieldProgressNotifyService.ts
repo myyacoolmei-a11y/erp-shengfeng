@@ -155,7 +155,7 @@ function inferDeviceName(userAgent?: string): string | null {
 export async function upsertPushSubscription(
   userId: number,
   data: { endpoint: string; p256dh: string; auth: string; userAgent?: string; deviceName?: string },
-): Promise<void> {
+) {
   const now = new Date();
   const deviceName = data.deviceName?.trim() || inferDeviceName(data.userAgent) || null;
 
@@ -165,7 +165,7 @@ export async function upsertPushSubscription(
     .where(eq(userPushSubscriptionsTable.endpoint, data.endpoint));
 
   if (existing) {
-    await db
+    const [row] = await db
       .update(userPushSubscriptionsTable)
       .set({
         userId,
@@ -176,20 +176,40 @@ export async function upsertPushSubscription(
         enabled: true,
         updatedAt: now,
       })
-      .where(eq(userPushSubscriptionsTable.id, existing.id));
-    return;
+      .where(eq(userPushSubscriptionsTable.id, existing.id))
+      .returning();
+    return row!;
   }
 
-  await db.insert(userPushSubscriptionsTable).values({
-    userId,
-    endpoint: data.endpoint,
-    p256dh: data.p256dh,
-    auth: data.auth,
-    userAgent: data.userAgent ?? null,
-    deviceName,
-    enabled: true,
-    updatedAt: now,
-  });
+  const [row] = await db
+    .insert(userPushSubscriptionsTable)
+    .values({
+      userId,
+      endpoint: data.endpoint,
+      p256dh: data.p256dh,
+      auth: data.auth,
+      userAgent: data.userAgent ?? null,
+      deviceName,
+      enabled: true,
+      updatedAt: now,
+    })
+    .returning();
+  return row!;
+}
+
+export async function listPushSubscriptionsForUser(userId: number) {
+  return db
+    .select({
+      id: userPushSubscriptionsTable.id,
+      endpoint: userPushSubscriptionsTable.endpoint,
+      deviceName: userPushSubscriptionsTable.deviceName,
+      enabled: userPushSubscriptionsTable.enabled,
+      createdAt: userPushSubscriptionsTable.createdAt,
+      updatedAt: userPushSubscriptionsTable.updatedAt,
+      lastUsedAt: userPushSubscriptionsTable.lastUsedAt,
+    })
+    .from(userPushSubscriptionsTable)
+    .where(eq(userPushSubscriptionsTable.userId, userId));
 }
 
 export async function deletePushSubscription(userId: number, endpoint: string): Promise<void> {
