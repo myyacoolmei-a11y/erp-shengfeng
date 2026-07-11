@@ -296,12 +296,13 @@ export default function WorkOrders() {
   const filterCustomerId = parseInt(urlParams.get("customerId") ?? "0", 10) || null;
   const filterCustomerName = urlParams.get("customerName") ?? "";
   const expandParam = parseInt(urlParams.get("expand") ?? "0", 10) || null;
+  const openParam = parseInt(urlParams.get("open") ?? "0", 10) || null;
 
   const [statusFilter, setStatusFilter] = useState("全部");
   const [showCreate, setShowCreate] = useState(false);
   const [editItem, setEditItem] = useState<any>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
-  const [expandedId, setExpandedId] = useState<number | null>(expandParam);
+  const [expandedId, setExpandedId] = useState<number | null>(expandParam ?? openParam);
   const [form, setForm] = useState<WOForm>(makeEmpty());
   const [arModal, setArModal] = useState<{ order: any; amount: string } | null>(null);
   const [pdfPreview, setPdfPreview] = useState<{ url: string; filename: string } | null>(null);
@@ -321,6 +322,19 @@ export default function WorkOrders() {
   useEffect(() => {
     if (expandParam) setExpandedId(expandParam);
   }, [expandParam]);
+
+  useEffect(() => {
+    if (openParam) setExpandedId(openParam);
+  }, [openParam]);
+
+  useEffect(() => {
+    if (!openParam || !orders?.length) return;
+    const found = orders.some(o => o.id === openParam);
+    if (!found) return;
+    requestAnimationFrame(() => {
+      document.getElementById(`wo-row-${openParam}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  }, [openParam, orders]);
 
   const createMutation = useCreateWorkOrder({
     mutation: {
@@ -490,7 +504,7 @@ export default function WorkOrders() {
             {orders.map(o => {
               const techDisplay = getTechDisplay(o);
               return (
-                <div key={o.id} className="px-3 sm:px-4 py-3">
+                <div key={o.id} id={`wo-row-${o.id}`} className="px-3 sm:px-4 py-3">
                   {/* Row 1: number + badges + actions */}
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex-1 min-w-0">

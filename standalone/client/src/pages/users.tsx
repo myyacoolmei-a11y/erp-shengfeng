@@ -72,6 +72,7 @@ interface UserItem {
   featurePermissions: FeatureKey[];
   dataPermission: DataPermission;
   linkedEmployeeId: number | null;
+  receiveDispatchNotifications: boolean;
   isActive: boolean;
   createdAt: string;
 }
@@ -105,6 +106,7 @@ function defaultCreateForm(): UserFormState {
     dataPermission: "all",
     permissionTemplate: "",
     isActive: true,
+    receiveDispatchNotifications: true,
   });
   return tpl;
 }
@@ -124,6 +126,7 @@ function userToForm(u: UserItem): UserFormState {
     dataPermission: u.dataPermission ?? "all",
     permissionTemplate: "",
     isActive: u.isActive,
+    receiveDispatchNotifications: u.receiveDispatchNotifications ?? true,
   };
 }
 
@@ -146,6 +149,7 @@ function buildApiBody(form: UserFormState, isCreate: boolean) {
     dataPermission: form.dataPermission,
     permissionTemplate: tplKey || undefined,
     roles,
+    receiveDispatchNotifications: form.receiveDispatchNotifications,
   };
 
   if (isCreate) body.password = form.password;

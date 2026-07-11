@@ -33,6 +33,7 @@ export const usersTable = pgTable("users", {
   mustChangePassword: boolean("must_change_password").notNull().default(false),
   lineUserId: text("line_user_id"),
   linkedEmployeeId: integer("linked_employee_id").references(() => employeesTable.id, { onDelete: "set null" }),
+  receiveDispatchNotifications: boolean("receive_dispatch_notifications").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

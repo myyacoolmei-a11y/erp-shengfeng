@@ -17,6 +17,8 @@ import {
   serializeFieldProgress,
   taipeiDateString,
 } from "../lib/workOrders/fieldProgressUtils.ts";
+import { notifyFieldProgressEvent } from "../lib/notifications/fieldProgressNotifyService.ts";
+import { logger } from "../lib/logger.ts";
 
 const router: IRouter = Router();
 
@@ -85,6 +87,21 @@ function parseWorkOrderId(raw: string | string[] | undefined): number | null {
   const s = Array.isArray(raw) ? raw[0] : raw;
   const id = parseInt(s ?? "", 10);
   return Number.isNaN(id) ? null : id;
+}
+
+function emitFieldProgressNotify(
+  req: Request,
+  workOrderId: number,
+  action: "depart" | "arrive" | "complete" | "unable",
+  actedAt: Date,
+): void {
+  void notifyFieldProgressEvent({
+    workOrderId,
+    engineerUserId: req.user!.id,
+    engineerName: req.user!.displayName,
+    action,
+    actedAt,
+  }).catch(err => logger.error({ err }, "field progress notify failed"));
 }
 
 /** GET field progress for one work order (all engineers for admin; own only for engineer) */
@@ -191,6 +208,7 @@ async function handleFieldAction(
       .set({ departedAt: now, updatedAt: now })
       .where(eq(workOrderFieldProgressTable.id, progress.id))
       .returning();
+    emitFieldProgressNotify(req, workOrderId, "depart", now);
     res.json(serializeFieldProgress(updated));
     return;
   }
@@ -209,6 +227,7 @@ async function handleFieldAction(
       .set({ arrivedAt: now, updatedAt: now })
       .where(eq(workOrderFieldProgressTable.id, progress.id))
       .returning();
+    emitFieldProgressNotify(req, workOrderId, "arrive", now);
     res.json(serializeFieldProgress(updated));
     return;
   }
@@ -248,6 +267,7 @@ async function handleFieldAction(
     })
     .where(eq(workOrdersTable.id, workOrderId));
 
+  emitFieldProgressNotify(req, workOrderId, "complete", now);
   res.json(serializeFieldProgress(updated));
 }
 
@@ -330,6 +350,7 @@ router.post(
       .where(eq(workOrderFieldProgressTable.id, progress.id))
       .returning();
 
+    emitFieldProgressNotify(req, workOrderId, "unable", now);
     res.json(serializeFieldProgress(updated));
   },
 );

@@ -27,6 +27,7 @@ import reminderSettingsRouter from "./reminderSettings";
 import workOrderFieldProgressRouter from "./workOrderFieldProgress";
 import jobsRouter from "./jobs";
 import partnerRouter from "./partner";
+import notificationsRouter from "./notifications";
 
 import { authenticate } from "../lib/auth";
 
@@ -62,6 +63,7 @@ router.use(wholesaleSettlementsRouter);
 router.use(voiceRouter);
 router.use(reminderSettingsRouter);
 router.use(partnerRouter);
+router.use(notificationsRouter);
 router.use(workOrderFieldProgressRouter);
 
 export default router;

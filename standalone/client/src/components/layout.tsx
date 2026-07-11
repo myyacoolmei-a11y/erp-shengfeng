@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
 import {
   LayoutDashboard,
@@ -29,6 +29,7 @@ import { useAuth, effectiveRoles, userCanAccessNav, type UserRole } from "@/cont
 import { ROLE_LABELS } from "@/lib/role-labels";
 import { APP_BRAND } from "@/lib/appBrand";
 import { PwaInstallBanner } from "@/components/pwa/PwaInstallBanner";
+import { NotificationBell } from "@/components/NotificationBell";
 
 interface NavItem {
   href: string;
@@ -296,9 +297,19 @@ function NavContent() {
 }
 
 export function Layout({ children }: { children: React.ReactNode }) {
-  const [location] = useLocation();
+  const [location, navigate] = useLocation();
   const { user } = useAuth();
   const userRoles = effectiveRoles(user);
+
+  useEffect(() => {
+    function onSwMessage(e: MessageEvent) {
+      if (e.data?.type === "navigate" && typeof e.data.url === "string") {
+        navigate(e.data.url);
+      }
+    }
+    navigator.serviceWorker?.addEventListener("message", onSwMessage);
+    return () => navigator.serviceWorker?.removeEventListener("message", onSwMessage);
+  }, [navigate]);
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -307,6 +318,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </aside>
 
       <div className="flex flex-1 flex-col overflow-hidden">
+        <header className="hidden md:flex h-12 items-center justify-end gap-2 border-b bg-card px-6 shadow-sm">
+          {user && <NotificationBell />}
+        </header>
         <header className="flex h-14 items-center gap-4 border-b bg-card px-6 md:hidden shadow-sm">
           <Sheet>
             <SheetTrigger asChild>
@@ -328,7 +342,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </div>
           </Link>
           {user && (
-            <div className="ml-auto flex items-center gap-1 flex-wrap justify-end">
+            <div className="ml-auto flex items-center gap-2 flex-wrap justify-end">
+              <NotificationBell />
               {userRoles.slice(0, 2).map((r) => (
                 <span key={r} className={`text-xs px-1.5 py-0.5 rounded border font-medium ${ROLE_COLORS[r as UserRole]}`}>
                   {ROLE_LABELS[r as UserRole] ?? r}

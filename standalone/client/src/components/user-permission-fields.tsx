@@ -13,6 +13,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -35,6 +36,7 @@ export interface UserFormState {
   dataPermission: DataPermission;
   permissionTemplate: PermissionTemplateKey | "";
   isActive: boolean;
+  receiveDispatchNotifications: boolean;
 }
 
 export function applyPermissionTemplate(
@@ -255,6 +257,17 @@ export function UserPermissionFields({
             </label>
           ))}
         </div>
+      </div>
+
+      <div className="flex items-center justify-between rounded-lg border p-3 bg-muted/20">
+        <div>
+          <p className="text-sm font-medium">接收派工進度通知</p>
+          <p className="text-xs text-muted-foreground">工程師出發／到達／完工／無法施工時推播與站內通知</p>
+        </div>
+        <Switch
+          checked={form.receiveDispatchNotifications}
+          onCheckedChange={v => setForm(f => ({ ...f, receiveDispatchNotifications: v }))}
+        />
       </div>
     </div>
   );

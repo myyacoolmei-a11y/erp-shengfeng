@@ -20,6 +20,7 @@ export interface UserPublicDto {
   featurePermissions: FeatureKey[];
   dataPermission: DataPermission;
   linkedEmployeeId: number | null;
+  receiveDispatchNotifications: boolean;
   isActive: boolean;
   createdAt: Date;
 }
@@ -46,6 +47,7 @@ export function toUserPublicDto(user: User): UserPublicDto {
     featurePermissions: resolveFeaturePermissions(userLike),
     dataPermission: resolveDataPermission(userLike),
     linkedEmployeeId: user.linkedEmployeeId ?? null,
+    receiveDispatchNotifications: user.receiveDispatchNotifications ?? true,
     isActive: user.isActive,
     createdAt: user.createdAt,
   };
