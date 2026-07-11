@@ -1,6 +1,11 @@
 import jwt from "jsonwebtoken";
 import type { Request, Response, NextFunction } from "express";
 import { logger } from "./logger";
+import {
+  resolveFeaturePermissions,
+  type FeatureKey,
+  type PermissionUserLike,
+} from "../../shared/userPermissions.ts";
 
 export interface JwtPayload {
   id: number;
@@ -10,6 +15,8 @@ export interface JwtPayload {
   roles: string[];
   mustChangePassword: boolean;
   linkedEmployeeId?: number | null;
+  featurePermissions?: string[];
+  dataPermission?: string;
 }
 
 declare global {
@@ -78,5 +85,42 @@ export function requireRole(...allowedRoles: string[]) {
       return;
     }
     next();
+  };
+}
+
+/** Feature permission gate — falls back to legacy role mapping when JWT has no explicit list */
+export function requireFeature(...allowedFeatures: FeatureKey[]) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    if (!req.user) {
+      res.status(401).json({ error: "請先登入" });
+      return;
+    }
+    const perms = resolveFeaturePermissions(req.user as PermissionUserLike);
+    if (!allowedFeatures.some(f => perms.includes(f))) {
+      res.status(403).json({ error: "您沒有權限執行此操作" });
+      return;
+    }
+    next();
+  };
+}
+
+/** Pass if user has allowed role OR allowed feature (backward compatible) */
+export function requireRoleOrFeature(roles: string[], features: FeatureKey[]) {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    if (!req.user) {
+      res.status(401).json({ error: "請先登入" });
+      return;
+    }
+    const userRoles = effectiveRoles(req.user);
+    if (roles.some(r => userRoles.includes(r))) {
+      next();
+      return;
+    }
+    const perms = resolveFeaturePermissions(req.user as PermissionUserLike);
+    if (features.some(f => perms.includes(f))) {
+      next();
+      return;
+    }
+    res.status(403).json({ error: "您沒有權限執行此操作" });
   };
 }

@@ -1,5 +1,11 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import { setAuthTokenGetter, setOn401Handler } from "@workspace/api-client-react";
+import type { FeatureKey, DataPermission } from "../../../shared/userPermissions.ts";
+import {
+  hasFeaturePermission,
+  resolveFeaturePermissions,
+  navHrefAllowed,
+} from "../../../shared/userPermissions.ts";
 
 export type UserRole =
   | "super_admin"
@@ -19,6 +25,8 @@ export interface AuthUser {
   roles: UserRole[];
   mustChangePassword: boolean;
   linkedEmployeeId?: number | null;
+  featurePermissions?: FeatureKey[];
+  dataPermission?: DataPermission;
 }
 
 /** Returns effective roles — falls back to [role] when roles array is empty (old tokens) */
@@ -32,6 +40,21 @@ export function hasRole(user: AuthUser | null, ...roles: UserRole[]): boolean {
   if (!user) return false;
   const eff = effectiveRoles(user);
   return roles.some((r) => eff.includes(r));
+}
+
+export function userCanAccessNav(user: AuthUser | null, href: string): boolean {
+  if (!user) return false;
+  return navHrefAllowed(user, href);
+}
+
+export function userHasFeature(user: AuthUser | null, feature: FeatureKey): boolean {
+  if (!user) return false;
+  return hasFeaturePermission(user, feature);
+}
+
+export function userFeaturePermissions(user: AuthUser | null): FeatureKey[] {
+  if (!user) return [];
+  return resolveFeaturePermissions(user);
 }
 
 interface AuthContextType {
@@ -86,12 +109,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     fetch("/api/auth/me", {
       headers: { Authorization: `Bearer ${token}` },
     })
-      .then((res) => {
+      .then(async (res) => {
         if (!res.ok) {
           localStorage.removeItem(TOKEN_KEY);
           localStorage.removeItem(USER_KEY);
           setUser(null);
+          return;
         }
+        const me = (await res.json()) as AuthUser;
+        setUser(me);
+        localStorage.setItem(USER_KEY, JSON.stringify(me));
       })
       .catch(() => { /* network error — keep existing state */ })
       .finally(() => setIsLoading(false));

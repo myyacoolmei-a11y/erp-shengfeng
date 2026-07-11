@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { useAuth, effectiveRoles, type UserRole } from "@/contexts/auth-context";
+import { useAuth, effectiveRoles, userCanAccessNav, type UserRole } from "@/contexts/auth-context";
 import { ROLE_LABELS } from "@/lib/role-labels";
 import { APP_BRAND } from "@/lib/appBrand";
 import { PwaInstallBanner } from "@/components/pwa/PwaInstallBanner";
@@ -158,9 +158,13 @@ function NavContent() {
 
   const userRoles = effectiveRoles(user);
   const showWholesale = WHOLESALE_ROLES.some((r) => userRoles.includes(r));
-  const visibleItems = NAV_ITEMS.filter((item) =>
-    item.roles.some((r) => userRoles.includes(r))
-  );
+  const visibleItems = NAV_ITEMS.filter((item) => {
+    if (!user) return false;
+    const roleOk = item.roles.some((r) => userRoles.includes(r));
+    if (!roleOk) return false;
+    if (userRoles.includes("super_admin")) return true;
+    return userCanAccessNav(user, item.href);
+  });
 
   const topItems = visibleItems.filter(
     (item) => !(["/inventory", "/warranties", "/employees", "/users", "/reminder-settings", "/work-hours-stats"].includes(item.href))

@@ -176,7 +176,9 @@ export default function Employees() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">員工管理</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">管理公司員工資料與 KPI 績效</p>
+          <p className="text-sm text-muted-foreground mt-1">
+            管理公司正式員工的人事資料（職位、聯絡方式、在職狀態與績效）。不含登入帳號與系統權限，請至「用戶管理」設定。
+          </p>
         </div>
         <Button size="sm" onClick={() => { setForm(emptyForm); setShowCreate(true); }}>
           <Plus className="h-4 w-4 mr-1" />新增員工

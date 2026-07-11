@@ -1,8 +1,7 @@
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useListEmployees } from "@workspace/api-client-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -36,10 +35,28 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { UserPlus, Pencil, Trash2, KeyRound, Loader2, UserCheck, UserX, ShieldAlert } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth, hasRole, type UserRole } from "@/contexts/auth-context";
-import { ROLE_LABELS } from "@/lib/role-labels";
+import { useAuth } from "@/contexts/auth-context";
+import {
+  IDENTITY_TYPE_LABELS,
+  FEATURE_LABELS,
+  DATA_PERMISSION_LABELS,
+  PERMISSION_TEMPLATES,
+  inferRolesFromFeatures,
+  type FeatureKey,
+  type DataPermission,
+  type IdentityType,
+  type PermissionTemplateKey,
+} from "../../../shared/userPermissions.ts";
+import {
+  UserProfileFields,
+  UserPermissionFields,
+  applyPermissionTemplate,
+  type UserFormState,
+} from "@/components/user-permission-fields";
 
 interface UserItem {
   id: number;
@@ -47,35 +64,17 @@ interface UserItem {
   displayName: string;
   role: string;
   roles: string[];
+  phone: string | null;
+  email: string | null;
+  identityType: string;
+  title: string | null;
+  notes: string | null;
+  featurePermissions: FeatureKey[];
+  dataPermission: DataPermission;
+  linkedEmployeeId: number | null;
   isActive: boolean;
   createdAt: string;
 }
-
-const ALL_ROLES_FOR_OWNER: { value: UserRole; label: string }[] = [
-  { value: "owner", label: ROLE_LABELS.owner },
-  { value: "admin", label: ROLE_LABELS.admin },
-  { value: "sales", label: ROLE_LABELS.sales },
-  { value: "engineer", label: ROLE_LABELS.engineer },
-  { value: "technician", label: ROLE_LABELS.technician },
-  { value: "accountant", label: ROLE_LABELS.accountant },
-  { value: "distributor", label: ROLE_LABELS.distributor },
-];
-
-const ALL_ROLES_FOR_SUPER_ADMIN: { value: UserRole; label: string }[] = [
-  { value: "super_admin", label: ROLE_LABELS.super_admin },
-  ...ALL_ROLES_FOR_OWNER,
-];
-
-const ROLE_COLORS: Record<string, string> = {
-  super_admin: "bg-red-100 text-red-800 border border-red-200",
-  owner: "bg-amber-100 text-amber-800 border border-amber-200",
-  admin: "bg-blue-100 text-blue-800 border border-blue-200",
-  sales: "bg-green-100 text-green-800 border border-green-200",
-  engineer: "bg-purple-100 text-purple-800 border border-purple-200",
-  technician: "bg-slate-100 text-slate-700 border border-slate-200",
-  accountant: "bg-pink-100 text-pink-800 border border-pink-200",
-  distributor: "bg-orange-100 text-orange-800 border border-orange-200",
-};
 
 const TOKEN_KEY = "erp_auth_token";
 
@@ -91,51 +90,68 @@ function authFetch(url: string, options: RequestInit = {}) {
   });
 }
 
-function effectiveUserRoles(u: UserItem): string[] {
-  return u.roles?.length ? u.roles : [u.role];
+function defaultCreateForm(): UserFormState {
+  const tpl = applyPermissionTemplate("engineer", {
+    displayName: "",
+    username: "",
+    password: "",
+    phone: "",
+    email: "",
+    identityType: "employee",
+    title: "",
+    notes: "",
+    linkedEmployeeId: null,
+    featurePermissions: [],
+    dataPermission: "all",
+    permissionTemplate: "",
+    isActive: true,
+  });
+  return tpl;
 }
 
-const EMPTY_CREATE = { username: "", password: "", displayName: "", roles: ["technician"] as UserRole[] };
-const EMPTY_EDIT = { displayName: "", username: "", roles: ["technician"] as UserRole[], isActive: true };
+function userToForm(u: UserItem): UserFormState {
+  return {
+    displayName: u.displayName,
+    username: u.username,
+    password: "",
+    phone: u.phone ?? "",
+    email: u.email ?? "",
+    identityType: (u.identityType as IdentityType) ?? "employee",
+    title: u.title ?? "",
+    notes: u.notes ?? "",
+    linkedEmployeeId: u.linkedEmployeeId,
+    featurePermissions: u.featurePermissions ?? [],
+    dataPermission: u.dataPermission ?? "all",
+    permissionTemplate: "",
+    isActive: u.isActive,
+  };
+}
 
-/** Multi-select role checkboxes */
-function RoleCheckboxes({
-  selected,
-  available,
-  onChange,
-}: {
-  selected: UserRole[];
-  available: { value: UserRole; label: string }[];
-  onChange: (roles: UserRole[]) => void;
-}) {
-  function toggle(role: UserRole, checked: boolean) {
-    if (checked) {
-      onChange([...selected, role]);
-    } else {
-      onChange(selected.filter((r) => r !== role));
-    }
-  }
+function buildApiBody(form: UserFormState, isCreate: boolean) {
+  const tplKey = form.permissionTemplate as PermissionTemplateKey | "";
+  const roles = tplKey && PERMISSION_TEMPLATES[tplKey]
+    ? [...PERMISSION_TEMPLATES[tplKey].roles]
+    : inferRolesFromFeatures(form.featurePermissions);
 
-  return (
-    <div className="border rounded-md p-3 space-y-2 max-h-52 overflow-y-auto">
-      {available.map((opt) => {
-        const checked = selected.includes(opt.value);
-        return (
-          <label key={opt.value} className="flex items-center gap-2.5 cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={checked}
-              onChange={(e) => toggle(opt.value, e.target.checked)}
-              className="h-4 w-4 rounded border-input accent-primary"
-            />
-            <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${ROLE_COLORS[opt.value] ?? "bg-gray-100 text-gray-700 border border-gray-200"}`}>
-              {opt.label}
-            </span>
-          </label>
-        );
-      })}
-    </div>
-  );
+  const body: Record<string, unknown> = {
+    displayName: form.displayName,
+    username: form.username,
+    phone: form.phone || undefined,
+    email: form.email || undefined,
+    identityType: form.identityType,
+    title: form.title || undefined,
+    notes: form.notes || undefined,
+    linkedEmployeeId: form.linkedEmployeeId,
+    featurePermissions: form.featurePermissions,
+    dataPermission: form.dataPermission,
+    permissionTemplate: tplKey || undefined,
+    roles,
+  };
+
+  if (isCreate) body.password = form.password;
+  else body.isActive = form.isActive;
+
+  return body;
 }
 
 export default function UsersPage() {
@@ -143,19 +159,17 @@ export default function UsersPage() {
   const { user: me } = useAuth();
   const qc = useQueryClient();
 
-  const iAmSuperAdmin = hasRole(me, "super_admin");
-  const availableRoles = iAmSuperAdmin ? ALL_ROLES_FOR_SUPER_ADMIN : ALL_ROLES_FOR_OWNER;
+  const { data: employees = [] } = useListEmployees();
 
   const [createOpen, setCreateOpen] = useState(false);
-  const [createForm, setCreateForm] = useState(EMPTY_CREATE);
+  const [createForm, setCreateForm] = useState<UserFormState>(defaultCreateForm);
   const [createError, setCreateError] = useState<string | null>(null);
 
   const [editTarget, setEditTarget] = useState<UserItem | null>(null);
-  const [editForm, setEditForm] = useState(EMPTY_EDIT);
+  const [editForm, setEditForm] = useState<UserFormState>(defaultCreateForm());
   const [editError, setEditError] = useState<string | null>(null);
 
   const [deleteTarget, setDeleteTarget] = useState<UserItem | null>(null);
-
   const [resetTarget, setResetTarget] = useState<UserItem | null>(null);
   const [resetPassword, setResetPassword] = useState("");
   const [resetError, setResetError] = useState<string | null>(null);
@@ -170,8 +184,11 @@ export default function UsersPage() {
   });
 
   const createMutation = useMutation({
-    mutationFn: async (body: typeof createForm) => {
-      const res = await authFetch("/api/users", { method: "POST", body: JSON.stringify(body) });
+    mutationFn: async (form: UserFormState) => {
+      const res = await authFetch("/api/users", {
+        method: "POST",
+        body: JSON.stringify(buildApiBody(form, true)),
+      });
       if (!res.ok) {
         const d = (await res.json()) as { error?: string };
         throw new Error(d.error ?? "建立失敗");
@@ -181,16 +198,19 @@ export default function UsersPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["users"] });
       setCreateOpen(false);
-      setCreateForm(EMPTY_CREATE);
+      setCreateForm(defaultCreateForm());
       setCreateError(null);
-      toast({ title: "使用者已建立", description: "首次登入需強制變更密碼" });
+      toast({ title: "用戶已建立", description: "首次登入需強制變更密碼" });
     },
     onError: (err) => setCreateError(err instanceof Error ? err.message : "建立失敗"),
   });
 
   const editMutation = useMutation({
-    mutationFn: async ({ id, body }: { id: number; body: typeof editForm }) => {
-      const res = await authFetch(`/api/users/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+    mutationFn: async ({ id, form }: { id: number; form: UserFormState }) => {
+      const res = await authFetch(`/api/users/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(buildApiBody(form, false)),
+      });
       if (!res.ok) {
         const d = (await res.json()) as { error?: string };
         throw new Error(d.error ?? "更新失敗");
@@ -201,7 +221,7 @@ export default function UsersPage() {
       qc.invalidateQueries({ queryKey: ["users"] });
       setEditTarget(null);
       setEditError(null);
-      toast({ title: "使用者已更新" });
+      toast({ title: "用戶已更新" });
     },
     onError: (err) => setEditError(err instanceof Error ? err.message : "更新失敗"),
   });
@@ -217,7 +237,7 @@ export default function UsersPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["users"] });
       setDeleteTarget(null);
-      toast({ title: "使用者已刪除" });
+      toast({ title: "用戶已刪除" });
     },
     onError: (err) => {
       setDeleteTarget(null);
@@ -240,157 +260,145 @@ export default function UsersPage() {
       setResetTarget(null);
       setResetPassword("");
       setResetError(null);
-      toast({ title: "密碼已重設", description: "使用者下次登入時需強制變更密碼" });
+      toast({ title: "密碼已重設", description: "用戶下次登入時需強制變更密碼" });
     },
     onError: (err) => setResetError(err instanceof Error ? err.message : "重設失敗"),
   });
 
   function openEdit(u: UserItem) {
     setEditTarget(u);
-    const roles = effectiveUserRoles(u) as UserRole[];
-    setEditForm({ displayName: u.displayName, username: u.username, roles, isActive: u.isActive });
+    setEditForm(userToForm(u));
     setEditError(null);
   }
 
+  function validateForm(form: UserFormState): string | null {
+    if (!form.displayName.trim()) return "請填寫姓名";
+    if (!form.username.trim()) return "請填寫登入帳號";
+    if (form.featurePermissions.length === 0) return "至少選擇一項功能權限";
+    return null;
+  }
+
+  const employeeNameById = (id: number | null) => {
+    if (!id) return null;
+    return employees.find(e => e.id === id)?.name ?? `#${id}`;
+  };
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">用戶管理</h1>
-          <p className="text-sm text-muted-foreground mt-1">管理系統使用者帳號與多角色權限</p>
+          <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
+            管理所有可登入 ERP 的帳號與權限。用戶不一定是正式員工，也可能是老闆、外包、會計或臨時人員。
+            正式員工的人事資料請至「員工管理」維護。
+          </p>
         </div>
-        <Button onClick={() => { setCreateForm(EMPTY_CREATE); setCreateError(null); setCreateOpen(true); }}>
+        <Button onClick={() => { setCreateForm(defaultCreateForm()); setCreateError(null); setCreateOpen(true); }}>
           <UserPlus className="mr-2 h-4 w-4" />
-          新增使用者
+          新增用戶
         </Button>
       </div>
 
-      {/* ── Role permission summary ── */}
-      <div className="rounded-md border bg-muted/30 p-4">
-        <p className="text-xs font-semibold text-muted-foreground mb-2 uppercase tracking-wide">角色權限說明（可多選，權限取聯集）</p>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-1.5 text-xs">
-          {[
-            { role: "super_admin", desc: "系統核心設定，帳號不可被刪除或停用，僅本人可修改密碼" },
-            { role: "owner", desc: "老闆/老闆娘：所有業務完整存取，可管理員工與用戶" },
-            { role: "admin", desc: "行政：客戶、報價、派工、保固、基本收款（不含用戶管理）" },
-            { role: "sales", desc: "業務：客戶管理、報價單（不可刪除）" },
-            { role: "engineer", desc: "工程師/師傅：派工單、進度、保養（不含財務）" },
-            { role: "technician", desc: "技師：派工單、保養（不含報價/收款/財務）" },
-            { role: "accountant", desc: "會計：應收帳款、收款、客戶（唯讀）" },
-            { role: "distributor", desc: "配合廠商：僅限自己的報價單/訂單" },
-          ].map(({ role, desc }) => (
-            <div key={role} className="flex items-start gap-1.5">
-              <span className={`shrink-0 text-xs px-1.5 py-0.5 rounded font-medium ${ROLE_COLORS[role]}`}>
-                {ROLE_LABELS[role as UserRole] ?? role}
-              </span>
-              <span className="text-muted-foreground leading-tight">{desc}</span>
-            </div>
-          ))}
-        </div>
+      <div className="rounded-md border bg-muted/30 p-4 text-sm text-muted-foreground">
+        <p className="font-medium text-foreground mb-1">與員工管理的差異</p>
+        <ul className="list-disc list-inside space-y-0.5 text-xs">
+          <li><strong>員工管理</strong>：公司正式員工的人事資料（職位、績效、在職狀態），不含登入帳號。</li>
+          <li><strong>用戶管理</strong>：登入帳號、功能權限、資料權限；可選擇關聯正式員工。</li>
+        </ul>
       </div>
 
-      {/* ── Users table ── */}
-      <div className="rounded-md border bg-card">
+      <div className="rounded-md border bg-card overflow-x-auto">
         {isLoading ? (
           <div className="flex items-center justify-center py-12">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
         ) : users.length === 0 ? (
-          <div className="text-center py-12 text-muted-foreground">尚無使用者</div>
+          <div className="text-center py-12 text-muted-foreground">尚無用戶</div>
         ) : (
           <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>姓名</TableHead>
                 <TableHead>帳號</TableHead>
-                <TableHead>角色</TableHead>
+                <TableHead>身分</TableHead>
+                <TableHead>職稱</TableHead>
+                <TableHead>功能權限</TableHead>
+                <TableHead>資料權限</TableHead>
                 <TableHead>狀態</TableHead>
-                <TableHead>建立日期</TableHead>
                 <TableHead className="text-right">操作</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {users.map((u) => {
+              {users.map(u => {
                 const isSelf = me?.id === u.id;
-                const uRoles = effectiveUserRoles(u);
-                const isTargetSuperAdmin = uRoles.includes("super_admin");
-
-                const renderActions = () => {
-                  if (isTargetSuperAdmin && !isSelf) {
-                    return (
-                      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground px-2 py-1">
-                        <ShieldAlert className="h-3.5 w-3.5" />
-                        受保護
-                      </span>
-                    );
-                  }
-                  if (isTargetSuperAdmin && isSelf) {
-                    return (
-                      <Button variant="ghost" size="sm" onClick={() => openEdit(u)} title="編輯">
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                    );
-                  }
-                  return (
-                    <div className="flex items-center justify-end gap-1">
-                      <Button variant="ghost" size="sm" onClick={() => openEdit(u)} title="編輯">
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => { setResetTarget(u); setResetPassword(""); setResetError(null); }}
-                        title="重設密碼"
-                      >
-                        <KeyRound className="h-3.5 w-3.5" />
-                      </Button>
-                      {!isSelf && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                          onClick={() => setDeleteTarget(u)}
-                          title="刪除"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      )}
-                    </div>
-                  );
-                };
+                const isTargetSuperAdmin = (u.roles?.length ? u.roles : [u.role]).includes("super_admin");
 
                 return (
                   <TableRow key={u.id} className={!u.isActive ? "opacity-60" : ""}>
                     <TableCell className="font-medium">
                       {u.displayName}
-                      {isSelf && <span className="ml-1.5 text-xs text-muted-foreground">(我)</span>}
+                      {isSelf && <span className="ml-1 text-xs text-muted-foreground">(我)</span>}
+                      {u.linkedEmployeeId && (
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          關聯：{employeeNameById(u.linkedEmployeeId)}
+                        </p>
+                      )}
                     </TableCell>
-                    <TableCell className="text-muted-foreground font-mono text-sm">{u.username}</TableCell>
+                    <TableCell className="font-mono text-sm text-muted-foreground">{u.username}</TableCell>
+                    <TableCell className="text-sm">
+                      {IDENTITY_TYPE_LABELS[u.identityType as IdentityType] ?? u.identityType}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{u.title || "—"}</TableCell>
                     <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {uRoles.map((r) => (
-                          <span key={r} className={`text-xs px-1.5 py-0.5 rounded font-medium ${ROLE_COLORS[r] ?? "bg-gray-100 text-gray-700 border border-gray-200"}`}>
-                            {ROLE_LABELS[r as UserRole] ?? r}
+                      <div className="flex flex-wrap gap-1 max-w-[200px]">
+                        {(u.featurePermissions ?? []).slice(0, 4).map(f => (
+                          <span key={f} className="text-[10px] px-1.5 py-0.5 rounded bg-green-50 text-green-800 border border-green-200">
+                            {FEATURE_LABELS[f]}
                           </span>
                         ))}
+                        {(u.featurePermissions?.length ?? 0) > 4 && (
+                          <span className="text-[10px] text-muted-foreground">+{u.featurePermissions!.length - 4}</span>
+                        )}
                       </div>
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {DATA_PERMISSION_LABELS[u.dataPermission] ?? u.dataPermission}
                     </TableCell>
                     <TableCell>
                       {u.isActive ? (
                         <span className="inline-flex items-center gap-1 text-xs text-green-700 bg-green-50 border border-green-200 rounded px-1.5 py-0.5">
-                          <UserCheck className="h-3 w-3" />啟用中
+                          <UserCheck className="h-3 w-3" />啟用
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 text-xs text-muted-foreground bg-muted border rounded px-1.5 py-0.5">
-                          <UserX className="h-3 w-3" />已停用
+                          <UserX className="h-3 w-3" />停用
                         </span>
                       )}
                     </TableCell>
-                    <TableCell className="text-muted-foreground text-sm">
-                      {new Date(u.createdAt).toLocaleDateString("zh-TW")}
-                    </TableCell>
                     <TableCell className="text-right">
-                      {renderActions()}
+                      {isTargetSuperAdmin && !isSelf ? (
+                        <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                          <ShieldAlert className="h-3.5 w-3.5" />受保護
+                        </span>
+                      ) : (
+                        <div className="flex items-center justify-end gap-1">
+                          <Button variant="ghost" size="sm" onClick={() => openEdit(u)} title="編輯">
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                          {!isTargetSuperAdmin && (
+                            <>
+                              <Button variant="ghost" size="sm" onClick={() => { setResetTarget(u); setResetPassword(""); setResetError(null); }} title="重設密碼">
+                                <KeyRound className="h-3.5 w-3.5" />
+                              </Button>
+                              {!isSelf && (
+                                <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={() => setDeleteTarget(u)} title="刪除">
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      )}
                     </TableCell>
                   </TableRow>
                 );
@@ -400,176 +408,121 @@ export default function UsersPage() {
         )}
       </div>
 
-      {/* ── Create dialog ── */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>新增使用者</DialogTitle>
-            <DialogDescription>建立新的系統使用者帳號，首次登入將強制變更密碼</DialogDescription>
+            <DialogTitle>新增用戶</DialogTitle>
+            <DialogDescription>建立登入帳號並設定功能與資料權限，不必先建立員工資料。</DialogDescription>
           </DialogHeader>
           <form
-            onSubmit={(e) => {
+            onSubmit={e => {
               e.preventDefault();
-              if (createForm.roles.length === 0) { setCreateError("至少選擇一個角色"); return; }
+              if (!createForm.password || createForm.password.length < 6) {
+                setCreateError("密碼至少 6 位");
+                return;
+              }
+              const err = validateForm(createForm);
+              if (err) { setCreateError(err); return; }
               setCreateError(null);
               createMutation.mutate(createForm);
             }}
             className="space-y-4"
           >
-            <div className="space-y-2">
-              <Label htmlFor="c-displayName">姓名</Label>
-              <Input id="c-displayName" value={createForm.displayName}
-                onChange={(e) => setCreateForm({ ...createForm, displayName: e.target.value })}
-                placeholder="請輸入姓名" required />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="c-username">帳號</Label>
-              <Input id="c-username" value={createForm.username}
-                onChange={(e) => setCreateForm({ ...createForm, username: e.target.value })}
-                placeholder="登入用帳號" required />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="c-password">密碼</Label>
-              <Input id="c-password" type="password" value={createForm.password}
-                onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
-                placeholder="至少 6 位" required minLength={6} />
-            </div>
-            <div className="space-y-2">
-              <Label>角色（可多選，至少選一個）</Label>
-              <RoleCheckboxes
-                selected={createForm.roles}
-                available={availableRoles}
-                onChange={(roles) => setCreateForm({ ...createForm, roles })}
-              />
-            </div>
-            {createError && (
-              <p className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-md">{createError}</p>
-            )}
+            <UserProfileFields form={createForm} setForm={setCreateForm} employees={employees} showPassword />
+            <UserPermissionFields form={createForm} setForm={setCreateForm} />
+            {createError && <p className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-md">{createError}</p>}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>取消</Button>
               <Button type="submit" disabled={createMutation.isPending}>
-                {createMutation.isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />建立中...</> : "建立"}
+                {createMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                建立
               </Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
 
-      {/* ── Edit dialog ── */}
-      <Dialog open={!!editTarget} onOpenChange={(o) => { if (!o) setEditTarget(null); }}>
-        <DialogContent>
+      <Dialog open={!!editTarget} onOpenChange={o => { if (!o) setEditTarget(null); }}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>編輯使用者</DialogTitle>
-            <DialogDescription>修改 {editTarget?.displayName} 的帳號資訊</DialogDescription>
+            <DialogTitle>編輯用戶</DialogTitle>
+            <DialogDescription>{editTarget?.displayName}</DialogDescription>
           </DialogHeader>
           <form
-            onSubmit={(e) => {
+            onSubmit={e => {
               e.preventDefault();
-              if (editForm.roles.length === 0) { setEditError("至少選擇一個角色"); return; }
+              const err = validateForm(editForm);
+              if (err) { setEditError(err); return; }
               setEditError(null);
-              if (editTarget) editMutation.mutate({ id: editTarget.id, body: editForm });
+              if (editTarget) editMutation.mutate({ id: editTarget.id, form: editForm });
             }}
             className="space-y-4"
           >
-            <div className="space-y-2">
-              <Label htmlFor="e-displayName">姓名</Label>
-              <Input id="e-displayName" value={editForm.displayName}
-                onChange={(e) => setEditForm({ ...editForm, displayName: e.target.value })}
-                required />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="e-username">帳號</Label>
-              <Input id="e-username" value={editForm.username}
-                onChange={(e) => setEditForm({ ...editForm, username: e.target.value })}
-                required />
-            </div>
-            <div className="space-y-2">
-              <Label>角色（可多選，至少選一個）</Label>
-              {effectiveUserRoles(editTarget ?? { role: "", roles: [] } as unknown as UserItem).includes("super_admin") ? (
-                <div className="flex items-center gap-2 rounded-md border bg-muted px-3 py-2 text-sm text-muted-foreground">
-                  <ShieldAlert className="h-4 w-4 shrink-0" />
-                  系統管理員（角色不可變更）
+            <UserProfileFields form={editForm} setForm={setEditForm} employees={employees} />
+            {editTarget && !(editTarget.roles?.length ? editTarget.roles : [editTarget.role]).includes("super_admin") ? (
+              <>
+                <UserPermissionFields form={editForm} setForm={setEditForm} />
+                <div className="space-y-2">
+                  <Label>帳號狀態</Label>
+                  <Select
+                    value={editForm.isActive ? "active" : "disabled"}
+                    onValueChange={v => setEditForm(f => ({ ...f, isActive: v === "active" }))}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="active">啟用</SelectItem>
+                      <SelectItem value="disabled">停用</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-              ) : (
-                <RoleCheckboxes
-                  selected={editForm.roles}
-                  available={availableRoles}
-                  onChange={(roles) => setEditForm({ ...editForm, roles })}
-                />
-              )}
-            </div>
-            {editTarget && !effectiveUserRoles(editTarget).includes("super_admin") && (
-              <div className="space-y-2">
-                <Label htmlFor="e-status">狀態</Label>
-                <Select
-                  value={editForm.isActive ? "active" : "disabled"}
-                  onValueChange={(v) => setEditForm({ ...editForm, isActive: v === "active" })}
-                >
-                  <SelectTrigger id="e-status"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="active">啟用中</SelectItem>
-                    <SelectItem value="disabled">已停用</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground flex items-center gap-2 border rounded-md p-3">
+                <ShieldAlert className="h-4 w-4" />
+                系統管理員僅可修改基本資料，權限不可變更。
+              </p>
             )}
-            {editError && (
-              <p className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-md">{editError}</p>
-            )}
+            {editError && <p className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-md">{editError}</p>}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setEditTarget(null)}>取消</Button>
-              <Button type="submit" disabled={editMutation.isPending}>
-                {editMutation.isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />儲存中...</> : "儲存"}
-              </Button>
+              <Button type="submit" disabled={editMutation.isPending}>儲存</Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
 
-      {/* ── Reset password dialog ── */}
-      <Dialog open={!!resetTarget} onOpenChange={(o) => { if (!o) setResetTarget(null); }}>
+      <Dialog open={!!resetTarget} onOpenChange={o => { if (!o) setResetTarget(null); }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>重設密碼</DialogTitle>
-            <DialogDescription>
-              為 <strong>{resetTarget?.displayName}</strong> 設定新密碼，使用者下次登入時將強制變更密碼。
-            </DialogDescription>
+            <DialogDescription>為 {resetTarget?.displayName} 設定新密碼</DialogDescription>
           </DialogHeader>
           <form
-            onSubmit={(e) => {
+            onSubmit={e => {
               e.preventDefault();
-              setResetError(null);
               if (resetTarget) resetMutation.mutate({ id: resetTarget.id, newPassword: resetPassword });
             }}
             className="space-y-4"
           >
             <div className="space-y-2">
-              <Label htmlFor="r-password">新密碼</Label>
-              <Input id="r-password" type="password" value={resetPassword}
-                onChange={(e) => setResetPassword(e.target.value)}
-                placeholder="至少 6 位" required minLength={6} />
+              <Label>新密碼</Label>
+              <Input type="password" value={resetPassword} onChange={e => setResetPassword(e.target.value)} minLength={6} required />
             </div>
-            {resetError && (
-              <p className="text-sm text-destructive bg-destructive/10 px-3 py-2 rounded-md">{resetError}</p>
-            )}
+            {resetError && <p className="text-sm text-destructive">{resetError}</p>}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setResetTarget(null)}>取消</Button>
-              <Button type="submit" disabled={resetMutation.isPending}>
-                {resetMutation.isPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />重設中...</> : "確認重設"}
-              </Button>
+              <Button type="submit" disabled={resetMutation.isPending}>確認重設</Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
 
-      {/* ── Delete confirm ── */}
-      <AlertDialog open={!!deleteTarget} onOpenChange={(o) => { if (!o) setDeleteTarget(null); }}>
+      <AlertDialog open={!!deleteTarget} onOpenChange={o => { if (!o) setDeleteTarget(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>確認刪除使用者</AlertDialogTitle>
+            <AlertDialogTitle>確認刪除用戶</AlertDialogTitle>
             <AlertDialogDescription>
-              即將刪除 <strong>{deleteTarget?.displayName}</strong>（{deleteTarget?.username}）的帳號。
-              此操作無法復原，請確認後繼續。
+              即將刪除 {deleteTarget?.displayName}（{deleteTarget?.username}）的登入帳號，此操作無法復原。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -577,9 +530,7 @@ export default function UsersPage() {
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               onClick={() => deleteTarget && deleteMutation.mutate(deleteTarget.id)}
-              disabled={deleteMutation.isPending}
             >
-              {deleteMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               確認刪除
             </AlertDialogAction>
           </AlertDialogFooter>

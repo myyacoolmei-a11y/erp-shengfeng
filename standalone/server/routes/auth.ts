@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod/v4";
 import { db, usersTable } from "@workspace/db";
 import { signToken, authenticate } from "../lib/auth";
+import { toJwtUserFields, toUserPublicDto } from "../lib/userPublicDto";
 import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
@@ -114,26 +115,21 @@ router.post("/auth/login", async (req, res): Promise<void> => {
 
   const userRoles = user.roles?.length ? user.roles : [user.role];
 
-  const token = signToken({
-    id: user.id,
-    username: user.username,
-    displayName: user.displayName,
-    role: user.role,
-    roles: userRoles,
-    mustChangePassword: user.mustChangePassword,
-    linkedEmployeeId: user.linkedEmployeeId ?? null,
-  });
+  const token = signToken(toJwtUserFields(user));
 
+  const publicUser = toUserPublicDto(user);
   res.json({
     token,
     user: {
-      id: user.id,
-      username: user.username,
-      displayName: user.displayName,
-      role: user.role,
-      roles: userRoles,
+      id: publicUser.id,
+      username: publicUser.username,
+      displayName: publicUser.displayName,
+      role: publicUser.role,
+      roles: publicUser.roles,
       mustChangePassword: user.mustChangePassword,
-      linkedEmployeeId: user.linkedEmployeeId ?? null,
+      linkedEmployeeId: publicUser.linkedEmployeeId,
+      featurePermissions: publicUser.featurePermissions,
+      dataPermission: publicUser.dataPermission,
     },
   });
 });
@@ -149,14 +145,17 @@ router.get("/auth/me", authenticate, async (req, res): Promise<void> => {
     return;
   }
   const userRoles = user.roles?.length ? user.roles : [user.role];
+  const publicUser = toUserPublicDto(user);
   res.json({
-    id: user.id,
-    username: user.username,
-    displayName: user.displayName,
-    role: user.role,
-    roles: userRoles,
+    id: publicUser.id,
+    username: publicUser.username,
+    displayName: publicUser.displayName,
+    role: publicUser.role,
+    roles: publicUser.roles,
     mustChangePassword: user.mustChangePassword,
-    linkedEmployeeId: user.linkedEmployeeId ?? null,
+    linkedEmployeeId: publicUser.linkedEmployeeId,
+    featurePermissions: publicUser.featurePermissions,
+    dataPermission: publicUser.dataPermission,
   });
 });
 
@@ -187,28 +186,21 @@ router.patch("/auth/password", authenticate, async (req, res): Promise<void> => 
     .set({ passwordHash: newHash, mustChangePassword: false })
     .where(eq(usersTable.id, userId));
 
-  const userRoles = user.roles?.length ? user.roles : [user.role];
+  const newToken = signToken(toJwtUserFields({ ...user, mustChangePassword: false }));
 
-  const newToken = signToken({
-    id: user.id,
-    username: user.username,
-    displayName: user.displayName,
-    role: user.role,
-    roles: userRoles,
-    mustChangePassword: false,
-    linkedEmployeeId: user.linkedEmployeeId ?? null,
-  });
-
+  const publicUser = toUserPublicDto({ ...user, mustChangePassword: false });
   res.json({
     token: newToken,
     user: {
-      id: user.id,
-      username: user.username,
-      displayName: user.displayName,
-      role: user.role,
-      roles: userRoles,
+      id: publicUser.id,
+      username: publicUser.username,
+      displayName: publicUser.displayName,
+      role: publicUser.role,
+      roles: publicUser.roles,
       mustChangePassword: false,
-      linkedEmployeeId: user.linkedEmployeeId ?? null,
+      linkedEmployeeId: publicUser.linkedEmployeeId,
+      featurePermissions: publicUser.featurePermissions,
+      dataPermission: publicUser.dataPermission,
     },
   });
 });
