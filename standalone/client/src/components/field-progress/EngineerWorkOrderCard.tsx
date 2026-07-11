@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { useQuery } from "@tanstack/react-query";
 import {
   type FieldProgressRecord,
   UNABLE_REASONS,
@@ -45,8 +46,8 @@ import {
   arriveFieldProgress,
   completeFieldProgress,
   reportUnableFieldProgress,
-  listMyFieldProgress,
 } from "@/lib/fieldProgressApi";
+import { fetchWorkOrderReopenInfo } from "@/lib/notificationsApi";
 
 interface WorkOrderCardData {
   id: number;
@@ -97,6 +98,12 @@ interface Props {
 export function EngineerWorkOrderCard({ order, progress, onProgressUpdated }: Props) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  const { data: reopenInfo } = useQuery({
+    queryKey: ["work-order-reopen", order.id],
+    queryFn: () => fetchWorkOrderReopenInfo(order.id),
+    enabled: order.status === "待施工",
+  });
   const [confirmComplete, setConfirmComplete] = useState(false);
   const [unableOpen, setUnableOpen] = useState(false);
   const [unableReason, setUnableReason] = useState<string>("");
@@ -239,6 +246,23 @@ export function EngineerWorkOrderCard({ order, progress, onProgressUpdated }: Pr
           <p className="text-xs text-muted-foreground whitespace-pre-wrap">{order.description}</p>
         )}
       </div>
+
+      {reopenInfo && order.status === "待施工" && (
+        <div className="rounded-lg border-2 border-red-400 bg-red-50 px-3 py-2.5 text-sm text-red-900 space-y-1">
+          <p className="font-bold flex items-center gap-1.5">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            案件退回重拍
+          </p>
+          <p><span className="text-red-700/80">原因：</span>{reopenInfo.returnReason}</p>
+          {reopenInfo.returnNote && (
+            <p><span className="text-red-700/80">說明：</span>{reopenInfo.returnNote}</p>
+          )}
+          <p className="text-xs text-red-700/70">
+            {reopenInfo.reopenedByName ? `${reopenInfo.reopenedByName} · ` : ""}
+            {new Date(reopenInfo.createdAt).toLocaleString("zh-TW", { timeZone: "Asia/Taipei" })}
+          </p>
+        </div>
+      )}
 
       {hasUnable && progress && (
         <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 space-y-0.5">

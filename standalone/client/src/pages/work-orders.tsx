@@ -33,6 +33,7 @@ import { PdfPreviewDialog } from "@/components/pdf/pdf-preview-dialog";
 import { handlePdfAction, isMobileDevice, openPrintWindow } from "@/components/pdf/pdf-service";
 import { buildWorkOrderHtml } from "@/components/pdf/templates/WorkOrderTemplate";
 import { FieldProgressDetailSection } from "@/components/field-progress/FieldProgressDetailSection";
+import { WorkOrderReopenDialog } from "@/components/work-orders/WorkOrderReopenDialog";
 
 const STATUSES = WO_STATUSES;
 
@@ -307,6 +308,10 @@ export default function WorkOrders() {
   const [arModal, setArModal] = useState<{ order: any; amount: string } | null>(null);
   const [pdfPreview, setPdfPreview] = useState<{ url: string; filename: string } | null>(null);
   const pendingARRef = useRef<any>(null);
+  const [reopenModal, setReopenModal] = useState<{ payload: Record<string, unknown> } | null>(null);
+
+  const COMPLETED_STATUSES = ["已完成", "已結案"];
+  const isAdmin = user?.role === "super_admin" || user?.role === "owner" || user?.role === "admin";
 
   const { data: orders, isLoading } = useListWorkOrders({
     ...(filterCustomerId ? { customerId: filterCustomerId } : {}),
@@ -444,15 +449,40 @@ export default function WorkOrders() {
       return;
     }
     const payload = buildPayload(form);
-    console.log("[work-order submit]", { customerId: payload.customerId, quoteId: payload.quoteId, customerName: payload.customerName });
     if (mode === "create") {
       createMutation.mutate({ data: payload });
-    } else {
-      if (form.status === "已完成" && editItem?.status !== "已完成") {
-        pendingARRef.current = { ...editItem, ...payload };
-      }
-      updateMutation.mutate({ id: editItem.id, data: payload });
+      return;
     }
+
+    const isReopen =
+      isAdmin &&
+      form.status === "待施工" &&
+      editItem?.status &&
+      COMPLETED_STATUSES.includes(editItem.status) &&
+      editItem.status !== "待施工";
+
+    if (isReopen) {
+      setReopenModal({ payload });
+      return;
+    }
+
+    if (form.status === "已完成" && editItem?.status !== "已完成") {
+      pendingARRef.current = { ...editItem, ...payload };
+    }
+    updateMutation.mutate({ id: editItem.id, data: payload });
+  }
+
+  function confirmReopen(reason: string, note: string) {
+    if (!reopenModal || !editItem) return;
+    updateMutation.mutate({
+      id: editItem.id,
+      data: {
+        ...reopenModal.payload,
+        reopenReason: reason,
+        reopenNote: note || undefined,
+      },
+    });
+    setReopenModal(null);
   }
 
   const isDialogOpen = showCreate || !!editItem;
@@ -723,6 +753,14 @@ export default function WorkOrders() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <WorkOrderReopenDialog
+        open={!!reopenModal}
+        workOrderLabel={editItem?.workOrderNumber || `#${editItem?.id ?? ""}`}
+        onCancel={() => setReopenModal(null)}
+        onConfirm={confirmReopen}
+        pending={updateMutation.isPending}
+      />
 
       <PdfPreviewDialog
         open={!!pdfPreview}

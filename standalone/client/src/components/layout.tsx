@@ -118,6 +118,12 @@ const NAV_ITEMS: NavItem[] = [
     roles: ["super_admin", "owner", "admin", "accountant"],
   },
   {
+    href: "/notification-settings",
+    label: "通知設定",
+    icon: Bell,
+    roles: ["super_admin", "owner", "admin", "sales", "accountant", "engineer", "technician", "distributor"],
+  },
+  {
     href: "/reminder-settings",
     label: "AI 小秘書",
     icon: Bell,
@@ -168,10 +174,10 @@ function NavContent() {
   });
 
   const topItems = visibleItems.filter(
-    (item) => !(["/inventory", "/warranties", "/employees", "/users", "/reminder-settings", "/work-hours-stats"].includes(item.href))
+    (item) => !(["/inventory", "/warranties", "/employees", "/users", "/reminder-settings", "/notification-settings", "/work-hours-stats"].includes(item.href))
   );
   const bottomItems = visibleItems.filter(
-    (item) => ["/warranties", "/employees", "/users", "/inventory", "/reminder-settings", "/work-hours-stats"].includes(item.href)
+    (item) => ["/warranties", "/employees", "/users", "/inventory", "/reminder-settings", "/notification-settings", "/work-hours-stats"].includes(item.href)
   );
 
   function NavLink({ item }: { item: NavItem }) {

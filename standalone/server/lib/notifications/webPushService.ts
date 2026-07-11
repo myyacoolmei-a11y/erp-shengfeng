@@ -1,4 +1,19 @@
+import { eq } from "drizzle-orm";
+import { db, userPushSubscriptionsTable } from "@workspace/db";
 import { logger } from "../logger.ts";
+
+export interface WebPushPayload {
+  title: string;
+  body: string;
+  url: string;
+  notificationId?: string;
+}
+
+export interface WebPushResult {
+  success: boolean;
+  errorMessage?: string;
+  staleSubscription?: boolean;
+}
 
 let configured = false;
 
@@ -18,14 +33,24 @@ export function isWebPushConfigured(): boolean {
   return getVapidKeys() != null;
 }
 
-export async function sendWebPushNotification(
-  subscription: { endpoint: string; p256dh: string; auth: string },
-  payload: { title: string; body: string; url: string },
-): Promise<boolean> {
+function isStalePushError(err: unknown): boolean {
+  if (!err || typeof err !== "object") return false;
+  const statusCode = (err as { statusCode?: number }).statusCode;
+  return statusCode === 404 || statusCode === 410;
+}
+
+export async function sendWebPushToSubscription(
+  subscription: {
+    id: number;
+    endpoint: string;
+    p256dh: string;
+    auth: string;
+  },
+  payload: WebPushPayload,
+): Promise<WebPushResult> {
   const keys = getVapidKeys();
   if (!keys) {
-    logger.debug("Web Push skipped: VAPID keys not configured");
-    return false;
+    return { success: false, errorMessage: "VAPID keys not configured" };
   }
 
   try {
@@ -40,11 +65,44 @@ export async function sendWebPushNotification(
         endpoint: subscription.endpoint,
         keys: { p256dh: subscription.p256dh, auth: subscription.auth },
       },
-      JSON.stringify(payload),
+      JSON.stringify({
+        title: payload.title,
+        body: payload.body,
+        url: payload.url,
+        notificationId: payload.notificationId,
+      }),
     );
-    return true;
+
+    await db
+      .update(userPushSubscriptionsTable)
+      .set({ lastUsedAt: new Date(), updatedAt: new Date() })
+      .where(eq(userPushSubscriptionsTable.id, subscription.id));
+
+    return { success: true };
   } catch (err) {
-    logger.warn({ err, endpoint: subscription.endpoint.slice(0, 48) }, "Web Push delivery failed");
-    return false;
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    logger.warn(
+      { err, endpoint: subscription.endpoint.slice(0, 48), statusCode: (err as { statusCode?: number }).statusCode },
+      "Web Push delivery failed",
+    );
+
+    if (isStalePushError(err)) {
+      await db
+        .update(userPushSubscriptionsTable)
+        .set({ enabled: false, updatedAt: new Date() })
+        .where(eq(userPushSubscriptionsTable.id, subscription.id));
+      return { success: false, errorMessage, staleSubscription: true };
+    }
+
+    return { success: false, errorMessage };
   }
+}
+
+/** @deprecated Use sendWebPushToSubscription */
+export async function sendWebPushNotification(
+  subscription: { endpoint: string; p256dh: string; auth: string },
+  payload: { title: string; body: string; url: string },
+): Promise<boolean> {
+  const result = await sendWebPushToSubscription({ ...subscription, id: 0 }, payload);
+  return result.success;
 }

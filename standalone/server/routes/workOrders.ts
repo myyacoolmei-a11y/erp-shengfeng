@@ -25,6 +25,11 @@ import {
 import { assertWorkOrderDataAccess } from "../lib/dataPermissionAccess.ts";
 import { resetWorkOrderFieldProgressOnReopen } from "../lib/workOrders/resetWorkOrderFieldProgressOnReopen.ts";
 import { logger } from "../lib/logger.ts";
+import {
+  emitWorkOrderCreatedNotifications,
+  emitWorkOrderUpdatedNotifications,
+} from "../lib/notifications/workOrdersNotificationHook.ts";
+import { WORK_ORDER_RETURN_REASONS } from "@workspace/db";
 
 const WO_COMPLETED_STATUSES = ["已完成", "已結案"];
 const WO_ADMIN_ROLES = ["super_admin", "owner", "admin"];
@@ -314,6 +319,10 @@ router.post("/work-orders", requireRole(...WO_WRITE_ROLES), async (req, res): Pr
     await syncQuoteDispatchStatus(updated.quoteId);
   }
 
+  void emitWorkOrderCreatedNotifications(updated).catch(err => {
+    logger.error({ err, workOrderId: updated.id }, "work order create notification failed");
+  });
+
   res.status(201).json(formatOrder({ ...updated, linkedCustomerName: null }, insertedItems));
 });
 
@@ -360,13 +369,7 @@ router.patch("/work-orders/:id", requireRole(...WO_WRITE_ROLES), async (req, res
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
   const [existing] = await db
-    .select({
-      id: workOrdersTable.id,
-      status: workOrdersTable.status,
-      assignedTo: workOrdersTable.assignedTo,
-      assistantTo: workOrdersTable.assistantTo,
-      technicians: workOrdersTable.technicians,
-    })
+    .select()
     .from(workOrdersTable)
     .where(eq(workOrdersTable.id, id));
   if (!existing) { res.status(404).json({ error: "找不到派工單" }); return; }
@@ -381,6 +384,14 @@ router.patch("/work-orders/:id", requireRole(...WO_WRITE_ROLES), async (req, res
 
   const { equipmentItems: itemInputs, ...orderFields } = parsed.data as any;
   const clearLegacy = itemInputs !== undefined;
+  const reopenReason = typeof orderFields.reopenReason === "string" ? orderFields.reopenReason.trim() : "";
+  const reopenNote = typeof orderFields.reopenNote === "string" ? orderFields.reopenNote.trim() : "";
+  const adminNotificationNote = typeof orderFields.adminNotificationNote === "string"
+    ? orderFields.adminNotificationNote.trim()
+    : "";
+  delete orderFields.reopenReason;
+  delete orderFields.reopenNote;
+  delete orderFields.adminNotificationNote;
 
   const newStatus = typeof orderFields.status === "string" ? orderFields.status : undefined;
   const isAdminReopen =
@@ -389,6 +400,17 @@ router.patch("/work-orders/:id", requireRole(...WO_WRITE_ROLES), async (req, res
     existing.status !== "待施工" &&
     WO_COMPLETED_STATUSES.includes(existing.status) &&
     effectiveRoles(req.user).some(r => WO_ADMIN_ROLES.includes(r));
+
+  if (isAdminReopen) {
+    if (!reopenReason || !WORK_ORDER_RETURN_REASONS.includes(reopenReason as typeof WORK_ORDER_RETURN_REASONS[number])) {
+      res.status(400).json({ error: "改回待施工時請選擇退回原因" });
+      return;
+    }
+    if (reopenReason === "其他" && !reopenNote) {
+      res.status(400).json({ error: "請填寫退回說明" });
+      return;
+    }
+  }
 
   const sanitizedOrderFields = sanitizeWOData(orderFields, { clearLegacyEquipment: clearLegacy }) as Record<string, unknown>;
   if (isAdminReopen) {
@@ -427,6 +449,15 @@ router.patch("/work-orders/:id", requireRole(...WO_WRITE_ROLES), async (req, res
   if (order.quoteId) {
     await syncQuoteDispatchStatus(order.quoteId);
   }
+
+  void emitWorkOrderUpdatedNotifications(existing, order, {
+    reopenReason: isAdminReopen ? reopenReason : undefined,
+    reopenNote: isAdminReopen ? reopenNote : undefined,
+    reopenedByUserId: isAdminReopen ? req.user!.id : undefined,
+    adminNote: adminNotificationNote || undefined,
+  }).catch(err => {
+    logger.error({ err, workOrderId: id }, "work order update notification failed");
+  });
 
   res.json(formatOrder({ ...order, linkedCustomerName: null }, equipmentItems));
 });

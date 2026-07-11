@@ -10,7 +10,7 @@ import {
 } from "@workspace/db";
 import type { FieldProgressAction } from "@workspace/db";
 import { logger } from "../logger.ts";
-import { sendWebPushNotification } from "./webPushService.ts";
+import { notifyManagersFieldProgress } from "./workOrderNotificationHelpers.ts";
 
 const ACTION_LABELS: Record<FieldProgressAction, string> = {
   depart: "已出發",
@@ -38,7 +38,7 @@ export interface FieldProgressNotifyInput {
   actedAt: Date;
 }
 
-/** Fire-and-forget: record event, in-app + Web Push to opted-in managers. Never throws. */
+/** Fire-and-forget: record event + unified notifications. Never throws. */
 export async function notifyFieldProgressEvent(input: FieldProgressNotifyInput): Promise<void> {
   try {
     const [order] = await db
@@ -61,7 +61,6 @@ export async function notifyFieldProgressEvent(input: FieldProgressNotifyInput):
     const customerName = order.customerName ?? "（未知客戶）";
     const timeLabel = formatTaipeiTime(input.actedAt);
     const woLabel = order.workOrderNumber ?? `#${order.id}`;
-    const openUrl = `/work-orders?open=${order.id}`;
 
     await db.insert(fieldProgressEventsTable).values({
       workOrderId: input.workOrderId,
@@ -74,46 +73,21 @@ export async function notifyFieldProgressEvent(input: FieldProgressNotifyInput):
       actedAt: input.actedAt,
     });
 
-    const recipients = await db
-      .select({ id: usersTable.id })
-      .from(usersTable)
-      .where(
-        and(
-          eq(usersTable.isActive, true),
-          eq(usersTable.receiveDispatchNotifications, true),
-        ),
-      );
-
     const title = `派工 ${actionLabel}`;
-    const body = `${input.engineerName} · ${customerName} · ${woLabel} · ${timeLabel}`;
-    const payload = { workOrderId: order.id, url: openUrl };
+    const message = `${input.engineerName} · ${customerName} · ${woLabel} · ${timeLabel}`;
 
-    for (const recipient of recipients) {
-      if (recipient.id === input.engineerUserId) continue;
-
-      await db.insert(inAppNotificationsTable).values({
-        userId: recipient.id,
-        kind: "field_progress",
-        title,
-        body,
-        payload,
-      });
-
-      const subs = await db
-        .select()
-        .from(userPushSubscriptionsTable)
-        .where(eq(userPushSubscriptionsTable.userId, recipient.id));
-
-      for (const sub of subs) {
-        void sendWebPushNotification(sub, { title, body, url: openUrl });
-      }
-    }
+    await notifyManagersFieldProgress({
+      workOrderId: order.id,
+      engineerUserId: input.engineerUserId,
+      title,
+      message,
+      dedupeKey: `field-progress-${input.workOrderId}-${input.action}-${input.engineerUserId}-${input.actedAt.getTime()}`,
+    });
 
     logger.info({
       event: "field_progress_notify",
       workOrderId: input.workOrderId,
       action: input.action,
-      recipientCount: recipients.length,
     }, "Field progress notifications sent");
   } catch (err) {
     logger.error({ err, ...input }, "notifyFieldProgressEvent failed");
@@ -168,12 +142,25 @@ export async function markAllNotificationsRead(userId: number): Promise<void> {
     );
 }
 
+function inferDeviceName(userAgent?: string): string | null {
+  if (!userAgent) return null;
+  if (/iPhone/i.test(userAgent)) return "iPhone";
+  if (/iPad/i.test(userAgent)) return "iPad";
+  if (/Android/i.test(userAgent)) return "Android";
+  if (/Macintosh/i.test(userAgent)) return "Mac";
+  if (/Windows/i.test(userAgent)) return "Windows";
+  return "瀏覽器";
+}
+
 export async function upsertPushSubscription(
   userId: number,
-  data: { endpoint: string; p256dh: string; auth: string; userAgent?: string },
+  data: { endpoint: string; p256dh: string; auth: string; userAgent?: string; deviceName?: string },
 ): Promise<void> {
+  const now = new Date();
+  const deviceName = data.deviceName?.trim() || inferDeviceName(data.userAgent) || null;
+
   const [existing] = await db
-    .select({ id: userPushSubscriptionsTable.id, userId: userPushSubscriptionsTable.userId })
+    .select({ id: userPushSubscriptionsTable.id })
     .from(userPushSubscriptionsTable)
     .where(eq(userPushSubscriptionsTable.endpoint, data.endpoint));
 
@@ -185,6 +172,9 @@ export async function upsertPushSubscription(
         p256dh: data.p256dh,
         auth: data.auth,
         userAgent: data.userAgent ?? null,
+        deviceName,
+        enabled: true,
+        updatedAt: now,
       })
       .where(eq(userPushSubscriptionsTable.id, existing.id));
     return;
@@ -196,6 +186,9 @@ export async function upsertPushSubscription(
     p256dh: data.p256dh,
     auth: data.auth,
     userAgent: data.userAgent ?? null,
+    deviceName,
+    enabled: true,
+    updatedAt: now,
   });
 }
 

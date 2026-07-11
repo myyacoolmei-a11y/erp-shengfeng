@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useLocation } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Bell } from "lucide-react";
@@ -13,7 +13,6 @@ import {
   fetchInAppNotifications,
   markNotificationRead,
   markAllNotificationsRead,
-  subscribeWebPush,
   type InAppNotificationDto,
 } from "@/lib/notificationsApi";
 
@@ -75,10 +74,6 @@ export function NotificationBell() {
       qc.invalidateQueries({ queryKey: UNREAD_KEY });
     },
   });
-
-  useEffect(() => {
-    void subscribeWebPush().catch(() => { /* optional */ });
-  }, []);
 
   function handleItemClick(item: InAppNotificationDto) {
     if (!item.readAt) readMutation.mutate(item.id);

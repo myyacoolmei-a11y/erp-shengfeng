@@ -1,6 +1,8 @@
 import { Router, type IRouter } from "express";
 import { z } from "zod/v4";
-import { authenticate } from "../lib/auth";
+import { eq, desc, and } from "drizzle-orm";
+import { authenticate, effectiveRoles } from "../lib/auth";
+import { db, workOrderReopenEventsTable, usersTable, userPushSubscriptionsTable, lineUserBindingsTable } from "@workspace/db";
 import {
   listInAppNotifications,
   countUnreadNotifications,
@@ -9,20 +11,48 @@ import {
   upsertPushSubscription,
   deletePushSubscription,
 } from "../lib/notifications/fieldProgressNotifyService";
+import {
+  getUserNotificationPrefs,
+  updateUserNotificationPrefs,
+} from "../lib/notifications/notificationService";
 import { getVapidPublicKey, isWebPushConfigured } from "../lib/notifications/webPushService";
 
 const router: IRouter = Router();
+const ADMIN_ROLES = ["super_admin", "owner", "admin"];
 
 router.use(authenticate);
 
 router.get("/notifications/vapid-public-key", (_req, res): void => {
-  const publicKey = getVapidPublicKey();
-  res.json({ publicKey, configured: isWebPushConfigured() });
+  res.json({ publicKey: getVapidPublicKey(), configured: isWebPushConfigured() });
+});
+
+router.get("/notifications/prefs", async (req, res): Promise<void> => {
+  const prefs = await getUserNotificationPrefs(req.user!.id);
+  res.json({
+    ...prefs,
+    webPushConfigured: isWebPushConfigured(),
+    pushPermission: null,
+  });
+});
+
+const PrefsBody = z.object({
+  notifyInApp: z.boolean().optional(),
+  notifyWebPush: z.boolean().optional(),
+  notifyLine: z.boolean().optional(),
+});
+
+router.patch("/notifications/prefs", async (req, res): Promise<void> => {
+  const parsed = PrefsBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+  const row = await updateUserNotificationPrefs(req.user!.id, parsed.data);
+  res.json(row);
 });
 
 router.get("/notifications/unread-count", async (req, res): Promise<void> => {
-  const count = await countUnreadNotifications(req.user!.id);
-  res.json({ count });
+  res.json({ count: await countUnreadNotifications(req.user!.id) });
 });
 
 router.get("/notifications/in-app", async (req, res): Promise<void> => {
@@ -65,6 +95,7 @@ const SubscribeBody = z.object({
     p256dh: z.string().min(1),
     auth: z.string().min(1),
   }),
+  deviceName: z.string().optional(),
 });
 
 router.post("/notifications/push/subscribe", async (req, res): Promise<void> => {
@@ -78,6 +109,7 @@ router.post("/notifications/push/subscribe", async (req, res): Promise<void> => 
     p256dh: parsed.data.keys.p256dh,
     auth: parsed.data.keys.auth,
     userAgent: req.headers["user-agent"],
+    deviceName: parsed.data.deviceName,
   });
   res.status(201).json({ ok: true });
 });
@@ -90,6 +122,84 @@ router.delete("/notifications/push/subscribe", async (req, res): Promise<void> =
   }
   await deletePushSubscription(req.user!.id, endpoint);
   res.json({ ok: true });
+});
+
+router.get("/notifications/work-orders/:workOrderId/reopen-info", async (req, res): Promise<void> => {
+  const workOrderId = parseInt(String(req.params.workOrderId), 10);
+  if (isNaN(workOrderId)) {
+    res.status(400).json({ error: "Invalid workOrderId" });
+    return;
+  }
+
+  const [event] = await db
+    .select({
+      returnReason: workOrderReopenEventsTable.returnReason,
+      returnNote: workOrderReopenEventsTable.returnNote,
+      createdAt: workOrderReopenEventsTable.createdAt,
+      reopenedByName: usersTable.displayName,
+    })
+    .from(workOrderReopenEventsTable)
+    .leftJoin(usersTable, eq(workOrderReopenEventsTable.reopenedByUserId, usersTable.id))
+    .where(eq(workOrderReopenEventsTable.workOrderId, workOrderId))
+    .orderBy(desc(workOrderReopenEventsTable.createdAt))
+    .limit(1);
+
+  if (!event) {
+    res.json({ latest: null });
+    return;
+  }
+
+  res.json({
+    latest: {
+      returnReason: event.returnReason,
+      returnNote: event.returnNote,
+      createdAt: event.createdAt.toISOString(),
+      reopenedByName: event.reopenedByName,
+    },
+  });
+});
+
+router.get("/notifications/admin/user-status", async (req, res): Promise<void> => {
+  if (!effectiveRoles(req.user!).some(r => ADMIN_ROLES.includes(r))) {
+    res.status(403).json({ error: "需要管理員權限" });
+    return;
+  }
+
+  const users = await db
+    .select({
+      id: usersTable.id,
+      displayName: usersTable.displayName,
+      username: usersTable.username,
+    })
+    .from(usersTable)
+    .where(eq(usersTable.isActive, true));
+
+  const result = [];
+  for (const user of users) {
+    const pushRows = await db
+      .select({ id: userPushSubscriptionsTable.id })
+      .from(userPushSubscriptionsTable)
+      .where(
+        and(
+          eq(userPushSubscriptionsTable.userId, user.id),
+          eq(userPushSubscriptionsTable.enabled, true),
+        ),
+      );
+    const [line] = await db
+      .select({ lineUserId: lineUserBindingsTable.lineUserId })
+      .from(lineUserBindingsTable)
+      .where(and(eq(lineUserBindingsTable.userId, user.id), eq(lineUserBindingsTable.enabled, true)));
+
+    result.push({
+      userId: user.id,
+      displayName: user.displayName,
+      username: user.username,
+      webPushDeviceCount: pushRows.length,
+      lineBound: !!line?.lineUserId,
+    });
+  }
+
+  res.json(result);
 });
 
 export default router;

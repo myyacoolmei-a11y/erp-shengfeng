@@ -30,6 +30,7 @@ import WholesaleSettlements from "@/pages/wholesale-settlements";
 import PartnerHome from "@/pages/partner-home";
 import PartnerAdmin from "@/pages/partner-admin";
 import ReminderSettings from "@/pages/reminder-settings";
+import NotificationSettings from "@/pages/notification-settings";
 import WorkHoursStats from "@/pages/work-hours-stats";
 
 function ComingSoon({ title }: { title: string }) {
@@ -231,8 +232,13 @@ function AppRoutes() {
               </RoleGuard>
             </Route>
             <Route path="/reminder-settings">
-              <RoleGuard roles={["super_admin", "owner", "admin", "sales", "accountant", "distributor"]}>
+              <RoleGuard roles={["super_admin", "owner", "admin", "sales", "accountant", "distributor", "engineer", "technician"]}>
                 <ReminderSettings />
+              </RoleGuard>
+            </Route>
+            <Route path="/notification-settings">
+              <RoleGuard roles={["super_admin", "owner", "admin", "sales", "accountant", "engineer", "technician", "distributor"]}>
+                <NotificationSettings />
               </RoleGuard>
             </Route>
             <Route path="/users">

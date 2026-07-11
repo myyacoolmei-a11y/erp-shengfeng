@@ -3,6 +3,7 @@ import { and, desc, eq, gt, isNotNull, isNull, ne } from "drizzle-orm";
 import {
   db,
   lineBindingCodesTable,
+  lineUserBindingsTable,
   notificationSettingsTable,
   usersTable,
 } from "@workspace/db";
@@ -67,7 +68,31 @@ async function persistLineBinding(opts: {
     .set({ lineUserId: opts.lineUserId })
     .where(eq(usersTable.id, erpUser.id));
 
+  const profile = await getLineUserProfile(opts.lineUserId);
+
+  await db
+    .insert(lineUserBindingsTable)
+    .values({
+      userId: erpUser.id,
+      lineUserId: opts.lineUserId,
+      displayName: profile?.displayName ?? null,
+      enabled: true,
+      boundAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: lineUserBindingsTable.userId,
+      set: {
+        lineUserId: opts.lineUserId,
+        displayName: profile?.displayName ?? null,
+        enabled: true,
+        updatedAt: new Date(),
+      },
+    });
+
   await ensureDefaultPrefsForUser(erpUser.id);
+  const { ensureUserNotificationPrefs } = await import("../notifications/notificationService.ts");
+  await ensureUserNotificationPrefs(erpUser.id);
 
   await db
     .update(notificationSettingsTable)
