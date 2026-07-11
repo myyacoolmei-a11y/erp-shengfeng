@@ -9,7 +9,7 @@ import {
   quotesTable,
 } from "@workspace/db";
 import { CreateWorkOrderBody, UpdateWorkOrderBody, CreateProgressBody } from "@workspace/api-zod";
-import { requireRole } from "../lib/auth";
+import { requireRole, effectiveRoles } from "../lib/auth";
 import { syncQuoteDispatchStatus } from "../lib/quoteWorkflow";
 import { formatQuoteNumber } from "../lib/quoteStatus";
 import { stripQuotePricingFromNotes } from "../../shared/workOrderNotes.ts";
@@ -23,6 +23,11 @@ import {
   deriveAssignedFromTechnicians,
 } from "../lib/workOrders/workOrderAssignment.ts";
 import { assertWorkOrderDataAccess } from "../lib/dataPermissionAccess.ts";
+import { resetWorkOrderFieldProgressOnReopen } from "../lib/workOrders/resetWorkOrderFieldProgressOnReopen.ts";
+import { logger } from "../lib/logger.ts";
+
+const WO_COMPLETED_STATUSES = ["已完成", "已結案"];
+const WO_ADMIN_ROLES = ["super_admin", "owner", "admin"];
 
 const router: IRouter = Router();
 
@@ -357,6 +362,7 @@ router.patch("/work-orders/:id", requireRole(...WO_WRITE_ROLES), async (req, res
   const [existing] = await db
     .select({
       id: workOrdersTable.id,
+      status: workOrdersTable.status,
       assignedTo: workOrdersTable.assignedTo,
       assistantTo: workOrdersTable.assistantTo,
       technicians: workOrdersTable.technicians,
@@ -376,13 +382,34 @@ router.patch("/work-orders/:id", requireRole(...WO_WRITE_ROLES), async (req, res
   const { equipmentItems: itemInputs, ...orderFields } = parsed.data as any;
   const clearLegacy = itemInputs !== undefined;
 
+  const newStatus = typeof orderFields.status === "string" ? orderFields.status : undefined;
+  const isAdminReopen =
+    !!req.user &&
+    newStatus === "待施工" &&
+    existing.status !== "待施工" &&
+    WO_COMPLETED_STATUSES.includes(existing.status) &&
+    effectiveRoles(req.user).some(r => WO_ADMIN_ROLES.includes(r));
+
+  const sanitizedOrderFields = sanitizeWOData(orderFields, { clearLegacyEquipment: clearLegacy }) as Record<string, unknown>;
+  if (isAdminReopen) {
+    sanitizedOrderFields.completedDate = null;
+  }
+
   const [order] = await db
     .update(workOrdersTable)
-    .set(sanitizeWOData(orderFields, { clearLegacyEquipment: clearLegacy }) as any)
+    .set(sanitizedOrderFields as any)
     .where(eq(workOrdersTable.id, id))
     .returning();
 
   if (!order) { res.status(404).json({ error: "找不到派工單" }); return; }
+
+  if (isAdminReopen) {
+    try {
+      await resetWorkOrderFieldProgressOnReopen(id);
+    } catch (err) {
+      logger.error({ err, workOrderId: id }, "field progress reset failed after work order reopen");
+    }
+  }
 
   let equipmentItems: ReturnType<typeof serializeEquipmentItem>[] = [];
   if (itemInputs !== undefined) {

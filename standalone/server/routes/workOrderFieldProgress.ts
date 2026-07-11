@@ -1,9 +1,10 @@
 import { Router, type IRouter, type Request, type Response } from "express";
-import { eq, and, gte, lte, sql } from "drizzle-orm";
+import { eq, and, gte, lte, sql, desc } from "drizzle-orm";
 import {
   db,
   workOrdersTable,
   workOrderFieldProgressTable,
+  fieldProgressSnapshotsTable,
   customersTable,
 } from "@workspace/db";
 import { requireRole } from "../lib/auth";
@@ -15,6 +16,7 @@ import {
   isFieldProgressAdmin,
   diffMinutes,
   serializeFieldProgress,
+  serializeFieldProgressSnapshot,
   taipeiDateString,
 } from "../lib/workOrders/fieldProgressUtils.ts";
 import { notifyFieldProgressEvent } from "../lib/notifications/fieldProgressNotifyService.ts";
@@ -139,6 +141,38 @@ router.get(
         : rows;
 
     res.json(filtered.map(serializeFieldProgress));
+  },
+);
+
+/** GET archived field progress cycles (admin history after reopen) */
+router.get(
+  "/work-orders/:workOrderId/field-progress/snapshots",
+  requireRole(...READ_ROLES),
+  async (req, res): Promise<void> => {
+    const workOrderId = parseWorkOrderId(req.params.workOrderId);
+    if (!workOrderId) {
+      res.status(400).json({ error: "Invalid workOrderId" });
+      return;
+    }
+
+    if (!isFieldProgressAdmin(req.user!)) {
+      res.status(403).json({ error: "您沒有權限查看歷史施工紀錄" });
+      return;
+    }
+
+    const order = await fetchWorkOrder(workOrderId);
+    if (!order) {
+      res.status(404).json({ error: "找不到派工單" });
+      return;
+    }
+
+    const rows = await db
+      .select()
+      .from(fieldProgressSnapshotsTable)
+      .where(eq(fieldProgressSnapshotsTable.workOrderId, workOrderId))
+      .orderBy(desc(fieldProgressSnapshotsTable.archivedAt));
+
+    res.json(rows.map(serializeFieldProgressSnapshot));
   },
 );
 

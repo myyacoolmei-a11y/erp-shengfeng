@@ -348,9 +348,14 @@ export default function WorkOrders() {
   });
   const updateMutation = useUpdateWorkOrder({
     mutation: {
-      onSuccess: () => {
+      onSuccess: (_data, variables) => {
         invalidateStatistics(queryClient);
         queryClient.invalidateQueries({ queryKey: getListWorkOrdersQueryKey() });
+        if (variables.id) {
+          queryClient.invalidateQueries({ queryKey: ["field-progress", variables.id] });
+          queryClient.invalidateQueries({ queryKey: ["field-progress-snapshots", variables.id] });
+        }
+        queryClient.invalidateQueries({ queryKey: ["field-progress", "mine"] });
         setEditItem(null);
         toast({ title: "派工單已更新" });
         if (pendingARRef.current) {

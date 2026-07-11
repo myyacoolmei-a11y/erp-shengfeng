@@ -30,5 +30,6 @@ export * from "./workOrderFieldProgress";
 export * from "./partnerBoard";
 export * from "./partnerSuggestions";
 export * from "./fieldProgressEvents";
+export * from "./fieldProgressSnapshots";
 export * from "./inAppNotifications";
 export * from "./userPushSubscriptions";

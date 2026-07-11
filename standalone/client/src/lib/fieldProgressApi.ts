@@ -21,6 +21,10 @@ export interface FieldProgressRecord {
   updatedAt: string | null;
 }
 
+export interface FieldProgressSnapshotRecord extends FieldProgressRecord {
+  archivedAt: string | null;
+}
+
 export interface WorkHoursStatRow extends FieldProgressRecord {
   date: string;
   workOrderNumber: string;
@@ -78,6 +82,10 @@ export function isWorkOrderAssignedToUser(
 
 export async function listFieldProgress(workOrderId: number): Promise<FieldProgressRecord[]> {
   return customFetch(`/api/work-orders/${workOrderId}/field-progress`);
+}
+
+export async function listFieldProgressSnapshots(workOrderId: number): Promise<FieldProgressSnapshotRecord[]> {
+  return customFetch(`/api/work-orders/${workOrderId}/field-progress/snapshots`);
 }
 
 export async function listMyFieldProgress(): Promise<FieldProgressRecord[]> {

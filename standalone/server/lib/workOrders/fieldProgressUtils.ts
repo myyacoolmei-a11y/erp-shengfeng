@@ -81,3 +81,29 @@ export function serializeFieldProgress(row: {
     updatedAt: isoOrNull(row.updatedAt),
   };
 }
+
+export function serializeFieldProgressSnapshot(row: {
+  id: number;
+  workOrderId: number;
+  engineerUserId: number;
+  engineerName: string;
+  departedAt: Date | null;
+  arrivedAt: Date | null;
+  completedAt: Date | null;
+  unableToCompleteAt: Date | null;
+  unableReason: string | null;
+  unableNote: string | null;
+  travelDurationMinutes: number | null;
+  workDurationMinutes: number | null;
+  totalDurationMinutes: number | null;
+  archivedAt: Date;
+}) {
+  return {
+    ...serializeFieldProgress({
+      ...row,
+      createdAt: row.archivedAt,
+      updatedAt: row.archivedAt,
+    }),
+    archivedAt: isoOrNull(row.archivedAt),
+  };
+}
