@@ -77,33 +77,50 @@ router.post("/push/test", async (req, res): Promise<void> => {
   const userId = req.user!.id;
   logger.info({ event: "push_test_request", userId, channel: "web_push" }, "Push test request received");
 
-  if (!isWebPushConfigured()) {
-    logger.warn({ userId }, "Push test rejected: VAPID not configured");
-    res.status(503).json({
-      vapidConfigured: false,
-      foundCount: 0,
-      sentCount: 0,
-      successCount: 0,
-      failCount: 0,
-      results: [],
-      overallSuccess: false,
-      message: "伺服器 VAPID 金鑰未設定，無法發送 Web Push",
-      channel: "web_push",
-    });
-    return;
+  try {
+    if (!isWebPushConfigured()) {
+      logger.warn({ userId }, "Push test rejected: VAPID not configured");
+      res.status(503).json({
+        vapidConfigured: false,
+        foundCount: 0,
+        sentCount: 0,
+        successCount: 0,
+        failCount: 0,
+        results: [],
+        overallSuccess: false,
+        message: "伺服器 VAPID 金鑰未設定，無法發送 Web Push",
+        channel: "web_push",
+      });
+      return;
+    }
+
+    const result = await sendTestWebPushForUser(userId);
+    logger.info({
+      event: "push_test_complete",
+      userId,
+      foundCount: result.foundCount,
+      successCount: result.successCount,
+      failCount: result.failCount,
+      overallSuccess: result.overallSuccess,
+    }, "Push test completed");
+
+    res.json({ ...result, channel: "web_push" });
+  } catch (err) {
+    logger.error({ err, userId }, "Push test failed");
+    if (!res.headersSent) {
+      res.status(500).json({
+        vapidConfigured: isWebPushConfigured(),
+        foundCount: 0,
+        sentCount: 0,
+        successCount: 0,
+        failCount: 0,
+        results: [],
+        overallSuccess: false,
+        message: err instanceof Error ? err.message : "測試推播失敗",
+        channel: "web_push",
+      });
+    }
   }
-
-  const result = await sendTestWebPushForUser(userId);
-  logger.info({
-    event: "push_test_complete",
-    userId,
-    foundCount: result.foundCount,
-    successCount: result.successCount,
-    failCount: result.failCount,
-    overallSuccess: result.overallSuccess,
-  }, "Push test completed");
-
-  res.json({ ...result, channel: "web_push" });
 });
 
 export default router;

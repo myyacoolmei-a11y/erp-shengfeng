@@ -68,6 +68,19 @@ export function toAbsoluteAppUrl(pathOrUrl: string): string {
   return `${base}${path}`;
 }
 
+/** Safe variant — returns null instead of throwing (for optional Web Push / LINE URLs). */
+export function tryToAbsoluteAppUrl(pathOrUrl: string): string | null {
+  try {
+    return toAbsoluteAppUrl(pathOrUrl);
+  } catch {
+    return null;
+  }
+}
+
 export function absoluteWorkOrderViewUrl(workOrderId: number): string {
   return toAbsoluteAppUrl(`/work-orders?open=${workOrderId}`);
+}
+
+export function tryAbsoluteWorkOrderViewUrl(workOrderId: number): string | null {
+  return tryToAbsoluteAppUrl(`/work-orders?open=${workOrderId}`);
 }

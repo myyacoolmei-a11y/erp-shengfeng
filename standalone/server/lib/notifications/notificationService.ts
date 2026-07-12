@@ -11,9 +11,10 @@ import {
 } from "@workspace/db";
 import type { NotificationChannel } from "../../../shared/notifications/types.ts";
 import { logger } from "../logger.ts";
-import { absoluteWorkOrderViewUrl, toAbsoluteAppUrl } from "../appUrl.ts";
-import { sendWebPushToSubscription } from "./webPushService.ts";
+import { tryToAbsoluteAppUrl } from "../appUrl.ts";
+import { sendWebPushToSubscription, isWebPushConfigured } from "./webPushService.ts";
 import { sendLineWorkOrderNotification } from "./lineNotificationService.ts";
+import { isLineMessagingConfigured } from "../line/lineConfig.ts";
 
 export interface SendNotificationInput {
   recipientUserIds: number[];
@@ -24,12 +25,9 @@ export interface SendNotificationInput {
   channels?: NotificationChannel[];
   payload?: Record<string, unknown>;
   dedupeKey?: string;
-  /** LINE-specific formatted body (supports emoji / multiline) */
   lineMessage?: string;
-  /** Override push title/body; defaults to title/message */
   pushTitle?: string;
   pushBody?: string;
-  /** If true, also honor users.receive_dispatch_notifications for in_app/web_push */
   requireDispatchPref?: boolean;
 }
 
@@ -62,7 +60,11 @@ async function claimDedupeKey(dedupeKey: string): Promise<boolean> {
 }
 
 async function getUserPrefs(userId: number) {
-  await ensureUserNotificationPrefs(userId);
+  try {
+    await ensureUserNotificationPrefs(userId);
+  } catch (err) {
+    logger.warn({ err, userId }, "ensureUserNotificationPrefs failed — using defaults");
+  }
 
   const [prefs] = await db
     .select()
@@ -92,7 +94,7 @@ async function getUserPrefs(userId: number) {
   };
 }
 
-async function logDelivery(row: {
+async function safeLogDelivery(row: {
   userId: number;
   channel: NotificationChannel;
   notificationType: string;
@@ -103,21 +105,33 @@ async function logDelivery(row: {
   subscriptionId?: number;
   lineUserId?: string;
   dedupeKey?: string;
-}) {
-  await db.insert(notificationDeliveryLogsTable).values({
-    userId: row.userId,
-    channel: row.channel,
-    notificationType: row.notificationType,
-    title: row.title,
-    success: row.success,
-    errorMessage: row.errorMessage ?? null,
-    workOrderId: row.workOrderId ?? null,
-    subscriptionId: row.subscriptionId ?? null,
-    lineUserId: row.lineUserId ?? null,
-    dedupeKey: row.dedupeKey ?? null,
-  });
+}): Promise<void> {
+  try {
+    await db.insert(notificationDeliveryLogsTable).values({
+      userId: row.userId,
+      channel: row.channel,
+      notificationType: row.notificationType,
+      title: row.title,
+      success: row.success,
+      errorMessage: row.errorMessage ?? null,
+      workOrderId: row.workOrderId ?? null,
+      subscriptionId: row.subscriptionId ?? null,
+      lineUserId: row.lineUserId ?? null,
+      dedupeKey: row.dedupeKey ?? null,
+    });
+  } catch (err) {
+    logger.warn({ err, userId: row.userId, channel: row.channel }, "notification delivery log write failed");
+  }
 }
 
+function resolvePushUrl(workOrderId?: number): string | null {
+  if (workOrderId) {
+    return tryToAbsoluteAppUrl(`/work-orders?open=${workOrderId}`);
+  }
+  return tryToAbsoluteAppUrl("/");
+}
+
+/** Never throws — failures are logged and summarized. */
 export async function sendNotification(input: SendNotificationInput): Promise<SendNotificationResult> {
   const summary: SendNotificationResult = {
     recipientCount: 0,
@@ -127,243 +141,235 @@ export async function sendNotification(input: SendNotificationInput): Promise<Se
     line: emptyChannelSummary(),
   };
 
-  const uniqueRecipients = [...new Set(input.recipientUserIds.filter(id => id > 0))];
-  summary.recipientCount = uniqueRecipients.length;
+  try {
+    const uniqueRecipients = [...new Set(input.recipientUserIds.filter(id => id > 0))];
+    summary.recipientCount = uniqueRecipients.length;
 
-  logger.info({
-    event: "notification_dispatch_start",
-    type: input.type,
-    workOrderId: input.workOrderId,
-    recipientCount: uniqueRecipients.length,
-    recipientUserIds: uniqueRecipients,
-    channels: input.channels ?? ["in_app", "web_push", "line"],
-    dedupeKey: input.dedupeKey,
-  }, "Notification dispatch started");
-
-  if (uniqueRecipients.length === 0) {
-    logger.warn({
-      event: "notification_dispatch_skipped",
+    logger.info({
+      event: "notification_dispatch_start",
       type: input.type,
       workOrderId: input.workOrderId,
-      reason: "no_recipients",
-    }, "Notification dispatch skipped: no recipients");
-    return summary;
-  }
+      recipientCount: uniqueRecipients.length,
+      channels: input.channels ?? ["in_app", "web_push", "line"],
+    }, "Notification dispatch started");
 
-  if (input.dedupeKey) {
-    const claimed = await claimDedupeKey(input.dedupeKey);
-    if (!claimed) {
-      summary.deduped = true;
-      logger.info({ dedupeKey: input.dedupeKey, type: input.type }, "Notification deduped");
+    if (uniqueRecipients.length === 0) {
+      logger.warn({ type: input.type, workOrderId: input.workOrderId }, "Notification skipped: no recipients");
       return summary;
     }
-  }
 
-  const channels = input.channels ?? ["in_app", "web_push", "line"];
-  const relativeOpenUrl = input.workOrderId ? `/work-orders?open=${input.workOrderId}` : "/";
-  const absolutePushUrl = input.workOrderId
-    ? absoluteWorkOrderViewUrl(input.workOrderId)
-    : toAbsoluteAppUrl("/");
-  const payload = {
-    workOrderId: input.workOrderId,
-    url: relativeOpenUrl,
-    type: input.type,
-    ...input.payload,
-  };
-
-  for (const userId of uniqueRecipients) {
-    const prefs = await getUserPrefs(userId);
-    if (!prefs.active) {
-      logger.info({ userId, type: input.type }, "Notification skipped: inactive user");
-      continue;
-    }
-
-    if (input.requireDispatchPref && !prefs.receiveDispatchNotifications) {
-      logger.info({ userId, type: input.type }, "Notification skipped: receiveDispatchNotifications disabled");
-      continue;
-    }
-
-    if (channels.includes("in_app")) {
-      if (!prefs.notifyInApp) {
-        summary.inApp.skipped += 1;
-        logger.info({ userId, type: input.type }, "In-app notification skipped: user pref disabled");
-      } else {
-        summary.inApp.attempted += 1;
-        try {
-          await db.insert(inAppNotificationsTable).values({
-            userId,
-            kind: input.type,
-            title: input.title,
-            body: input.message,
-            payload,
-          });
-          summary.inApp.succeeded += 1;
-          logger.info({ userId, type: input.type, channel: "in_app" }, "In-app notification created");
-          await logDelivery({
-            userId,
-            channel: "in_app",
-            notificationType: input.type,
-            title: input.title,
-            success: true,
-            workOrderId: input.workOrderId,
-            dedupeKey: input.dedupeKey,
-          });
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          summary.inApp.failed += 1;
-          logger.error({ err, userId, type: input.type, channel: "in_app" }, "In-app notification failed");
-          await logDelivery({
-            userId,
-            channel: "in_app",
-            notificationType: input.type,
-            title: input.title,
-            success: false,
-            errorMessage: msg,
-            workOrderId: input.workOrderId,
-            dedupeKey: input.dedupeKey,
-          });
-        }
+    if (input.dedupeKey) {
+      const claimed = await claimDedupeKey(input.dedupeKey);
+      if (!claimed) {
+        summary.deduped = true;
+        logger.info({ dedupeKey: input.dedupeKey, type: input.type }, "Notification deduped");
+        return summary;
       }
     }
 
-    if (channels.includes("web_push")) {
-      if (!prefs.notifyWebPush) {
-        summary.webPush.skipped += 1;
-        logger.info({ userId, type: input.type }, "Web Push skipped: user pref disabled");
-      } else {
-        const subs = await db
-          .select()
-          .from(userPushSubscriptionsTable)
-          .where(
-            and(
-              eq(userPushSubscriptionsTable.userId, userId),
-              eq(userPushSubscriptionsTable.enabled, true),
-            ),
-          );
+    const channels = input.channels ?? ["in_app", "web_push", "line"];
+    const relativeOpenUrl = input.workOrderId ? `/work-orders?open=${input.workOrderId}` : "/";
+    const payload = {
+      workOrderId: input.workOrderId,
+      url: relativeOpenUrl,
+      type: input.type,
+      ...input.payload,
+    };
 
-        summary.webPush.subscriptionCount += subs.length;
-        logger.info({
-          userId,
-          type: input.type,
-          channel: "web_push",
-          subscriptionCount: subs.length,
-        }, "Web Push subscriptions loaded");
+    for (const userId of uniqueRecipients) {
+      let prefs;
+      try {
+        prefs = await getUserPrefs(userId);
+      } catch (err) {
+        logger.error({ err, userId, type: input.type }, "getUserPrefs failed — skipping user");
+        continue;
+      }
 
-        if (subs.length === 0) {
-          summary.webPush.skipped += 1;
-          logger.warn({ userId, type: input.type }, "Web Push skipped: no active subscriptions");
-        }
+      if (!prefs.active) continue;
+      if (input.requireDispatchPref && !prefs.receiveDispatchNotifications) continue;
 
-        const pushTitle = input.pushTitle ?? input.title;
-        const pushBody = input.pushBody ?? input.message;
-
-        for (const sub of subs) {
-          summary.webPush.attempted += 1;
-          const result = await sendWebPushToSubscription(sub, {
-            title: pushTitle,
-            body: pushBody,
-            url: absolutePushUrl,
-            notificationId: input.dedupeKey,
-          });
-
-          if (result.success) {
-            summary.webPush.succeeded += 1;
-            logger.info({
+      // 1) In-app — always attempt first
+      if (channels.includes("in_app")) {
+        if (!prefs.notifyInApp) {
+          summary.inApp.skipped += 1;
+        } else {
+          summary.inApp.attempted += 1;
+          try {
+            await db.insert(inAppNotificationsTable).values({
               userId,
-              subscriptionId: sub.id,
-              type: input.type,
-              channel: "web_push",
-              statusCode: result.statusCode,
-            }, "Web Push sent successfully");
-          } else {
-            summary.webPush.failed += 1;
-            logger.warn({
+              kind: input.type,
+              title: input.title,
+              body: input.message,
+              payload,
+            });
+            summary.inApp.succeeded += 1;
+            await safeLogDelivery({
               userId,
-              subscriptionId: sub.id,
-              type: input.type,
-              channel: "web_push",
-              statusCode: result.statusCode,
-              errorMessage: result.errorMessage,
-            }, "Web Push delivery failed");
+              channel: "in_app",
+              notificationType: input.type,
+              title: input.title,
+              success: true,
+              workOrderId: input.workOrderId,
+              dedupeKey: input.dedupeKey,
+            });
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            summary.inApp.failed += 1;
+            logger.error({ err, userId, type: input.type }, "In-app notification failed");
+            await safeLogDelivery({
+              userId,
+              channel: "in_app",
+              notificationType: input.type,
+              title: input.title,
+              success: false,
+              errorMessage: msg,
+              workOrderId: input.workOrderId,
+              dedupeKey: input.dedupeKey,
+            });
           }
+        }
+      }
 
-          await logDelivery({
-            userId,
-            channel: "web_push",
-            notificationType: input.type,
-            title: pushTitle,
-            success: result.success,
-            errorMessage: result.errorMessage,
-            workOrderId: input.workOrderId,
-            subscriptionId: sub.id,
-            dedupeKey: input.dedupeKey,
-          });
+      // 2) Web Push — isolated; missing VAPID or APP_URL must not affect in-app
+      if (channels.includes("web_push")) {
+        if (!prefs.notifyWebPush) {
+          summary.webPush.skipped += 1;
+        } else if (!isWebPushConfigured()) {
+          summary.webPush.skipped += 1;
+          logger.info({ userId, type: input.type }, "Web Push skipped: VAPID not configured");
+        } else {
+          const pushUrl = resolvePushUrl(input.workOrderId);
+          if (!pushUrl) {
+            summary.webPush.skipped += 1;
+            logger.warn({ userId, type: input.type }, "Web Push skipped: APP_URL not configured");
+          } else {
+            try {
+              const subs = await db
+                .select()
+                .from(userPushSubscriptionsTable)
+                .where(
+                  and(
+                    eq(userPushSubscriptionsTable.userId, userId),
+                    eq(userPushSubscriptionsTable.enabled, true),
+                  ),
+                );
+
+              summary.webPush.subscriptionCount += subs.length;
+              if (subs.length === 0) {
+                summary.webPush.skipped += 1;
+              }
+
+              const pushTitle = input.pushTitle ?? input.title;
+              const pushBody = input.pushBody ?? input.message;
+
+              for (const sub of subs) {
+                summary.webPush.attempted += 1;
+                try {
+                  const result = await sendWebPushToSubscription(sub, {
+                    title: pushTitle,
+                    body: pushBody,
+                    url: pushUrl,
+                    notificationId: input.dedupeKey,
+                  });
+                  if (result.success) {
+                    summary.webPush.succeeded += 1;
+                  } else {
+                    summary.webPush.failed += 1;
+                  }
+                  await safeLogDelivery({
+                    userId,
+                    channel: "web_push",
+                    notificationType: input.type,
+                    title: pushTitle,
+                    success: result.success,
+                    errorMessage: result.errorMessage,
+                    workOrderId: input.workOrderId,
+                    subscriptionId: sub.id,
+                    dedupeKey: input.dedupeKey,
+                  });
+                } catch (err) {
+                  const msg = err instanceof Error ? err.message : String(err);
+                  summary.webPush.failed += 1;
+                  logger.warn({ err, userId, subscriptionId: sub.id }, "Web Push send threw");
+                  await safeLogDelivery({
+                    userId,
+                    channel: "web_push",
+                    notificationType: input.type,
+                    title: pushTitle,
+                    success: false,
+                    errorMessage: msg,
+                    workOrderId: input.workOrderId,
+                    subscriptionId: sub.id,
+                    dedupeKey: input.dedupeKey,
+                  });
+                }
+              }
+            } catch (err) {
+              logger.warn({ err, userId, type: input.type }, "Web Push block failed");
+            }
+          }
+        }
+      }
+
+      // 3) LINE — isolated
+      if (channels.includes("line")) {
+        if (!prefs.notifyLine) {
+          summary.line.skipped += 1;
+        } else if (!isLineMessagingConfigured()) {
+          summary.line.skipped += 1;
+          logger.info({ userId, type: input.type }, "LINE skipped: not configured");
+        } else if (!prefs.lineUserId) {
+          summary.line.skipped += 1;
+        } else {
+          summary.line.attempted += 1;
+          try {
+            await sendLineWorkOrderNotification({
+              lineUserId: prefs.lineUserId,
+              text: input.lineMessage ?? `${input.title}\n\n${input.message}`,
+              workOrderId: input.workOrderId,
+            });
+            summary.line.succeeded += 1;
+            await safeLogDelivery({
+              userId,
+              channel: "line",
+              notificationType: input.type,
+              title: input.title,
+              success: true,
+              workOrderId: input.workOrderId,
+              lineUserId: prefs.lineUserId,
+              dedupeKey: input.dedupeKey,
+            });
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            summary.line.failed += 1;
+            logger.warn({ err, userId, type: input.type }, "LINE notification failed");
+            await safeLogDelivery({
+              userId,
+              channel: "line",
+              notificationType: input.type,
+              title: input.title,
+              success: false,
+              errorMessage: msg,
+              workOrderId: input.workOrderId,
+              lineUserId: prefs.lineUserId,
+              dedupeKey: input.dedupeKey,
+            });
+          }
         }
       }
     }
 
-    if (channels.includes("line")) {
-      if (!prefs.notifyLine) {
-        summary.line.skipped += 1;
-        logger.info({ userId, type: input.type }, "LINE notification skipped: user pref disabled");
-      } else if (!prefs.lineUserId) {
-        summary.line.skipped += 1;
-        logger.info({ userId, type: input.type }, "LINE notification skipped: no LINE binding");
-      } else {
-        summary.line.attempted += 1;
-        try {
-          await sendLineWorkOrderNotification({
-            lineUserId: prefs.lineUserId,
-            text: input.lineMessage ?? `${input.title}\n\n${input.message}`,
-            workOrderId: input.workOrderId,
-          });
-          summary.line.succeeded += 1;
-          logger.info({
-            userId,
-            lineUserId: prefs.lineUserId.slice(0, 8),
-            type: input.type,
-            channel: "line",
-          }, "LINE notification sent successfully");
-          await logDelivery({
-            userId,
-            channel: "line",
-            notificationType: input.type,
-            title: input.title,
-            success: true,
-            workOrderId: input.workOrderId,
-            lineUserId: prefs.lineUserId,
-            dedupeKey: input.dedupeKey,
-          });
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          summary.line.failed += 1;
-          logger.warn({ err, userId, type: input.type, channel: "line" }, "LINE notification failed");
-          await logDelivery({
-            userId,
-            channel: "line",
-            notificationType: input.type,
-            title: input.title,
-            success: false,
-            errorMessage: msg,
-            workOrderId: input.workOrderId,
-            lineUserId: prefs.lineUserId,
-            dedupeKey: input.dedupeKey,
-          });
-        }
-      }
-    }
+    logger.info({
+      event: "notification_dispatch_complete",
+      type: input.type,
+      workOrderId: input.workOrderId,
+      inApp: summary.inApp,
+      webPush: summary.webPush,
+      line: summary.line,
+    }, "Notification dispatch complete");
+  } catch (err) {
+    logger.error({ err, type: input.type, workOrderId: input.workOrderId }, "sendNotification unexpected error");
   }
-
-  logger.info({
-    event: "notification_dispatch_complete",
-    type: input.type,
-    workOrderId: input.workOrderId,
-    recipientCount: uniqueRecipients.length,
-    dedupeKey: input.dedupeKey,
-    inApp: summary.inApp,
-    webPush: summary.webPush,
-    line: summary.line,
-  }, "Notification dispatch complete");
 
   return summary;
 }
@@ -383,7 +389,12 @@ export async function ensureUserNotificationPrefs(userId: number): Promise<void>
 }
 
 export async function getUserNotificationPrefs(userId: number) {
-  await ensureUserNotificationPrefs(userId);
+  try {
+    await ensureUserNotificationPrefs(userId);
+  } catch (err) {
+    logger.warn({ err, userId }, "ensureUserNotificationPrefs failed in getUserNotificationPrefs");
+  }
+
   const [prefs] = await db
     .select()
     .from(userNotificationPrefsTable)

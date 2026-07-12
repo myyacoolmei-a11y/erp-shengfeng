@@ -23,6 +23,13 @@ import { logger } from "../lib/logger";
 const router: IRouter = Router();
 const ADMIN_ROLES = ["super_admin", "owner", "admin"];
 
+function jsonError(res: import("express").Response, err: unknown, fallback = "操作失敗"): void {
+  logger.error({ err }, "notifications route error");
+  if (!res.headersSent) {
+    res.status(500).json({ error: err instanceof Error ? err.message : fallback });
+  }
+}
+
 router.use(authenticate);
 
 router.get("/notifications/vapid-public-key", (_req, res): void => {
@@ -30,12 +37,16 @@ router.get("/notifications/vapid-public-key", (_req, res): void => {
 });
 
 router.get("/notifications/prefs", async (req, res): Promise<void> => {
-  const prefs = await getUserNotificationPrefs(req.user!.id);
-  res.json({
-    ...prefs,
-    webPushConfigured: isWebPushConfigured(),
-    pushPermission: null,
-  });
+  try {
+    const prefs = await getUserNotificationPrefs(req.user!.id);
+    res.json({
+      ...prefs,
+      webPushConfigured: isWebPushConfigured(),
+      pushPermission: null,
+    });
+  } catch (err) {
+    jsonError(res, err, "無法載入通知設定");
+  }
 });
 
 const PrefsBody = z.object({
@@ -55,22 +66,30 @@ router.patch("/notifications/prefs", async (req, res): Promise<void> => {
 });
 
 router.get("/notifications/unread-count", async (req, res): Promise<void> => {
-  res.json({ count: await countUnreadNotifications(req.user!.id) });
+  try {
+    res.json({ count: await countUnreadNotifications(req.user!.id) });
+  } catch (err) {
+    jsonError(res, err, "無法讀取未讀數");
+  }
 });
 
 router.get("/notifications/in-app", async (req, res): Promise<void> => {
-  const rows = await listInAppNotifications(req.user!.id);
-  res.json(
-    rows.map(r => ({
-      id: r.id,
-      kind: r.kind,
-      title: r.title,
-      body: r.body,
-      payload: r.payload,
-      readAt: r.readAt?.toISOString() ?? null,
-      createdAt: r.createdAt.toISOString(),
-    })),
-  );
+  try {
+    const rows = await listInAppNotifications(req.user!.id);
+    res.json(
+      rows.map(r => ({
+        id: r.id,
+        kind: r.kind,
+        title: r.title,
+        body: r.body,
+        payload: r.payload,
+        readAt: r.readAt?.toISOString() ?? null,
+        createdAt: r.createdAt.toISOString(),
+      })),
+    );
+  } catch (err) {
+    jsonError(res, err, "無法載入站內通知");
+  }
 });
 
 router.patch("/notifications/in-app/:id/read", async (req, res): Promise<void> => {
@@ -152,22 +171,26 @@ router.post("/notifications/push/test", async (req, res): Promise<void> => {
   const userId = req.user!.id;
   logger.info({ event: "push_test_request", userId, route: "/notifications/push/test" }, "Push test request received");
 
-  if (!isWebPushConfigured()) {
-    res.status(503).json({
-      vapidConfigured: false,
-      foundCount: 0,
-      sentCount: 0,
-      successCount: 0,
-      failCount: 0,
-      results: [],
-      overallSuccess: false,
-      message: "伺服器 VAPID 金鑰未設定，無法發送 Web Push",
-    });
-    return;
-  }
+  try {
+    if (!isWebPushConfigured()) {
+      res.status(503).json({
+        vapidConfigured: false,
+        foundCount: 0,
+        sentCount: 0,
+        successCount: 0,
+        failCount: 0,
+        results: [],
+        overallSuccess: false,
+        message: "伺服器 VAPID 金鑰未設定，無法發送 Web Push",
+      });
+      return;
+    }
 
-  const result = await sendTestWebPushForUser(userId);
-  res.json(result);
+    const result = await sendTestWebPushForUser(userId);
+    res.json(result);
+  } catch (err) {
+    jsonError(res, err, "測試推播失敗");
+  }
 });
 
 router.delete("/notifications/push/subscribe", async (req, res): Promise<void> => {

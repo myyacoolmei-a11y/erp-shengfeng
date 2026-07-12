@@ -1,7 +1,7 @@
 import { logger } from "../logger.ts";
 import { getLineChannelAccessToken, isLineMessagingConfigured } from "../line/lineConfig.ts";
 import { formatLineApiError } from "../line/lineMessaging.ts";
-import { absoluteWorkOrderViewUrl } from "../appUrl.ts";
+import { tryAbsoluteWorkOrderViewUrl } from "../appUrl.ts";
 
 export async function sendLineWorkOrderNotification(opts: {
   lineUserId: string;
@@ -16,25 +16,29 @@ export async function sendLineWorkOrderNotification(opts: {
   const messages: unknown[] = [{ type: "text", text: opts.text }];
 
   if (opts.workOrderId) {
-    const viewUrl = absoluteWorkOrderViewUrl(opts.workOrderId);
-    console.log("[LINE Flex Message] 查看派工單 viewUrl:", viewUrl);
-    logger.info({ viewUrl, workOrderId: opts.workOrderId }, "LINE Flex Message 查看派工單 viewUrl");
+    const viewUrl = tryAbsoluteWorkOrderViewUrl(opts.workOrderId);
+    if (viewUrl) {
+      console.log("[LINE Flex Message] 查看派工單 viewUrl:", viewUrl);
+      logger.info({ viewUrl, workOrderId: opts.workOrderId }, "LINE Flex Message 查看派工單 viewUrl");
 
-    messages.push({
-      type: "template",
-      altText: "查看派工單",
-      template: {
-        type: "buttons",
-        text: "請點擊下方按鈕查看派工單",
-        actions: [
-          {
-            type: "uri",
-            label: "查看派工單",
-            uri: viewUrl,
-          },
-        ],
-      },
-    });
+      messages.push({
+        type: "template",
+        altText: "查看派工單",
+        template: {
+          type: "buttons",
+          text: "請點擊下方按鈕查看派工單",
+          actions: [
+            {
+              type: "uri",
+              label: "查看派工單",
+              uri: viewUrl,
+            },
+          ],
+        },
+      });
+    } else {
+      logger.warn({ workOrderId: opts.workOrderId }, "LINE: APP_URL not set, sending text only");
+    }
   }
 
   const res = await fetch("https://api.line.me/v2/bot/message/push", {
