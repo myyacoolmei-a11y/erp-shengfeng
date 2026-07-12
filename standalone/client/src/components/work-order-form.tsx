@@ -113,8 +113,11 @@ export function equipmentItemsFromOrder(o: {
   return [defaultEquipmentItem()];
 }
 
+export type CustomerMode = "existing" | "temporary" | null;
+
 export function makeEmpty() {
   return {
+    customerMode: null as CustomerMode,
     quoteId: undefined as number | undefined,
     customerId: 0,
     customerName: "",
@@ -139,6 +142,8 @@ export function makeEmpty() {
 export type WOForm = ReturnType<typeof makeEmpty>;
 
 export function hasWorkOrderCustomer(f: WOForm): boolean {
+  if (f.customerMode === "temporary") return f.customerName.trim().length > 0;
+  if (f.customerMode === "existing") return f.customerId > 0;
   return f.customerId > 0 || f.customerName.trim().length > 0;
 }
 
@@ -350,17 +355,39 @@ export function WorkOrderFormFields({
 
   function handleSelectorChange(v: CustomerSelectorValue | null) {
     if (!v) {
-      setForm(f => ({ ...f, customerId: 0, customerName: "" }));
+      setForm(f => ({ ...f, customerMode: null, customerId: 0, customerName: "" }));
+      return;
+    }
+    if (v.type === "temp") {
+      setForm(f => ({
+        ...f,
+        customerMode: "temporary",
+        customerId: 0,
+        customerName: v.name,
+        contactPerson: v.contactPerson || f.contactPerson || "",
+        mobilePhone: v.mobile || f.mobilePhone || "",
+        telephone: v.phone || f.telephone || "",
+        installAddress: v.address || f.installAddress || "",
+      }));
       return;
     }
     setForm(f => ({
       ...f,
+      customerMode: "existing",
       customerId: v.customerId ?? 0,
-      customerName: v.type === "temp" ? v.name : "",
+      customerName: "",
       contactPerson: f.contactPerson || v.contactPerson || "",
       mobilePhone: f.mobilePhone || v.mobile || "",
       telephone: f.telephone || v.phone || "",
       installAddress: f.installAddress || v.address || "",
+    }));
+  }
+
+  function handleCustomerModeChange(mode: "existing" | "temporary" | null) {
+    setForm(f => ({
+      ...f,
+      customerMode: mode,
+      ...(mode === "temporary" ? { customerId: 0, customerName: "" } : {}),
     }));
   }
 
@@ -478,6 +505,8 @@ export function WorkOrderFormFields({
         <CustomerSelector
           value={selectorValue}
           onChange={handleSelectorChange}
+          onCustomerModeChange={handleCustomerModeChange}
+          modal={false}
           disabled={customerDisabled || customerLockedFromQuote}
           allowTemp={!customerLockedFromQuote}
           showAddressPicker={true}

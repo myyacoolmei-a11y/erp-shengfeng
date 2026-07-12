@@ -38,6 +38,10 @@ export interface CustomerSelectorProps {
   onChange: (v: CustomerSelectorValue | null) => void
   /** Lock the selector (e.g. when customer comes from a quote) */
   disabled?: boolean
+  /** Radix Popover modal — set false when inside Dialog (mobile PWA) */
+  modal?: boolean
+  /** Called when user enters existing search vs temporary customer flow */
+  onCustomerModeChange?: (mode: "existing" | "temporary" | null) => void
   /** Show the "臨時客戶" option (default true). Set false for payments/warranties/maintenance. */
   allowTemp?: boolean
   /** When provided, shows a "轉成正式客戶" button for temp-type values */
@@ -97,6 +101,8 @@ export function CustomerSelector({
   value,
   onChange,
   disabled = false,
+  modal = true,
+  onCustomerModeChange,
   allowTemp = true,
   onConvertToFormal,
   convertPrimarySalesRepId,
@@ -120,7 +126,7 @@ export function CustomerSelector({
 
   // Temp customer inline input
   const [tempOpen, setTempOpen] = useState(false);
-  const [tempForm, setTempForm] = useState({ name: "", contactPerson: "", phone: "", address: "" });
+  const [tempForm, setTempForm] = useState({ name: "", contactPerson: "", phone: "", mobile: "", address: "" });
 
   // Convert-to-formal
   const [convertOpen, setConvertOpen] = useState(false);
@@ -133,11 +139,27 @@ export function CustomerSelector({
   }, [query]);
 
   // Search results
-  const { data: searchResults = [] } = useListCustomers(
+  const { data: searchResults = [], isFetching: searchFetching, isError: searchError } = useListCustomers(
     debouncedQuery ? { search: debouncedQuery, includeOld: "true" } : undefined,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     { query: { enabled: open && debouncedQuery.length >= 1 } as any }
   );
+
+  function selectCustomer(c: {
+    id: number;
+    name?: string | null;
+    contactPerson?: string | null;
+    phone?: string | null;
+    mobile?: string | null;
+    address?: string | null;
+    taxId?: string | null;
+  }) {
+    onCustomerModeChange?.("existing");
+    onChange(customerToValue(c));
+    setOpen(false);
+    setQuery("");
+    setTempOpen(false);
+  }
 
   // Customer addresses (for showAddressPicker)
   const { data: addresses = [] } = useListCustomerAddresses(
@@ -199,18 +221,20 @@ export function CustomerSelector({
 
   function handleConfirmTemp() {
     if (!tempForm.name.trim()) return;
+    onCustomerModeChange?.("temporary");
     onChange({
       type: "temp",
       customerId: null,
-      name: tempForm.name,
-      contactPerson: tempForm.contactPerson,
-      phone: tempForm.phone,
-      mobile: "",
-      address: tempForm.address,
+      name: tempForm.name.trim(),
+      contactPerson: tempForm.contactPerson.trim(),
+      phone: tempForm.phone.trim(),
+      mobile: tempForm.mobile.trim(),
+      address: tempForm.address.trim(),
       taxId: "",
     });
     setTempOpen(false);
     setOpen(false);
+    setTempForm({ name: "", contactPerson: "", phone: "", mobile: "", address: "" });
   }
 
   // ── Convert temp → formal ────────────────────────────────────────────────
@@ -296,7 +320,11 @@ export function CustomerSelector({
         </div>
       ) : (
         /* ── Empty state — search combobox ── */
-        <Popover open={open} onOpenChange={(o) => { setOpen(o); if (!o) { setQuery(""); setTempOpen(false); } }}>
+        <Popover open={open} modal={modal} onOpenChange={(o) => {
+          setOpen(o);
+          if (o) onCustomerModeChange?.("existing");
+          if (!o) { setQuery(""); setTempOpen(false); }
+        }}>
           <PopoverTrigger asChild>
             <Button type="button" variant="outline" role="combobox" className="w-full justify-between font-normal">
               <span className="flex items-center gap-1.5 text-muted-foreground">
@@ -305,17 +333,23 @@ export function CustomerSelector({
               <ChevronsUpDown className="ml-2 h-4 w-4 opacity-50" />
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-[380px] p-0" align="start">
+          <PopoverContent className="w-[min(380px,calc(100vw-2rem))] p-0 z-[200]" align="start" collisionPadding={12}>
             <Command shouldFilter={false}>
               <CommandInput
                 placeholder="輸入名稱、聯絡人、手機、市話、統編…"
                 value={query}
                 onValueChange={setQuery}
               />
-              <CommandList className="max-h-72">
+              <CommandList className="max-h-72 overflow-y-auto">
                 {debouncedQuery.length >= 1 && (
                   <>
-                    {searchResults.length === 0 ? (
+                    {searchFetching && (
+                      <div className="py-3 text-center text-xs text-muted-foreground">搜尋中…</div>
+                    )}
+                    {searchError && (
+                      <div className="py-3 px-3 text-center text-xs text-destructive">無法搜尋客戶，請確認登入權限</div>
+                    )}
+                    {!searchFetching && !searchError && searchResults.length === 0 ? (
                       <CommandEmpty>找不到符合的客戶</CommandEmpty>
                     ) : (
                       <CommandGroup heading="搜尋結果">
@@ -323,8 +357,9 @@ export function CustomerSelector({
                           <CommandItem
                             key={c.id}
                             value={String(c.id)}
-                            onSelect={() => { onChange(customerToValue(c)); setOpen(false); setQuery(""); }}
-                            className="flex flex-col items-start gap-0.5 py-2"
+                            onSelect={() => selectCustomer(c)}
+                            onPointerDown={(e) => e.preventDefault()}
+                            className="flex flex-col items-start gap-0.5 py-2 cursor-pointer"
                           >
                             <div className="flex items-center gap-1.5 w-full">
                               <Check className="h-3.5 w-3.5 shrink-0 opacity-0" />
@@ -332,10 +367,9 @@ export function CustomerSelector({
                               {c.taxId && <span className="text-xs text-muted-foreground ml-auto">統編 {c.taxId}</span>}
                             </div>
                             <div className="pl-5 flex flex-wrap gap-x-2 gap-y-0 text-xs text-muted-foreground">
-                              {c.contactPerson && <span>{c.contactPerson}</span>}
-                              {c.phone && <span>{c.phone}</span>}
-                              {c.mobile && <span>{c.mobile}</span>}
-                              {c.address && <span className="truncate max-w-[240px]">{c.address}</span>}
+                              {c.contactPerson && <span>聯絡人：{c.contactPerson}</span>}
+                              {c.mobile && <span>手機：{c.mobile}</span>}
+                              {c.phone && <span>市話：{c.phone}</span>}
                             </div>
                           </CommandItem>
                         ))}
@@ -352,13 +386,16 @@ export function CustomerSelector({
                   {allowTemp && (
                     <CommandItem
                       value="__temp__"
-                      onSelect={() => { setTempOpen(true); }}
+                      onSelect={() => {
+                        onCustomerModeChange?.("temporary");
+                        setTempOpen(true);
+                      }}
                       className="text-muted-foreground"
                     >
                       <Plus className="h-3.5 w-3.5 mr-2" />輸入臨時客戶資料（無需建立正式資料）
                     </CommandItem>
                   )}
-                  <CommandItem value="__create__" onSelect={() => { setOpen(false); setCreateOpen(true); }}>
+                  <CommandItem value="__create__" onSelect={() => { setOpen(false); setCreateOpen(true); onCustomerModeChange?.(null); }}>
                     <Plus className="h-3.5 w-3.5 mr-2 text-primary" />
                     <span className="text-primary font-medium">建立正式客戶</span>
                   </CommandItem>
@@ -380,7 +417,14 @@ export function CustomerSelector({
                       onChange={e => setTempForm(f => ({ ...f, contactPerson: e.target.value }))}
                     />
                     <Input
-                      placeholder="電話"
+                      placeholder="手機"
+                      type="tel"
+                      value={tempForm.mobile}
+                      onChange={e => setTempForm(f => ({ ...f, mobile: e.target.value }))}
+                    />
+                    <Input
+                      placeholder="市話（選填）"
+                      type="tel"
                       value={tempForm.phone}
                       onChange={e => setTempForm(f => ({ ...f, phone: e.target.value }))}
                     />

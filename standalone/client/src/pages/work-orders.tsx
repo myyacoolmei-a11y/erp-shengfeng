@@ -420,6 +420,7 @@ export default function WorkOrders() {
     } catch { /* ignore */ }
 
     setForm({
+      customerMode: o.customerId ? "existing" as const : (o.customerName ? "temporary" as const : null),
       quoteId: o.quoteId ?? undefined,
       customerId: o.customerId ?? 0,
       customerName: o.customerName ?? "",
@@ -445,7 +446,10 @@ export default function WorkOrders() {
   function handleSubmit(e: React.FormEvent, mode: "create" | "edit") {
     e.preventDefault();
     if (!hasWorkOrderCustomer(form)) {
-      toast({ title: "請選擇客戶", variant: "destructive" });
+      toast({
+        title: form.customerMode === "temporary" ? "請填寫臨時客戶名稱" : "請選擇客戶",
+        variant: "destructive",
+      });
       return;
     }
     const payload = buildPayload(form);

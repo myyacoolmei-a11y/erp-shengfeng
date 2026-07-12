@@ -9,7 +9,7 @@ import { requireRole } from "../lib/auth";
 
 const router: IRouter = Router();
 
-const READ_ROLES = ["super_admin", "owner", "admin", "sales", "accountant"];
+const READ_ROLES = ["super_admin", "owner", "admin", "sales", "accountant", "engineer", "technician"];
 const WRITE_ROLES = ["super_admin", "owner", "admin", "sales"];
 const DELETE_ROLES = ["super_admin", "owner", "admin"];
 

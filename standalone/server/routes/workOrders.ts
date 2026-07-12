@@ -289,6 +289,11 @@ router.post("/work-orders", requireRole(...WO_WRITE_ROLES), async (req, res): Pr
     return;
   }
 
+  if (!parsed.data.customerId && !parsed.data.customerName?.trim()) {
+    res.status(400).json({ error: "請選擇正式客戶或輸入臨時客戶名稱" });
+    return;
+  }
+
   const { equipmentItems: itemInputs = [], ...orderFields } = parsed.data as any;
   const hasEquipment = Array.isArray(itemInputs) && itemInputs.length > 0;
 

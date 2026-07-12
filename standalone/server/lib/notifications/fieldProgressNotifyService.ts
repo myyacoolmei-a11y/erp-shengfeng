@@ -45,8 +45,9 @@ export async function notifyFieldProgressEvent(input: FieldProgressNotifyInput):
       .select({
         id: workOrdersTable.id,
         customerId: workOrdersTable.customerId,
+        customerName: workOrdersTable.customerName,
+        linkedCustomerName: customersTable.name,
         workOrderNumber: workOrdersTable.workOrderNumber,
-        customerName: customersTable.name,
       })
       .from(workOrdersTable)
       .leftJoin(customersTable, eq(workOrdersTable.customerId, customersTable.id))
@@ -58,7 +59,7 @@ export async function notifyFieldProgressEvent(input: FieldProgressNotifyInput):
     }
 
     const actionLabel = ACTION_LABELS[input.action];
-    const customerName = order.customerName ?? "（未知客戶）";
+    const customerName = order.customerName ?? order.linkedCustomerName ?? "（未知客戶）";
     const timeLabel = formatTaipeiTime(input.actedAt);
     const woLabel = order.workOrderNumber ?? `#${order.id}`;
 
