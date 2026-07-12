@@ -46,7 +46,7 @@ function extractPushError(err: unknown): { statusCode?: number; errorMessage: st
 }
 
 function isStalePushError(statusCode?: number): boolean {
-  return statusCode === 404 || statusCode === 410 || statusCode === 401 || statusCode === 403;
+  return statusCode === 404 || statusCode === 410;
 }
 
 export function isVapidMismatchError(statusCode?: number): boolean {
@@ -74,17 +74,24 @@ export async function sendWebPushToSubscription(
       configured = true;
     }
 
+    const payloadJson = JSON.stringify({
+      title: payload.title,
+      body: payload.body,
+      url: payload.url,
+      notificationId: payload.notificationId,
+    });
+
+    logger.info(
+      { subscriptionId: subscription.id, url: payload.url, endpoint: subscription.endpoint.slice(0, 48) },
+      "Web Push sending",
+    );
+
     await webpush.sendNotification(
       {
         endpoint: subscription.endpoint,
         keys: { p256dh: subscription.p256dh, auth: subscription.auth },
       },
-      JSON.stringify({
-        title: payload.title,
-        body: payload.body,
-        url: payload.url,
-        notificationId: payload.notificationId,
-      }),
+      payloadJson,
     );
 
     if (subscription.id > 0) {

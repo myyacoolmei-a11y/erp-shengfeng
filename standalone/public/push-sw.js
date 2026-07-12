@@ -8,11 +8,35 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(self.clients.claim());
 });
 
+function resolveAbsoluteUrl(url) {
+  if (!url || typeof url !== "string") {
+    return self.location.origin + "/";
+  }
+  if (/^https?:\/\//i.test(url)) {
+    return url;
+  }
+  return new URL(url, self.location.origin).href;
+}
+
+function toNavigatePath(url) {
+  if (!url || typeof url !== "string") return "/";
+  if (/^https?:\/\//i.test(url)) {
+    const parsed = new URL(url);
+    return parsed.pathname + parsed.search + parsed.hash;
+  }
+  return url.startsWith("/") ? url : `/${url}`;
+}
+
 self.addEventListener("push", (event) => {
-  let data = { title: "晟風 ERP", body: "", url: "/", notificationId: null };
+  let data = { title: "晟風 ERP", body: "", url: self.location.origin + "/", notificationId: null };
   try {
     if (event.data) {
-      data = { ...data, ...JSON.parse(event.data.text()) };
+      const parsed = JSON.parse(event.data.text());
+      data = {
+        ...data,
+        ...parsed,
+        url: resolveAbsoluteUrl(parsed.url ?? data.url),
+      };
     }
   } catch {
     /* ignore malformed payload */
@@ -22,7 +46,7 @@ self.addEventListener("push", (event) => {
     self.registration.showNotification(data.title, {
       body: data.body,
       icon: "/icons/icon-192.png",
-      badge: "/icons/icon-192.png",
+      badge: "/icons/apple-touch-icon.png",
       data: { url: data.url, notificationId: data.notificationId },
       tag: data.notificationId ? `shengfeng-${data.notificationId}` : `shengfeng-${Date.now()}`,
       renotify: true,
@@ -32,14 +56,14 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const relativeUrl = event.notification.data?.url || "/";
-  const absoluteUrl = new URL(relativeUrl, self.location.origin).href;
+  const absoluteUrl = resolveAbsoluteUrl(event.notification.data?.url);
+  const navigatePath = toNavigatePath(event.notification.data?.url);
 
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
       for (const client of clientList) {
         if (client.url && client.url.startsWith(self.location.origin) && "focus" in client) {
-          client.postMessage({ type: "navigate", url: relativeUrl });
+          client.postMessage({ type: "navigate", url: navigatePath });
           return client.focus();
         }
       }

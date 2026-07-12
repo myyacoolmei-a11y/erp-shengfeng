@@ -2,6 +2,7 @@ import { eq, and } from "drizzle-orm";
 import { db, userPushSubscriptionsTable } from "@workspace/db";
 import { logger } from "../logger.ts";
 import { sendWebPushToSubscription, isVapidMismatchError } from "./webPushService.ts";
+import { toAbsoluteAppUrl } from "../appUrl.ts";
 
 export interface WebPushTestDeliveryResult {
   subscriptionId: number;
@@ -59,7 +60,7 @@ export async function sendTestWebPushForUser(userId: number): Promise<WebPushTes
   const payload = {
     title: "測試推播",
     body: "若您在鎖定畫面看到此訊息，Web Push 已成功設定。",
-    url: "/notification-settings",
+    url: toAbsoluteAppUrl("/notification-settings"),
     notificationId: testId,
   };
 

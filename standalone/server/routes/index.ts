@@ -28,6 +28,7 @@ import workOrderFieldProgressRouter from "./workOrderFieldProgress";
 import jobsRouter from "./jobs";
 import partnerRouter from "./partner";
 import notificationsRouter from "./notifications";
+import pushRouter from "./push";
 
 import { authenticate } from "../lib/auth";
 
@@ -64,6 +65,7 @@ router.use(voiceRouter);
 router.use(reminderSettingsRouter);
 router.use(partnerRouter);
 router.use(notificationsRouter);
+router.use(pushRouter);
 router.use(workOrderFieldProgressRouter);
 
 export default router;

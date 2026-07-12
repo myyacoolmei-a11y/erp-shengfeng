@@ -12,6 +12,10 @@ function authFetch(url: string, options: RequestInit = {}) {
   });
 }
 
+export function isIosDevice(): boolean {
+  return /iPhone|iPad|iPod/i.test(navigator.userAgent);
+}
+
 export function isPwaStandalone(): boolean {
   return (
     window.matchMedia("(display-mode: standalone)").matches
@@ -222,7 +226,7 @@ export async function collectWebPushDiagnostics(): Promise<WebPushDiagnosticStat
   let serverPublicKey: string | null = null;
 
   try {
-    const res = await authFetch("/api/notifications/vapid-public-key");
+    const res = await authFetch("/api/push/vapid-public-key");
     if (res.ok) {
       const data = (await res.json()) as { publicKey: string | null; configured: boolean };
       vapidPublicKeyPresent = !!(data.configured && data.publicKey);
@@ -299,7 +303,7 @@ export async function reregisterServiceWorker(): Promise<void> {
 }
 
 async function deleteDbSubscription(endpoint: string): Promise<void> {
-  await authFetch("/api/notifications/push/subscribe", {
+  await authFetch("/api/push/unsubscribe", {
     method: "DELETE",
     body: JSON.stringify({ endpoint }),
   });
@@ -310,6 +314,15 @@ export async function runPushSubscribeFlow(deviceName?: string): Promise<PushSub
   if (!("Notification" in window) || !("serviceWorker" in navigator)) {
     const diagnostics = await collectWebPushDiagnostics();
     return { ok: false, message: "此瀏覽器不支援 Web Push", diagnostics };
+  }
+
+  if (isIosDevice() && !isPwaStandalone()) {
+    const diagnostics = await collectWebPushDiagnostics();
+    return {
+      ok: false,
+      message: "iPhone 必須從主畫面 PWA 開啟後才能訂閱推播",
+      diagnostics,
+    };
   }
 
   if (Notification.permission === "denied") {
@@ -325,7 +338,7 @@ export async function runPushSubscribeFlow(deviceName?: string): Promise<PushSub
     }
   }
 
-  const keyRes = await authFetch("/api/notifications/vapid-public-key");
+  const keyRes = await authFetch("/api/push/vapid-public-key");
   if (!keyRes.ok) {
     const diagnostics = await collectWebPushDiagnostics();
     return { ok: false, message: "無法取得 VAPID 公鑰", diagnostics };
@@ -375,7 +388,7 @@ export async function runPushSubscribeFlow(deviceName?: string): Promise<PushSub
     return { ok: false, message: "subscription 缺少 endpoint、p256dh 或 auth", diagnostics };
   }
 
-  const saveRes = await authFetch("/api/notifications/push/subscribe", {
+  const saveRes = await authFetch("/api/push/subscribe", {
     method: "POST",
     body: JSON.stringify({
       endpoint: json.endpoint,
@@ -409,7 +422,7 @@ export async function runPushSubscribeFlow(deviceName?: string): Promise<PushSub
 }
 
 export async function sendServerTestPush(): Promise<WebPushTestResult> {
-  const res = await authFetch("/api/notifications/push/test", { method: "POST" });
+  const res = await authFetch("/api/push/test", { method: "POST" });
   if (!res.ok) {
     const text = await res.text();
     throw new Error(text || "測試推播請求失敗");

@@ -10,8 +10,8 @@ import {
   notificationDedupTable,
 } from "@workspace/db";
 import type { NotificationChannel } from "../../../shared/notifications/types.ts";
-import { workOrderOpenUrl } from "../../../shared/notifications/types.ts";
 import { logger } from "../logger.ts";
+import { absoluteWorkOrderViewUrl, toAbsoluteAppUrl } from "../appUrl.ts";
 import { sendWebPushToSubscription } from "./webPushService.ts";
 import { sendLineWorkOrderNotification } from "./lineNotificationService.ts";
 
@@ -107,10 +107,13 @@ export async function sendNotification(input: SendNotificationInput): Promise<vo
   }
 
   const channels = input.channels ?? ["in_app", "web_push", "line"];
-  const openUrl = input.workOrderId ? workOrderOpenUrl(input.workOrderId) : "/";
+  const relativeOpenUrl = input.workOrderId ? `/work-orders?open=${input.workOrderId}` : "/";
+  const absolutePushUrl = input.workOrderId
+    ? absoluteWorkOrderViewUrl(input.workOrderId)
+    : toAbsoluteAppUrl("/");
   const payload = {
     workOrderId: input.workOrderId,
-    url: openUrl,
+    url: relativeOpenUrl,
     type: input.type,
     ...input.payload,
   };
@@ -178,7 +181,7 @@ export async function sendNotification(input: SendNotificationInput): Promise<vo
         const result = await sendWebPushToSubscription(sub, {
           title: pushTitle,
           body: pushBody,
-          url: openUrl,
+          url: absolutePushUrl,
           notificationId: input.dedupeKey,
         });
 

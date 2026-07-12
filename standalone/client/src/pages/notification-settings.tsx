@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { Bell, Smartphone, Loader2, RefreshCw, Send, Wrench } from "lucide-react";
+import { Bell, Smartphone, Loader2, RefreshCw, Send, Wrench, ShieldCheck } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { usePwaInstall } from "@/hooks/use-pwa-install";
+import { useAuth, hasRole } from "@/contexts/auth-context";
 import {
   fetchNotificationPrefs,
   updateNotificationPrefs,
@@ -17,11 +18,53 @@ import {
   runPushSubscribeFlow,
   reregisterServiceWorker,
   sendServerTestPush,
+  derivePushSetupStatus,
+  PUSH_STATUS_LABELS,
+  isIosDevice,
+  isPwaStandalone,
   type WebPushDiagnosticState,
   type WebPushTestResult,
+  type PushSetupStatus,
 } from "@/lib/webPushDiagnostics";
 
 const PREFS_KEY = ["notification-prefs"];
+
+function PushStatusBanner({
+  status,
+  testResult,
+}: {
+  status: PushSetupStatus;
+  testResult: WebPushTestResult | null;
+}) {
+  const label = PUSH_STATUS_LABELS[status];
+  const tone =
+    status === "test_passed" || status === "subscribed"
+      ? "bg-green-50 border-green-200 text-green-900"
+      : status === "test_failed" || status === "permission_denied"
+        ? "bg-red-50 border-red-200 text-red-900"
+        : "bg-amber-50 border-amber-200 text-amber-900";
+
+  const failedDetail = testResult?.results.find(r => !r.success);
+
+  return (
+    <div className={`rounded-lg border p-3 text-sm ${tone}`}>
+      <p className="font-semibold">Web Push 狀態：{label}</p>
+      {status === "test_failed" && failedDetail && (
+        <p className="text-xs mt-1 break-all">
+          HTTP {failedDetail.statusCode ?? "?"} · {failedDetail.errorMessage ?? "未知錯誤"}
+        </p>
+      )}
+      {status === "test_passed" && testResult && (
+        <p className="text-xs mt-1">
+          伺服器 web-push 發送成功 {testResult.successCount}/{testResult.sentCount} 筆（與 LINE 分開記錄）
+        </p>
+      )}
+      <p className="text-xs mt-1 text-muted-foreground">
+        LINE 通知成功 ≠ Web Push 成功，請以本頁測試推播結果為準。
+      </p>
+    </div>
+  );
+}
 
 function yn(v: boolean): string {
   return v ? "是" : "否";
@@ -128,7 +171,11 @@ function DiagnosticPanel({
 export default function NotificationSettingsPage() {
   const { toast } = useToast();
   const qc = useQueryClient();
+  const { user } = useAuth();
   const { isIos } = usePwaInstall();
+  const isAdmin = hasRole(user, "super_admin", "owner", "admin");
+  const isIphone = isIosDevice();
+  const canShowEnableButton = !isIphone || isPwaStandalone();
   const [diag, setDiag] = useState<WebPushDiagnosticState | null>(null);
   const [testResult, setTestResult] = useState<WebPushTestResult | null>(null);
   const [pushBusy, setPushBusy] = useState(false);
@@ -222,6 +269,7 @@ export default function NotificationSettingsPage() {
   }
 
   const permission = typeof Notification !== "undefined" ? Notification.permission : "default";
+  const pushStatus = diag ? derivePushSetupStatus(diag, testResult) : "permission_pending";
 
   return (
     <div className="space-y-6 max-w-2xl">
@@ -241,28 +289,31 @@ export default function NotificationSettingsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {diag && <PushStatusBanner status={pushStatus} testResult={testResult} />}
           <DiagnosticPanel diag={diag} testResult={testResult} />
 
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" onClick={() => void refreshDiagnostics()}>
               <RefreshCw className="h-4 w-4 mr-1" />重新診斷
             </Button>
-            <Button
-              size="sm"
-              onClick={handleEnablePush}
-              disabled={pushBusy || !prefs?.webPushConfigured}
-            >
-              {pushBusy ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Bell className="h-4 w-4 mr-1" />}
-              訂閱並儲存推播
-            </Button>
+            {canShowEnableButton && (
+              <Button
+                size="sm"
+                onClick={handleEnablePush}
+                disabled={pushBusy || !prefs?.webPushConfigured}
+              >
+                {pushBusy ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Bell className="h-4 w-4 mr-1" />}
+                開啟通知
+              </Button>
+            )}
             <Button
               size="sm"
               variant="secondary"
               onClick={handleTestPush}
-              disabled={testBusy || !prefs?.webPushConfigured}
+              disabled={testBusy || !prefs?.webPushConfigured || !canShowEnableButton}
             >
               {testBusy ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <Send className="h-4 w-4 mr-1" />}
-              測試推播（伺服器）
+              測試推播（伺服器 web-push）
             </Button>
             <Button size="sm" variant="outline" onClick={handleReregisterSw} disabled={swBusy}>
               {swBusy ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : <RefreshCw className="h-4 w-4 mr-1" />}
@@ -276,15 +327,15 @@ export default function NotificationSettingsPage() {
             </p>
           )}
 
-          {(isIos || /iPhone|iPad/i.test(navigator.userAgent)) && !diag?.pwaStandalone && (
+          {(isIos || isIphone) && !diag?.pwaStandalone && (
             <div className="text-sm bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-2 text-blue-900">
-              <p className="font-semibold">iPhone 必要步驟（display: standalone）</p>
+              <p className="font-semibold">尚未安裝 PWA —「開啟通知」按鈕已隱藏</p>
               <ol className="list-decimal list-inside space-y-1 text-xs">
                 <li>使用 Safari 開啟 ERP</li>
                 <li>分享 → 加入主畫面</li>
-                <li>從主畫面圖示開啟（非 Safari 分頁）</li>
-                <li>按「訂閱並儲存推播」→ 允許通知</li>
-                <li>按「測試推播」後關閉 ERP 查看鎖定畫面</li>
+                <li>從主畫面圖示開啟（display: standalone）</li>
+                <li>再按「開啟通知」→ 允許通知</li>
+                <li>按「測試推播」後完全關閉 ERP 查看鎖定畫面</li>
               </ol>
             </div>
           )}
@@ -300,6 +351,32 @@ export default function NotificationSettingsPage() {
           )}
         </CardContent>
       </Card>
+
+      {isAdmin && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4" />
+              管理員 — 手機 Web Push 測試
+            </CardTitle>
+            <CardDescription>
+              從伺服器 web-push 發送測試通知至本帳號已訂閱的手機（不含 LINE、不含站內小鈴鐺）
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              請先在本機 iPhone PWA 完成「開啟通知」訂閱，再按下方按鈕。測試後請完全關閉 ERP 確認鎖定畫面通知。
+            </p>
+            <Button
+              onClick={handleTestPush}
+              disabled={testBusy || !prefs?.webPushConfigured || !canShowEnableButton}
+            >
+              {testBusy ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Send className="h-4 w-4 mr-2" />}
+              發送手機測試通知
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>
