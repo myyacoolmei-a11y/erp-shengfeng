@@ -58,6 +58,8 @@ export default defineConfig({
         ],
       },
       workbox: {
+        skipWaiting: true,
+        clientsClaim: true,
         navigateFallback: "/index.html",
         importScripts: ["push-sw.js"],
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2,webmanifest}"],

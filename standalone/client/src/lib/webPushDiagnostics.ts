@@ -28,21 +28,34 @@ export function urlBase64ToUint8Array(base64String: string): Uint8Array {
   return arr;
 }
 
+function bufferEquals(a: ArrayBuffer | null | undefined, b: Uint8Array): boolean {
+  if (!a) return false;
+  const av = new Uint8Array(a);
+  if (av.length !== b.length) return false;
+  for (let i = 0; i < av.length; i++) {
+    if (av[i] !== b[i]) return false;
+  }
+  return true;
+}
+
 export interface WebPushDiagnosticState {
   pwaStandalone: boolean;
-  serviceWorkerSupported: boolean;
-  serviceWorkerReady: boolean;
-  serviceWorkerController: boolean;
-  serviceWorkerScriptUrl: string | null;
-  pushSwScriptReachable: boolean;
+  isHttps: boolean;
   notificationPermission: NotificationPermission | "unsupported";
-  pushSubscriptionExists: boolean;
-  pushSubscriptionEndpoint: string | null;
-  vapidPublicKeyPresent: boolean;
-  subscriptionSavedInDb: boolean;
-  dbDeviceCount: number;
+  serviceWorkerRegistered: boolean;
+  serviceWorkerActivated: boolean;
+  serviceWorkerState: string;
+  serviceWorkerController: boolean;
+  serviceWorkerScope: string | null;
+  serviceWorkerScriptUrl: string | null;
+  pushSwHasPushListener: boolean;
+  browserSubscriptionExists: boolean;
+  browserSubscriptionComplete: boolean;
+  browserSubscriptionEndpoint: string | null;
+  dbSubscriptionForCurrentDevice: boolean;
   dbEnabledCount: number;
-  currentEndpointInDb: boolean;
+  vapidPublicKeyPresent: boolean;
+  vapidKeyMismatch: boolean;
   errors: string[];
 }
 
@@ -76,6 +89,7 @@ export interface WebPushTestResult {
     statusCode?: number;
     errorMessage?: string;
     deleted: boolean;
+    requiresResubscribe?: boolean;
   }>;
   overallSuccess: boolean;
   message: string;
@@ -84,86 +98,171 @@ export interface WebPushTestResult {
 async function checkPushSwReachable(): Promise<boolean> {
   try {
     const res = await fetch("/push-sw.js", { cache: "no-store" });
-    return res.ok && (await res.text()).includes("addEventListener(\"push\"");
+    const text = await res.text();
+    return res.ok && text.includes("addEventListener(\"push\"") && text.includes("showNotification");
   } catch {
     return false;
   }
 }
 
+function resolveServiceWorkerState(reg: ServiceWorkerRegistration): {
+  activated: boolean;
+  state: string;
+  scriptUrl: string | null;
+} {
+  if (reg.active?.state === "activated") {
+    return { activated: true, state: "activated", scriptUrl: reg.active.scriptURL };
+  }
+  if (reg.installing) {
+    return { activated: false, state: reg.installing.state, scriptUrl: reg.installing.scriptURL };
+  }
+  if (reg.waiting) {
+    return { activated: false, state: reg.waiting.state, scriptUrl: reg.waiting.scriptURL };
+  }
+  if (reg.active) {
+    return { activated: reg.active.state === "activated", state: reg.active.state, scriptUrl: reg.active.scriptURL };
+  }
+  return { activated: false, state: "none", scriptUrl: null };
+}
+
+async function detectVapidKeyMismatch(
+  reg: ServiceWorkerRegistration,
+  publicKey: string,
+): Promise<boolean> {
+  const sub = await reg.pushManager.getSubscription();
+  if (!sub) return false;
+  const expectedKey = urlBase64ToUint8Array(publicKey);
+  const existingKey = sub.options?.applicationServerKey ?? null;
+  return !bufferEquals(existingKey, expectedKey);
+}
+
 export async function collectWebPushDiagnostics(): Promise<WebPushDiagnosticState> {
   const errors: string[] = [];
   const pwaStandalone = isPwaStandalone();
-  const serviceWorkerSupported = "serviceWorker" in navigator;
+  const isHttps = window.location.protocol === "https:" || window.location.hostname === "localhost";
 
-  let serviceWorkerReady = false;
+  if (!isHttps) {
+    errors.push("網站必須使用 HTTPS 才能使用 Web Push");
+  }
+  if (!pwaStandalone && /iPhone|iPad/i.test(navigator.userAgent)) {
+    errors.push("iPhone 必須從主畫面圖示開啟（PWA standalone 模式）");
+  }
+
+  const serviceWorkerSupported = "serviceWorker" in navigator;
+  let serviceWorkerRegistered = false;
+  let serviceWorkerActivated = false;
+  let serviceWorkerState = "unsupported";
   let serviceWorkerController = false;
+  let serviceWorkerScope: string | null = null;
   let serviceWorkerScriptUrl: string | null = null;
 
   if (serviceWorkerSupported) {
     serviceWorkerController = !!navigator.serviceWorker.controller;
     try {
-      const reg = await navigator.serviceWorker.ready;
-      serviceWorkerReady = !!reg;
-      serviceWorkerScriptUrl = reg.active?.scriptURL ?? reg.installing?.scriptURL ?? reg.waiting?.scriptURL ?? null;
-      if (!serviceWorkerController && reg.active) {
-        serviceWorkerController = true;
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      serviceWorkerRegistered = registrations.length > 0;
+      const reg = registrations[0] ?? (await navigator.serviceWorker.ready);
+      if (reg) {
+        serviceWorkerRegistered = true;
+        serviceWorkerScope = reg.scope;
+        const swInfo = resolveServiceWorkerState(reg);
+        serviceWorkerActivated = swInfo.activated;
+        serviceWorkerState = swInfo.state;
+        serviceWorkerScriptUrl = swInfo.scriptUrl;
+        if (!serviceWorkerController && reg.active) {
+          serviceWorkerController = true;
+        }
+        if (serviceWorkerScope && !serviceWorkerScope.startsWith(window.location.origin)) {
+          errors.push(`Service Worker scope 未涵蓋此網站：${serviceWorkerScope}`);
+        }
       }
     } catch (err) {
-      errors.push(`serviceWorker.ready 失敗：${err instanceof Error ? err.message : String(err)}`);
+      errors.push(`Service Worker 診斷失敗：${err instanceof Error ? err.message : String(err)}`);
     }
   } else {
     errors.push("此瀏覽器不支援 Service Worker");
   }
 
-  const pushSwScriptReachable = await checkPushSwReachable();
-  if (!pushSwScriptReachable) {
-    errors.push("無法載入 /push-sw.js（push 事件處理器可能未註冊）");
+  const pushSwHasPushListener = await checkPushSwReachable();
+  if (!pushSwHasPushListener) {
+    errors.push("push-sw.js 未載入或未包含 push/showNotification 處理器");
   }
 
   const notificationPermission: NotificationPermission | "unsupported" =
     "Notification" in window ? Notification.permission : "unsupported";
 
-  let pushSubscriptionExists = false;
-  let pushSubscriptionEndpoint: string | null = null;
+  let browserSubscriptionExists = false;
+  let browserSubscriptionComplete = false;
+  let browserSubscriptionEndpoint: string | null = null;
 
-  if (serviceWorkerSupported && serviceWorkerReady) {
+  if (serviceWorkerSupported && serviceWorkerRegistered) {
     try {
       const reg = await navigator.serviceWorker.ready;
       const sub = await reg.pushManager.getSubscription();
-      pushSubscriptionExists = !!sub;
-      pushSubscriptionEndpoint = sub?.endpoint ?? null;
+      browserSubscriptionExists = !!sub;
+      if (sub) {
+        const json = sub.toJSON();
+        browserSubscriptionEndpoint = json.endpoint ?? sub.endpoint ?? null;
+        browserSubscriptionComplete = !!(
+          browserSubscriptionEndpoint
+          && json.keys?.p256dh
+          && json.keys?.auth
+        );
+        if (!browserSubscriptionComplete) {
+          errors.push("瀏覽器 subscription 缺少 endpoint、p256dh 或 auth");
+        }
+      }
     } catch (err) {
       errors.push(`getSubscription 失敗：${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
   let vapidPublicKeyPresent = false;
+  let vapidKeyMismatch = false;
+  let serverPublicKey: string | null = null;
+
   try {
     const res = await authFetch("/api/notifications/vapid-public-key");
     if (res.ok) {
       const data = (await res.json()) as { publicKey: string | null; configured: boolean };
       vapidPublicKeyPresent = !!(data.configured && data.publicKey);
+      serverPublicKey = data.publicKey;
       if (!vapidPublicKeyPresent) errors.push("伺服器 VAPID 公鑰未設定");
     }
   } catch (err) {
     errors.push(`讀取 VAPID 公鑰失敗：${err instanceof Error ? err.message : String(err)}`);
   }
 
-  let dbDeviceCount = 0;
+  if (serverPublicKey && serviceWorkerSupported && browserSubscriptionExists) {
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      vapidKeyMismatch = await detectVapidKeyMismatch(reg, serverPublicKey);
+      if (vapidKeyMismatch) {
+        errors.push("VAPID 公鑰不一致，需清除舊 subscription 並重新訂閱");
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
   let dbEnabledCount = 0;
-  let currentEndpointInDb = false;
-  let subscriptionSavedInDb = false;
+  let dbSubscriptionForCurrentDevice = false;
 
   try {
     const res = await authFetch("/api/notifications/push/subscriptions");
     if (res.ok) {
       const data = (await res.json()) as { subscriptions: DbPushSubscription[] };
-      dbDeviceCount = data.subscriptions.length;
       dbEnabledCount = data.subscriptions.filter(s => s.enabled).length;
-      if (pushSubscriptionEndpoint) {
-        currentEndpointInDb = data.subscriptions.some(s => s.endpoint === pushSubscriptionEndpoint && s.enabled);
+      if (browserSubscriptionEndpoint) {
+        dbSubscriptionForCurrentDevice = data.subscriptions.some(
+          s => s.endpoint === browserSubscriptionEndpoint && s.enabled,
+        );
       }
-      subscriptionSavedInDb = dbEnabledCount > 0 && (!pushSubscriptionEndpoint || currentEndpointInDb);
+      if (dbEnabledCount === 0) {
+        errors.push("此手機尚未完成推播訂閱");
+      } else if (browserSubscriptionEndpoint && !dbSubscriptionForCurrentDevice) {
+        errors.push("瀏覽器 subscription 尚未綁定至目前登入帳號的資料庫");
+      }
     }
   } catch (err) {
     errors.push(`讀取資料庫 subscription 失敗：${err instanceof Error ? err.message : String(err)}`);
@@ -171,19 +270,22 @@ export async function collectWebPushDiagnostics(): Promise<WebPushDiagnosticStat
 
   return {
     pwaStandalone,
-    serviceWorkerSupported,
-    serviceWorkerReady,
-    serviceWorkerController,
-    serviceWorkerScriptUrl,
-    pushSwScriptReachable,
+    isHttps,
     notificationPermission,
-    pushSubscriptionExists,
-    pushSubscriptionEndpoint,
-    vapidPublicKeyPresent,
-    subscriptionSavedInDb,
-    dbDeviceCount,
+    serviceWorkerRegistered,
+    serviceWorkerActivated,
+    serviceWorkerState,
+    serviceWorkerController,
+    serviceWorkerScope,
+    serviceWorkerScriptUrl,
+    pushSwHasPushListener,
+    browserSubscriptionExists,
+    browserSubscriptionComplete,
+    browserSubscriptionEndpoint,
+    dbSubscriptionForCurrentDevice,
     dbEnabledCount,
-    currentEndpointInDb,
+    vapidPublicKeyPresent,
+    vapidKeyMismatch,
     errors,
   };
 }
@@ -196,10 +298,15 @@ export async function reregisterServiceWorker(): Promise<void> {
   window.location.reload();
 }
 
+async function deleteDbSubscription(endpoint: string): Promise<void> {
+  await authFetch("/api/notifications/push/subscribe", {
+    method: "DELETE",
+    body: JSON.stringify({ endpoint }),
+  });
+}
+
 /** Full subscribe flow: permission → subscribe → save → verify DB */
 export async function runPushSubscribeFlow(deviceName?: string): Promise<PushSubscribeFlowResult> {
-  const errors: string[] = [];
-
   if (!("Notification" in window) || !("serviceWorker" in navigator)) {
     const diagnostics = await collectWebPushDiagnostics();
     return { ok: false, message: "此瀏覽器不支援 Web Push", diagnostics };
@@ -237,12 +344,24 @@ export async function runPushSubscribeFlow(deviceName?: string): Promise<PushSub
     return { ok: false, message: `Service Worker 未就緒：${err instanceof Error ? err.message : String(err)}`, diagnostics };
   }
 
+  const applicationServerKey = urlBase64ToUint8Array(publicKey);
   let sub = await reg.pushManager.getSubscription();
+
+  if (sub) {
+    const mismatch = await detectVapidKeyMismatch(reg, publicKey);
+    if (mismatch) {
+      const oldEndpoint = sub.endpoint;
+      await sub.unsubscribe();
+      await deleteDbSubscription(oldEndpoint).catch(() => undefined);
+      sub = null;
+    }
+  }
+
   if (!sub) {
     try {
       sub = await reg.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(publicKey),
+        applicationServerKey,
       });
     } catch (err) {
       const diagnostics = await collectWebPushDiagnostics();
@@ -253,7 +372,7 @@ export async function runPushSubscribeFlow(deviceName?: string): Promise<PushSub
   const json = sub.toJSON();
   if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) {
     const diagnostics = await collectWebPushDiagnostics();
-    return { ok: false, message: "subscription 缺少 endpoint 或 keys", diagnostics };
+    return { ok: false, message: "subscription 缺少 endpoint、p256dh 或 auth", diagnostics };
   }
 
   const saveRes = await authFetch("/api/notifications/push/subscribe", {
@@ -267,24 +386,24 @@ export async function runPushSubscribeFlow(deviceName?: string): Promise<PushSub
 
   if (!saveRes.ok) {
     const text = await saveRes.text();
-    errors.push(`儲存 subscription 失敗：${text}`);
     const diagnostics = await collectWebPushDiagnostics();
     return { ok: false, message: text || "訂閱儲存失敗", diagnostics };
   }
 
   const saveData = (await saveRes.json()) as { verified: boolean; dbCount: number };
   if (!saveData.verified) {
-    errors.push("儲存後驗證失敗：資料庫找不到此 endpoint");
+    const diagnostics = await collectWebPushDiagnostics();
+    return { ok: false, message: "儲存後驗證失敗：資料庫找不到此 endpoint", diagnostics };
   }
 
   const diagnostics = await collectWebPushDiagnostics();
-  if (diagnostics.dbEnabledCount === 0) {
+  if (diagnostics.dbEnabledCount === 0 || !diagnostics.dbSubscriptionForCurrentDevice) {
     return { ok: false, message: "此手機尚未完成推播訂閱（資料庫無有效記錄）", diagnostics };
   }
 
   return {
     ok: true,
-    message: `推播訂閱成功，資料庫共 ${diagnostics.dbEnabledCount} 筆裝置`,
+    message: `推播訂閱成功，資料庫共 ${diagnostics.dbEnabledCount} 筆有效裝置`,
     diagnostics,
   };
 }
@@ -303,4 +422,15 @@ export async function fetchPushSubscriptions(): Promise<DbPushSubscription[]> {
   if (!res.ok) throw new Error("無法讀取 subscription 列表");
   const data = (await res.json()) as { subscriptions: DbPushSubscription[] };
   return data.subscriptions;
+}
+
+export function formatDiagnosticLabel(state: WebPushDiagnosticState): string {
+  return [
+    `PWA 主畫面模式：${state.pwaStandalone ? "是" : "否"}`,
+    `HTTPS：${state.isHttps ? "是" : "否"}`,
+    `通知權限：${state.notificationPermission}`,
+    `Service Worker 註冊：${state.serviceWorkerRegistered ? "是" : "否"}`,
+    `Service Worker 狀態：${state.serviceWorkerState}`,
+    `Service Worker Controller：${state.serviceWorkerController ? "存在" : "不存在"}`,
+  ].join("\n");
 }

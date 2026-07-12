@@ -1,7 +1,7 @@
 import { logger } from "../logger.ts";
 import { getLineChannelAccessToken, isLineMessagingConfigured } from "../line/lineConfig.ts";
 import { formatLineApiError } from "../line/lineMessaging.ts";
-import { absoluteWorkOrderUrl } from "../../../shared/notifications/types.ts";
+import { absoluteWorkOrderViewUrl } from "../appUrl.ts";
 
 export async function sendLineWorkOrderNotification(opts: {
   lineUserId: string;
@@ -16,7 +16,10 @@ export async function sendLineWorkOrderNotification(opts: {
   const messages: unknown[] = [{ type: "text", text: opts.text }];
 
   if (opts.workOrderId) {
-    const uri = absoluteWorkOrderUrl(opts.workOrderId);
+    const viewUrl = absoluteWorkOrderViewUrl(opts.workOrderId);
+    console.log("[LINE Flex Message] 查看派工單 viewUrl:", viewUrl);
+    logger.info({ viewUrl, workOrderId: opts.workOrderId }, "LINE Flex Message 查看派工單 viewUrl");
+
     messages.push({
       type: "template",
       altText: "查看派工單",
@@ -27,7 +30,7 @@ export async function sendLineWorkOrderNotification(opts: {
           {
             type: "uri",
             label: "查看派工單",
-            uri,
+            uri: viewUrl,
           },
         ],
       },

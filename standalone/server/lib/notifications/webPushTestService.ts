@@ -1,7 +1,7 @@
 import { eq, and } from "drizzle-orm";
 import { db, userPushSubscriptionsTable } from "@workspace/db";
 import { logger } from "../logger.ts";
-import { sendWebPushToSubscription } from "./webPushService.ts";
+import { sendWebPushToSubscription, isVapidMismatchError } from "./webPushService.ts";
 
 export interface WebPushTestDeliveryResult {
   subscriptionId: number;
@@ -11,6 +11,7 @@ export interface WebPushTestDeliveryResult {
   statusCode?: number;
   errorMessage?: string;
   deleted: boolean;
+  requiresResubscribe?: boolean;
 }
 
 export interface WebPushTestResult {
@@ -70,6 +71,7 @@ export async function sendTestWebPushForUser(userId: number): Promise<WebPushTes
     const delivery = await sendWebPushToSubscription(sub, payload);
     const statusCode = delivery.statusCode;
     let deleted = false;
+    const requiresResubscribe = isVapidMismatchError(statusCode);
 
     if (delivery.staleSubscription) {
       await db.delete(userPushSubscriptionsTable).where(eq(userPushSubscriptionsTable.id, sub.id));
@@ -83,14 +85,22 @@ export async function sendTestWebPushForUser(userId: number): Promise<WebPushTes
       failCount += 1;
     }
 
+    let errorMessage = delivery.errorMessage;
+    if (requiresResubscribe) {
+      errorMessage = `${errorMessage ?? "VAPID 金鑰不一致"} — 請重新訂閱推播`;
+    } else if (statusCode === 404 || statusCode === 410) {
+      errorMessage = `${errorMessage ?? "訂閱已失效"} — 請重新訂閱推播`;
+    }
+
     results.push({
       subscriptionId: sub.id,
       deviceName: sub.deviceName,
       endpointPreview: maskEndpoint(sub.endpoint),
       success: delivery.success,
       statusCode,
-      errorMessage: delivery.errorMessage,
+      errorMessage,
       deleted,
+      requiresResubscribe,
     });
   }
 

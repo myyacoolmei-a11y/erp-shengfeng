@@ -46,7 +46,11 @@ function extractPushError(err: unknown): { statusCode?: number; errorMessage: st
 }
 
 function isStalePushError(statusCode?: number): boolean {
-  return statusCode === 404 || statusCode === 410;
+  return statusCode === 404 || statusCode === 410 || statusCode === 401 || statusCode === 403;
+}
+
+export function isVapidMismatchError(statusCode?: number): boolean {
+  return statusCode === 401 || statusCode === 403;
 }
 
 export async function sendWebPushToSubscription(

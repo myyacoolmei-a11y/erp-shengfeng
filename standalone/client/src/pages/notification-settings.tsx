@@ -27,10 +27,14 @@ function yn(v: boolean): string {
   return v ? "是" : "否";
 }
 
+function exists(v: boolean): string {
+  return v ? "存在" : "不存在";
+}
+
 function DiagRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between gap-4 text-sm py-1 border-b border-border/50 last:border-0">
-      <span className="text-muted-foreground shrink-0">{label}</span>
+      <span className="text-muted-foreground shrink-0">{label}：</span>
       <span className="font-medium text-right break-all">{value}</span>
     </div>
   );
@@ -45,49 +49,65 @@ function DiagnosticPanel({
 }) {
   if (!diag) return <p className="text-sm text-muted-foreground">診斷載入中…</p>;
 
-  const pushSubLabel = diag.pushSubscriptionExists ? "存在" : "不存在";
-  const dbSavedLabel = diag.subscriptionSavedInDb ? "是" : "否";
-  const permLabel = diag.notificationPermission;
+  const browserSubLabel = diag.browserSubscriptionComplete
+    ? "存在（含 endpoint / p256dh / auth）"
+    : diag.browserSubscriptionExists
+      ? "存在但不完整"
+      : "不存在";
 
-  let sendResult = "尚未測試";
-  let statusCode = "—";
-  let errorContent = "—";
+  const dbSubLabel = diag.dbEnabledCount === 0
+    ? "此手機尚未完成推播訂閱"
+    : diag.dbSubscriptionForCurrentDevice
+      ? "已綁定目前裝置"
+      : "資料庫有記錄，但非此裝置 endpoint";
 
-  if (testResult) {
-    if (testResult.foundCount === 0) {
-      sendResult = "失敗";
-      errorContent = "此手機尚未完成推播訂閱";
-    } else if (testResult.overallSuccess) {
-      sendResult = "成功";
-    } else {
-      sendResult = "失敗";
-    }
-    const failed = testResult.results.find(r => !r.success);
-    statusCode = failed?.statusCode != null ? String(failed.statusCode) : (testResult.overallSuccess ? "201" : "—");
-    errorContent = failed?.errorMessage ?? (testResult.overallSuccess ? "—" : testResult.message);
-  }
+  const httpStatusCodes = testResult?.results.length
+    ? testResult.results.map(r => `#${r.subscriptionId}→${r.statusCode ?? "?"}`).join("、")
+    : "—";
+
+  const errorMessages = testResult?.results.filter(r => !r.success).length
+    ? testResult.results
+      .filter(r => !r.success)
+      .map(r => `#${r.subscriptionId} ${r.errorMessage ?? "未知錯誤"}`)
+      .join("；")
+    : testResult?.foundCount === 0
+      ? "此手機尚未完成推播訂閱"
+      : "—";
+
+  const needsResubscribe = testResult?.results.some(r => r.deleted || r.requiresResubscribe);
 
   return (
     <div className="rounded-lg border bg-muted/30 p-4 space-y-1">
-      <p className="font-semibold text-sm mb-2">Web Push 診斷</p>
-      <DiagRow label="PWA standalone" value={yn(diag.pwaStandalone)} />
-      <DiagRow label="Service Worker ready" value={yn(diag.serviceWorkerReady)} />
-      <DiagRow label="Service Worker controller" value={yn(diag.serviceWorkerController)} />
-      <DiagRow label="push-sw.js 可載入" value={yn(diag.pushSwScriptReachable)} />
-      <DiagRow label="Notification permission" value={permLabel} />
-      <DiagRow label="Push subscription" value={pushSubLabel} />
-      <DiagRow label="Subscription 已存資料庫" value={dbSavedLabel} />
-      <DiagRow label="後端找到裝置數" value={String(diag.dbEnabledCount)} />
-      <DiagRow label="Web Push 發送結果" value={sendResult} />
-      <DiagRow label="錯誤狀態碼" value={statusCode} />
-      <DiagRow label="錯誤內容" value={errorContent} />
-      {testResult && testResult.foundCount > 0 && (
+      <p className="font-semibold text-sm mb-2">Web Push 即時診斷</p>
+      <DiagRow label="PWA 主畫面模式" value={yn(diag.pwaStandalone)} />
+      <DiagRow label="HTTPS" value={yn(diag.isHttps)} />
+      <DiagRow label="通知權限" value={String(diag.notificationPermission)} />
+      <DiagRow label="Service Worker 註冊" value={yn(diag.serviceWorkerRegistered)} />
+      <DiagRow label="Service Worker 狀態" value={diag.serviceWorkerActivated ? "activated" : diag.serviceWorkerState} />
+      <DiagRow label="Service Worker Controller" value={exists(diag.serviceWorkerController)} />
+      <DiagRow label="Service Worker Scope" value={diag.serviceWorkerScope ?? "—"} />
+      <DiagRow label="push-sw.js 監聽 push" value={yn(diag.pushSwHasPushListener)} />
+      <DiagRow label="瀏覽器 Subscription" value={browserSubLabel} />
+      <DiagRow label="資料庫 Subscription" value={dbSubLabel} />
+      <DiagRow label="有效裝置數" value={String(diag.dbEnabledCount)} />
+      <DiagRow label="後端實際發送數" value={testResult ? String(testResult.sentCount) : "—"} />
+      <DiagRow label="成功數" value={testResult ? String(testResult.successCount) : "—"} />
+      <DiagRow label="失敗數" value={testResult ? String(testResult.failCount) : "—"} />
+      <DiagRow label="HTTP 狀態碼" value={httpStatusCodes} />
+      <DiagRow label="錯誤訊息" value={errorMessages} />
+      {diag.vapidKeyMismatch && (
+        <p className="text-xs text-amber-800 pt-2">VAPID 公鑰不一致，請按「訂閱並儲存推播」重新訂閱</p>
+      )}
+      {needsResubscribe && (
+        <p className="text-xs text-amber-800">部分訂閱已失效或被刪除，請重新訂閱推播</p>
+      )}
+      {testResult && testResult.results.length > 0 && (
         <div className="mt-3 pt-2 border-t text-xs space-y-1">
-          <p className="font-medium">測試推播明細</p>
-          <p>找到 {testResult.foundCount} 筆 · 發送 {testResult.sentCount} 筆 · 成功 {testResult.successCount} · 失敗 {testResult.failCount}</p>
+          <p className="font-medium">每筆 Web Push 明細</p>
           {testResult.results.map(r => (
             <p key={r.subscriptionId} className="text-muted-foreground break-all">
-              #{r.subscriptionId} {r.deviceName ?? "裝置"} — {r.success ? "成功" : `失敗 (${r.statusCode ?? "?"})`}{r.deleted ? " [已刪除失效訂閱]" : ""}
+              #{r.subscriptionId} {r.deviceName ?? "裝置"} — HTTP {r.statusCode ?? "?"} — {r.success ? "成功" : "失敗"}
+              {r.deleted ? " [已刪除失效訂閱]" : ""}
               {r.errorMessage ? ` · ${r.errorMessage}` : ""}
             </p>
           ))}
@@ -99,7 +119,7 @@ function DiagnosticPanel({
         </div>
       )}
       {diag.serviceWorkerScriptUrl && (
-        <p className="text-[10px] text-muted-foreground mt-2 break-all">SW: {diag.serviceWorkerScriptUrl}</p>
+        <p className="text-[10px] text-muted-foreground mt-2 break-all">SW script: {diag.serviceWorkerScriptUrl}</p>
       )}
     </div>
   );
@@ -173,13 +193,14 @@ export default function NotificationSettingsPage() {
         });
       } else if (result.overallSuccess) {
         toast({
-          title: "測試推播已發送",
-          description: `成功 ${result.successCount}/${result.sentCount} 筆。請關閉 ERP 後查看鎖定畫面。`,
+          title: "測試推播已從伺服器發送",
+          description: `HTTP 201 · 成功 ${result.successCount}/${result.sentCount} 筆。請完全關閉 ERP 後查看鎖定畫面。`,
         });
       } else {
+        const failed = result.results.find(r => !r.success);
         toast({
           title: "測試推播失敗",
-          description: result.results.find(r => !r.success)?.errorMessage ?? result.message,
+          description: `HTTP ${failed?.statusCode ?? "?"} · ${failed?.errorMessage ?? result.message}`,
           variant: "destructive",
         });
       }
@@ -213,10 +234,10 @@ export default function NotificationSettingsPage() {
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2">
             <Wrench className="h-4 w-4" />
-            Web Push 診斷與測試
+            Web Push 即時診斷
           </CardTitle>
           <CardDescription>
-            測試推播由伺服器 web-push 發送，不會只新增站內小鈴鐺通知
+            測試推播由伺服器 web-push 發送；關閉 ERP 後在鎖定畫面確認系統通知
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

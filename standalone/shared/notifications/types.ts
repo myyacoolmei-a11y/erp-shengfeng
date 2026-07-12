@@ -23,8 +23,17 @@ export function workOrderOpenUrl(workOrderId: number): string {
   return `/work-orders?open=${workOrderId}`;
 }
 
+/** @deprecated Prefer server `absoluteWorkOrderViewUrl()` for LINE / external links */
 export function absoluteWorkOrderUrl(workOrderId: number): string {
-  const base = process.env.APP_BASE_URL?.trim()?.replace(/\/+$/, "")
-    ?? "http://localhost:3000";
-  return `${base}${workOrderOpenUrl(workOrderId)}`;
+  const base = (
+    process.env.APP_URL?.trim()
+    ?? process.env.PUBLIC_APP_URL?.trim()
+    ?? process.env.APP_BASE_URL?.trim()
+    ?? ""
+  ).replace(/\/+$/, "");
+  if (!base) {
+    throw new Error("APP_URL / PUBLIC_APP_URL / APP_BASE_URL 未設定");
+  }
+  const normalized = /^https?:\/\//i.test(base) ? base : `https://${base}`;
+  return `${normalized}${workOrderOpenUrl(workOrderId)}`;
 }

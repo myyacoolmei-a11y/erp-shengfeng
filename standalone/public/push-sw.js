@@ -1,4 +1,13 @@
 /* Web Push handlers — imported by Workbox service worker via importScripts */
+
+self.addEventListener("install", (event) => {
+  event.waitUntil(self.skipWaiting());
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(self.clients.claim());
+});
+
 self.addEventListener("push", (event) => {
   let data = { title: "晟風 ERP", body: "", url: "/", notificationId: null };
   try {
@@ -10,22 +19,13 @@ self.addEventListener("push", (event) => {
   }
 
   event.waitUntil(
-    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
-      const hasFocusedClient = clientList.some(
-        c => c.focused && c.url && c.url.startsWith(self.location.origin),
-      );
-      if (hasFocusedClient) {
-        return undefined;
-      }
-
-      return self.registration.showNotification(data.title, {
-        body: data.body,
-        icon: "/icons/icon-192.png",
-        badge: "/icons/icon-192.png",
-        data: { url: data.url, notificationId: data.notificationId },
-        tag: data.notificationId ? `shengfeng-${data.notificationId}` : `shengfeng-${Date.now()}`,
-        renotify: true,
-      });
+    self.registration.showNotification(data.title, {
+      body: data.body,
+      icon: "/icons/icon-192.png",
+      badge: "/icons/icon-192.png",
+      data: { url: data.url, notificationId: data.notificationId },
+      tag: data.notificationId ? `shengfeng-${data.notificationId}` : `shengfeng-${Date.now()}`,
+      renotify: true,
     }),
   );
 });
