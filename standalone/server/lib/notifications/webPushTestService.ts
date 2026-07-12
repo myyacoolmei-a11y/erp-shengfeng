@@ -33,6 +33,8 @@ function maskEndpoint(endpoint: string): string {
 
 /** Server-only test push via web-push — does NOT create in-app notifications. */
 export async function sendTestWebPushForUser(userId: number): Promise<WebPushTestResult> {
+  logger.info({ event: "web_push_test_start", userId }, "Web Push test: loading subscriptions");
+
   const subs = await db
     .select()
     .from(userPushSubscriptionsTable)

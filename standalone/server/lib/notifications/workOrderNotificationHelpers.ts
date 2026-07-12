@@ -1,7 +1,76 @@
 import { eq, and, inArray, isNotNull } from "drizzle-orm";
 import { db, usersTable, employeesTable } from "@workspace/db";
-import { fireAndForgetNotification } from "./notificationService.ts";
+import { sendNotification, fireAndForgetNotification } from "./notificationService.ts";
 import { NOTIFICATION_TYPES } from "../../../shared/notifications/types.ts";
+import { logger } from "../logger.ts";
+
+const DISPATCH_NOTIFY_ROLES = ["super_admin", "owner", "admin", "accountant"] as const;
+
+function userEffectiveRoles(user: { role: string; roles: string[] | null }): string[] {
+  return user.roles?.length ? user.roles : [user.role];
+}
+
+function isDispatchManagerRole(roles: string[]): boolean {
+  return roles.some(r => DISPATCH_NOTIFY_ROLES.includes(r as (typeof DISPATCH_NOTIFY_ROLES)[number]));
+}
+
+/** Users who should receive dispatch / field-progress notifications (managers). */
+export async function resolveDispatchNotificationRecipientIds(
+  excludeUserId?: number,
+): Promise<number[]> {
+  const rows = await db
+    .select({
+      id: usersTable.id,
+      role: usersTable.role,
+      roles: usersTable.roles,
+      receiveDispatchNotifications: usersTable.receiveDispatchNotifications,
+    })
+    .from(usersTable)
+    .where(eq(usersTable.isActive, true));
+
+  const managerRecipients = rows
+    .filter(u => {
+      if (excludeUserId != null && u.id === excludeUserId) return false;
+      if (!u.receiveDispatchNotifications) return false;
+      return isDispatchManagerRole(userEffectiveRoles(u));
+    })
+    .map(u => u.id);
+
+  if (managerRecipients.length > 0) {
+    return managerRecipients;
+  }
+
+  const fallback = rows
+    .filter(u => {
+      if (excludeUserId != null && u.id === excludeUserId) return false;
+      return u.receiveDispatchNotifications;
+    })
+    .map(u => u.id);
+
+  if (fallback.length > 0) {
+    logger.warn(
+      { excludeUserId, fallbackCount: fallback.length },
+      "dispatch notify: no manager-role recipients, using receiveDispatchNotifications fallback",
+    );
+  }
+
+  return fallback;
+}
+
+async function isDispatchManagerUser(userId: number): Promise<boolean> {
+  const [user] = await db
+    .select({
+      role: usersTable.role,
+      roles: usersTable.roles,
+      receiveDispatchNotifications: usersTable.receiveDispatchNotifications,
+      isActive: usersTable.isActive,
+    })
+    .from(usersTable)
+    .where(eq(usersTable.id, userId));
+
+  if (!user?.isActive || !user.receiveDispatchNotifications) return false;
+  return isDispatchManagerRole(userEffectiveRoles(user));
+}
 
 function parseTechnicianNames(technicians: string | null): string[] {
   if (!technicians) return [];
@@ -174,23 +243,43 @@ export async function notifyManagersFieldProgress(opts: {
   title: string;
   message: string;
   dedupeKey: string;
+  lineMessage?: string;
 }): Promise<void> {
-  const managers = await db
-    .select({ id: usersTable.id })
-    .from(usersTable)
-    .where(and(eq(usersTable.isActive, true), eq(usersTable.receiveDispatchNotifications, true)));
+  let recipientUserIds = await resolveDispatchNotificationRecipientIds(opts.engineerUserId);
 
-  const recipientUserIds = managers
-    .map(m => m.id)
-    .filter(id => id !== opts.engineerUserId);
+  if (recipientUserIds.length === 0 && (await isDispatchManagerUser(opts.engineerUserId))) {
+    recipientUserIds = [opts.engineerUserId];
+    logger.info(
+      { engineerUserId: opts.engineerUserId, workOrderId: opts.workOrderId },
+      "field progress notify: solo manager — notifying acting user",
+    );
+  }
 
-  fireAndForgetNotification({
+  logger.info({
+    event: "field_progress_notify_recipients",
+    workOrderId: opts.workOrderId,
+    engineerUserId: opts.engineerUserId,
+    recipientCount: recipientUserIds.length,
+    recipientUserIds,
+  }, "Field progress notification recipients resolved");
+
+  if (recipientUserIds.length === 0) {
+    logger.warn({
+      event: "field_progress_notify_no_recipients",
+      workOrderId: opts.workOrderId,
+      engineerUserId: opts.engineerUserId,
+    }, "Field progress notification skipped: no recipients");
+    return;
+  }
+
+  await sendNotification({
     recipientUserIds,
     type: NOTIFICATION_TYPES.FIELD_PROGRESS,
     title: opts.title,
     message: opts.message,
     workOrderId: opts.workOrderId,
     dedupeKey: opts.dedupeKey,
-    requireDispatchPref: true,
+    lineMessage: opts.lineMessage ?? `📍 ${opts.title}\n\n${opts.message}`,
+    channels: ["in_app", "web_push", "line"],
   });
 }

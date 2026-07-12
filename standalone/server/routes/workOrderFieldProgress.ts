@@ -96,6 +96,7 @@ function emitFieldProgressNotify(
   workOrderId: number,
   action: "depart" | "arrive" | "complete" | "unable",
   actedAt: Date,
+  extra?: { unableReason?: string; unableNote?: string | null },
 ): void {
   void notifyFieldProgressEvent({
     workOrderId,
@@ -103,7 +104,11 @@ function emitFieldProgressNotify(
     engineerName: req.user!.displayName,
     action,
     actedAt,
-  }).catch(err => logger.error({ err }, "field progress notify failed"));
+    unableReason: extra?.unableReason,
+    unableNote: extra?.unableNote,
+  }).catch(err => {
+    logger.error({ err, workOrderId, action }, "field progress notify failed");
+  });
 }
 
 /** GET field progress for one work order (all engineers for admin; own only for engineer) */
@@ -384,7 +389,10 @@ router.post(
       .where(eq(workOrderFieldProgressTable.id, progress.id))
       .returning();
 
-    emitFieldProgressNotify(req, workOrderId, "unable", now);
+    emitFieldProgressNotify(req, workOrderId, "unable", now, {
+      unableReason: reason,
+      unableNote: reason === "其他" ? note!.trim() : note?.trim() || null,
+    });
     res.json(serializeFieldProgress(updated));
   },
 );

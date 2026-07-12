@@ -33,6 +33,25 @@ export interface SendNotificationInput {
   requireDispatchPref?: boolean;
 }
 
+export interface ChannelDeliverySummary {
+  attempted: number;
+  succeeded: number;
+  failed: number;
+  skipped: number;
+}
+
+export interface SendNotificationResult {
+  recipientCount: number;
+  deduped: boolean;
+  inApp: ChannelDeliverySummary;
+  webPush: ChannelDeliverySummary & { subscriptionCount: number };
+  line: ChannelDeliverySummary;
+}
+
+function emptyChannelSummary(): ChannelDeliverySummary {
+  return { attempted: 0, succeeded: 0, failed: 0, skipped: 0 };
+}
+
 async function claimDedupeKey(dedupeKey: string): Promise<boolean> {
   try {
     await db.insert(notificationDedupTable).values({ dedupeKey });
@@ -43,6 +62,8 @@ async function claimDedupeKey(dedupeKey: string): Promise<boolean> {
 }
 
 async function getUserPrefs(userId: number) {
+  await ensureUserNotificationPrefs(userId);
+
   const [prefs] = await db
     .select()
     .from(userNotificationPrefsTable)
@@ -97,12 +118,44 @@ async function logDelivery(row: {
   });
 }
 
-export async function sendNotification(input: SendNotificationInput): Promise<void> {
+export async function sendNotification(input: SendNotificationInput): Promise<SendNotificationResult> {
+  const summary: SendNotificationResult = {
+    recipientCount: 0,
+    deduped: false,
+    inApp: emptyChannelSummary(),
+    webPush: { ...emptyChannelSummary(), subscriptionCount: 0 },
+    line: emptyChannelSummary(),
+  };
+
+  const uniqueRecipients = [...new Set(input.recipientUserIds.filter(id => id > 0))];
+  summary.recipientCount = uniqueRecipients.length;
+
+  logger.info({
+    event: "notification_dispatch_start",
+    type: input.type,
+    workOrderId: input.workOrderId,
+    recipientCount: uniqueRecipients.length,
+    recipientUserIds: uniqueRecipients,
+    channels: input.channels ?? ["in_app", "web_push", "line"],
+    dedupeKey: input.dedupeKey,
+  }, "Notification dispatch started");
+
+  if (uniqueRecipients.length === 0) {
+    logger.warn({
+      event: "notification_dispatch_skipped",
+      type: input.type,
+      workOrderId: input.workOrderId,
+      reason: "no_recipients",
+    }, "Notification dispatch skipped: no recipients");
+    return summary;
+  }
+
   if (input.dedupeKey) {
     const claimed = await claimDedupeKey(input.dedupeKey);
     if (!claimed) {
-      logger.debug({ dedupeKey: input.dedupeKey }, "notification deduped");
-      return;
+      summary.deduped = true;
+      logger.info({ dedupeKey: input.dedupeKey, type: input.type }, "Notification deduped");
+      return summary;
     }
   }
 
@@ -118,121 +171,201 @@ export async function sendNotification(input: SendNotificationInput): Promise<vo
     ...input.payload,
   };
 
-  const uniqueRecipients = [...new Set(input.recipientUserIds.filter(id => id > 0))];
-  if (uniqueRecipients.length === 0) return;
-
   for (const userId of uniqueRecipients) {
     const prefs = await getUserPrefs(userId);
-    if (!prefs.active) continue;
-
-    if (input.requireDispatchPref && !prefs.receiveDispatchNotifications) {
+    if (!prefs.active) {
+      logger.info({ userId, type: input.type }, "Notification skipped: inactive user");
       continue;
     }
 
-    if (channels.includes("in_app") && prefs.notifyInApp) {
-      try {
-        await db.insert(inAppNotificationsTable).values({
-          userId,
-          kind: input.type,
-          title: input.title,
-          body: input.message,
-          payload,
-        });
-        await logDelivery({
-          userId,
-          channel: "in_app",
-          notificationType: input.type,
-          title: input.title,
-          success: true,
-          workOrderId: input.workOrderId,
-          dedupeKey: input.dedupeKey,
-        });
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        logger.error({ err, userId, type: input.type }, "in-app notification failed");
-        await logDelivery({
-          userId,
-          channel: "in_app",
-          notificationType: input.type,
-          title: input.title,
-          success: false,
-          errorMessage: msg,
-          workOrderId: input.workOrderId,
-          dedupeKey: input.dedupeKey,
-        });
+    if (input.requireDispatchPref && !prefs.receiveDispatchNotifications) {
+      logger.info({ userId, type: input.type }, "Notification skipped: receiveDispatchNotifications disabled");
+      continue;
+    }
+
+    if (channels.includes("in_app")) {
+      if (!prefs.notifyInApp) {
+        summary.inApp.skipped += 1;
+        logger.info({ userId, type: input.type }, "In-app notification skipped: user pref disabled");
+      } else {
+        summary.inApp.attempted += 1;
+        try {
+          await db.insert(inAppNotificationsTable).values({
+            userId,
+            kind: input.type,
+            title: input.title,
+            body: input.message,
+            payload,
+          });
+          summary.inApp.succeeded += 1;
+          logger.info({ userId, type: input.type, channel: "in_app" }, "In-app notification created");
+          await logDelivery({
+            userId,
+            channel: "in_app",
+            notificationType: input.type,
+            title: input.title,
+            success: true,
+            workOrderId: input.workOrderId,
+            dedupeKey: input.dedupeKey,
+          });
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          summary.inApp.failed += 1;
+          logger.error({ err, userId, type: input.type, channel: "in_app" }, "In-app notification failed");
+          await logDelivery({
+            userId,
+            channel: "in_app",
+            notificationType: input.type,
+            title: input.title,
+            success: false,
+            errorMessage: msg,
+            workOrderId: input.workOrderId,
+            dedupeKey: input.dedupeKey,
+          });
+        }
       }
     }
 
-    if (channels.includes("web_push") && prefs.notifyWebPush) {
-      const subs = await db
-        .select()
-        .from(userPushSubscriptionsTable)
-        .where(
-          and(
-            eq(userPushSubscriptionsTable.userId, userId),
-            eq(userPushSubscriptionsTable.enabled, true),
-          ),
-        );
+    if (channels.includes("web_push")) {
+      if (!prefs.notifyWebPush) {
+        summary.webPush.skipped += 1;
+        logger.info({ userId, type: input.type }, "Web Push skipped: user pref disabled");
+      } else {
+        const subs = await db
+          .select()
+          .from(userPushSubscriptionsTable)
+          .where(
+            and(
+              eq(userPushSubscriptionsTable.userId, userId),
+              eq(userPushSubscriptionsTable.enabled, true),
+            ),
+          );
 
-      const pushTitle = input.pushTitle ?? input.title;
-      const pushBody = input.pushBody ?? input.message;
-
-      for (const sub of subs) {
-        const result = await sendWebPushToSubscription(sub, {
-          title: pushTitle,
-          body: pushBody,
-          url: absolutePushUrl,
-          notificationId: input.dedupeKey,
-        });
-
-        await logDelivery({
+        summary.webPush.subscriptionCount += subs.length;
+        logger.info({
           userId,
+          type: input.type,
           channel: "web_push",
-          notificationType: input.type,
-          title: pushTitle,
-          success: result.success,
-          errorMessage: result.errorMessage,
-          workOrderId: input.workOrderId,
-          subscriptionId: sub.id,
-          dedupeKey: input.dedupeKey,
-        });
+          subscriptionCount: subs.length,
+        }, "Web Push subscriptions loaded");
+
+        if (subs.length === 0) {
+          summary.webPush.skipped += 1;
+          logger.warn({ userId, type: input.type }, "Web Push skipped: no active subscriptions");
+        }
+
+        const pushTitle = input.pushTitle ?? input.title;
+        const pushBody = input.pushBody ?? input.message;
+
+        for (const sub of subs) {
+          summary.webPush.attempted += 1;
+          const result = await sendWebPushToSubscription(sub, {
+            title: pushTitle,
+            body: pushBody,
+            url: absolutePushUrl,
+            notificationId: input.dedupeKey,
+          });
+
+          if (result.success) {
+            summary.webPush.succeeded += 1;
+            logger.info({
+              userId,
+              subscriptionId: sub.id,
+              type: input.type,
+              channel: "web_push",
+              statusCode: result.statusCode,
+            }, "Web Push sent successfully");
+          } else {
+            summary.webPush.failed += 1;
+            logger.warn({
+              userId,
+              subscriptionId: sub.id,
+              type: input.type,
+              channel: "web_push",
+              statusCode: result.statusCode,
+              errorMessage: result.errorMessage,
+            }, "Web Push delivery failed");
+          }
+
+          await logDelivery({
+            userId,
+            channel: "web_push",
+            notificationType: input.type,
+            title: pushTitle,
+            success: result.success,
+            errorMessage: result.errorMessage,
+            workOrderId: input.workOrderId,
+            subscriptionId: sub.id,
+            dedupeKey: input.dedupeKey,
+          });
+        }
       }
     }
 
-    if (channels.includes("line") && prefs.notifyLine && prefs.lineUserId) {
-      try {
-        await sendLineWorkOrderNotification({
-          lineUserId: prefs.lineUserId,
-          text: input.lineMessage ?? `${input.title}\n\n${input.message}`,
-          workOrderId: input.workOrderId,
-        });
-        await logDelivery({
-          userId,
-          channel: "line",
-          notificationType: input.type,
-          title: input.title,
-          success: true,
-          workOrderId: input.workOrderId,
-          lineUserId: prefs.lineUserId,
-          dedupeKey: input.dedupeKey,
-        });
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        logger.warn({ err, userId, type: input.type }, "LINE notification failed");
-        await logDelivery({
-          userId,
-          channel: "line",
-          notificationType: input.type,
-          title: input.title,
-          success: false,
-          errorMessage: msg,
-          workOrderId: input.workOrderId,
-          lineUserId: prefs.lineUserId,
-          dedupeKey: input.dedupeKey,
-        });
+    if (channels.includes("line")) {
+      if (!prefs.notifyLine) {
+        summary.line.skipped += 1;
+        logger.info({ userId, type: input.type }, "LINE notification skipped: user pref disabled");
+      } else if (!prefs.lineUserId) {
+        summary.line.skipped += 1;
+        logger.info({ userId, type: input.type }, "LINE notification skipped: no LINE binding");
+      } else {
+        summary.line.attempted += 1;
+        try {
+          await sendLineWorkOrderNotification({
+            lineUserId: prefs.lineUserId,
+            text: input.lineMessage ?? `${input.title}\n\n${input.message}`,
+            workOrderId: input.workOrderId,
+          });
+          summary.line.succeeded += 1;
+          logger.info({
+            userId,
+            lineUserId: prefs.lineUserId.slice(0, 8),
+            type: input.type,
+            channel: "line",
+          }, "LINE notification sent successfully");
+          await logDelivery({
+            userId,
+            channel: "line",
+            notificationType: input.type,
+            title: input.title,
+            success: true,
+            workOrderId: input.workOrderId,
+            lineUserId: prefs.lineUserId,
+            dedupeKey: input.dedupeKey,
+          });
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          summary.line.failed += 1;
+          logger.warn({ err, userId, type: input.type, channel: "line" }, "LINE notification failed");
+          await logDelivery({
+            userId,
+            channel: "line",
+            notificationType: input.type,
+            title: input.title,
+            success: false,
+            errorMessage: msg,
+            workOrderId: input.workOrderId,
+            lineUserId: prefs.lineUserId,
+            dedupeKey: input.dedupeKey,
+          });
+        }
       }
     }
   }
+
+  logger.info({
+    event: "notification_dispatch_complete",
+    type: input.type,
+    workOrderId: input.workOrderId,
+    recipientCount: uniqueRecipients.length,
+    dedupeKey: input.dedupeKey,
+    inApp: summary.inApp,
+    webPush: summary.webPush,
+    line: summary.line,
+  }, "Notification dispatch complete");
+
+  return summary;
 }
 
 /** Fire-and-forget — never blocks caller or throws. */

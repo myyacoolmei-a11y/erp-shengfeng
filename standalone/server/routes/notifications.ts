@@ -18,6 +18,7 @@ import {
 } from "../lib/notifications/notificationService";
 import { getVapidPublicKey, isWebPushConfigured } from "../lib/notifications/webPushService";
 import { sendTestWebPushForUser } from "../lib/notifications/webPushTestService";
+import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 const ADMIN_ROLES = ["super_admin", "owner", "admin"];
@@ -148,6 +149,9 @@ router.get("/notifications/push/subscriptions", async (req, res): Promise<void> 
 
 /** Server-side Web Push test — does NOT create in-app notifications */
 router.post("/notifications/push/test", async (req, res): Promise<void> => {
+  const userId = req.user!.id;
+  logger.info({ event: "push_test_request", userId, route: "/notifications/push/test" }, "Push test request received");
+
   if (!isWebPushConfigured()) {
     res.status(503).json({
       vapidConfigured: false,
@@ -162,7 +166,7 @@ router.post("/notifications/push/test", async (req, res): Promise<void> => {
     return;
   }
 
-  const result = await sendTestWebPushForUser(req.user!.id);
+  const result = await sendTestWebPushForUser(userId);
   res.json(result);
 });
 

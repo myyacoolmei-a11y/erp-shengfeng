@@ -36,11 +36,21 @@ export interface FieldProgressNotifyInput {
   engineerName: string;
   action: FieldProgressAction;
   actedAt: Date;
+  unableReason?: string;
+  unableNote?: string | null;
 }
 
 /** Fire-and-forget: record event + unified notifications. Never throws. */
 export async function notifyFieldProgressEvent(input: FieldProgressNotifyInput): Promise<void> {
   try {
+    logger.info({
+      event: "field_progress_notify_request",
+      workOrderId: input.workOrderId,
+      engineerUserId: input.engineerUserId,
+      action: input.action,
+      actedAt: input.actedAt.toISOString(),
+    }, "Field progress notify request received");
+
     const [order] = await db
       .select({
         id: workOrdersTable.id,
@@ -76,20 +86,24 @@ export async function notifyFieldProgressEvent(input: FieldProgressNotifyInput):
 
     const title = `派工 ${actionLabel}`;
     const message = `${input.engineerName} · ${customerName} · ${woLabel} · ${timeLabel}`;
+    const unableDetail = input.action === "unable" && input.unableReason
+      ? `\n原因：${input.unableReason}${input.unableNote ? `\n備註：${input.unableNote}` : ""}`
+      : "";
 
     await notifyManagersFieldProgress({
       workOrderId: order.id,
       engineerUserId: input.engineerUserId,
       title,
-      message,
+      message: message + unableDetail,
       dedupeKey: `field-progress-${input.workOrderId}-${input.action}-${input.engineerUserId}-${input.actedAt.getTime()}`,
+      lineMessage: `📍 ${title}\n\n${message}${unableDetail}`,
     });
 
     logger.info({
-      event: "field_progress_notify",
+      event: "field_progress_notify_complete",
       workOrderId: input.workOrderId,
       action: input.action,
-    }, "Field progress notifications sent");
+    }, "Field progress notifications dispatched");
   } catch (err) {
     logger.error({ err, ...input }, "notifyFieldProgressEvent failed");
   }
