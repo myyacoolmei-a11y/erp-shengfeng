@@ -99,6 +99,42 @@ export interface WebPushTestResult {
   message: string;
 }
 
+export type PushSetupStatus =
+  | "unsupported"
+  | "not_pwa"
+  | "permission_denied"
+  | "permission_pending"
+  | "not_subscribed"
+  | "subscribed"
+  | "test_passed"
+  | "test_failed";
+
+export const PUSH_STATUS_LABELS: Record<PushSetupStatus, string> = {
+  unsupported: "此裝置不支援 Web Push",
+  not_pwa: "尚未安裝 PWA（請從主畫面圖示開啟）",
+  permission_denied: "尚未允許通知（權限已被拒絕）",
+  permission_pending: "尚未允許通知",
+  not_subscribed: "已允許但尚未訂閱",
+  subscribed: "已成功訂閱",
+  test_passed: "測試推播成功（Web Push）",
+  test_failed: "測試推播失敗（Web Push）",
+};
+
+export function derivePushSetupStatus(
+  diag: WebPushDiagnosticState,
+  testResult: WebPushTestResult | null,
+): PushSetupStatus {
+  if (testResult?.foundCount === 0) return "not_subscribed";
+  if (testResult?.overallSuccess) return "test_passed";
+  if (testResult && testResult.foundCount > 0 && !testResult.overallSuccess) return "test_failed";
+  if (isIosDevice() && !diag.pwaStandalone) return "not_pwa";
+  if (diag.notificationPermission === "denied") return "permission_denied";
+  if (diag.notificationPermission !== "granted") return "permission_pending";
+  if (diag.dbSubscriptionForCurrentDevice && diag.browserSubscriptionComplete) return "subscribed";
+  if (diag.notificationPermission === "granted") return "not_subscribed";
+  return "permission_pending";
+}
+
 async function checkPushSwReachable(): Promise<boolean> {
   try {
     const res = await fetch("/push-sw.js", { cache: "no-store" });
