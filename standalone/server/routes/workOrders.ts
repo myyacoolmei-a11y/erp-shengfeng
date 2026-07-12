@@ -294,7 +294,13 @@ router.post("/work-orders", requireRole(...WO_WRITE_ROLES), async (req, res): Pr
     return;
   }
 
+  if (!parsed.data.customerId && !parsed.data.mobilePhone?.trim()) {
+    res.status(400).json({ error: "臨時客戶請填寫手機號碼" });
+    return;
+  }
+
   const { equipmentItems: itemInputs = [], ...orderFields } = parsed.data as any;
+  if (orderFields.customerId === 0) orderFields.customerId = null;
   const hasEquipment = Array.isArray(itemInputs) && itemInputs.length > 0;
 
   const [order] = await db

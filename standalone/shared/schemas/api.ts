@@ -1022,7 +1022,10 @@ export const CreateWorkOrderBody = zod.object({
   "floor": zod.string().optional(),
   "sortOrder": zod.number().optional()
 })).optional()
-})
+}).refine(
+  (data) => !!data.customerId || (!!data.customerName?.trim() && !!data.mobilePhone?.trim()),
+  { message: "請選擇正式客戶，或填寫臨時客戶姓名與手機" },
+)
 
 export const CreateWorkOrderResponse = zod.object({
   "id": zod.number(),

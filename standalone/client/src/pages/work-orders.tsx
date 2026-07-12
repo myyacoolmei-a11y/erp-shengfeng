@@ -447,7 +447,7 @@ export default function WorkOrders() {
     e.preventDefault();
     if (!hasWorkOrderCustomer(form)) {
       toast({
-        title: form.customerMode === "temporary" ? "請填寫臨時客戶名稱" : "請選擇客戶",
+        title: form.customerMode === "temporary" ? "請填寫臨時客戶姓名與手機" : "請選擇客戶",
         variant: "destructive",
       });
       return;

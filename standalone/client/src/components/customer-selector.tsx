@@ -388,7 +388,8 @@ export function CustomerSelector({
                       value="__temp__"
                       onSelect={() => {
                         onCustomerModeChange?.("temporary");
-                        setTempOpen(true);
+                        setOpen(false);
+                        setTempOpen(false);
                       }}
                       className="text-muted-foreground"
                     >

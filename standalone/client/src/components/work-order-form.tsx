@@ -142,17 +142,19 @@ export function makeEmpty() {
 export type WOForm = ReturnType<typeof makeEmpty>;
 
 export function hasWorkOrderCustomer(f: WOForm): boolean {
-  if (f.customerMode === "temporary") return f.customerName.trim().length > 0;
+  if (f.customerMode === "temporary") {
+    return f.customerName.trim().length > 0 && f.mobilePhone.trim().length > 0;
+  }
   if (f.customerMode === "existing") return f.customerId > 0;
-  return f.customerId > 0 || f.customerName.trim().length > 0;
+  return f.customerId > 0 || (f.customerName.trim().length > 0 && f.mobilePhone.trim().length > 0);
 }
 
 export function buildPayload(f: WOForm) {
   const title = f.title.trim() || `${f.projectType || "派工"} 派工單`;
-  const hasLinkedCustomer = f.customerId > 0;
+  const isLinked = f.customerMode === "existing" && f.customerId > 0;
   return {
-    customerId: hasLinkedCustomer ? f.customerId : null,
-    customerName: hasLinkedCustomer ? undefined : (f.customerName.trim() || undefined),
+    customerId: isLinked ? f.customerId : null,
+    customerName: isLinked ? undefined : f.customerName.trim(),
     quoteId: f.quoteId,
     title,
     status: f.status,
@@ -387,7 +389,11 @@ export function WorkOrderFormFields({
     setForm(f => ({
       ...f,
       customerMode: mode,
-      ...(mode === "temporary" ? { customerId: 0, customerName: "" } : {}),
+      ...(mode === "temporary"
+        ? { customerId: 0 }
+        : mode === "existing"
+          ? { customerName: "" }
+          : { customerId: 0, customerName: "" }),
     }));
   }
 
@@ -502,17 +508,59 @@ export function WorkOrderFormFields({
         <Label>
           客戶{!customerDisabled && <span className="text-destructive ml-0.5">*</span>}
         </Label>
-        <CustomerSelector
-          value={selectorValue}
-          onChange={handleSelectorChange}
-          onCustomerModeChange={handleCustomerModeChange}
-          modal={false}
-          disabled={customerDisabled || customerLockedFromQuote}
-          allowTemp={!customerLockedFromQuote}
-          showAddressPicker={true}
-          onAddressSelect={(_, address) => setForm(f => ({ ...f, installAddress: address }))}
-          selectedAddressId={null}
-        />
+        {form.customerMode === "temporary" && !customerDisabled && !customerLockedFromQuote ? (
+          <div className="rounded-md border border-dashed p-3 space-y-3 bg-muted/10">
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs font-medium text-muted-foreground">臨時客戶（不建立正式資料）</p>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs shrink-0"
+                onClick={() => handleCustomerModeChange("existing")}
+              >
+                改選正式客戶
+              </Button>
+            </div>
+            <div className="space-y-1">
+              <Label>客戶名稱 <span className="text-destructive">*</span></Label>
+              <Input
+                placeholder="客戶名稱"
+                value={form.customerName}
+                onChange={e => setForm(f => ({ ...f, customerName: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>聯絡人</Label>
+              <Input
+                placeholder="聯絡人"
+                value={form.contactPerson}
+                onChange={e => setForm(f => ({ ...f, contactPerson: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>手機 <span className="text-destructive">*</span></Label>
+              <Input
+                type="tel"
+                placeholder="0912-345-678"
+                value={form.mobilePhone}
+                onChange={e => setForm(f => ({ ...f, mobilePhone: e.target.value }))}
+              />
+            </div>
+          </div>
+        ) : (
+          <CustomerSelector
+            value={selectorValue}
+            onChange={handleSelectorChange}
+            onCustomerModeChange={handleCustomerModeChange}
+            modal={false}
+            disabled={customerDisabled || customerLockedFromQuote}
+            allowTemp={!customerLockedFromQuote}
+            showAddressPicker={form.customerMode !== "temporary"}
+            onAddressSelect={(_, address) => setForm(f => ({ ...f, installAddress: address }))}
+            selectedAddressId={null}
+          />
+        )}
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
