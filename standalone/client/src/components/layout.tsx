@@ -23,8 +23,7 @@ import {
   Clock,
   Settings,
   Sparkles,
-  MessageSquareQuote,
-  MessageCircle,
+  Car,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -41,131 +40,143 @@ interface NavItem {
   roles: UserRole[];
 }
 
-/** Daily workflow — shown in order under「工作流程」 */
-const WORKFLOW_ITEMS: NavItem[] = [
+/** 📊 工作中心 */
+const WORK_CENTER_ITEMS: NavItem[] = [
   {
     href: "/",
-    label: "儀表板",
+    label: "📊 儀表板",
     icon: LayoutDashboard,
     roles: ["super_admin", "owner", "admin", "accountant"],
   },
   {
     href: "/engineer-dashboard",
-    label: "儀表板",
+    label: "📊 儀表板",
     icon: LayoutDashboard,
     roles: ["engineer", "technician"],
   },
   {
-    href: "/partner-home",
-    label: "❤️ 晟風夥伴",
-    icon: Heart,
-    roles: ["engineer", "technician"],
-  },
-  {
     href: "/customers",
-    label: "客戶管理",
+    label: "👥 客戶管理",
     icon: Users,
     roles: ["super_admin", "owner", "admin", "sales", "accountant"],
   },
   {
     href: "/quotes",
-    label: "報價單",
+    label: "📄 報價單",
     icon: FileText,
     roles: ["super_admin", "owner", "admin", "sales", "distributor"],
   },
   {
     href: "/work-orders",
-    label: "派工單",
+    label: "🔧 派工單",
     icon: Wrench,
     roles: ["super_admin", "owner", "admin", "engineer", "technician"],
   },
   {
     href: "/repair-cases",
-    label: "維修案件",
+    label: "🛠 維修案件",
     icon: HardHat,
     roles: ["super_admin", "owner", "admin", "engineer", "technician", "sales"],
   },
   {
     href: "/receivables",
-    label: "收款 / 應收帳款",
+    label: "💰 收款／應收帳款",
     icon: CreditCard,
     roles: ["super_admin", "owner", "admin", "accountant"],
   },
   {
     href: "/products",
-    label: "商品管理",
+    label: "📦 商品管理",
     icon: Archive,
     roles: ["super_admin", "owner", "admin", "sales"],
   },
   {
     href: "/inventory",
-    label: "庫存管理",
+    label: "🏪 庫存管理",
     icon: Package,
     roles: ["super_admin", "owner", "admin"],
   },
   {
     href: "/warranties",
-    label: "保固保養",
+    label: "🛡 保固保養",
     icon: ShieldCheck,
     roles: ["super_admin", "owner", "admin", "accountant", "engineer", "technician"],
   },
 ];
 
-/** Company settings — collapsible under「⚙️ 公司設定」 */
-const COMPANY_SETTINGS_ITEMS: NavItem[] = [
+/** ⚙️ 公司內部 */
+const COMPANY_INTERNAL_ITEMS: NavItem[] = [
   {
     href: "/employees",
-    label: "員工管理",
+    label: "👨‍🔧 員工管理",
     icon: Briefcase,
     roles: ["super_admin", "owner", "admin"],
   },
   {
     href: "/users",
-    label: "用戶管理",
+    label: "👤 用戶管理",
     icon: UserCog,
     roles: ["super_admin", "owner"],
   },
   {
+    href: "/work-hours-stats",
+    label: "🕒 工時統計",
+    icon: Clock,
+    roles: ["super_admin", "owner", "admin", "accountant"],
+  },
+  {
     href: "/notification-settings",
-    label: "通知設定",
+    label: "🔔 通知中心",
     icon: Bell,
     roles: ["super_admin", "owner", "admin", "sales", "accountant", "distributor"],
   },
   {
     href: "/reminder-settings",
-    label: "AI 小秘書",
-    icon: Sparkles,
-    roles: ["super_admin", "owner", "admin", "sales", "accountant", "distributor"],
-  },
-  {
-    href: "/partner-admin",
-    label: "AI 提醒語錄",
-    icon: MessageSquareQuote,
-    roles: ["super_admin", "owner", "admin"],
-  },
-  {
-    href: "/work-hours-stats",
-    label: "工時統計",
-    icon: Clock,
-    roles: ["super_admin", "owner", "admin", "accountant"],
-  },
-  {
-    href: "/reminder-settings",
-    label: "LINE 設定",
-    icon: MessageCircle,
+    label: "⚙️ 系統設定",
+    icon: Settings,
     roles: ["super_admin", "owner", "admin"],
   },
 ];
 
-const COMPANY_SETTINGS_HREFS = new Set(COMPANY_SETTINGS_ITEMS.map((item) => item.href));
+/** 🤖 AI 中心 */
+const AI_CENTER_ITEMS: NavItem[] = [
+  {
+    href: "/reminder-settings",
+    label: "🤖 AI 小秘書",
+    icon: Sparkles,
+    roles: ["super_admin", "owner", "admin", "sales", "accountant", "distributor"],
+  },
+  {
+    href: "/engineer-dashboard",
+    label: "🚗 AI 工作提醒",
+    icon: Car,
+    roles: ["engineer", "technician"],
+  },
+  {
+    href: "/reminder-settings",
+    label: "🚗 AI 工作提醒",
+    icon: Car,
+    roles: ["super_admin", "owner", "admin", "sales", "accountant"],
+  },
+  {
+    href: "/partner-home",
+    label: "❤️ 晟風夥伴文化",
+    icon: Heart,
+    roles: ["engineer", "technician"],
+  },
+  {
+    href: "/partner-admin",
+    label: "❤️ 晟風夥伴文化",
+    icon: Heart,
+    roles: ["super_admin", "owner", "admin"],
+  },
+];
 
 const ADMIN_MANAGER_ROLES: UserRole[] = ["super_admin", "owner", "admin"];
 
-/** Workflow display order (批發管理 inserted after 商品管理) */
-const WORKFLOW_ORDER = [
+const WORK_CENTER_ORDER = [
   "/",
   "/engineer-dashboard",
-  "/partner-home",
   "/customers",
   "/quotes",
   "/work-orders",
@@ -211,34 +222,48 @@ function isEngineerOnly(userRoles: UserRole[]): boolean {
   return hasFieldRole && !hasManagerRole;
 }
 
+function NavSectionHeader({ title }: { title: string }) {
+  return (
+    <div className="pt-3 first:pt-1">
+      <p className="px-3 pb-1.5 text-[10px] font-semibold tracking-wide text-muted-foreground">
+        {title}
+      </p>
+      <div className="mx-3 border-b border-border/60" />
+    </div>
+  );
+}
+
 function NavContent() {
   const [location, navigate] = useLocation();
   const { user, logout } = useAuth();
   const isWholesalePath = location.startsWith("/wholesale");
-  const isCompanySettingsPath = [...COMPANY_SETTINGS_HREFS].some(
-    (href) => location === href || location.startsWith(`${href}/`),
-  );
   const [wholesaleOpen, setWholesaleOpen] = useState(isWholesalePath);
-  const [companySettingsOpen, setCompanySettingsOpen] = useState(isCompanySettingsPath);
 
   const userRoles = effectiveRoles(user);
   const showWholesale = WHOLESALE_ROLES.some((r) => userRoles.includes(r));
   const engineerOnly = isEngineerOnly(userRoles);
 
-  const workflowItems = user
-    ? filterVisibleNavItems(WORKFLOW_ITEMS, user, userRoles)
+  const workCenterItems = user
+    ? filterVisibleNavItems(WORK_CENTER_ITEMS, user, userRoles)
+    : [];
+  const companyInternalItems = user && !engineerOnly
+    ? filterVisibleNavItems(COMPANY_INTERNAL_ITEMS, user, userRoles)
+    : [];
+  const aiCenterItems = user
+    ? filterVisibleNavItems(AI_CENTER_ITEMS, user, userRoles)
     : [];
 
-  const workflowByHref = new Map(workflowItems.map((item) => [item.href, item]));
-  const orderedWorkflowItems = WORKFLOW_ORDER
-    .map((href) => workflowByHref.get(href))
+  const workCenterByHref = new Map(workCenterItems.map((item) => [item.href, item]));
+  const orderedWorkCenterItems = WORK_CENTER_ORDER
+    .map((href) => workCenterByHref.get(href))
     .filter((item): item is NavItem => !!item);
 
-  const companySettingsItems = user && !engineerOnly
-    ? filterVisibleNavItems(COMPANY_SETTINGS_ITEMS, user, userRoles)
-    : [];
-
-  const showCompanySettings = companySettingsItems.length > 0;
+  const workCenterBeforeWholesale = orderedWorkCenterItems.filter(
+    (item) => item.href !== "/inventory" && item.href !== "/warranties",
+  );
+  const workCenterAfterWholesale = orderedWorkCenterItems.filter(
+    (item) => item.href === "/inventory" || item.href === "/warranties",
+  );
 
   function NavLink({ item }: { item: NavItem }) {
     const isActive = location === item.href || (item.href !== "/" && location.startsWith(item.href));
@@ -251,36 +276,11 @@ function NavContent() {
             : "text-muted-foreground hover:bg-muted hover:text-foreground"
         }`}
       >
-        <item.icon className="h-4 w-4" />
+        <item.icon className="h-4 w-4 shrink-0 opacity-70" />
         {item.label}
       </Link>
     );
   }
-
-  function NavSubLink({ item }: { item: NavItem }) {
-    const isActive = location === item.href || location.startsWith(`${item.href}/`);
-    return (
-      <Link
-        href={item.href}
-        className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium transition-colors ${
-          isActive
-            ? "bg-primary text-primary-foreground"
-            : "text-muted-foreground hover:bg-muted hover:text-foreground"
-        }`}
-      >
-        <item.icon className="h-3.5 w-3.5" />
-        {item.label}
-      </Link>
-    );
-  }
-
-  const workflowBeforeWholesale = orderedWorkflowItems.filter((item) =>
-    WORKFLOW_ORDER.indexOf(item.href as (typeof WORKFLOW_ORDER)[number]) <
-    WORKFLOW_ORDER.indexOf("/inventory"),
-  );
-  const workflowAfterWholesale = orderedWorkflowItems.filter((item) =>
-    item.href === "/inventory" || item.href === "/warranties",
-  );
 
   return (
     <div className="flex h-full flex-col py-4">
@@ -298,14 +298,13 @@ function NavContent() {
       </div>
 
       <div className="flex-1 px-4 mt-2 overflow-y-auto">
-        <nav className="flex flex-col gap-1">
-          <p className="px-3 pt-1 pb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-            工作流程
-          </p>
+        <nav className="flex flex-col gap-0.5">
+          <NavSectionHeader title="📊 工作中心" />
 
-          {workflowBeforeWholesale.map((item) => <NavLink key={`${item.href}-${item.label}`} item={item} />)}
+          {workCenterBeforeWholesale.map((item) => (
+            <NavLink key={`${item.href}-${item.label}`} item={item} />
+          ))}
 
-          {/* Wholesale group — part of daily workflow */}
           {showWholesale && (
             <div>
               <button
@@ -320,8 +319,8 @@ function NavContent() {
                     : "text-muted-foreground hover:bg-muted hover:text-foreground"
                 }`}
               >
-                <ShoppingCart className="h-4 w-4" />
-                批發管理
+                <ShoppingCart className="h-4 w-4 shrink-0 opacity-70" />
+                🚚 批發管理
                 <ChevronDown
                   className={`ml-auto h-3.5 w-3.5 transition-transform duration-200 ${wholesaleOpen ? "" : "-rotate-90"}`}
                 />
@@ -350,40 +349,26 @@ function NavContent() {
             </div>
           )}
 
-          {workflowAfterWholesale.map((item) => <NavLink key={`${item.href}-${item.label}`} item={item} />)}
+          {workCenterAfterWholesale.map((item) => (
+            <NavLink key={`${item.href}-${item.label}`} item={item} />
+          ))}
 
-          {/* Company settings — collapsible */}
-          {showCompanySettings && (
-            <div className="mt-3">
-              <p className="px-3 pt-2 pb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-                公司設定
-              </p>
-              <button
-                type="button"
-                onClick={() => {
-                  if (!isCompanySettingsPath) navigate(companySettingsItems[0]!.href);
-                  setCompanySettingsOpen((v) => !v);
-                }}
-                className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium w-full transition-colors ${
-                  isCompanySettingsPath
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                }`}
-              >
-                <Settings className="h-4 w-4" />
-                ⚙️ 公司設定
-                <ChevronDown
-                  className={`ml-auto h-3.5 w-3.5 transition-transform duration-200 ${companySettingsOpen ? "" : "-rotate-90"}`}
-                />
-              </button>
-              {companySettingsOpen && (
-                <div className="ml-3 mt-0.5 flex flex-col gap-0.5 border-l pl-3">
-                  {companySettingsItems.map((item) => (
-                    <NavSubLink key={`${item.href}-${item.label}`} item={item} />
-                  ))}
-                </div>
-              )}
-            </div>
+          {companyInternalItems.length > 0 && (
+            <>
+              <NavSectionHeader title="⚙️ 公司內部" />
+              {companyInternalItems.map((item) => (
+                <NavLink key={`${item.href}-${item.label}`} item={item} />
+              ))}
+            </>
+          )}
+
+          {aiCenterItems.length > 0 && (
+            <>
+              <NavSectionHeader title="🤖 AI 中心" />
+              {aiCenterItems.map((item) => (
+                <NavLink key={`${item.href}-${item.label}`} item={item} />
+              ))}
+            </>
           )}
         </nav>
 
