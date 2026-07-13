@@ -35,6 +35,7 @@ export * from "./userNotificationPrefs";
 export * from "./lineUserBindings";
 export * from "./notificationDeliveryLogs";
 export * from "./workOrderReopenEvents";
+export * from "./companyAiWorkReminderSettings";
 export * from "./notificationDedup";
 export * from "./inAppNotifications";
 export * from "./userPushSubscriptions";

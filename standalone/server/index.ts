@@ -17,6 +17,7 @@ import { ensureDispatchNotificationsMigration } from "./lib/migrations/ensureDis
 import { ensureFieldProgressSnapshotsMigration } from "./lib/migrations/ensureFieldProgressSnapshotsMigration";
 import { ensureUnifiedNotificationsMigration } from "./lib/migrations/ensureUnifiedNotificationsMigration";
 import { getSpeechService, resolveActiveSpeechProviderId } from "./lib/voice/speech/speechServiceFactory.ts";
+import { ensureAiWorkReminderMigration } from "./lib/migrations/ensureAiWorkReminderMigration";
 import { startReminderScheduler } from "./lib/reminders/scheduler.ts";
 
 const rawPort = process.env["PORT"];
@@ -70,5 +71,6 @@ app.listen(port, async (err) => {
   await ensureDispatchNotificationsMigration();
   await ensureFieldProgressSnapshotsMigration();
   await ensureUnifiedNotificationsMigration();
+  await ensureAiWorkReminderMigration();
   startReminderScheduler();
 });

@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { MapPin, Plus, X } from "lucide-react";
 import { CustomerSelector, type CustomerSelectorValue } from "@/components/customer-selector";
 import { stripQuotePricingFromNotes, categoryToProjectType } from "../../../shared/workOrderNotes.ts";
+import { DEFAULT_AI_REMINDER_SCENARIO_IDS, type AiReminderRuleSource } from "@/lib/aiWorkReminderSettings";
+import { WorkOrderAiReminderSection } from "@/components/work-orders/WorkOrderAiReminderSection";
 
 export const WO_STATUSES = ["待施工", "已完成"];
 export const WO_PROJECT_TYPES = ["新裝", "維修", "保養", "遷機", "清洗", "保固服務"];
@@ -136,6 +138,12 @@ export function makeEmpty() {
     hasElevator: "",
     description: "",
     notes: "",
+    estimatedWorkMinutes: undefined as number | undefined,
+    aiReminderEnabled: false,
+    aiReminderScenarioIds: [...DEFAULT_AI_REMINDER_SCENARIO_IDS],
+    aiNotifySupervisorOnDelay: false,
+    aiReminderRuleSource: "company_default" as AiReminderRuleSource,
+    aiReminderCustomConfig: { scenarios: {} },
   };
 }
 
@@ -172,6 +180,12 @@ export function buildPayload(f: WOForm) {
     hasElevator: f.hasElevator || undefined,
     description: f.description || undefined,
     notes: f.notes || undefined,
+    estimatedWorkMinutes: f.estimatedWorkMinutes,
+    aiReminderEnabled: f.aiReminderEnabled,
+    aiReminderScenarioIds: f.aiReminderScenarioIds,
+    aiNotifySupervisorOnDelay: f.aiNotifySupervisorOnDelay,
+    aiReminderRuleSource: f.aiReminderRuleSource,
+    aiReminderCustomConfig: f.aiReminderRuleSource === "custom" ? f.aiReminderCustomConfig : undefined,
     equipmentItems: f.equipmentItems.map((item, idx) => ({
       productId: item.productId,
       quoteItemId: item.quoteItemId,
@@ -306,6 +320,8 @@ interface WorkOrderFormFieldsProps {
   quotes?: any[];
   showQuoteSelector?: boolean;
   customerDisabled?: boolean;
+  workOrderNumber?: string | null;
+  customerDisplayName?: string;
 }
 
 export function WorkOrderFormFields({
@@ -316,6 +332,8 @@ export function WorkOrderFormFields({
   quotes = [],
   showQuoteSelector = true,
   customerDisabled = false,
+  workOrderNumber,
+  customerDisplayName,
 }: WorkOrderFormFieldsProps) {
 
   const selectedQuote = form.quoteId ? quotes.find(q => q.id === form.quoteId) : undefined;
@@ -673,6 +691,13 @@ export function WorkOrderFormFields({
           <p className="text-xs text-muted-foreground">已選：{form.technicians.join("、")}</p>
         )}
       </div>
+
+      <WorkOrderAiReminderSection
+        form={form}
+        setForm={setForm}
+        workOrderNumber={workOrderNumber}
+        customerDisplayName={customerDisplayName}
+      />
 
       {/* ── 冷氣設備 ── */}
       <div className="space-y-2">

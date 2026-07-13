@@ -28,6 +28,7 @@ import workOrderFieldProgressRouter from "./workOrderFieldProgress";
 import jobsRouter from "./jobs";
 import partnerRouter from "./partner";
 import notificationsRouter from "./notifications";
+import aiWorkReminderSettingsRouter from "./aiWorkReminderSettings";
 import pushRouter from "./push";
 
 import { authenticate } from "../lib/auth";
@@ -63,6 +64,7 @@ router.use(wholesaleReceivablesRouter);
 router.use(wholesaleSettlementsRouter);
 router.use(voiceRouter);
 router.use(reminderSettingsRouter);
+router.use(aiWorkReminderSettingsRouter);
 router.use(partnerRouter);
 router.use(notificationsRouter);
 router.use(pushRouter);

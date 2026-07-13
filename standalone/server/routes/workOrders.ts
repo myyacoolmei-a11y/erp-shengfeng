@@ -30,6 +30,10 @@ import {
   emitWorkOrderUpdatedNotifications,
 } from "../lib/notifications/workOrdersNotificationHook.ts";
 import { WORK_ORDER_RETURN_REASONS } from "@workspace/db";
+import {
+  parseAiReminderScenarioIds,
+  parseWorkOrderAiReminderCustomConfig,
+} from "../../shared/aiWorkReminder.ts";
 
 const WO_COMPLETED_STATUSES = ["已完成", "已結案"];
 const WO_ADMIN_ROLES = ["super_admin", "owner", "admin"];
@@ -76,6 +80,12 @@ const WO_SELECT = {
   description: workOrdersTable.description,
   notes: workOrdersTable.notes,
   technicians: workOrdersTable.technicians,
+  estimatedWorkMinutes: workOrdersTable.estimatedWorkMinutes,
+  aiReminderEnabled: workOrdersTable.aiReminderEnabled,
+  aiReminderScenarioIds: workOrdersTable.aiReminderScenarioIds,
+  aiNotifySupervisorOnDelay: workOrdersTable.aiNotifySupervisorOnDelay,
+  aiReminderRuleSource: workOrdersTable.aiReminderRuleSource,
+  aiReminderCustomConfig: workOrdersTable.aiReminderCustomConfig,
   createdAt: workOrdersTable.createdAt,
   updatedAt: workOrdersTable.updatedAt,
 };
@@ -131,11 +141,59 @@ function resolveEquipmentItems(order: Record<string, unknown>, dbItems: ReturnTy
   return legacyEquipmentFallback(order);
 }
 
+function serializeAiReminderFieldsForDb(data: Record<string, unknown>): Record<string, unknown> {
+  const result = { ...data };
+  if (Array.isArray(result.aiReminderScenarioIds)) {
+    result.aiReminderScenarioIds = JSON.stringify(result.aiReminderScenarioIds);
+  }
+  if (result.aiReminderCustomConfig && typeof result.aiReminderCustomConfig === "object") {
+    result.aiReminderCustomConfig = JSON.stringify(result.aiReminderCustomConfig);
+  }
+  return result;
+}
+
+function deserializeAiReminderFields(order: Record<string, unknown>) {
+  let aiReminderScenarioIds = parseAiReminderScenarioIds(null);
+  let aiReminderCustomConfig = null;
+
+  try {
+    const rawIds = order.aiReminderScenarioIds;
+    if (typeof rawIds === "string" && rawIds) {
+      aiReminderScenarioIds = parseAiReminderScenarioIds(JSON.parse(rawIds));
+    } else if (Array.isArray(rawIds)) {
+      aiReminderScenarioIds = parseAiReminderScenarioIds(rawIds);
+    }
+  } catch {
+    aiReminderScenarioIds = parseAiReminderScenarioIds(null);
+  }
+
+  try {
+    const rawConfig = order.aiReminderCustomConfig;
+    if (typeof rawConfig === "string" && rawConfig) {
+      aiReminderCustomConfig = parseWorkOrderAiReminderCustomConfig(JSON.parse(rawConfig));
+    } else if (rawConfig && typeof rawConfig === "object") {
+      aiReminderCustomConfig = parseWorkOrderAiReminderCustomConfig(rawConfig);
+    }
+  } catch {
+    aiReminderCustomConfig = null;
+  }
+
+  return {
+    estimatedWorkMinutes: (order.estimatedWorkMinutes as number | null | undefined) ?? null,
+    aiReminderEnabled: Boolean(order.aiReminderEnabled),
+    aiReminderScenarioIds,
+    aiNotifySupervisorOnDelay: Boolean(order.aiNotifySupervisorOnDelay),
+    aiReminderRuleSource: (order.aiReminderRuleSource as string | null) ?? "company_default",
+    aiReminderCustomConfig,
+  };
+}
+
 function formatOrder(o: Record<string, unknown>, equipmentItems: ReturnType<typeof serializeEquipmentItem>[] = []) {
   const { storedCustomerName, linkedCustomerName, linkedQuoteCreatedAt, ...rest } = o as any;
   const quoteId = rest.quoteId as number | null | undefined;
   return {
     ...rest,
+    ...deserializeAiReminderFields(rest),
     customerName: (linkedCustomerName as string | null) ?? (storedCustomerName as string | null) ?? null,
     quoteNumber: quoteId != null
       ? formatQuoteNumber(quoteId, linkedQuoteCreatedAt ?? rest.createdAt)
@@ -211,7 +269,7 @@ function sanitizeWOData<T extends Record<string, unknown>>(
   for (const key of Object.keys(result)) {
     if (result[key] === undefined) delete result[key];
   }
-  return deriveAssignedFromTechnicians(result);
+  return deriveAssignedFromTechnicians(serializeAiReminderFieldsForDb(result));
 }
 
 router.get("/work-orders", requireRole(...WO_READ_ROLES), async (req, res): Promise<void> => {

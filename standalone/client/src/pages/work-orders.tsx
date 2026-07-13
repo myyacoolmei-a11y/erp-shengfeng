@@ -25,6 +25,12 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
 import { WO_STATUSES, makeEmpty, type WOForm, buildPayload, hasWorkOrderCustomer, WorkOrderFormFields, equipmentItemsFromOrder } from "@/components/work-order-form";
+import { validateWorkOrderAiReminder } from "@/components/work-orders/WorkOrderAiReminderSection";
+import {
+  parseAiReminderScenarioIds,
+  parseWorkOrderAiReminderCustomConfig,
+  type AiReminderRuleSource,
+} from "@/lib/aiWorkReminderSettings";
 import { stripQuotePricingFromNotes } from "@/lib/quoteToWorkOrder";
 import { VoiceAssistantButton } from "@/components/voice-assistant/VoiceAssistantDialog";
 import { applyVoiceToWorkOrderForm } from "@/lib/voice/applyVoiceToWorkOrder";
@@ -439,6 +445,12 @@ export default function WorkOrders() {
       hasElevator: o.hasElevator ?? "",
       description: o.description ?? "",
       notes: stripQuotePricingFromNotes(o.notes ?? ""),
+      estimatedWorkMinutes: o.estimatedWorkMinutes ?? undefined,
+      aiReminderEnabled: Boolean(o.aiReminderEnabled),
+      aiReminderScenarioIds: parseAiReminderScenarioIds(o.aiReminderScenarioIds),
+      aiNotifySupervisorOnDelay: Boolean(o.aiNotifySupervisorOnDelay),
+      aiReminderRuleSource: (o.aiReminderRuleSource as AiReminderRuleSource) ?? "company_default",
+      aiReminderCustomConfig: parseWorkOrderAiReminderCustomConfig(o.aiReminderCustomConfig),
     });
     setEditItem(o);
   }
@@ -450,6 +462,11 @@ export default function WorkOrders() {
         title: form.customerMode === "temporary" ? "請填寫臨時客戶姓名與手機" : "請選擇客戶",
         variant: "destructive",
       });
+      return;
+    }
+    const aiError = validateWorkOrderAiReminder(form);
+    if (aiError) {
+      toast({ title: aiError, variant: "destructive" });
       return;
     }
     const payload = buildPayload(form);
@@ -676,6 +693,8 @@ export default function WorkOrders() {
               quotes={quotes ?? []}
               showQuoteSelector={true}
               customerDisabled={dialogMode === "edit"}
+              workOrderNumber={editItem?.workOrderNumber}
+              customerDisplayName={editItem?.customerName ?? form.customerName}
             />
 
             <DialogFooter className="pt-2">

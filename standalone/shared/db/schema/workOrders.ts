@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, timestamp, date } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, timestamp, date, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { customersTable } from "./customers";
@@ -32,6 +32,12 @@ export const workOrdersTable = pgTable("work_orders", {
   description: text("description"),
   notes: text("notes"),
   technicians: text("technicians"),
+  estimatedWorkMinutes: integer("estimated_work_minutes"),
+  aiReminderEnabled: boolean("ai_reminder_enabled").notNull().default(false),
+  aiReminderScenarioIds: text("ai_reminder_scenario_ids"),
+  aiNotifySupervisorOnDelay: boolean("ai_notify_supervisor_on_delay").notNull().default(false),
+  aiReminderRuleSource: text("ai_reminder_rule_source").default("company_default"),
+  aiReminderCustomConfig: text("ai_reminder_custom_config"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
