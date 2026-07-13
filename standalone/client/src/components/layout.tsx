@@ -36,119 +36,155 @@ interface NavItem {
   href: string;
   label: string;
   icon: React.ElementType;
+  iconBg: string;
+  iconColor: string;
   roles: UserRole[];
 }
 
-/** 📊 工作中心 */
+/** 工作中心 */
 const WORK_CENTER_ITEMS: NavItem[] = [
   {
     href: "/",
-    label: "📊 儀表板",
+    label: "儀表板",
     icon: LayoutDashboard,
+    iconBg: "bg-blue-100",
+    iconColor: "text-blue-600",
     roles: ["super_admin", "owner", "admin", "accountant"],
   },
   {
     href: "/engineer-dashboard",
-    label: "📊 儀表板",
+    label: "儀表板",
     icon: LayoutDashboard,
+    iconBg: "bg-blue-100",
+    iconColor: "text-blue-600",
     roles: ["engineer", "technician"],
   },
   {
     href: "/customers",
-    label: "👥 客戶管理",
+    label: "客戶管理",
     icon: Users,
+    iconBg: "bg-emerald-100",
+    iconColor: "text-emerald-600",
     roles: ["super_admin", "owner", "admin", "sales", "accountant"],
   },
   {
     href: "/quotes",
-    label: "📄 報價單",
+    label: "報價單",
     icon: FileText,
+    iconBg: "bg-amber-100",
+    iconColor: "text-amber-600",
     roles: ["super_admin", "owner", "admin", "sales", "distributor"],
   },
   {
     href: "/work-orders",
-    label: "🔧 派工單",
+    label: "派工單",
     icon: Wrench,
+    iconBg: "bg-orange-100",
+    iconColor: "text-orange-600",
     roles: ["super_admin", "owner", "admin", "engineer", "technician"],
   },
   {
     href: "/repair-cases",
-    label: "🛠 維修案件",
+    label: "維修案件",
     icon: HardHat,
+    iconBg: "bg-violet-100",
+    iconColor: "text-violet-600",
     roles: ["super_admin", "owner", "admin", "engineer", "technician", "sales"],
   },
   {
     href: "/receivables",
-    label: "💰 收款／應收帳款",
+    label: "收款／應收帳款",
     icon: CreditCard,
+    iconBg: "bg-rose-100",
+    iconColor: "text-rose-600",
     roles: ["super_admin", "owner", "admin", "accountant"],
   },
   {
     href: "/products",
-    label: "📦 商品管理",
+    label: "商品管理",
     icon: Archive,
+    iconBg: "bg-cyan-100",
+    iconColor: "text-cyan-600",
     roles: ["super_admin", "owner", "admin", "sales"],
   },
   {
     href: "/inventory",
-    label: "🏪 庫存管理",
+    label: "庫存管理",
     icon: Package,
+    iconBg: "bg-teal-100",
+    iconColor: "text-teal-600",
     roles: ["super_admin", "owner", "admin"],
   },
   {
     href: "/warranties",
-    label: "🛡 保固保養",
+    label: "保固保養",
     icon: ShieldCheck,
+    iconBg: "bg-indigo-100",
+    iconColor: "text-indigo-600",
     roles: ["super_admin", "owner", "admin", "accountant", "engineer", "technician"],
   },
 ];
 
-/** ⚙️ 公司內部 */
+/** 公司內部 */
 const COMPANY_INTERNAL_ITEMS: NavItem[] = [
   {
     href: "/employees",
-    label: "👨‍🔧 員工管理",
+    label: "員工管理",
     icon: Briefcase,
+    iconBg: "bg-slate-100",
+    iconColor: "text-slate-600",
     roles: ["super_admin", "owner", "admin"],
   },
   {
     href: "/users",
-    label: "👤 用戶管理",
+    label: "用戶管理",
     icon: UserCog,
+    iconBg: "bg-red-100",
+    iconColor: "text-red-600",
     roles: ["super_admin", "owner"],
   },
   {
     href: "/work-hours-stats",
-    label: "🕒 工時統計",
+    label: "工時統計",
     icon: Clock,
+    iconBg: "bg-yellow-100",
+    iconColor: "text-yellow-700",
     roles: ["super_admin", "owner", "admin", "accountant"],
   },
   {
     href: "/notification-settings",
-    label: "🔔 通知中心",
+    label: "通知中心",
     icon: Bell,
+    iconBg: "bg-amber-100",
+    iconColor: "text-amber-600",
     roles: ["super_admin", "owner", "admin", "sales", "accountant", "distributor"],
   },
 ];
 
-/** 🤖 AI 中心 */
+/** AI 中心 */
 const AI_CENTER_ITEMS: NavItem[] = [
   {
     href: "/ai-assistant",
-    label: "🤖 AI 小秘書",
+    label: "AI 小秘書",
     icon: Sparkles,
+    iconBg: "bg-purple-100",
+    iconColor: "text-purple-600",
     roles: ["super_admin", "owner", "admin", "sales", "accountant", "distributor"],
   },
   {
     href: "/ai-work-reminders",
-    label: "🚗 AI 工作提醒",
+    label: "AI 工作提醒",
     icon: Car,
+    iconBg: "bg-sky-100",
+    iconColor: "text-sky-600",
     roles: ["super_admin", "owner", "admin", "sales", "accountant", "engineer", "technician"],
   },
   {
     href: "/partner-culture",
-    label: "❤️ 晟風夥伴文化",
+    label: "晟風夥伴文化",
     icon: Heart,
+    iconBg: "bg-pink-100",
+    iconColor: "text-pink-600",
     roles: ["super_admin", "owner", "admin", "engineer", "technician"],
   },
 ];
@@ -171,10 +207,10 @@ const WORK_CENTER_ORDER = [
 const WHOLESALE_ROLES: UserRole[] = ["super_admin", "owner", "admin", "sales", "accountant"];
 
 const WHOLESALE_SUB_ITEMS = [
-  { href: "/wholesale/customers", label: "批發客戶", icon: Building2 },
-  { href: "/wholesale/products", label: "批發商品", icon: Archive },
-  { href: "/wholesale/orders", label: "批發出貨單", icon: ReceiptText },
-  { href: "/wholesale/settlements", label: "月結 / 應收", icon: CreditCard },
+  { href: "/wholesale/customers", label: "批發客戶", icon: Building2, iconBg: "bg-emerald-100", iconColor: "text-emerald-600" },
+  { href: "/wholesale/products", label: "批發商品", icon: Archive, iconBg: "bg-cyan-100", iconColor: "text-cyan-600" },
+  { href: "/wholesale/orders", label: "批發出貨單", icon: ReceiptText, iconBg: "bg-amber-100", iconColor: "text-amber-600" },
+  { href: "/wholesale/settlements", label: "月結 / 應收", icon: CreditCard, iconBg: "bg-rose-100", iconColor: "text-rose-600" },
 ];
 
 const ROLE_COLORS: Record<UserRole, string> = {
@@ -203,14 +239,37 @@ function isEngineerOnly(userRoles: UserRole[]): boolean {
   return hasFieldRole && !hasManagerRole;
 }
 
+function NavIcon({
+  icon: Icon,
+  iconBg,
+  iconColor,
+  active,
+  size = "md",
+}: {
+  icon: React.ElementType;
+  iconBg: string;
+  iconColor: string;
+  active: boolean;
+  size?: "md" | "sm";
+}) {
+  const box = size === "sm" ? "h-7 w-7 rounded-md" : "h-8 w-8 rounded-lg";
+  const glyph = size === "sm" ? "h-3.5 w-3.5" : "h-4 w-4";
+  return (
+    <span
+      className={`flex shrink-0 items-center justify-center ${box} ${
+        active ? "bg-primary-foreground/20 text-primary-foreground" : `${iconBg} ${iconColor}`
+      }`}
+    >
+      <Icon className={glyph} strokeWidth={2} />
+    </span>
+  );
+}
+
 function NavSectionHeader({ title }: { title: string }) {
   return (
-    <div className="pt-3 first:pt-1">
-      <p className="px-3 pb-1.5 text-[10px] font-semibold tracking-wide text-muted-foreground">
-        {title}
-      </p>
-      <div className="mx-3 border-b border-border/60" />
-    </div>
+    <p className="px-3 pb-1.5 pt-4 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70 first:pt-2">
+      {title}
+    </p>
   );
 }
 
@@ -251,14 +310,14 @@ function NavContent() {
     return (
       <Link
         href={item.href}
-        className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+        className={`flex items-center gap-3 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors ${
           isActive
-            ? "bg-primary text-primary-foreground"
-            : "text-muted-foreground hover:bg-muted hover:text-foreground"
+            ? "bg-primary text-primary-foreground shadow-sm"
+            : "text-foreground/80 hover:bg-muted/80"
         }`}
       >
-        <item.icon className="h-4 w-4 shrink-0 opacity-70" />
-        {item.label}
+        <NavIcon icon={item.icon} iconBg={item.iconBg} iconColor={item.iconColor} active={isActive} />
+        <span className="truncate">{item.label}</span>
       </Link>
     );
   }
@@ -280,7 +339,7 @@ function NavContent() {
 
       <div className="flex-1 px-4 mt-2 overflow-y-auto">
         <nav className="flex flex-col gap-0.5">
-          <NavSectionHeader title="📊 工作中心" />
+          <NavSectionHeader title="工作中心" />
 
           {workCenterBeforeWholesale.map((item) => (
             <NavLink key={`${item.href}-${item.label}`} item={item} />
@@ -294,34 +353,45 @@ function NavContent() {
                   if (!isWholesalePath) navigate("/wholesale/customers");
                   setWholesaleOpen((v) => !v);
                 }}
-                className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium w-full transition-colors ${
+                className={`flex items-center gap-3 rounded-lg px-2.5 py-2 text-sm font-medium w-full transition-colors ${
                   isWholesalePath
-                    ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                    ? "bg-primary text-primary-foreground shadow-sm"
+                    : "text-foreground/80 hover:bg-muted/80"
                 }`}
               >
-                <ShoppingCart className="h-4 w-4 shrink-0 opacity-70" />
-                🚚 批發管理
+                <NavIcon
+                  icon={ShoppingCart}
+                  iconBg="bg-orange-100"
+                  iconColor="text-orange-600"
+                  active={isWholesalePath}
+                />
+                <span className="truncate">批發管理</span>
                 <ChevronDown
                   className={`ml-auto h-3.5 w-3.5 transition-transform duration-200 ${wholesaleOpen ? "" : "-rotate-90"}`}
                 />
               </button>
               {wholesaleOpen && (
-                <div className="ml-3 mt-0.5 flex flex-col gap-0.5 border-l pl-3">
+                <div className="ml-5 mt-0.5 flex flex-col gap-0.5 border-l border-border/50 pl-2.5">
                   {WHOLESALE_SUB_ITEMS.map((sub) => {
                     const isActive = location === sub.href || location.startsWith(sub.href);
                     return (
                       <Link
                         key={sub.href}
                         href={sub.href}
-                        className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium transition-colors ${
+                        className={`flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm font-medium transition-colors ${
                           isActive
-                            ? "bg-primary text-primary-foreground"
-                            : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                            ? "bg-primary text-primary-foreground shadow-sm"
+                            : "text-foreground/80 hover:bg-muted/80"
                         }`}
                       >
-                        <sub.icon className="h-3.5 w-3.5" />
-                        {sub.label}
+                        <NavIcon
+                          icon={sub.icon}
+                          iconBg={sub.iconBg}
+                          iconColor={sub.iconColor}
+                          active={isActive}
+                          size="sm"
+                        />
+                        <span className="truncate">{sub.label}</span>
                       </Link>
                     );
                   })}
@@ -336,7 +406,7 @@ function NavContent() {
 
           {companyInternalItems.length > 0 && (
             <>
-              <NavSectionHeader title="⚙️ 公司內部" />
+              <NavSectionHeader title="公司內部" />
               {companyInternalItems.map((item) => (
                 <NavLink key={`${item.href}-${item.label}`} item={item} />
               ))}
@@ -345,7 +415,7 @@ function NavContent() {
 
           {aiCenterItems.length > 0 && (
             <>
-              <NavSectionHeader title="🤖 AI 中心" />
+              <NavSectionHeader title="AI 中心" />
               {aiCenterItems.map((item) => (
                 <NavLink key={`${item.href}-${item.label}`} item={item} />
               ))}
