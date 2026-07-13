@@ -61,6 +61,15 @@ const LineNotificationPrefsSchema = z.object({
   receivePendingDispatch: z.boolean().optional(),
   receiveQuoteFollowUp: z.boolean().optional(),
   receiveReceivableCollection: z.boolean().optional(),
+  receiveWorkReminder60: z.boolean().optional(),
+  receiveWorkReminder30: z.boolean().optional(),
+  receiveWorkReminder15: z.boolean().optional(),
+  receiveWorkReminder5: z.boolean().optional(),
+  receivePastAppointment: z.boolean().optional(),
+  receivePreviousJobIncomplete: z.boolean().optional(),
+  receiveReadyForNextJob: z.boolean().optional(),
+  receiveOneTapNavigation: z.boolean().optional(),
+  receiveCompanyAnnouncement: z.boolean().optional(),
 });
 
 router.post("/reminder-settings/line-binding/code", async (req, res) => {
@@ -98,7 +107,9 @@ router.patch("/reminder-settings/my-line-notifications", async (req, res) => {
   try {
     res.json(await updateMyLineNotificationPrefs(req.user!.id, parsed.data));
   } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : "更新失敗" });
+    const message = err instanceof Error ? err.message : "更新失敗";
+    const status = message.includes("無權限") ? 403 : 500;
+    res.status(status).json({ error: message });
   }
 });
 

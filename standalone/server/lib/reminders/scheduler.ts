@@ -4,6 +4,7 @@ import { getNotificationSettings } from "./reminderSettingsService.ts";
 import { runDailyMorningBriefing, runEveningReceivableReminder } from "./briefingReminderService.ts";
 import { runReceivableCollectionReminder } from "./reminderSettingsService.ts";
 import { runWorkOrderReminders } from "../notifications/workOrderReminderService.ts";
+import { runAiWorkReminderScheduler } from "../notifications/aiWorkReminderScheduler.ts";
 import {
   DAILY_MORNING_BRIEFING_KIND,
   EVENING_RECEIVABLE_REMINDER_KIND,
@@ -67,6 +68,7 @@ export function startReminderScheduler() {
     void tickDailyMorningBriefing();
     void tickEveningReceivableReminder();
     void runWorkOrderReminders().catch(err => logger.error({ err }, "work order reminders failed"));
+    void runAiWorkReminderScheduler().catch(err => logger.error({ err }, "AI work reminder scheduler failed"));
   }, intervalMs);
 
   logger.info({ intervalMs, timezone: "Asia/Taipei" }, "Reminder scheduler started");

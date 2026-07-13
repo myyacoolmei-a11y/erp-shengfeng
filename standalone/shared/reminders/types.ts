@@ -48,17 +48,28 @@ export interface NotificationSettingsDto {
 
 export interface UserLineNotificationPrefsDto {
   lineLinked: boolean;
+  roleCategory: "manager" | "engineer" | "other";
   receiveMorningBriefing: boolean;
   receiveEveningReminder: boolean;
   receivePendingDispatch: boolean;
   receiveQuoteFollowUp: boolean;
   receiveReceivableCollection: boolean;
+  receiveWorkReminder60: boolean;
+  receiveWorkReminder30: boolean;
+  receiveWorkReminder15: boolean;
+  receiveWorkReminder5: boolean;
+  receivePastAppointment: boolean;
+  receivePreviousJobIncomplete: boolean;
+  receiveReadyForNextJob: boolean;
+  receiveOneTapNavigation: boolean;
+  receiveCompanyAnnouncement: boolean;
 }
 
 export interface LineBindingOverviewAdminDto {
   userId: number;
   displayName: string;
   username: string;
+  roleCategory: "manager" | "engineer" | "other";
   bindingStatus: "none" | "pending" | "bound";
   lineUserIdMasked: string | null;
   pendingCode: string | null;
@@ -69,6 +80,15 @@ export interface LineBindingOverviewAdminDto {
     receivePendingDispatch: boolean;
     receiveQuoteFollowUp: boolean;
     receiveReceivableCollection: boolean;
+    receiveWorkReminder60: boolean;
+    receiveWorkReminder30: boolean;
+    receiveWorkReminder15: boolean;
+    receiveWorkReminder5: boolean;
+    receivePastAppointment: boolean;
+    receivePreviousJobIncomplete: boolean;
+    receiveReadyForNextJob: boolean;
+    receiveOneTapNavigation: boolean;
+    receiveCompanyAnnouncement: boolean;
   } | null;
 }
 

@@ -63,7 +63,7 @@ const COMPANY_INTERNAL_ITEMS: NavItem[] = [
   { href: "/employees", label: "員工管理", icon: Briefcase, roles: ["super_admin", "owner", "admin"] },
   { href: "/users", label: "用戶管理", icon: UserCog, roles: ["super_admin", "owner"] },
   { href: "/work-hours-stats", label: "工時統計", icon: Clock, roles: ["super_admin", "owner", "admin", "accountant"] },
-  { href: "/notification-settings", label: "通知中心", icon: Bell, roles: ["super_admin", "owner", "admin", "sales", "accountant", "distributor"] },
+  { href: "/notification-settings", label: "通知中心", icon: Bell, roles: ["super_admin", "owner", "admin", "sales", "accountant", "distributor", "engineer", "technician"] },
 ];
 
 /** AI 中心 */
@@ -71,6 +71,7 @@ const AI_CENTER_ITEMS: NavItem[] = [
   { href: "/ai-assistant", label: "AI 小秘書", icon: Sparkles, roles: ["super_admin", "owner", "admin", "sales", "accountant", "distributor"] },
   { href: "/ai-work-reminders", label: "AI 工作提醒", icon: Car, roles: ["super_admin", "owner", "admin", "sales", "accountant", "engineer", "technician"] },
   { href: "/partner-culture", label: "晟風夥伴文化", icon: Heart, roles: ["super_admin", "owner", "admin", "engineer", "technician"] },
+  { href: "/notification-settings", label: "通知中心", icon: Bell, roles: ["engineer", "technician"] },
 ];
 
 const ADMIN_MANAGER_ROLES: UserRole[] = ["super_admin", "owner", "admin"];

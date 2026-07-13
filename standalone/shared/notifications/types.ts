@@ -15,6 +15,15 @@ export const NOTIFICATION_TYPES = {
   WORK_ORDER_REMINDER_DAY_BEFORE: "work_order_reminder_day_before",
   WORK_ORDER_REMINDER_TWO_HOURS: "work_order_reminder_two_hours",
   FIELD_PROGRESS: "field_progress",
+  AI_WORK_REMINDER_60: "ai_work_reminder_60",
+  AI_WORK_REMINDER_30: "ai_work_reminder_30",
+  AI_WORK_REMINDER_15: "ai_work_reminder_15",
+  AI_WORK_REMINDER_5: "ai_work_reminder_5",
+  AI_WORK_REMINDER_PAST_APPOINTMENT: "ai_work_reminder_past_appointment",
+  AI_WORK_REMINDER_PREVIOUS_INCOMPLETE: "ai_work_reminder_previous_incomplete",
+  AI_WORK_REMINDER_READY_NEXT: "ai_work_reminder_ready_next",
+  AI_WORK_REMINDER_SUPERVISOR_ALERT: "ai_work_reminder_supervisor_alert",
+  COMPANY_ANNOUNCEMENT: "company_announcement",
 } as const;
 
 export type NotificationType = (typeof NOTIFICATION_TYPES)[keyof typeof NOTIFICATION_TYPES];

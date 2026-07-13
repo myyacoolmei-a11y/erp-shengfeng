@@ -44,6 +44,47 @@ function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : "載入失敗";
 }
 
+function formatActiveLinePrefs(
+  prefs: {
+    receiveMorningBriefing: boolean;
+    receiveEveningReminder: boolean;
+    receivePendingDispatch: boolean;
+    receiveQuoteFollowUp: boolean;
+    receiveReceivableCollection: boolean;
+    receiveWorkReminder60: boolean;
+    receiveWorkReminder30: boolean;
+    receiveWorkReminder15: boolean;
+    receiveWorkReminder5: boolean;
+    receivePastAppointment: boolean;
+    receivePreviousJobIncomplete: boolean;
+    receiveReadyForNextJob: boolean;
+    receiveOneTapNavigation: boolean;
+    receiveCompanyAnnouncement: boolean;
+  } | null,
+  roleCategory: "manager" | "engineer" | "other",
+): string {
+  if (!prefs) return "—";
+  const labels: string[] = [];
+  if (roleCategory === "manager") {
+    if (prefs.receiveMorningBriefing) labels.push("晨報");
+    if (prefs.receivePendingDispatch) labels.push("待派工");
+    if (prefs.receiveQuoteFollowUp) labels.push("報價");
+    if (prefs.receiveEveningReminder) labels.push("晚間");
+    if (prefs.receiveReceivableCollection) labels.push("收款");
+  } else if (roleCategory === "engineer") {
+    if (prefs.receiveWorkReminder60) labels.push("1h");
+    if (prefs.receiveWorkReminder30) labels.push("30m");
+    if (prefs.receiveWorkReminder15) labels.push("15m");
+    if (prefs.receiveWorkReminder5) labels.push("5m");
+    if (prefs.receivePastAppointment) labels.push("逾時");
+    if (prefs.receivePreviousJobIncomplete) labels.push("上案未完成");
+    if (prefs.receiveReadyForNextJob) labels.push("可往下一案");
+    if (prefs.receiveOneTapNavigation) labels.push("導航");
+  }
+  if (prefs.receiveCompanyAnnouncement) labels.push("公告");
+  return labels.length > 0 ? labels.join("、") : "（未勾選）";
+}
+
 export function LineBindingPanel() {
   const { toast } = useToast();
   const { user } = useAuth();
@@ -331,15 +372,7 @@ export function LineBindingPanel() {
                 </TableHeader>
                 <TableBody>
                   {lineBindingOverview.map(row => {
-                    const activePrefs = row.prefs
-                      ? [
-                          row.prefs.receiveMorningBriefing && "晨報",
-                          row.prefs.receivePendingDispatch && "待派工",
-                          row.prefs.receiveQuoteFollowUp && "報價",
-                          row.prefs.receiveEveningReminder && "晚間",
-                          row.prefs.receiveReceivableCollection && "收款",
-                        ].filter(Boolean).join("、")
-                      : "—";
+                    const activePrefs = formatActiveLinePrefs(row.prefs, row.roleCategory);
 
                     const statusLabel =
                       row.bindingStatus === "bound"

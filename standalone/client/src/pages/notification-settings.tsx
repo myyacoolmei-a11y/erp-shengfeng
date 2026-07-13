@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Bell, Smartphone, Loader2, RefreshCw, Send, Wrench, ShieldCheck } from "lucide-react";
 import { LineBindingPanel } from "@/components/notifications/LineBindingPanel";
+import { LineNotificationPrefsPanel } from "@/components/notifications/LineNotificationPrefsPanel";
 import { APP_BRAND } from "@/lib/appBrand";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -291,6 +292,8 @@ export default function NotificationSettingsPage() {
       </div>
 
       <LineBindingPanel />
+
+      <LineNotificationPrefsPanel />
 
       <Card>
         <CardHeader>

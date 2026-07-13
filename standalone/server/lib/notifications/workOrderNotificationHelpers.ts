@@ -2,6 +2,8 @@ import { eq, and, inArray, isNotNull } from "drizzle-orm";
 import { db, usersTable, employeesTable } from "@workspace/db";
 import { sendNotification, fireAndForgetNotification } from "./notificationService.ts";
 import { NOTIFICATION_TYPES } from "../../../shared/notifications/types.ts";
+import { listActiveManagerUserIds } from "./notificationRecipientFilter.ts";
+import { effectiveRoleList, isEngineerRole } from "../../../shared/notificationRolePermissions.ts";
 import { logger } from "../logger.ts";
 
 export async function notifyManagersFieldProgress(opts: {
@@ -13,16 +15,12 @@ export async function notifyManagersFieldProgress(opts: {
   lineMessage?: string;
 }): Promise<void> {
   try {
-    const managers = await db
-      .select({ id: usersTable.id })
-      .from(usersTable)
-      .where(and(eq(usersTable.isActive, true), eq(usersTable.receiveDispatchNotifications, true)));
+    const managerIds = await listActiveManagerUserIds();
+    let recipientUserIds = managerIds.filter(id => id !== opts.engineerUserId);
 
-    let recipientUserIds = managers.map(m => m.id).filter(id => id !== opts.engineerUserId);
-
-    if (recipientUserIds.length === 0 && managers.some(m => m.id === opts.engineerUserId)) {
+    if (recipientUserIds.length === 0 && managerIds.includes(opts.engineerUserId)) {
       recipientUserIds = [opts.engineerUserId];
-      logger.info({ engineerUserId: opts.engineerUserId }, "field progress: solo recipient fallback");
+      logger.info({ engineerUserId: opts.engineerUserId }, "field progress: solo manager fallback");
     }
 
     logger.info({
@@ -88,6 +86,8 @@ export async function resolveEngineerUserIdsForWorkOrder(order: {
       displayName: usersTable.displayName,
       username: usersTable.username,
       linkedEmployeeId: usersTable.linkedEmployeeId,
+      role: usersTable.role,
+      roles: usersTable.roles,
     })
     .from(usersTable)
     .where(and(eq(usersTable.isActive, true), isNotNull(usersTable.linkedEmployeeId)));
@@ -102,6 +102,8 @@ export async function resolveEngineerUserIdsForWorkOrder(order: {
   const ids = new Set<number>();
 
   for (const user of activeUsers) {
+    const roleList = effectiveRoleList(user.roles, user.role);
+    if (!isEngineerRole(roleList)) continue;
     if (nameSet.has(user.displayName.trim()) || nameSet.has(user.username.trim())) {
       ids.add(user.id);
       continue;

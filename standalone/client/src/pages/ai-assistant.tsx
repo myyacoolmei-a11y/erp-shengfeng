@@ -27,16 +27,12 @@ import {
   previewEveningReceivableReminder,
   testEveningReceivableReminderPush,
   getLineBindingStatus,
-  getMyLineNotificationPrefs,
-  updateMyLineNotificationPrefs,
-  type UserLineNotificationPrefsDto,
 } from "@/lib/reminderSettingsApi";
 
 const SETTINGS_KEY = ["receivable-reminder-settings"];
 const MORNING_SETTINGS_KEY = ["daily-morning-briefing-settings"];
 const EVENING_SETTINGS_KEY = ["evening-receivable-reminder-settings"];
 const BINDING_STATUS_KEY = ["receivable-line-binding-status"];
-const LINE_PREFS_KEY = ["my-line-notification-prefs"];
 
 export default function AiAssistantPage() {
   const { toast } = useToast();
@@ -87,12 +83,6 @@ export default function AiAssistantPage() {
   });
 
   const lineLinked = bindingStatus?.status === "bound";
-
-  const { data: linePrefs, isLoading: linePrefsLoading } = useQuery({
-    queryKey: LINE_PREFS_KEY,
-    queryFn: getMyLineNotificationPrefs,
-    enabled: lineLinked,
-  });
 
   const { data: logs = [] } = useQuery({
     queryKey: ["receivable-reminder-logs"],
@@ -207,19 +197,6 @@ export default function AiAssistantPage() {
     onError: (err: Error) => toast({ title: "測試推播失敗", description: err.message, variant: "destructive" }),
   });
 
-  const saveLinePrefsMutation = useMutation({
-    mutationFn: updateMyLineNotificationPrefs,
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: LINE_PREFS_KEY });
-      toast({ title: "AI 推播偏好已儲存" });
-    },
-    onError: (err: Error) => toast({ title: "儲存失敗", description: err.message, variant: "destructive" }),
-  });
-
-  function handlePrefChange(key: keyof Omit<UserLineNotificationPrefsDto, "lineLinked">, checked: boolean) {
-    saveLinePrefsMutation.mutate({ [key]: checked });
-  }
-
   function errorMessage(err: unknown): string {
     return err instanceof Error ? err.message : "載入失敗";
   }
@@ -232,61 +209,11 @@ export default function AiAssistantPage() {
           AI 小秘書
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
-          每日晨報、晚間摘要、待派工、報價追蹤與收款提醒。LINE 綁定與 Web Push 請至
+          每日晨報、晚間摘要、待派工、報價追蹤與收款提醒。LINE 綁定、通知偏好與 Web Push 請至
           {" "}
           <Link href="/notification-settings" className="text-primary underline">通知中心</Link>。
         </p>
       </div>
-
-      {lineLinked && (
-        <Card>
-          <CardHeader>
-            <CardTitle>我的 AI 推播項目</CardTitle>
-            <CardDescription>選擇要透過 LINE 接收的 AI 小秘書內容（需先在通知中心完成 LINE 綁定）。</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {linePrefsLoading || !linePrefs ? (
-              <p className="text-sm text-muted-foreground flex items-center gap-2">
-                <Loader2 className="h-4 w-4 animate-spin" />載入偏好設定…
-              </p>
-            ) : (
-              <>
-                {[
-                  { key: "receiveMorningBriefing" as const, label: "AI 每日晨報", desc: "待派工、應收、報價追蹤摘要" },
-                  { key: "receivePendingDispatch" as const, label: "待派工提醒", desc: "晨報中的待派工區塊" },
-                  { key: "receiveQuoteFollowUp" as const, label: "報價追蹤", desc: "晨報中的報價追蹤區塊" },
-                  { key: "receiveEveningReminder" as const, label: "AI 晚間摘要", desc: "每天 21:00 未收款摘要" },
-                  { key: "receiveReceivableCollection" as const, label: "收款提醒", desc: "依排程時間的到期應收提醒" },
-                ].map(item => (
-                  <div key={item.key} className="flex items-center justify-between rounded-lg border p-4">
-                    <div>
-                      <p className="font-medium">{item.label}</p>
-                      <p className="text-sm text-muted-foreground">{item.desc}</p>
-                    </div>
-                    <Switch
-                      checked={linePrefs[item.key]}
-                      disabled={saveLinePrefsMutation.isPending}
-                      onCheckedChange={checked => handlePrefChange(item.key, checked)}
-                    />
-                  </div>
-                ))}
-              </>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {!lineLinked && !isAdmin && (
-        <Card className="border-dashed">
-          <CardContent className="py-6 text-sm text-muted-foreground">
-            請先至
-            {" "}
-            <Link href="/notification-settings" className="text-primary underline">通知中心</Link>
-            {" "}
-            完成 LINE 綁定，才能設定 AI 推播項目。
-          </CardContent>
-        </Card>
-      )}
 
       {isAdmin && adminSettingsError && (
         <Card className="border-destructive/50">

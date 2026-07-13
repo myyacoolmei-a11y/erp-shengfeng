@@ -11,6 +11,7 @@ import {
 import type { FieldProgressAction } from "@workspace/db";
 import { logger } from "../logger.ts";
 import { notifyManagersFieldProgress } from "./workOrderNotificationHelpers.ts";
+import { notifyReadyForNextJobAfterComplete } from "./workReminderChainHelpers.ts";
 
 const ACTION_LABELS: Record<FieldProgressAction, string> = {
   depart: "已出發",
@@ -98,6 +99,14 @@ export async function notifyFieldProgressEvent(input: FieldProgressNotifyInput):
       dedupeKey: `field-progress-${input.workOrderId}-${input.action}-${input.engineerUserId}-${input.actedAt.getTime()}`,
       lineMessage: `📍 ${title}\n\n${message}${unableDetail}`,
     });
+
+    if (input.action === "complete") {
+      void notifyReadyForNextJobAfterComplete({
+        completedWorkOrderId: input.workOrderId,
+        engineerUserId: input.engineerUserId,
+        engineerName: input.engineerName,
+      });
+    }
 
     logger.info({
       event: "field_progress_notify_complete",

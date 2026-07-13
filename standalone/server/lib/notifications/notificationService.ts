@@ -15,6 +15,13 @@ import { tryToAbsoluteAppUrl } from "../appUrl.ts";
 import { sendWebPushToSubscription, isWebPushConfigured } from "./webPushService.ts";
 import { sendLineWorkOrderNotification } from "./lineNotificationService.ts";
 import { isLineMessagingConfigured } from "../line/lineConfig.ts";
+import { filterRecipientUserIdsByNotificationType } from "./notificationRecipientFilter.ts";
+import {
+  getNotificationCategory,
+  defaultChannelsForCategory,
+  workReminderPrefKeyForNotificationType,
+} from "../../../shared/notificationRolePermissions.ts";
+import { getWorkReminderPrefForUser } from "../line/lineSubscriptionService.ts";
 
 export interface SendNotificationInput {
   recipientUserIds: number[];
@@ -143,18 +150,23 @@ export async function sendNotification(input: SendNotificationInput): Promise<Se
 
   try {
     const uniqueRecipients = [...new Set(input.recipientUserIds.filter(id => id > 0))];
-    summary.recipientCount = uniqueRecipients.length;
+    const roleFilteredRecipients = await filterRecipientUserIdsByNotificationType(
+      uniqueRecipients,
+      input.type,
+    );
+    summary.recipientCount = roleFilteredRecipients.length;
 
     logger.info({
       event: "notification_dispatch_start",
       type: input.type,
       workOrderId: input.workOrderId,
-      recipientCount: uniqueRecipients.length,
-      channels: input.channels ?? ["in_app", "web_push", "line"],
+      recipientCount: roleFilteredRecipients.length,
+      skippedByRole: uniqueRecipients.length - roleFilteredRecipients.length,
+      channels: input.channels ?? defaultChannelsForCategory(getNotificationCategory(input.type)),
     }, "Notification dispatch started");
 
-    if (uniqueRecipients.length === 0) {
-      logger.warn({ type: input.type, workOrderId: input.workOrderId }, "Notification skipped: no recipients");
+    if (roleFilteredRecipients.length === 0) {
+      logger.warn({ type: input.type, workOrderId: input.workOrderId }, "Notification skipped: no recipients after role filter");
       return summary;
     }
 
@@ -167,7 +179,8 @@ export async function sendNotification(input: SendNotificationInput): Promise<Se
       }
     }
 
-    const channels = input.channels ?? ["in_app", "web_push", "line"];
+    const category = getNotificationCategory(input.type);
+    const channels = input.channels ?? defaultChannelsForCategory(category);
     const relativeOpenUrl = input.workOrderId ? `/work-orders?open=${input.workOrderId}` : "/";
     const payload = {
       workOrderId: input.workOrderId,
@@ -176,7 +189,17 @@ export async function sendNotification(input: SendNotificationInput): Promise<Se
       ...input.payload,
     };
 
-    for (const userId of uniqueRecipients) {
+    for (const userId of roleFilteredRecipients) {
+      const prefKey = workReminderPrefKeyForNotificationType(input.type);
+      if (prefKey) {
+        const allowed = await getWorkReminderPrefForUser(userId, prefKey);
+        if (!allowed) {
+          summary.webPush.skipped += 1;
+          summary.line.skipped += 1;
+          continue;
+        }
+      }
+
       let prefs;
       try {
         prefs = await getUserPrefs(userId);
