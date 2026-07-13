@@ -22,7 +22,6 @@ import {
   Heart,
   Clock,
   Sparkles,
-  Car,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -68,8 +67,7 @@ const COMPANY_INTERNAL_ITEMS: NavItem[] = [
 
 /** AI 中心 */
 const AI_CENTER_ITEMS: NavItem[] = [
-  { href: "/ai-assistant", label: "AI 小秘書", icon: Sparkles, roles: ["super_admin", "owner", "admin", "sales", "accountant", "distributor"] },
-  { href: "/ai-work-reminders", label: "AI 工作提醒", icon: Car, roles: ["super_admin", "owner", "admin", "sales", "accountant", "engineer", "technician"] },
+  { href: "/ai-assistant", label: "AI 小秘書", icon: Sparkles, roles: ["super_admin", "owner", "admin", "sales", "accountant", "distributor", "engineer", "technician"] },
   { href: "/partner-culture", label: "晟風夥伴文化", icon: Heart, roles: ["super_admin", "owner", "admin", "engineer", "technician"] },
   { href: "/notification-settings", label: "通知中心", icon: Bell, roles: ["engineer", "technician"] },
 ];

@@ -1,7 +1,7 @@
-import { useEffect, useState } from "react";
-import { Link } from "wouter";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useLocation, useSearch } from "wouter";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Sparkles, Loader2, Send, Eye, Save, Sunrise, Moon } from "lucide-react";
+import { Sparkles, Loader2, Send, Eye, Save, Sunrise, Moon, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,9 +9,11 @@ import { Switch } from "@/components/ui/switch";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { APP_BRAND } from "@/lib/appBrand";
 import { useAuth, hasRole } from "@/contexts/auth-context";
+import { AiWorkRemindersPanel } from "@/components/ai-assistant/AiWorkRemindersPanel";
 import {
   getReceivableReminderSettings,
   updateReceivableReminderSettings,
@@ -34,11 +36,71 @@ const MORNING_SETTINGS_KEY = ["daily-morning-briefing-settings"];
 const EVENING_SETTINGS_KEY = ["evening-receivable-reminder-settings"];
 const BINDING_STATUS_KEY = ["receivable-line-binding-status"];
 
+type AiAssistantTab =
+  | "morning"
+  | "evening"
+  | "work-reminders"
+  | "quotes"
+  | "collection"
+  | "logs";
+
+const TAB_ITEMS: Array<{ id: AiAssistantTab; label: string }> = [
+  { id: "morning", label: "AI 晨報" },
+  { id: "evening", label: "AI 晚報" },
+  { id: "work-reminders", label: "AI 工作提醒" },
+  { id: "quotes", label: "AI 報價追蹤" },
+  { id: "collection", label: "AI 收款提醒" },
+  { id: "logs", label: "AI 推播紀錄" },
+];
+
+const TAB_TITLES: Record<AiAssistantTab, string> = {
+  morning: "AI 晨報",
+  evening: "AI 晚報",
+  "work-reminders": "AI 工作提醒",
+  quotes: "AI 報價追蹤",
+  collection: "AI 收款提醒",
+  logs: "AI 推播紀錄",
+};
+
+function isAiAssistantTab(value: string | null): value is AiAssistantTab {
+  return TAB_ITEMS.some(item => item.id === value);
+}
+
+function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : "載入失敗";
+}
+
 export default function AiAssistantPage() {
   const { toast } = useToast();
   const { user } = useAuth();
   const qc = useQueryClient();
+  const [, navigate] = useLocation();
+  const search = useSearch();
+
   const isAdmin = hasRole(user, "super_admin", "owner", "admin");
+  const canSeeWorkReminders = hasRole(
+    user,
+    "super_admin",
+    "owner",
+    "admin",
+    "sales",
+    "accountant",
+    "engineer",
+    "technician",
+  );
+
+  const visibleTabs = useMemo(() => {
+    return TAB_ITEMS.filter(tab => {
+      if (tab.id === "work-reminders") return canSeeWorkReminders;
+      return isAdmin;
+    });
+  }, [isAdmin, canSeeWorkReminders]);
+
+  const defaultTab = visibleTabs[0]?.id ?? "work-reminders";
+  const requestedTab = new URLSearchParams(search).get("tab");
+  const activeTab = isAiAssistantTab(requestedTab) && visibleTabs.some(t => t.id === requestedTab)
+    ? requestedTab
+    : defaultTab;
 
   const [enabled, setEnabled] = useState(false);
   const [morningEnabled, setMorningEnabled] = useState(false);
@@ -48,6 +110,7 @@ export default function AiAssistantPage() {
   const [previewMessage, setPreviewMessage] = useState("");
   const [morningPreviewMessage, setMorningPreviewMessage] = useState("");
   const [eveningPreviewMessage, setEveningPreviewMessage] = useState("");
+  const [quotePreviewMessage, setQuotePreviewMessage] = useState("");
   const [previewSummary, setPreviewSummary] = useState<{
     total: number;
     overdue: number;
@@ -92,9 +155,15 @@ export default function AiAssistantPage() {
 
   useEffect(() => {
     const previousTitle = document.title;
-    document.title = `AI 小秘書 — ${APP_BRAND.pwaName}`;
+    document.title = `${TAB_TITLES[activeTab]} — AI 小秘書 — ${APP_BRAND.pwaName}`;
     return () => { document.title = previousTitle; };
-  }, []);
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (!isAiAssistantTab(requestedTab) || !visibleTabs.some(t => t.id === requestedTab)) {
+      navigate(`/ai-assistant?tab=${defaultTab}`, { replace: true });
+    }
+  }, [requestedTab, defaultTab, visibleTabs, navigate]);
 
   useEffect(() => {
     if (!data) return;
@@ -173,6 +242,12 @@ export default function AiAssistantPage() {
     onError: (err: Error) => toast({ title: "測試推播失敗", description: err.message, variant: "destructive" }),
   });
 
+  const previewQuoteMutation = useMutation({
+    mutationFn: previewDailyMorningBriefing,
+    onSuccess: result => setQuotePreviewMessage(result.message),
+    onError: (err: Error) => toast({ title: "預覽失敗", description: err.message, variant: "destructive" }),
+  });
+
   const saveEveningMutation = useMutation({
     mutationFn: () => updateEveningReceivableReminderSettings({ enabled: eveningEnabled }),
     onSuccess: () => {
@@ -197,8 +272,8 @@ export default function AiAssistantPage() {
     onError: (err: Error) => toast({ title: "測試推播失敗", description: err.message, variant: "destructive" }),
   });
 
-  function errorMessage(err: unknown): string {
-    return err instanceof Error ? err.message : "載入失敗";
+  function handleTabChange(value: string) {
+    navigate(`/ai-assistant?tab=${value}`);
   }
 
   return (
@@ -209,187 +284,245 @@ export default function AiAssistantPage() {
           AI 小秘書
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
-          每日晨報、晚間摘要、待派工、報價追蹤與收款提醒。LINE 綁定、通知偏好與 Web Push 請至
+          晨報、晚報、工作提醒、報價追蹤與收款提醒。LINE 綁定、通知偏好與 Web Push 請至
           {" "}
           <Link href="/notification-settings" className="text-primary underline">通知中心</Link>。
         </p>
       </div>
 
-      {isAdmin && adminSettingsError && (
-        <Card className="border-destructive/50">
-          <CardContent className="py-4 text-sm text-destructive">
-            無法載入收款提醒設定：{errorMessage(adminSettingsErrorObj)}
-          </CardContent>
-        </Card>
-      )}
+      <Tabs value={activeTab} onValueChange={handleTabChange}>
+        <TabsList className="flex h-auto flex-wrap justify-start gap-1">
+          {visibleTabs.map(tab => (
+            <TabsTrigger key={tab.id} value={tab.id} className="text-xs sm:text-sm">
+              {tab.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
 
-      {isAdmin && !adminSettingsError && (
-        <>
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2"><Sunrise className="h-5 w-5" />AI 每日晨報</CardTitle>
-              <CardDescription>每天 09:00 自動推播：待派工、應收帳款、報價追蹤。</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between rounded-lg border p-4">
-                <div>
-                  <p className="font-medium">啟用每日晨報</p>
-                  <p className="text-sm text-muted-foreground">固定 09:00 發送（Asia/Taipei）</p>
-                </div>
-                <Switch checked={morningEnabled} onCheckedChange={setMorningEnabled} />
-              </div>
-              {morningData?.lastSentDate && (
-                <p className="text-xs text-muted-foreground">上次推播日期：{morningData.lastSentDate}</p>
-              )}
-              <div className="flex flex-wrap gap-2">
-                <Button onClick={() => saveMorningMutation.mutate()} disabled={saveMorningMutation.isPending}>
-                  <Save className="h-4 w-4 mr-1" />儲存
-                </Button>
-                <Button variant="outline" onClick={() => previewMorningMutation.mutate()} disabled={previewMorningMutation.isPending}>
-                  <Eye className="h-4 w-4 mr-1" />預覽晨報
-                </Button>
-                <Button variant="outline" onClick={() => testMorningMutation.mutate()} disabled={testMorningMutation.isPending || !lineLinked}>
-                  <Send className="h-4 w-4 mr-1" />測試推播
-                </Button>
-              </div>
-              {morningPreviewMessage && (
-                <Textarea readOnly value={morningPreviewMessage} rows={18} className="font-mono text-xs" />
-              )}
+        {isAdmin && adminSettingsError && (
+          <Card className="border-destructive/50 mt-4">
+            <CardContent className="py-4 text-sm text-destructive">
+              無法載入 AI 小秘書設定：{errorMessage(adminSettingsErrorObj)}
             </CardContent>
           </Card>
+        )}
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2"><Moon className="h-5 w-5" />AI 晚間摘要</CardTitle>
-              <CardDescription>每天晚上 21:00 自動推播未收款應收帳款摘要。</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between rounded-lg border p-4">
-                <div>
-                  <p className="font-medium">啟用晚間摘要</p>
-                  <p className="text-sm text-muted-foreground">固定 21:00 發送（Asia/Taipei）</p>
-                </div>
-                <Switch checked={eveningEnabled} onCheckedChange={setEveningEnabled} />
-              </div>
-              {eveningData?.lastSentDate && (
-                <p className="text-xs text-muted-foreground">上次推播日期：{eveningData.lastSentDate}</p>
-              )}
-              <div className="flex flex-wrap gap-2">
-                <Button onClick={() => saveEveningMutation.mutate()} disabled={saveEveningMutation.isPending}>
-                  <Save className="h-4 w-4 mr-1" />儲存
-                </Button>
-                <Button variant="outline" onClick={() => previewEveningMutation.mutate()} disabled={previewEveningMutation.isPending}>
-                  <Eye className="h-4 w-4 mr-1" />預覽晚報
-                </Button>
-                <Button variant="outline" onClick={() => testEveningMutation.mutate()} disabled={testEveningMutation.isPending || !lineLinked}>
-                  <Send className="h-4 w-4 mr-1" />測試推播
-                </Button>
-              </div>
-              {eveningPreviewMessage && (
-                <Textarea readOnly value={eveningPreviewMessage} rows={14} className="font-mono text-xs" />
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>收款提醒</CardTitle>
-              <CardDescription>到期應收帳款排程推播。ERP 網址請與通知中心 LINE 設定一致。</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-5">
-              {adminSettingsLoading ? (
-                <p className="text-sm text-muted-foreground flex items-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />載入設定…
-                </p>
-              ) : (
-                <>
-                  <div className="flex items-center justify-between rounded-lg border p-4">
-                    <div>
-                      <p className="font-medium">啟用收款提醒</p>
-                      <p className="text-sm text-muted-foreground">關閉後排程仍運作，但不會推播 LINE</p>
-                    </div>
-                    <Switch checked={enabled} onCheckedChange={setEnabled} />
-                  </div>
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="reminderTime">提醒時間（HH:mm）</Label>
-                      <Input id="reminderTime" value={reminderTime} onChange={e => setReminderTime(e.target.value)} placeholder="09:00" />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="appBaseUrl">ERP 網址（LINE 訊息連結用）</Label>
-                      <Input id="appBaseUrl" value={appBaseUrl} onChange={e => setAppBaseUrl(e.target.value)} />
-                    </div>
-                  </div>
-                  {data?.lastSentDate && (
-                    <p className="text-xs text-muted-foreground">上次推播日期：{data.lastSentDate}</p>
-                  )}
-                  <div className="flex flex-wrap gap-2">
-                    <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
-                      <Save className="h-4 w-4 mr-1" />儲存
-                    </Button>
-                    <Button variant="outline" onClick={() => previewMutation.mutate()} disabled={previewMutation.isPending}>
-                      <Eye className="h-4 w-4 mr-1" />預覽今日訊息
-                    </Button>
-                    <Button variant="outline" onClick={() => testMutation.mutate()} disabled={testMutation.isPending || !lineLinked}>
-                      <Send className="h-4 w-4 mr-1" />測試推播
-                    </Button>
-                  </div>
-                </>
-              )}
-            </CardContent>
-          </Card>
-
-          {previewSummary && (
+        {isAdmin && !adminSettingsError && (
+          <TabsContent value="morning" className="space-y-4 mt-4">
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">收款提醒預覽摘要</CardTitle>
+                <CardTitle className="flex items-center gap-2"><Sunrise className="h-5 w-5" />AI 每日晨報</CardTitle>
+                <CardDescription>每天 09:00 自動推播：待派工、應收帳款、報價追蹤。</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex flex-wrap gap-2 text-sm">
-                  <Badge variant="outline">共 {previewSummary.total} 筆</Badge>
-                  <Badge className="bg-red-100 text-red-700 hover:bg-red-100">逾期 {previewSummary.overdue}</Badge>
-                  <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-100">今日到期 {previewSummary.dueToday}</Badge>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between rounded-lg border p-4">
+                  <div>
+                    <p className="font-medium">啟用每日晨報</p>
+                    <p className="text-sm text-muted-foreground">固定 09:00 發送（Asia/Taipei）</p>
+                  </div>
+                  <Switch checked={morningEnabled} onCheckedChange={setMorningEnabled} />
                 </div>
-                {previewMessage ? (
-                  <Textarea readOnly value={previewMessage} rows={16} className="font-mono text-xs" />
-                ) : (
-                  <p className="text-sm text-muted-foreground">今日無到期或逾期應收款，不會發送 LINE。</p>
+                {morningData?.lastSentDate && (
+                  <p className="text-xs text-muted-foreground">上次推播日期：{morningData.lastSentDate}</p>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  <Button onClick={() => saveMorningMutation.mutate()} disabled={saveMorningMutation.isPending}>
+                    <Save className="h-4 w-4 mr-1" />儲存
+                  </Button>
+                  <Button variant="outline" onClick={() => previewMorningMutation.mutate()} disabled={previewMorningMutation.isPending}>
+                    <Eye className="h-4 w-4 mr-1" />預覽晨報
+                  </Button>
+                  <Button variant="outline" onClick={() => testMorningMutation.mutate()} disabled={testMorningMutation.isPending || !lineLinked}>
+                    <Send className="h-4 w-4 mr-1" />測試推播
+                  </Button>
+                </div>
+                {morningPreviewMessage && (
+                  <Textarea readOnly value={morningPreviewMessage} rows={18} className="font-mono text-xs" />
                 )}
               </CardContent>
             </Card>
-          )}
+          </TabsContent>
+        )}
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">推播紀錄</CardTitle>
-              <CardDescription>AI 小秘書相關 LINE 推播紀錄</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {logs.length === 0 ? (
-                <p className="text-sm text-muted-foreground">尚無推播紀錄</p>
-              ) : (
-                <ul className="space-y-2 text-sm">
-                  {logs.map(log => (
-                    <li key={log.id} className="rounded border p-3">
-                      <div className="flex items-center gap-2">
-                        <Badge variant={log.success ? "default" : "destructive"}>
-                          {log.success ? "成功" : "失敗"}
-                        </Badge>
-                        <span className="text-muted-foreground">
-                          {new Date(log.sentAt).toLocaleString("zh-TW")} · {log.itemCount} 筆
-                        </span>
+        {isAdmin && !adminSettingsError && (
+          <TabsContent value="evening" className="space-y-4 mt-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><Moon className="h-5 w-5" />AI 晚間摘要</CardTitle>
+                <CardDescription>每天晚上 21:00 自動推播未收款應收帳款摘要。</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center justify-between rounded-lg border p-4">
+                  <div>
+                    <p className="font-medium">啟用晚間摘要</p>
+                    <p className="text-sm text-muted-foreground">固定 21:00 發送（Asia/Taipei）</p>
+                  </div>
+                  <Switch checked={eveningEnabled} onCheckedChange={setEveningEnabled} />
+                </div>
+                {eveningData?.lastSentDate && (
+                  <p className="text-xs text-muted-foreground">上次推播日期：{eveningData.lastSentDate}</p>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  <Button onClick={() => saveEveningMutation.mutate()} disabled={saveEveningMutation.isPending}>
+                    <Save className="h-4 w-4 mr-1" />儲存
+                  </Button>
+                  <Button variant="outline" onClick={() => previewEveningMutation.mutate()} disabled={previewEveningMutation.isPending}>
+                    <Eye className="h-4 w-4 mr-1" />預覽晚報
+                  </Button>
+                  <Button variant="outline" onClick={() => testEveningMutation.mutate()} disabled={testEveningMutation.isPending || !lineLinked}>
+                    <Send className="h-4 w-4 mr-1" />測試推播
+                  </Button>
+                </div>
+                {eveningPreviewMessage && (
+                  <Textarea readOnly value={eveningPreviewMessage} rows={14} className="font-mono text-xs" />
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+
+        {canSeeWorkReminders && (
+          <TabsContent value="work-reminders" className="mt-4">
+            <AiWorkRemindersPanel />
+          </TabsContent>
+        )}
+
+        {isAdmin && !adminSettingsError && (
+          <TabsContent value="quotes" className="space-y-4 mt-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2"><FileText className="h-5 w-5" />AI 報價追蹤</CardTitle>
+                <CardDescription>
+                  已送出、未成交、未取消、未派工的報價單，納入每日 09:00 晨報第三區塊推播。
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-muted-foreground">
+                  是否接收報價追蹤區塊，請至
+                  {" "}
+                  <Link href="/notification-settings" className="text-primary underline">通知中心</Link>
+                  {" "}
+                  調整 LINE「報價追蹤」訂閱。
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" onClick={() => previewQuoteMutation.mutate()} disabled={previewQuoteMutation.isPending}>
+                    <Eye className="h-4 w-4 mr-1" />預覽晨報（含報價追蹤）
+                  </Button>
+                </div>
+                {quotePreviewMessage && (
+                  <Textarea readOnly value={quotePreviewMessage} rows={18} className="font-mono text-xs" />
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+
+        {isAdmin && !adminSettingsError && (
+          <TabsContent value="collection" className="space-y-4 mt-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>AI 收款提醒</CardTitle>
+                <CardDescription>到期應收帳款排程推播。ERP 網址請與通知中心 LINE 設定一致。</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                {adminSettingsLoading ? (
+                  <p className="text-sm text-muted-foreground flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />載入設定…
+                  </p>
+                ) : (
+                  <>
+                    <div className="flex items-center justify-between rounded-lg border p-4">
+                      <div>
+                        <p className="font-medium">啟用收款提醒</p>
+                        <p className="text-sm text-muted-foreground">關閉後排程仍運作，但不會推播 LINE</p>
                       </div>
-                      {log.errorMessage && (
-                        <p className="text-destructive text-xs mt-1">{log.errorMessage}</p>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </CardContent>
-          </Card>
-        </>
-      )}
+                      <Switch checked={enabled} onCheckedChange={setEnabled} />
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="reminderTime">提醒時間（HH:mm）</Label>
+                        <Input id="reminderTime" value={reminderTime} onChange={e => setReminderTime(e.target.value)} placeholder="09:00" />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="appBaseUrl">ERP 網址（LINE 訊息連結用）</Label>
+                        <Input id="appBaseUrl" value={appBaseUrl} onChange={e => setAppBaseUrl(e.target.value)} />
+                      </div>
+                    </div>
+                    {data?.lastSentDate && (
+                      <p className="text-xs text-muted-foreground">上次推播日期：{data.lastSentDate}</p>
+                    )}
+                    <div className="flex flex-wrap gap-2">
+                      <Button onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
+                        <Save className="h-4 w-4 mr-1" />儲存
+                      </Button>
+                      <Button variant="outline" onClick={() => previewMutation.mutate()} disabled={previewMutation.isPending}>
+                        <Eye className="h-4 w-4 mr-1" />預覽今日訊息
+                      </Button>
+                      <Button variant="outline" onClick={() => testMutation.mutate()} disabled={testMutation.isPending || !lineLinked}>
+                        <Send className="h-4 w-4 mr-1" />測試推播
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+
+            {previewSummary && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">收款提醒預覽摘要</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex flex-wrap gap-2 text-sm">
+                    <Badge variant="outline">共 {previewSummary.total} 筆</Badge>
+                    <Badge className="bg-red-100 text-red-700 hover:bg-red-100">逾期 {previewSummary.overdue}</Badge>
+                    <Badge className="bg-orange-100 text-orange-700 hover:bg-orange-100">今日到期 {previewSummary.dueToday}</Badge>
+                  </div>
+                  {previewMessage ? (
+                    <Textarea readOnly value={previewMessage} rows={16} className="font-mono text-xs" />
+                  ) : (
+                    <p className="text-sm text-muted-foreground">今日無到期或逾期應收款，不會發送 LINE。</p>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+          </TabsContent>
+        )}
+
+        {isAdmin && !adminSettingsError && (
+          <TabsContent value="logs" className="space-y-4 mt-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">AI 推播紀錄</CardTitle>
+                <CardDescription>AI 小秘書相關 LINE 推播紀錄</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {logs.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">尚無推播紀錄</p>
+                ) : (
+                  <ul className="space-y-2 text-sm">
+                    {logs.map(log => (
+                      <li key={log.id} className="rounded border p-3">
+                        <div className="flex items-center gap-2">
+                          <Badge variant={log.success ? "default" : "destructive"}>
+                            {log.success ? "成功" : "失敗"}
+                          </Badge>
+                          <span className="text-muted-foreground">
+                            {new Date(log.sentAt).toLocaleString("zh-TW")} · {log.itemCount} 筆
+                          </span>
+                        </div>
+                        {log.errorMessage && (
+                          <p className="text-destructive text-xs mt-1">{log.errorMessage}</p>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
+      </Tabs>
     </div>
   );
 }

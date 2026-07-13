@@ -30,7 +30,6 @@ import WholesaleSettlements from "@/pages/wholesale-settlements";
 import PartnerCultureRoute from "@/pages/partner-culture-route";
 import NotificationSettings from "@/pages/notification-settings";
 import AiAssistant from "@/pages/ai-assistant";
-import AiWorkReminders from "@/pages/ai-work-reminders";
 import WorkHoursStats from "@/pages/work-hours-stats";
 
 function ComingSoon({ title }: { title: string }) {
@@ -233,14 +232,12 @@ function AppRoutes() {
               <Redirect to="/partner-culture" />
             </Route>
             <Route path="/ai-assistant">
-              <RoleGuard roles={["super_admin", "owner", "admin", "sales", "accountant", "distributor"]}>
+              <RoleGuard roles={["super_admin", "owner", "admin", "sales", "accountant", "distributor", "engineer", "technician"]}>
                 <AiAssistant />
               </RoleGuard>
             </Route>
             <Route path="/ai-work-reminders">
-              <RoleGuard roles={["super_admin", "owner", "admin", "sales", "accountant", "engineer", "technician"]}>
-                <AiWorkReminders />
-              </RoleGuard>
+              <Redirect to="/ai-assistant?tab=work-reminders" />
             </Route>
             <Route path="/reminder-settings">
               <Redirect to="/ai-assistant" />

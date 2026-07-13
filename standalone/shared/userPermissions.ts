@@ -232,7 +232,7 @@ export const NAV_HREF_FEATURES: Record<string, FeatureKey | FeatureKey[]> = {
   "/employees": "system_settings",
   "/work-hours-stats": "system_settings",
   "/reminder-settings": "ai_assistant",
-  "/ai-assistant": "ai_assistant",
+  "/ai-assistant": ["ai_assistant", "work_orders"],
   "/ai-work-reminders": "home",
   "/users": "system_settings",
   "/wholesale/customers": "customers",
