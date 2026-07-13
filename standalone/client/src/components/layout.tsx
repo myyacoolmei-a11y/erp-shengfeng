@@ -22,7 +22,6 @@ import {
   Heart,
   Clock,
   Sparkles,
-  Calculator,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
@@ -49,7 +48,6 @@ const WORK_CENTER_ITEMS: NavItem[] = [
   { href: "/", label: "儀表板", icon: LayoutDashboard, roles: ["super_admin", "owner", "admin", "accountant"] },
   { href: "/engineer-dashboard", label: "儀表板", icon: LayoutDashboard, roles: ["engineer", "technician"] },
   { href: "/customers", label: "客戶管理", icon: Users, roles: ["super_admin", "owner", "admin", "sales", "accountant"] },
-  { href: "/deal-calculation", label: "成交試算", icon: Calculator, roles: ["super_admin", "owner", "admin", "sales", "accountant"] },
   { href: "/quotes", label: "報價單", icon: FileText, roles: ["super_admin", "owner", "admin", "sales", "distributor"] },
   { href: "/work-orders", label: "派工單", icon: Wrench, roles: ["super_admin", "owner", "admin", "engineer", "technician"] },
   { href: "/repair-cases", label: "維修案件", icon: HardHat, roles: ["super_admin", "owner", "admin", "engineer", "technician", "sales"] },
@@ -80,7 +78,6 @@ const WORK_CENTER_ORDER = [
   "/",
   "/engineer-dashboard",
   "/customers",
-  "/deal-calculation",
   "/quotes",
   "/work-orders",
   "/repair-cases",
