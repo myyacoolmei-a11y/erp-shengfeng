@@ -36,157 +36,41 @@ interface NavItem {
   href: string;
   label: string;
   icon: React.ElementType;
-  iconBg: string;
-  iconColor: string;
   roles: UserRole[];
 }
 
+const NAV_ITEM_BASE =
+  "flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] font-medium transition-colors";
+const NAV_ITEM_ACTIVE = "bg-foreground text-background";
+const NAV_ITEM_INACTIVE = "text-muted-foreground hover:bg-muted/60 hover:text-foreground";
+
 /** 工作中心 */
 const WORK_CENTER_ITEMS: NavItem[] = [
-  {
-    href: "/",
-    label: "儀表板",
-    icon: LayoutDashboard,
-    iconBg: "bg-blue-100",
-    iconColor: "text-blue-600",
-    roles: ["super_admin", "owner", "admin", "accountant"],
-  },
-  {
-    href: "/engineer-dashboard",
-    label: "儀表板",
-    icon: LayoutDashboard,
-    iconBg: "bg-blue-100",
-    iconColor: "text-blue-600",
-    roles: ["engineer", "technician"],
-  },
-  {
-    href: "/customers",
-    label: "客戶管理",
-    icon: Users,
-    iconBg: "bg-emerald-100",
-    iconColor: "text-emerald-600",
-    roles: ["super_admin", "owner", "admin", "sales", "accountant"],
-  },
-  {
-    href: "/quotes",
-    label: "報價單",
-    icon: FileText,
-    iconBg: "bg-amber-100",
-    iconColor: "text-amber-600",
-    roles: ["super_admin", "owner", "admin", "sales", "distributor"],
-  },
-  {
-    href: "/work-orders",
-    label: "派工單",
-    icon: Wrench,
-    iconBg: "bg-orange-100",
-    iconColor: "text-orange-600",
-    roles: ["super_admin", "owner", "admin", "engineer", "technician"],
-  },
-  {
-    href: "/repair-cases",
-    label: "維修案件",
-    icon: HardHat,
-    iconBg: "bg-violet-100",
-    iconColor: "text-violet-600",
-    roles: ["super_admin", "owner", "admin", "engineer", "technician", "sales"],
-  },
-  {
-    href: "/receivables",
-    label: "收款／應收帳款",
-    icon: CreditCard,
-    iconBg: "bg-rose-100",
-    iconColor: "text-rose-600",
-    roles: ["super_admin", "owner", "admin", "accountant"],
-  },
-  {
-    href: "/products",
-    label: "商品管理",
-    icon: Archive,
-    iconBg: "bg-cyan-100",
-    iconColor: "text-cyan-600",
-    roles: ["super_admin", "owner", "admin", "sales"],
-  },
-  {
-    href: "/inventory",
-    label: "庫存管理",
-    icon: Package,
-    iconBg: "bg-teal-100",
-    iconColor: "text-teal-600",
-    roles: ["super_admin", "owner", "admin"],
-  },
-  {
-    href: "/warranties",
-    label: "保固保養",
-    icon: ShieldCheck,
-    iconBg: "bg-indigo-100",
-    iconColor: "text-indigo-600",
-    roles: ["super_admin", "owner", "admin", "accountant", "engineer", "technician"],
-  },
+  { href: "/", label: "儀表板", icon: LayoutDashboard, roles: ["super_admin", "owner", "admin", "accountant"] },
+  { href: "/engineer-dashboard", label: "儀表板", icon: LayoutDashboard, roles: ["engineer", "technician"] },
+  { href: "/customers", label: "客戶管理", icon: Users, roles: ["super_admin", "owner", "admin", "sales", "accountant"] },
+  { href: "/quotes", label: "報價單", icon: FileText, roles: ["super_admin", "owner", "admin", "sales", "distributor"] },
+  { href: "/work-orders", label: "派工單", icon: Wrench, roles: ["super_admin", "owner", "admin", "engineer", "technician"] },
+  { href: "/repair-cases", label: "維修案件", icon: HardHat, roles: ["super_admin", "owner", "admin", "engineer", "technician", "sales"] },
+  { href: "/receivables", label: "收款／應收帳款", icon: CreditCard, roles: ["super_admin", "owner", "admin", "accountant"] },
+  { href: "/products", label: "商品管理", icon: Archive, roles: ["super_admin", "owner", "admin", "sales"] },
+  { href: "/inventory", label: "庫存管理", icon: Package, roles: ["super_admin", "owner", "admin"] },
+  { href: "/warranties", label: "保固保養", icon: ShieldCheck, roles: ["super_admin", "owner", "admin", "accountant", "engineer", "technician"] },
 ];
 
 /** 公司內部 */
 const COMPANY_INTERNAL_ITEMS: NavItem[] = [
-  {
-    href: "/employees",
-    label: "員工管理",
-    icon: Briefcase,
-    iconBg: "bg-slate-100",
-    iconColor: "text-slate-600",
-    roles: ["super_admin", "owner", "admin"],
-  },
-  {
-    href: "/users",
-    label: "用戶管理",
-    icon: UserCog,
-    iconBg: "bg-red-100",
-    iconColor: "text-red-600",
-    roles: ["super_admin", "owner"],
-  },
-  {
-    href: "/work-hours-stats",
-    label: "工時統計",
-    icon: Clock,
-    iconBg: "bg-yellow-100",
-    iconColor: "text-yellow-700",
-    roles: ["super_admin", "owner", "admin", "accountant"],
-  },
-  {
-    href: "/notification-settings",
-    label: "通知中心",
-    icon: Bell,
-    iconBg: "bg-amber-100",
-    iconColor: "text-amber-600",
-    roles: ["super_admin", "owner", "admin", "sales", "accountant", "distributor"],
-  },
+  { href: "/employees", label: "員工管理", icon: Briefcase, roles: ["super_admin", "owner", "admin"] },
+  { href: "/users", label: "用戶管理", icon: UserCog, roles: ["super_admin", "owner"] },
+  { href: "/work-hours-stats", label: "工時統計", icon: Clock, roles: ["super_admin", "owner", "admin", "accountant"] },
+  { href: "/notification-settings", label: "通知中心", icon: Bell, roles: ["super_admin", "owner", "admin", "sales", "accountant", "distributor"] },
 ];
 
 /** AI 中心 */
 const AI_CENTER_ITEMS: NavItem[] = [
-  {
-    href: "/ai-assistant",
-    label: "AI 小秘書",
-    icon: Sparkles,
-    iconBg: "bg-purple-100",
-    iconColor: "text-purple-600",
-    roles: ["super_admin", "owner", "admin", "sales", "accountant", "distributor"],
-  },
-  {
-    href: "/ai-work-reminders",
-    label: "AI 工作提醒",
-    icon: Car,
-    iconBg: "bg-sky-100",
-    iconColor: "text-sky-600",
-    roles: ["super_admin", "owner", "admin", "sales", "accountant", "engineer", "technician"],
-  },
-  {
-    href: "/partner-culture",
-    label: "晟風夥伴文化",
-    icon: Heart,
-    iconBg: "bg-pink-100",
-    iconColor: "text-pink-600",
-    roles: ["super_admin", "owner", "admin", "engineer", "technician"],
-  },
+  { href: "/ai-assistant", label: "AI 小秘書", icon: Sparkles, roles: ["super_admin", "owner", "admin", "sales", "accountant", "distributor"] },
+  { href: "/ai-work-reminders", label: "AI 工作提醒", icon: Car, roles: ["super_admin", "owner", "admin", "sales", "accountant", "engineer", "technician"] },
+  { href: "/partner-culture", label: "晟風夥伴文化", icon: Heart, roles: ["super_admin", "owner", "admin", "engineer", "technician"] },
 ];
 
 const ADMIN_MANAGER_ROLES: UserRole[] = ["super_admin", "owner", "admin"];
@@ -207,10 +91,10 @@ const WORK_CENTER_ORDER = [
 const WHOLESALE_ROLES: UserRole[] = ["super_admin", "owner", "admin", "sales", "accountant"];
 
 const WHOLESALE_SUB_ITEMS = [
-  { href: "/wholesale/customers", label: "批發客戶", icon: Building2, iconBg: "bg-emerald-100", iconColor: "text-emerald-600" },
-  { href: "/wholesale/products", label: "批發商品", icon: Archive, iconBg: "bg-cyan-100", iconColor: "text-cyan-600" },
-  { href: "/wholesale/orders", label: "批發出貨單", icon: ReceiptText, iconBg: "bg-amber-100", iconColor: "text-amber-600" },
-  { href: "/wholesale/settlements", label: "月結 / 應收", icon: CreditCard, iconBg: "bg-rose-100", iconColor: "text-rose-600" },
+  { href: "/wholesale/customers", label: "批發客戶", icon: Building2 },
+  { href: "/wholesale/products", label: "批發商品", icon: Archive },
+  { href: "/wholesale/orders", label: "批發出貨單", icon: ReceiptText },
+  { href: "/wholesale/settlements", label: "月結 / 應收", icon: CreditCard },
 ];
 
 const ROLE_COLORS: Record<UserRole, string> = {
@@ -241,33 +125,22 @@ function isEngineerOnly(userRoles: UserRole[]): boolean {
 
 function NavIcon({
   icon: Icon,
-  iconBg,
-  iconColor,
   active,
-  size = "md",
 }: {
   icon: React.ElementType;
-  iconBg: string;
-  iconColor: string;
   active: boolean;
-  size?: "md" | "sm";
 }) {
-  const box = size === "sm" ? "h-7 w-7 rounded-md" : "h-8 w-8 rounded-lg";
-  const glyph = size === "sm" ? "h-3.5 w-3.5" : "h-4 w-4";
   return (
-    <span
-      className={`flex shrink-0 items-center justify-center ${box} ${
-        active ? "bg-primary-foreground/20 text-primary-foreground" : `${iconBg} ${iconColor}`
-      }`}
-    >
-      <Icon className={glyph} strokeWidth={2} />
-    </span>
+    <Icon
+      className={`h-4 w-4 shrink-0 ${active ? "text-background" : "text-muted-foreground/70"}`}
+      strokeWidth={1.5}
+    />
   );
 }
 
 function NavSectionHeader({ title }: { title: string }) {
   return (
-    <p className="px-3 pb-1.5 pt-4 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70 first:pt-2">
+    <p className="px-2.5 pb-1 pt-5 text-[11px] font-medium tracking-wide text-muted-foreground/55 first:pt-1">
       {title}
     </p>
   );
@@ -310,13 +183,9 @@ function NavContent() {
     return (
       <Link
         href={item.href}
-        className={`flex items-center gap-3 rounded-lg px-2.5 py-2 text-sm font-medium transition-colors ${
-          isActive
-            ? "bg-primary text-primary-foreground shadow-sm"
-            : "text-foreground/80 hover:bg-muted/80"
-        }`}
+        className={`${NAV_ITEM_BASE} ${isActive ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE}`}
       >
-        <NavIcon icon={item.icon} iconBg={item.iconBg} iconColor={item.iconColor} active={isActive} />
+        <NavIcon icon={item.icon} active={isActive} />
         <span className="truncate">{item.label}</span>
       </Link>
     );
@@ -353,44 +222,25 @@ function NavContent() {
                   if (!isWholesalePath) navigate("/wholesale/customers");
                   setWholesaleOpen((v) => !v);
                 }}
-                className={`flex items-center gap-3 rounded-lg px-2.5 py-2 text-sm font-medium w-full transition-colors ${
-                  isWholesalePath
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "text-foreground/80 hover:bg-muted/80"
-                }`}
+                className={`${NAV_ITEM_BASE} w-full ${isWholesalePath ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE}`}
               >
-                <NavIcon
-                  icon={ShoppingCart}
-                  iconBg="bg-orange-100"
-                  iconColor="text-orange-600"
-                  active={isWholesalePath}
-                />
+                <NavIcon icon={ShoppingCart} active={isWholesalePath} />
                 <span className="truncate">批發管理</span>
                 <ChevronDown
-                  className={`ml-auto h-3.5 w-3.5 transition-transform duration-200 ${wholesaleOpen ? "" : "-rotate-90"}`}
+                  className={`ml-auto h-3.5 w-3.5 shrink-0 opacity-60 transition-transform duration-200 ${wholesaleOpen ? "" : "-rotate-90"}`}
                 />
               </button>
               {wholesaleOpen && (
-                <div className="ml-5 mt-0.5 flex flex-col gap-0.5 border-l border-border/50 pl-2.5">
+                <div className="ml-[18px] mt-0.5 flex flex-col gap-0.5 border-l border-border/40 pl-2.5">
                   {WHOLESALE_SUB_ITEMS.map((sub) => {
                     const isActive = location === sub.href || location.startsWith(sub.href);
                     return (
                       <Link
                         key={sub.href}
                         href={sub.href}
-                        className={`flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm font-medium transition-colors ${
-                          isActive
-                            ? "bg-primary text-primary-foreground shadow-sm"
-                            : "text-foreground/80 hover:bg-muted/80"
-                        }`}
+                        className={`${NAV_ITEM_BASE} ${isActive ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE}`}
                       >
-                        <NavIcon
-                          icon={sub.icon}
-                          iconBg={sub.iconBg}
-                          iconColor={sub.iconColor}
-                          active={isActive}
-                          size="sm"
-                        />
+                        <NavIcon icon={sub.icon} active={isActive} />
                         <span className="truncate">{sub.label}</span>
                       </Link>
                     );
@@ -479,7 +329,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen bg-background">
-      <aside className="hidden w-64 flex-col border-r bg-card md:flex shadow-sm">
+      <aside className="hidden w-60 flex-col border-r border-border/60 bg-card md:flex">
         <NavContent />
       </aside>
 
@@ -495,7 +345,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 <span className="sr-only">Toggle navigation</span>
               </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="w-64 p-0">
+            <SheetContent side="left" className="w-60 p-0">
               <NavContent />
             </SheetContent>
           </Sheet>
