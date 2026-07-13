@@ -17,15 +17,18 @@ import {
   Archive,
   ChevronDown,
   Building2,
-  ClipboardList,
   ReceiptText,
   Bell,
   Heart,
   Clock,
+  Settings,
+  Sparkles,
+  MessageSquareQuote,
+  MessageCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { useAuth, effectiveRoles, userCanAccessNav, type UserRole } from "@/contexts/auth-context";
+import { useAuth, effectiveRoles, userCanAccessNav, type UserRole, type AuthUser } from "@/contexts/auth-context";
 import { ROLE_LABELS } from "@/lib/role-labels";
 import { APP_BRAND } from "@/lib/appBrand";
 import { PwaInstallBanner } from "@/components/pwa/PwaInstallBanner";
@@ -38,7 +41,8 @@ interface NavItem {
   roles: UserRole[];
 }
 
-const NAV_ITEMS: NavItem[] = [
+/** Daily workflow — shown in order under「工作流程」 */
+const WORKFLOW_ITEMS: NavItem[] = [
   {
     href: "/",
     label: "儀表板",
@@ -49,6 +53,12 @@ const NAV_ITEMS: NavItem[] = [
     href: "/engineer-dashboard",
     label: "儀表板",
     icon: LayoutDashboard,
+    roles: ["engineer", "technician"],
+  },
+  {
+    href: "/partner-home",
+    label: "❤️ 晟風夥伴",
+    icon: Heart,
     roles: ["engineer", "technician"],
   },
   {
@@ -72,7 +82,7 @@ const NAV_ITEMS: NavItem[] = [
   {
     href: "/repair-cases",
     label: "維修案件",
-    icon: Wrench,
+    icon: HardHat,
     roles: ["super_admin", "owner", "admin", "engineer", "technician", "sales"],
   },
   {
@@ -99,6 +109,10 @@ const NAV_ITEMS: NavItem[] = [
     icon: ShieldCheck,
     roles: ["super_admin", "owner", "admin", "accountant", "engineer", "technician"],
   },
+];
+
+/** Company settings — collapsible under「⚙️ 公司設定」 */
+const COMPANY_SETTINGS_ITEMS: NavItem[] = [
   {
     href: "/employees",
     label: "員工管理",
@@ -106,10 +120,28 @@ const NAV_ITEMS: NavItem[] = [
     roles: ["super_admin", "owner", "admin"],
   },
   {
-    href: "/partner-home",
-    label: "❤️ 晟風夥伴",
-    icon: Heart,
-    roles: ["engineer", "technician"],
+    href: "/users",
+    label: "用戶管理",
+    icon: UserCog,
+    roles: ["super_admin", "owner"],
+  },
+  {
+    href: "/notification-settings",
+    label: "通知設定",
+    icon: Bell,
+    roles: ["super_admin", "owner", "admin", "sales", "accountant", "distributor"],
+  },
+  {
+    href: "/reminder-settings",
+    label: "AI 小秘書",
+    icon: Sparkles,
+    roles: ["super_admin", "owner", "admin", "sales", "accountant", "distributor"],
+  },
+  {
+    href: "/partner-admin",
+    label: "AI 提醒語錄",
+    icon: MessageSquareQuote,
+    roles: ["super_admin", "owner", "admin"],
   },
   {
     href: "/work-hours-stats",
@@ -118,24 +150,31 @@ const NAV_ITEMS: NavItem[] = [
     roles: ["super_admin", "owner", "admin", "accountant"],
   },
   {
-    href: "/notification-settings",
-    label: "通知設定",
-    icon: Bell,
-    roles: ["super_admin", "owner", "admin", "sales", "accountant", "engineer", "technician", "distributor"],
-  },
-  {
     href: "/reminder-settings",
-    label: "AI 小秘書",
-    icon: Bell,
-    roles: ["super_admin", "owner", "admin", "sales", "accountant", "distributor"],
-  },
-  {
-    href: "/users",
-    label: "用戶管理",
-    icon: UserCog,
-    roles: ["super_admin", "owner"],
+    label: "LINE 設定",
+    icon: MessageCircle,
+    roles: ["super_admin", "owner", "admin"],
   },
 ];
+
+const COMPANY_SETTINGS_HREFS = new Set(COMPANY_SETTINGS_ITEMS.map((item) => item.href));
+
+const ADMIN_MANAGER_ROLES: UserRole[] = ["super_admin", "owner", "admin"];
+
+/** Workflow display order (批發管理 inserted after 商品管理) */
+const WORKFLOW_ORDER = [
+  "/",
+  "/engineer-dashboard",
+  "/partner-home",
+  "/customers",
+  "/quotes",
+  "/work-orders",
+  "/repair-cases",
+  "/receivables",
+  "/products",
+  "/inventory",
+  "/warranties",
+] as const;
 
 const WHOLESALE_ROLES: UserRole[] = ["super_admin", "owner", "admin", "sales", "accountant"];
 
@@ -157,28 +196,49 @@ const ROLE_COLORS: Record<UserRole, string> = {
   distributor: "bg-orange-100 text-orange-800 border-orange-200",
 };
 
-function NavContent() {
-  const [location, navigate] = useLocation();
-  const { user, logout } = useAuth();
-  const isWholesalePath = location.startsWith("/wholesale");
-  const [wholesaleOpen, setWholesaleOpen] = useState(isWholesalePath);
-
-  const userRoles = effectiveRoles(user);
-  const showWholesale = WHOLESALE_ROLES.some((r) => userRoles.includes(r));
-  const visibleItems = NAV_ITEMS.filter((item) => {
-    if (!user) return false;
+function filterVisibleNavItems(items: NavItem[], user: AuthUser, userRoles: UserRole[]) {
+  return items.filter((item) => {
     const roleOk = item.roles.some((r) => userRoles.includes(r));
     if (!roleOk) return false;
     if (userRoles.includes("super_admin")) return true;
     return userCanAccessNav(user, item.href);
   });
+}
 
-  const topItems = visibleItems.filter(
-    (item) => !(["/inventory", "/warranties", "/employees", "/users", "/reminder-settings", "/notification-settings", "/work-hours-stats"].includes(item.href))
+function isEngineerOnly(userRoles: UserRole[]): boolean {
+  const hasFieldRole = userRoles.some((r) => r === "engineer" || r === "technician");
+  const hasManagerRole = userRoles.some((r) => ADMIN_MANAGER_ROLES.includes(r));
+  return hasFieldRole && !hasManagerRole;
+}
+
+function NavContent() {
+  const [location, navigate] = useLocation();
+  const { user, logout } = useAuth();
+  const isWholesalePath = location.startsWith("/wholesale");
+  const isCompanySettingsPath = [...COMPANY_SETTINGS_HREFS].some(
+    (href) => location === href || location.startsWith(`${href}/`),
   );
-  const bottomItems = visibleItems.filter(
-    (item) => ["/warranties", "/employees", "/users", "/inventory", "/reminder-settings", "/notification-settings", "/work-hours-stats"].includes(item.href)
-  );
+  const [wholesaleOpen, setWholesaleOpen] = useState(isWholesalePath);
+  const [companySettingsOpen, setCompanySettingsOpen] = useState(isCompanySettingsPath);
+
+  const userRoles = effectiveRoles(user);
+  const showWholesale = WHOLESALE_ROLES.some((r) => userRoles.includes(r));
+  const engineerOnly = isEngineerOnly(userRoles);
+
+  const workflowItems = user
+    ? filterVisibleNavItems(WORKFLOW_ITEMS, user, userRoles)
+    : [];
+
+  const workflowByHref = new Map(workflowItems.map((item) => [item.href, item]));
+  const orderedWorkflowItems = WORKFLOW_ORDER
+    .map((href) => workflowByHref.get(href))
+    .filter((item): item is NavItem => !!item);
+
+  const companySettingsItems = user && !engineerOnly
+    ? filterVisibleNavItems(COMPANY_SETTINGS_ITEMS, user, userRoles)
+    : [];
+
+  const showCompanySettings = companySettingsItems.length > 0;
 
   function NavLink({ item }: { item: NavItem }) {
     const isActive = location === item.href || (item.href !== "/" && location.startsWith(item.href));
@@ -197,6 +257,31 @@ function NavContent() {
     );
   }
 
+  function NavSubLink({ item }: { item: NavItem }) {
+    const isActive = location === item.href || location.startsWith(`${item.href}/`);
+    return (
+      <Link
+        href={item.href}
+        className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-sm font-medium transition-colors ${
+          isActive
+            ? "bg-primary text-primary-foreground"
+            : "text-muted-foreground hover:bg-muted hover:text-foreground"
+        }`}
+      >
+        <item.icon className="h-3.5 w-3.5" />
+        {item.label}
+      </Link>
+    );
+  }
+
+  const workflowBeforeWholesale = orderedWorkflowItems.filter((item) =>
+    WORKFLOW_ORDER.indexOf(item.href as (typeof WORKFLOW_ORDER)[number]) <
+    WORKFLOW_ORDER.indexOf("/inventory"),
+  );
+  const workflowAfterWholesale = orderedWorkflowItems.filter((item) =>
+    item.href === "/inventory" || item.href === "/warranties",
+  );
+
   return (
     <div className="flex h-full flex-col py-4">
       <div className="px-4 py-3">
@@ -214,12 +299,17 @@ function NavContent() {
 
       <div className="flex-1 px-4 mt-2 overflow-y-auto">
         <nav className="flex flex-col gap-1">
-          {topItems.map((item) => <NavLink key={item.href} item={item} />)}
+          <p className="px-3 pt-1 pb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            工作流程
+          </p>
 
-          {/* Wholesale group */}
+          {workflowBeforeWholesale.map((item) => <NavLink key={`${item.href}-${item.label}`} item={item} />)}
+
+          {/* Wholesale group — part of daily workflow */}
           {showWholesale && (
             <div>
               <button
+                type="button"
                 onClick={() => {
                   if (!isWholesalePath) navigate("/wholesale/customers");
                   setWholesaleOpen((v) => !v);
@@ -260,7 +350,41 @@ function NavContent() {
             </div>
           )}
 
-          {bottomItems.map((item) => <NavLink key={item.href} item={item} />)}
+          {workflowAfterWholesale.map((item) => <NavLink key={`${item.href}-${item.label}`} item={item} />)}
+
+          {/* Company settings — collapsible */}
+          {showCompanySettings && (
+            <div className="mt-3">
+              <p className="px-3 pt-2 pb-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                公司設定
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!isCompanySettingsPath) navigate(companySettingsItems[0]!.href);
+                  setCompanySettingsOpen((v) => !v);
+                }}
+                className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium w-full transition-colors ${
+                  isCompanySettingsPath
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                }`}
+              >
+                <Settings className="h-4 w-4" />
+                ⚙️ 公司設定
+                <ChevronDown
+                  className={`ml-auto h-3.5 w-3.5 transition-transform duration-200 ${companySettingsOpen ? "" : "-rotate-90"}`}
+                />
+              </button>
+              {companySettingsOpen && (
+                <div className="ml-3 mt-0.5 flex flex-col gap-0.5 border-l pl-3">
+                  {companySettingsItems.map((item) => (
+                    <NavSubLink key={`${item.href}-${item.label}`} item={item} />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </nav>
 
         <div className="mt-4 px-1 text-[10px] text-muted-foreground leading-relaxed border-t pt-3">
