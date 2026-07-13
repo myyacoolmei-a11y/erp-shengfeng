@@ -21,7 +21,6 @@ import {
   Bell,
   Heart,
   Clock,
-  Settings,
   Sparkles,
   Car,
 } from "lucide-react";
@@ -130,45 +129,27 @@ const COMPANY_INTERNAL_ITEMS: NavItem[] = [
     icon: Bell,
     roles: ["super_admin", "owner", "admin", "sales", "accountant", "distributor"],
   },
-  {
-    href: "/reminder-settings",
-    label: "⚙️ 系統設定",
-    icon: Settings,
-    roles: ["super_admin", "owner", "admin"],
-  },
 ];
 
 /** 🤖 AI 中心 */
 const AI_CENTER_ITEMS: NavItem[] = [
   {
-    href: "/reminder-settings",
+    href: "/ai-assistant",
     label: "🤖 AI 小秘書",
     icon: Sparkles,
     roles: ["super_admin", "owner", "admin", "sales", "accountant", "distributor"],
   },
   {
-    href: "/engineer-dashboard",
+    href: "/ai-work-reminders",
     label: "🚗 AI 工作提醒",
     icon: Car,
-    roles: ["engineer", "technician"],
+    roles: ["super_admin", "owner", "admin", "sales", "accountant", "engineer", "technician"],
   },
   {
-    href: "/reminder-settings",
-    label: "🚗 AI 工作提醒",
-    icon: Car,
-    roles: ["super_admin", "owner", "admin", "sales", "accountant"],
-  },
-  {
-    href: "/partner-home",
+    href: "/partner-culture",
     label: "❤️ 晟風夥伴文化",
     icon: Heart,
-    roles: ["engineer", "technician"],
-  },
-  {
-    href: "/partner-admin",
-    label: "❤️ 晟風夥伴文化",
-    icon: Heart,
-    roles: ["super_admin", "owner", "admin"],
+    roles: ["super_admin", "owner", "admin", "engineer", "technician"],
   },
 ];
 

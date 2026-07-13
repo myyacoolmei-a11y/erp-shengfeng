@@ -27,10 +27,10 @@ import WholesaleCustomers from "@/pages/wholesale-customers";
 import WholesaleProducts from "@/pages/wholesale-products";
 import WholesaleOrders from "@/pages/wholesale-orders";
 import WholesaleSettlements from "@/pages/wholesale-settlements";
-import PartnerHome from "@/pages/partner-home";
-import PartnerAdmin from "@/pages/partner-admin";
-import ReminderSettings from "@/pages/reminder-settings";
+import PartnerCultureRoute from "@/pages/partner-culture-route";
 import NotificationSettings from "@/pages/notification-settings";
+import AiAssistant from "@/pages/ai-assistant";
+import AiWorkReminders from "@/pages/ai-work-reminders";
 import WorkHoursStats from "@/pages/work-hours-stats";
 
 function ComingSoon({ title }: { title: string }) {
@@ -81,7 +81,7 @@ function defaultPathForRole(user: AuthUser): string {
   if (roles.includes("owner") || roles.includes("admin")) return "/";
   if (roles.includes("accountant")) return "/receivables";
   if (roles.includes("sales")) return "/customers";
-  if (roles.includes("engineer") || roles.includes("technician")) return "/partner-home";
+  if (roles.includes("engineer") || roles.includes("technician")) return "/partner-culture";
   if (roles.includes("distributor")) return "/quotes";
   return "/";
 }
@@ -221,20 +221,29 @@ function AppRoutes() {
                 <Employees />
               </RoleGuard>
             </Route>
-            <Route path="/partner-home">
-              <RoleGuard roles={["engineer", "technician"]}>
-                <PartnerHome />
+            <Route path="/partner-culture">
+              <RoleGuard roles={["super_admin", "owner", "admin", "engineer", "technician"]}>
+                <PartnerCultureRoute />
               </RoleGuard>
             </Route>
+            <Route path="/partner-home">
+              <Redirect to="/partner-culture" />
+            </Route>
             <Route path="/partner-admin">
-              <RoleGuard roles={["super_admin", "owner", "admin"]}>
-                <PartnerAdmin />
+              <Redirect to="/partner-culture" />
+            </Route>
+            <Route path="/ai-assistant">
+              <RoleGuard roles={["super_admin", "owner", "admin", "sales", "accountant", "distributor"]}>
+                <AiAssistant />
+              </RoleGuard>
+            </Route>
+            <Route path="/ai-work-reminders">
+              <RoleGuard roles={["super_admin", "owner", "admin", "sales", "accountant", "engineer", "technician"]}>
+                <AiWorkReminders />
               </RoleGuard>
             </Route>
             <Route path="/reminder-settings">
-              <RoleGuard roles={["super_admin", "owner", "admin", "sales", "accountant", "distributor", "engineer", "technician"]}>
-                <ReminderSettings />
-              </RoleGuard>
+              <Redirect to="/ai-assistant" />
             </Route>
             <Route path="/notification-settings">
               <RoleGuard roles={["super_admin", "owner", "admin", "sales", "accountant", "engineer", "technician", "distributor"]}>

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Link } from "wouter";
 import { Bell, Smartphone, Loader2, RefreshCw, Send, Wrench, ShieldCheck } from "lucide-react";
+import { LineBindingPanel } from "@/components/notifications/LineBindingPanel";
+import { APP_BRAND } from "@/lib/appBrand";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -172,7 +173,7 @@ export default function NotificationSettingsPage() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const { user } = useAuth();
-  const { isIos } = usePwaInstall();
+  const { isIOS } = usePwaInstall();
   const isAdmin = hasRole(user, "super_admin", "owner", "admin");
   const isIphone = isIosDevice();
   const canShowEnableButton = !isIphone || isPwaStandalone();
@@ -192,6 +193,12 @@ export default function NotificationSettingsPage() {
     void refreshDiagnostics();
   }, [refreshDiagnostics]);
 
+  useEffect(() => {
+    const previousTitle = document.title;
+    document.title = `通知中心 — ${APP_BRAND.pwaName}`;
+    return () => { document.title = previousTitle; };
+  }, []);
+
   const { data: prefs, isLoading } = useQuery({
     queryKey: PREFS_KEY,
     queryFn: fetchNotificationPrefs,
@@ -210,7 +217,7 @@ export default function NotificationSettingsPage() {
     setPushBusy(true);
     setTestResult(null);
     try {
-      const result = await runPushSubscribeFlow(isIos ? "iPhone" : undefined);
+      const result = await runPushSubscribeFlow(isIOS ? "iPhone" : undefined);
       setDiag(result.diagnostics);
       if (result.ok) {
         toast({ title: result.message });
@@ -274,9 +281,16 @@ export default function NotificationSettingsPage() {
   return (
     <div className="space-y-6 max-w-2xl">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">通知設定</h1>
-        <p className="text-muted-foreground text-sm mt-1">Web Push 診斷、訂閱與伺服器測試推播</p>
+        <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">
+          <Bell className="h-6 w-6" />
+          通知中心
+        </h1>
+        <p className="text-muted-foreground text-sm mt-1">
+          LINE API 與綁定、Web Push、ERP 站內小鈴鐺與通知測試
+        </p>
       </div>
+
+      <LineBindingPanel />
 
       <Card>
         <CardHeader>
@@ -327,7 +341,7 @@ export default function NotificationSettingsPage() {
             </p>
           )}
 
-          {(isIos || isIphone) && !diag?.pwaStandalone && (
+          {(isIOS || isIphone) && !diag?.pwaStandalone && (
             <div className="text-sm bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-2 text-blue-900">
               <p className="font-semibold">尚未安裝 PWA —「開啟通知」按鈕已隱藏</p>
               <ol className="list-decimal list-inside space-y-1 text-xs">
@@ -380,7 +394,8 @@ export default function NotificationSettingsPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">通知管道</CardTitle>
+          <CardTitle className="text-base">ERP 小鈴鐺與通知管道</CardTitle>
+          <CardDescription>站內通知、手機推播與 LINE 通知的個人開關</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           {isLoading ? (
@@ -427,16 +442,6 @@ export default function NotificationSettingsPage() {
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">LINE 綁定</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Button asChild variant="outline">
-            <Link href="/reminder-settings">前往 LINE 綁定設定</Link>
-          </Button>
-        </CardContent>
-      </Card>
     </div>
   );
 }
