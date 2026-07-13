@@ -5,7 +5,8 @@ import { fireAndForgetNotification } from "./notificationService.ts";
 import { resolveEngineerUserIdsForWorkOrder } from "./workOrderNotificationHelpers.ts";
 import { NOTIFICATION_TYPES } from "../../../shared/notifications/types.ts";
 import { tryToAbsoluteAppUrl } from "../appUrl.ts";
-import { getWorkReminderPrefForUser } from "../line/lineSubscriptionService.ts";
+import { getUserNotificationPrefsDto } from "../line/lineSubscriptionService.ts";
+import { isNotificationTypeEnabled } from "../../../shared/notificationUserPrefs.ts";
 import { logger } from "../logger.ts";
 
 function appointmentMs(scheduledDate: string, scheduledTime: string): number | null {
@@ -102,8 +103,8 @@ export async function notifyPreviousJobIncompleteIfNeeded(opts: {
       if (!prev || prev.status !== "待施工") continue;
       if (!(await isOrderIncompleteForEngineer(prev.id, engineerUserId))) continue;
 
-      const allowed = await getWorkReminderPrefForUser(engineerUserId, "receivePreviousJobIncomplete");
-      if (!allowed) continue;
+      const prefs = await getUserNotificationPrefsDto(engineerUserId);
+      if (!isNotificationTypeEnabled(prefs, NOTIFICATION_TYPES.AI_WORK_REMINDER_PREVIOUS_INCOMPLETE)) continue;
 
       const prevCustomer = prev.linkedCustomerName ?? prev.customerName ?? "—";
       const message = `上一案件尚未完成（${prevCustomer}），下一案件即將開始（${customerName}），請盡快收尾。`;
@@ -134,8 +135,8 @@ export async function notifyReadyForNextJobAfterComplete(opts: {
   engineerName: string;
 }): Promise<void> {
   try {
-    const allowed = await getWorkReminderPrefForUser(opts.engineerUserId, "receiveReadyForNextJob");
-    if (!allowed) return;
+    const prefs = await getUserNotificationPrefsDto(opts.engineerUserId);
+    if (!isNotificationTypeEnabled(prefs, NOTIFICATION_TYPES.AI_WORK_REMINDER_READY_NEXT)) return;
 
     const todayOrders = await loadTodayOrders();
     const completed = todayOrders.find(o => o.id === opts.completedWorkOrderId);

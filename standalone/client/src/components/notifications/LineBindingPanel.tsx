@@ -7,6 +7,7 @@ import {
   Users,
   Unlink,
   RefreshCw,
+  Settings2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,6 +30,8 @@ import {
   unbindLineSubscription,
   adminRegenerateLineBindingCode,
 } from "@/lib/reminderSettingsApi";
+import { formatEnabledNotificationLabels, type UserNotificationPrefs } from "@/lib/notificationUserPrefs";
+import { UserNotificationPrefsDialog } from "@/components/notifications/UserNotificationPrefsDialog";
 
 const SETTINGS_KEY = ["receivable-reminder-settings"];
 const BINDING_STATUS_KEY = ["receivable-line-binding-status"];
@@ -42,47 +45,6 @@ function isDesktopBrowser(): boolean {
 
 function errorMessage(err: unknown): string {
   return err instanceof Error ? err.message : "載入失敗";
-}
-
-function formatActiveLinePrefs(
-  prefs: {
-    receiveMorningBriefing: boolean;
-    receiveEveningReminder: boolean;
-    receivePendingDispatch: boolean;
-    receiveQuoteFollowUp: boolean;
-    receiveReceivableCollection: boolean;
-    receiveWorkReminder60: boolean;
-    receiveWorkReminder30: boolean;
-    receiveWorkReminder15: boolean;
-    receiveWorkReminder5: boolean;
-    receivePastAppointment: boolean;
-    receivePreviousJobIncomplete: boolean;
-    receiveReadyForNextJob: boolean;
-    receiveOneTapNavigation: boolean;
-    receiveCompanyAnnouncement: boolean;
-  } | null,
-  roleCategory: "manager" | "engineer" | "other",
-): string {
-  if (!prefs) return "—";
-  const labels: string[] = [];
-  if (roleCategory === "manager") {
-    if (prefs.receiveMorningBriefing) labels.push("晨報");
-    if (prefs.receivePendingDispatch) labels.push("待派工");
-    if (prefs.receiveQuoteFollowUp) labels.push("報價");
-    if (prefs.receiveEveningReminder) labels.push("晚間");
-    if (prefs.receiveReceivableCollection) labels.push("收款");
-  } else if (roleCategory === "engineer") {
-    if (prefs.receiveWorkReminder60) labels.push("1h");
-    if (prefs.receiveWorkReminder30) labels.push("30m");
-    if (prefs.receiveWorkReminder15) labels.push("15m");
-    if (prefs.receiveWorkReminder5) labels.push("5m");
-    if (prefs.receivePastAppointment) labels.push("逾時");
-    if (prefs.receivePreviousJobIncomplete) labels.push("上案未完成");
-    if (prefs.receiveReadyForNextJob) labels.push("可往下一案");
-    if (prefs.receiveOneTapNavigation) labels.push("導航");
-  }
-  if (prefs.receiveCompanyAnnouncement) labels.push("公告");
-  return labels.length > 0 ? labels.join("、") : "（未勾選）";
 }
 
 export function LineBindingPanel() {
@@ -99,6 +61,11 @@ export function LineBindingPanel() {
   const [addFriendUrl, setAddFriendUrl] = useState<string | null>(null);
   const [isPollingBinding, setIsPollingBinding] = useState(false);
   const [bindingComplete, setBindingComplete] = useState(false);
+  const [prefsDialogUser, setPrefsDialogUser] = useState<{
+    userId: number;
+    displayName: string;
+    prefs: UserNotificationPrefs;
+  } | null>(null);
 
   const { data: adminSettings } = useQuery({
     queryKey: SETTINGS_KEY,
@@ -348,7 +315,7 @@ export function LineBindingPanel() {
               <Users className="h-5 w-5" />
               LINE 綁定管理
             </CardTitle>
-            <CardDescription>查看所有 ERP 使用者的 LINE 綁定狀態，可解除綁定或重新產生綁定碼。</CardDescription>
+            <CardDescription>查看所有 ERP 使用者的 LINE 綁定狀態，並設定各人的可接收通知。</CardDescription>
           </CardHeader>
           <CardContent>
             {overviewLoading ? (
@@ -366,13 +333,13 @@ export function LineBindingPanel() {
                     <TableHead>使用者</TableHead>
                     <TableHead>狀態</TableHead>
                     <TableHead>LINE / 綁定碼</TableHead>
-                    <TableHead>推播項目</TableHead>
+                    <TableHead>可接收通知</TableHead>
                     <TableHead className="text-right">操作</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {lineBindingOverview.map(row => {
-                    const activePrefs = formatActiveLinePrefs(row.prefs, row.roleCategory);
+                    const activePrefs = row.prefs ? formatEnabledNotificationLabels(row.prefs) : "—";
 
                     const statusLabel =
                       row.bindingStatus === "bound"
@@ -415,6 +382,22 @@ export function LineBindingPanel() {
                         </TableCell>
                         <TableCell className="text-sm">{activePrefs}</TableCell>
                         <TableCell className="text-right space-x-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={!row.prefs}
+                            onClick={() => {
+                              if (!row.prefs) return;
+                              setPrefsDialogUser({
+                                userId: row.userId,
+                                displayName: row.displayName,
+                                prefs: row.prefs,
+                              });
+                            }}
+                          >
+                            <Settings2 className="h-3 w-3 mr-1" />
+                            設定通知
+                          </Button>
                           {row.bindingStatus === "bound" ? (
                             <Button
                               variant="outline"
@@ -449,6 +432,17 @@ export function LineBindingPanel() {
             )}
           </CardContent>
         </Card>
+      )}
+
+      {prefsDialogUser && (
+        <UserNotificationPrefsDialog
+          open
+          onOpenChange={open => { if (!open) setPrefsDialogUser(null); }}
+          userId={prefsDialogUser.userId}
+          displayName={prefsDialogUser.displayName}
+          initialPrefs={prefsDialogUser.prefs}
+          onSaved={() => qc.invalidateQueries({ queryKey: LINE_SUBSCRIPTIONS_KEY })}
+        />
       )}
     </>
   );

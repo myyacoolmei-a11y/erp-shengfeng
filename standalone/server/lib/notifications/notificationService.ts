@@ -10,18 +10,14 @@ import {
   notificationDedupTable,
 } from "@workspace/db";
 import type { NotificationChannel } from "../../../shared/notifications/types.ts";
+import type { NotificationPrefContext } from "../../../shared/notificationUserPrefs.ts";
 import { logger } from "../logger.ts";
 import { tryToAbsoluteAppUrl } from "../appUrl.ts";
 import { sendWebPushToSubscription, isWebPushConfigured } from "./webPushService.ts";
 import { sendLineWorkOrderNotification } from "./lineNotificationService.ts";
 import { isLineMessagingConfigured } from "../line/lineConfig.ts";
 import { filterRecipientUserIdsByNotificationType } from "./notificationRecipientFilter.ts";
-import {
-  getNotificationCategory,
-  defaultChannelsForCategory,
-  workReminderPrefKeyForNotificationType,
-} from "../../../shared/notificationRolePermissions.ts";
-import { getWorkReminderPrefForUser } from "../line/lineSubscriptionService.ts";
+import { defaultChannelsForNotificationType } from "../../../shared/notificationUserPrefs.ts";
 
 export interface SendNotificationInput {
   recipientUserIds: number[];
@@ -36,6 +32,7 @@ export interface SendNotificationInput {
   pushTitle?: string;
   pushBody?: string;
   requireDispatchPref?: boolean;
+  fieldProgressAction?: NotificationPrefContext["fieldProgressAction"];
 }
 
 export interface ChannelDeliverySummary {
@@ -150,23 +147,27 @@ export async function sendNotification(input: SendNotificationInput): Promise<Se
 
   try {
     const uniqueRecipients = [...new Set(input.recipientUserIds.filter(id => id > 0))];
-    const roleFilteredRecipients = await filterRecipientUserIdsByNotificationType(
+    const prefContext: NotificationPrefContext | undefined = input.fieldProgressAction
+      ? { fieldProgressAction: input.fieldProgressAction }
+      : undefined;
+    const prefFilteredRecipients = await filterRecipientUserIdsByNotificationType(
       uniqueRecipients,
       input.type,
+      prefContext,
     );
-    summary.recipientCount = roleFilteredRecipients.length;
+    summary.recipientCount = prefFilteredRecipients.length;
 
     logger.info({
       event: "notification_dispatch_start",
       type: input.type,
       workOrderId: input.workOrderId,
-      recipientCount: roleFilteredRecipients.length,
-      skippedByRole: uniqueRecipients.length - roleFilteredRecipients.length,
-      channels: input.channels ?? defaultChannelsForCategory(getNotificationCategory(input.type)),
+      recipientCount: prefFilteredRecipients.length,
+      skippedByPref: uniqueRecipients.length - prefFilteredRecipients.length,
+      channels: input.channels ?? defaultChannelsForNotificationType(input.type),
     }, "Notification dispatch started");
 
-    if (roleFilteredRecipients.length === 0) {
-      logger.warn({ type: input.type, workOrderId: input.workOrderId }, "Notification skipped: no recipients after role filter");
+    if (prefFilteredRecipients.length === 0) {
+      logger.warn({ type: input.type, workOrderId: input.workOrderId }, "Notification skipped: no recipients after pref filter");
       return summary;
     }
 
@@ -179,8 +180,7 @@ export async function sendNotification(input: SendNotificationInput): Promise<Se
       }
     }
 
-    const category = getNotificationCategory(input.type);
-    const channels = input.channels ?? defaultChannelsForCategory(category);
+    const channels = input.channels ?? defaultChannelsForNotificationType(input.type);
     const relativeOpenUrl = input.workOrderId ? `/work-orders?open=${input.workOrderId}` : "/";
     const payload = {
       workOrderId: input.workOrderId,
@@ -189,17 +189,7 @@ export async function sendNotification(input: SendNotificationInput): Promise<Se
       ...input.payload,
     };
 
-    for (const userId of roleFilteredRecipients) {
-      const prefKey = workReminderPrefKeyForNotificationType(input.type);
-      if (prefKey) {
-        const allowed = await getWorkReminderPrefForUser(userId, prefKey);
-        if (!allowed) {
-          summary.webPush.skipped += 1;
-          summary.line.skipped += 1;
-          continue;
-        }
-      }
-
+    for (const userId of prefFilteredRecipients) {
       let prefs;
       try {
         prefs = await getUserPrefs(userId);

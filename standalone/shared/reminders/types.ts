@@ -48,20 +48,19 @@ export interface NotificationSettingsDto {
 
 export interface UserLineNotificationPrefsDto {
   lineLinked: boolean;
-  roleCategory: "manager" | "engineer" | "other";
+  canEdit: boolean;
   receiveMorningBriefing: boolean;
   receiveEveningReminder: boolean;
-  receivePendingDispatch: boolean;
-  receiveQuoteFollowUp: boolean;
+  receiveAiWorkReminder: boolean;
+  receiveNextJobReminder: boolean;
+  receiveFieldDepart: boolean;
+  receiveFieldArrive: boolean;
+  receiveFieldComplete: boolean;
+  receiveFieldDelay: boolean;
   receiveReceivableCollection: boolean;
-  receiveWorkReminder60: boolean;
-  receiveWorkReminder30: boolean;
-  receiveWorkReminder15: boolean;
-  receiveWorkReminder5: boolean;
-  receivePastAppointment: boolean;
-  receivePreviousJobIncomplete: boolean;
-  receiveReadyForNextJob: boolean;
-  receiveOneTapNavigation: boolean;
+  receiveAccountsReceivable: boolean;
+  receiveQuoteFollowUp: boolean;
+  receiveLeaveRequest: boolean;
   receiveCompanyAnnouncement: boolean;
 }
 
@@ -69,27 +68,11 @@ export interface LineBindingOverviewAdminDto {
   userId: number;
   displayName: string;
   username: string;
-  roleCategory: "manager" | "engineer" | "other";
   bindingStatus: "none" | "pending" | "bound";
   lineUserIdMasked: string | null;
   pendingCode: string | null;
   pendingExpiresAt: string | null;
-  prefs: {
-    receiveMorningBriefing: boolean;
-    receiveEveningReminder: boolean;
-    receivePendingDispatch: boolean;
-    receiveQuoteFollowUp: boolean;
-    receiveReceivableCollection: boolean;
-    receiveWorkReminder60: boolean;
-    receiveWorkReminder30: boolean;
-    receiveWorkReminder15: boolean;
-    receiveWorkReminder5: boolean;
-    receivePastAppointment: boolean;
-    receivePreviousJobIncomplete: boolean;
-    receiveReadyForNextJob: boolean;
-    receiveOneTapNavigation: boolean;
-    receiveCompanyAnnouncement: boolean;
-  } | null;
+  prefs: Omit<UserLineNotificationPrefsDto, "lineLinked" | "canEdit"> | null;
 }
 
 /** @deprecated Use LineBindingOverviewAdminDto */

@@ -29,7 +29,7 @@ import {
 } from "../../shared/reminders/types.ts";
 import {
   getMyLineNotificationPrefsDto,
-  updateMyLineNotificationPrefs,
+  adminUpdateUserNotificationPrefs,
   listLineBindingOverviewForAdmin,
   adminUnbindLineUser,
   adminRegenerateBindingCode,
@@ -58,17 +58,16 @@ const EnableSchema = z.object({
 const LineNotificationPrefsSchema = z.object({
   receiveMorningBriefing: z.boolean().optional(),
   receiveEveningReminder: z.boolean().optional(),
-  receivePendingDispatch: z.boolean().optional(),
-  receiveQuoteFollowUp: z.boolean().optional(),
+  receiveAiWorkReminder: z.boolean().optional(),
+  receiveNextJobReminder: z.boolean().optional(),
+  receiveFieldDepart: z.boolean().optional(),
+  receiveFieldArrive: z.boolean().optional(),
+  receiveFieldComplete: z.boolean().optional(),
+  receiveFieldDelay: z.boolean().optional(),
   receiveReceivableCollection: z.boolean().optional(),
-  receiveWorkReminder60: z.boolean().optional(),
-  receiveWorkReminder30: z.boolean().optional(),
-  receiveWorkReminder15: z.boolean().optional(),
-  receiveWorkReminder5: z.boolean().optional(),
-  receivePastAppointment: z.boolean().optional(),
-  receivePreviousJobIncomplete: z.boolean().optional(),
-  receiveReadyForNextJob: z.boolean().optional(),
-  receiveOneTapNavigation: z.boolean().optional(),
+  receiveAccountsReceivable: z.boolean().optional(),
+  receiveQuoteFollowUp: z.boolean().optional(),
+  receiveLeaveRequest: z.boolean().optional(),
   receiveCompanyAnnouncement: z.boolean().optional(),
 });
 
@@ -99,17 +98,24 @@ router.get("/reminder-settings/my-line-notifications", async (req, res) => {
 
 router.patch("/reminder-settings/my-line-notifications", async (req, res) => {
   if (!requireUser(req, res)) return;
+  res.status(403).json({ error: "通知權限僅能由管理員設定，請聯絡管理者" });
+});
+
+router.patch("/reminder-settings/line-subscriptions/:userId/notification-prefs", requireRole(...ADMIN_ROLES), async (req, res) => {
+  const userId = Number(req.params.userId);
+  if (!Number.isFinite(userId) || userId <= 0) {
+    res.status(400).json({ error: "無效的使用者 ID" });
+    return;
+  }
   const parsed = LineNotificationPrefsSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
   try {
-    res.json(await updateMyLineNotificationPrefs(req.user!.id, parsed.data));
+    res.json(await adminUpdateUserNotificationPrefs(userId, parsed.data));
   } catch (err) {
-    const message = err instanceof Error ? err.message : "更新失敗";
-    const status = message.includes("無權限") ? 403 : 500;
-    res.status(status).json({ error: message });
+    res.status(500).json({ error: err instanceof Error ? err.message : "更新失敗" });
   }
 });
 

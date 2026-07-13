@@ -98,6 +98,7 @@ export async function notifyFieldProgressEvent(input: FieldProgressNotifyInput):
       message: message + unableDetail,
       dedupeKey: `field-progress-${input.workOrderId}-${input.action}-${input.engineerUserId}-${input.actedAt.getTime()}`,
       lineMessage: `📍 ${title}\n\n${message}${unableDetail}`,
+      fieldProgressAction: input.action,
     });
 
     if (input.action === "complete") {

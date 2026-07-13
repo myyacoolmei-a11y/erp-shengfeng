@@ -6,83 +6,101 @@ import {
   maskLineUserId,
 } from "./lineUserBinding.ts";
 import {
-  defaultLinePrefsForRoles,
-  effectiveRoleList,
-  isEngineerRole,
-  isManagerRole,
-  sanitizeLinePrefPatch,
-  type LineNotificationPrefKey,
-} from "../../../shared/notificationRolePermissions.ts";
+  defaultUserNotificationPrefs,
+  sanitizeNotificationPrefPatch,
+  type UserNotificationPrefs,
+  type NotificationPrefKey,
+  isNotificationTypeEnabled,
+  type NotificationPrefContext,
+} from "../../../shared/notificationUserPrefs.ts";
 
-export type LineNotificationPreferenceKey = LineNotificationPrefKey;
-
-export interface LineSubscriberPrefs {
-  receiveMorningBriefing: boolean;
-  receiveEveningReminder: boolean;
-  receivePendingDispatch: boolean;
-  receiveQuoteFollowUp: boolean;
-  receiveReceivableCollection: boolean;
-  receiveWorkReminder60: boolean;
-  receiveWorkReminder30: boolean;
-  receiveWorkReminder15: boolean;
-  receiveWorkReminder5: boolean;
-  receivePastAppointment: boolean;
-  receivePreviousJobIncomplete: boolean;
-  receiveReadyForNextJob: boolean;
-  receiveOneTapNavigation: boolean;
-  receiveCompanyAnnouncement: boolean;
-}
+export type LineSubscriberPrefs = UserNotificationPrefs;
 
 export interface LineSubscriber {
   userId: number;
   displayName: string;
   username: string;
   lineUserId: string;
-  roles: string[];
   prefs: LineSubscriberPrefs;
 }
 
-function mapPrefsRow(row: Partial<LineSubscriberPrefs> | null, roleDefaults: LineSubscriberPrefs): LineSubscriberPrefs {
+type DbPrefRow = Partial<UserNotificationPrefs> & {
+  receivePendingDispatch?: boolean | null;
+  receiveWorkReminder60?: boolean | null;
+  receiveWorkReminder30?: boolean | null;
+  receiveWorkReminder15?: boolean | null;
+  receiveWorkReminder5?: boolean | null;
+  receivePastAppointment?: boolean | null;
+  receivePreviousJobIncomplete?: boolean | null;
+  receiveReadyForNextJob?: boolean | null;
+  receiveOneTapNavigation?: boolean | null;
+};
+
+function mapDbRowToUserPrefs(row: DbPrefRow | null): UserNotificationPrefs {
+  const defaults = defaultUserNotificationPrefs();
+  if (!row) return defaults;
   return {
-    receiveMorningBriefing: row?.receiveMorningBriefing ?? roleDefaults.receiveMorningBriefing,
-    receiveEveningReminder: row?.receiveEveningReminder ?? roleDefaults.receiveEveningReminder,
-    receivePendingDispatch: row?.receivePendingDispatch ?? roleDefaults.receivePendingDispatch,
-    receiveQuoteFollowUp: row?.receiveQuoteFollowUp ?? roleDefaults.receiveQuoteFollowUp,
-    receiveReceivableCollection: row?.receiveReceivableCollection ?? roleDefaults.receiveReceivableCollection,
-    receiveWorkReminder60: row?.receiveWorkReminder60 ?? roleDefaults.receiveWorkReminder60,
-    receiveWorkReminder30: row?.receiveWorkReminder30 ?? roleDefaults.receiveWorkReminder30,
-    receiveWorkReminder15: row?.receiveWorkReminder15 ?? roleDefaults.receiveWorkReminder15,
-    receiveWorkReminder5: row?.receiveWorkReminder5 ?? roleDefaults.receiveWorkReminder5,
-    receivePastAppointment: row?.receivePastAppointment ?? roleDefaults.receivePastAppointment,
-    receivePreviousJobIncomplete: row?.receivePreviousJobIncomplete ?? roleDefaults.receivePreviousJobIncomplete,
-    receiveReadyForNextJob: row?.receiveReadyForNextJob ?? roleDefaults.receiveReadyForNextJob,
-    receiveOneTapNavigation: row?.receiveOneTapNavigation ?? roleDefaults.receiveOneTapNavigation,
-    receiveCompanyAnnouncement: row?.receiveCompanyAnnouncement ?? roleDefaults.receiveCompanyAnnouncement,
+    receiveMorningBriefing: row.receiveMorningBriefing ?? defaults.receiveMorningBriefing,
+    receiveEveningReminder: row.receiveEveningReminder ?? defaults.receiveEveningReminder,
+    receiveAiWorkReminder: row.receiveAiWorkReminder != null
+      ? row.receiveAiWorkReminder
+      : Boolean(row.receivePastAppointment || row.receivePreviousJobIncomplete || row.receiveReadyForNextJob),
+    receiveNextJobReminder: row.receiveNextJobReminder != null
+      ? row.receiveNextJobReminder
+      : Boolean(row.receiveWorkReminder60 || row.receiveWorkReminder30 || row.receiveWorkReminder15 || row.receiveWorkReminder5),
+    receiveFieldDepart: row.receiveFieldDepart ?? defaults.receiveFieldDepart,
+    receiveFieldArrive: row.receiveFieldArrive ?? defaults.receiveFieldArrive,
+    receiveFieldComplete: row.receiveFieldComplete ?? defaults.receiveFieldComplete,
+    receiveFieldDelay: row.receiveFieldDelay ?? defaults.receiveFieldDelay,
+    receiveReceivableCollection: row.receiveReceivableCollection ?? defaults.receiveReceivableCollection,
+    receiveAccountsReceivable: row.receiveAccountsReceivable ?? defaults.receiveAccountsReceivable,
+    receiveQuoteFollowUp: row.receiveQuoteFollowUp ?? defaults.receiveQuoteFollowUp,
+    receiveLeaveRequest: row.receiveLeaveRequest ?? defaults.receiveLeaveRequest,
+    receiveCompanyAnnouncement: row.receiveCompanyAnnouncement ?? defaults.receiveCompanyAnnouncement,
   };
 }
 
-async function getUserRoles(userId: number): Promise<string[]> {
-  const [user] = await db
-    .select({ role: usersTable.role, roles: usersTable.roles })
-    .from(usersTable)
-    .where(eq(usersTable.id, userId));
-  return effectiveRoleList(user?.roles, user?.role);
-}
+function expandPrefPatchForDb(patch: Partial<UserNotificationPrefs>): Record<string, boolean> {
+  const sanitized = sanitizeNotificationPrefPatch(patch);
+  const out: Record<string, boolean> = { ...sanitized };
 
-function roleCategory(roles: string[]): "manager" | "engineer" | "other" {
-  if (isManagerRole(roles)) return "manager";
-  if (isEngineerRole(roles)) return "engineer";
-  return "other";
+  if (typeof sanitized.receiveNextJobReminder === "boolean") {
+    const v = sanitized.receiveNextJobReminder;
+    out.receiveWorkReminder60 = v;
+    out.receiveWorkReminder30 = v;
+    out.receiveWorkReminder15 = v;
+    out.receiveWorkReminder5 = v;
+  }
+  if (typeof sanitized.receiveAiWorkReminder === "boolean") {
+    const v = sanitized.receiveAiWorkReminder;
+    out.receivePastAppointment = v;
+    out.receivePreviousJobIncomplete = v;
+    out.receiveReadyForNextJob = v;
+    out.receiveOneTapNavigation = v;
+  }
+  if (typeof sanitized.receiveMorningBriefing === "boolean") {
+    out.receivePendingDispatch = sanitized.receiveMorningBriefing;
+  }
+
+  return out;
 }
 
 export async function ensureDefaultPrefsForUser(userId: number): Promise<void> {
-  const roles = await getUserRoles(userId);
-  const defaults = defaultLinePrefsForRoles(roles);
+  const defaults = defaultUserNotificationPrefs();
   await db
     .insert(userLineNotificationPrefsTable)
     .values({
       userId,
       ...defaults,
+      receivePendingDispatch: false,
+      receiveWorkReminder60: false,
+      receiveWorkReminder30: false,
+      receiveWorkReminder15: false,
+      receiveWorkReminder5: false,
+      receivePastAppointment: false,
+      receivePreviousJobIncomplete: false,
+      receiveReadyForNextJob: false,
+      receiveOneTapNavigation: false,
     })
     .onConflictDoNothing();
 }
@@ -96,22 +114,26 @@ export async function getPrefsForUser(userId: number) {
   return row ?? null;
 }
 
+export async function getUserNotificationPrefsDto(userId: number): Promise<UserNotificationPrefs> {
+  const row = await getPrefsForUser(userId);
+  return mapDbRowToUserPrefs(row);
+}
+
 export async function updatePrefsForUser(
   userId: number,
-  input: Partial<LineSubscriberPrefs>,
+  input: Partial<UserNotificationPrefs>,
 ) {
-  const roles = await getUserRoles(userId);
-  const sanitized = sanitizeLinePrefPatch(roles, input as Partial<Record<LineNotificationPrefKey, boolean>>);
-  if (Object.keys(sanitized).length === 0) {
-    throw new Error("無權限修改此通知偏好");
+  const expanded = expandPrefPatchForDb(input);
+  if (Object.keys(expanded).length === 0) {
+    throw new Error("無有效的通知偏好欄位");
   }
   await ensureDefaultPrefsForUser(userId);
   const [updated] = await db
     .update(userLineNotificationPrefsTable)
-    .set(sanitized)
+    .set(expanded)
     .where(eq(userLineNotificationPrefsTable.userId, userId))
     .returning();
-  return updated;
+  return mapDbRowToUserPrefs(updated);
 }
 
 async function loadSubscribers(): Promise<LineSubscriber[]> {
@@ -121,13 +143,20 @@ async function loadSubscribers(): Promise<LineSubscriber[]> {
       displayName: usersTable.displayName,
       username: usersTable.username,
       lineUserId: usersTable.lineUserId,
-      role: usersTable.role,
-      roles: usersTable.roles,
       receiveMorningBriefing: userLineNotificationPrefsTable.receiveMorningBriefing,
       receiveEveningReminder: userLineNotificationPrefsTable.receiveEveningReminder,
       receivePendingDispatch: userLineNotificationPrefsTable.receivePendingDispatch,
       receiveQuoteFollowUp: userLineNotificationPrefsTable.receiveQuoteFollowUp,
       receiveReceivableCollection: userLineNotificationPrefsTable.receiveReceivableCollection,
+      receiveAccountsReceivable: userLineNotificationPrefsTable.receiveAccountsReceivable,
+      receiveAiWorkReminder: userLineNotificationPrefsTable.receiveAiWorkReminder,
+      receiveNextJobReminder: userLineNotificationPrefsTable.receiveNextJobReminder,
+      receiveFieldDepart: userLineNotificationPrefsTable.receiveFieldDepart,
+      receiveFieldArrive: userLineNotificationPrefsTable.receiveFieldArrive,
+      receiveFieldComplete: userLineNotificationPrefsTable.receiveFieldComplete,
+      receiveFieldDelay: userLineNotificationPrefsTable.receiveFieldDelay,
+      receiveLeaveRequest: userLineNotificationPrefsTable.receiveLeaveRequest,
+      receiveCompanyAnnouncement: userLineNotificationPrefsTable.receiveCompanyAnnouncement,
       receiveWorkReminder60: userLineNotificationPrefsTable.receiveWorkReminder60,
       receiveWorkReminder30: userLineNotificationPrefsTable.receiveWorkReminder30,
       receiveWorkReminder15: userLineNotificationPrefsTable.receiveWorkReminder15,
@@ -136,7 +165,6 @@ async function loadSubscribers(): Promise<LineSubscriber[]> {
       receivePreviousJobIncomplete: userLineNotificationPrefsTable.receivePreviousJobIncomplete,
       receiveReadyForNextJob: userLineNotificationPrefsTable.receiveReadyForNextJob,
       receiveOneTapNavigation: userLineNotificationPrefsTable.receiveOneTapNavigation,
-      receiveCompanyAnnouncement: userLineNotificationPrefsTable.receiveCompanyAnnouncement,
     })
     .from(usersTable)
     .leftJoin(
@@ -147,24 +175,19 @@ async function loadSubscribers(): Promise<LineSubscriber[]> {
 
   return rows
     .filter(row => row.lineUserId?.trim())
-    .map(row => {
-      const roles = effectiveRoleList(row.roles, row.role);
-      const roleDefaults = defaultLinePrefsForRoles(roles);
-      return {
-        userId: row.userId,
-        displayName: row.displayName,
-        username: row.username,
-        lineUserId: row.lineUserId!.trim(),
-        roles,
-        prefs: mapPrefsRow(row, roleDefaults),
-      };
-    });
+    .map(row => ({
+      userId: row.userId,
+      displayName: row.displayName,
+      username: row.username,
+      lineUserId: row.lineUserId!.trim(),
+      prefs: mapDbRowToUserPrefs(row),
+    }));
 }
 
-function prefsToDto(prefs: LineSubscriberPrefs, lineLinked: boolean, roles: string[]) {
+function prefsToDto(prefs: UserNotificationPrefs, lineLinked: boolean) {
   return {
     lineLinked,
-    roleCategory: roleCategory(roles),
+    canEdit: false,
     ...prefs,
   };
 }
@@ -176,13 +199,20 @@ export async function listLineBindingOverviewForAdmin() {
       displayName: usersTable.displayName,
       username: usersTable.username,
       lineUserId: usersTable.lineUserId,
-      role: usersTable.role,
-      roles: usersTable.roles,
       receiveMorningBriefing: userLineNotificationPrefsTable.receiveMorningBriefing,
       receiveEveningReminder: userLineNotificationPrefsTable.receiveEveningReminder,
       receivePendingDispatch: userLineNotificationPrefsTable.receivePendingDispatch,
       receiveQuoteFollowUp: userLineNotificationPrefsTable.receiveQuoteFollowUp,
       receiveReceivableCollection: userLineNotificationPrefsTable.receiveReceivableCollection,
+      receiveAccountsReceivable: userLineNotificationPrefsTable.receiveAccountsReceivable,
+      receiveAiWorkReminder: userLineNotificationPrefsTable.receiveAiWorkReminder,
+      receiveNextJobReminder: userLineNotificationPrefsTable.receiveNextJobReminder,
+      receiveFieldDepart: userLineNotificationPrefsTable.receiveFieldDepart,
+      receiveFieldArrive: userLineNotificationPrefsTable.receiveFieldArrive,
+      receiveFieldComplete: userLineNotificationPrefsTable.receiveFieldComplete,
+      receiveFieldDelay: userLineNotificationPrefsTable.receiveFieldDelay,
+      receiveLeaveRequest: userLineNotificationPrefsTable.receiveLeaveRequest,
+      receiveCompanyAnnouncement: userLineNotificationPrefsTable.receiveCompanyAnnouncement,
       receiveWorkReminder60: userLineNotificationPrefsTable.receiveWorkReminder60,
       receiveWorkReminder30: userLineNotificationPrefsTable.receiveWorkReminder30,
       receiveWorkReminder15: userLineNotificationPrefsTable.receiveWorkReminder15,
@@ -191,7 +221,6 @@ export async function listLineBindingOverviewForAdmin() {
       receivePreviousJobIncomplete: userLineNotificationPrefsTable.receivePreviousJobIncomplete,
       receiveReadyForNextJob: userLineNotificationPrefsTable.receiveReadyForNextJob,
       receiveOneTapNavigation: userLineNotificationPrefsTable.receiveOneTapNavigation,
-      receiveCompanyAnnouncement: userLineNotificationPrefsTable.receiveCompanyAnnouncement,
     })
     .from(usersTable)
     .leftJoin(
@@ -202,17 +231,13 @@ export async function listLineBindingOverviewForAdmin() {
 
   const rows = await Promise.all(
     users.map(async user => {
-      const roles = effectiveRoleList(user.roles, user.role);
-      const roleDefaults = defaultLinePrefsForRoles(roles);
-      const prefs = mapPrefsRow(user, roleDefaults);
-      const category = roleCategory(roles);
+      const prefs = mapDbRowToUserPrefs(user);
       const lineUserId = user.lineUserId?.trim() || null;
       if (lineUserId) {
         return {
           userId: user.userId,
           displayName: user.displayName,
           username: user.username,
-          roleCategory: category,
           bindingStatus: "bound" as const,
           lineUserIdMasked: maskLineUserId(lineUserId),
           pendingCode: null,
@@ -227,12 +252,11 @@ export async function listLineBindingOverviewForAdmin() {
           userId: user.userId,
           displayName: user.displayName,
           username: user.username,
-          roleCategory: category,
           bindingStatus: "pending" as const,
           lineUserIdMasked: null,
           pendingCode: pending.code,
           pendingExpiresAt: pending.expiresAt.toISOString(),
-          prefs: null,
+          prefs,
         };
       }
 
@@ -240,12 +264,11 @@ export async function listLineBindingOverviewForAdmin() {
         userId: user.userId,
         displayName: user.displayName,
         username: user.username,
-        roleCategory: category,
         bindingStatus: "none" as const,
         lineUserIdMasked: null,
         pendingCode: null,
         pendingExpiresAt: null,
-        prefs: null,
+        prefs,
       };
     }),
   );
@@ -274,21 +297,20 @@ export async function adminRegenerateBindingCode(targetUserId: number) {
 export async function listSubscribersForMorningBriefing(): Promise<LineSubscriber[]> {
   return (await loadSubscribers()).filter(
     s =>
-      isManagerRole(s.roles) &&
-      (s.prefs.receiveMorningBriefing || s.prefs.receivePendingDispatch || s.prefs.receiveQuoteFollowUp),
+      s.prefs.receiveMorningBriefing
+      || s.prefs.receiveQuoteFollowUp
+      || s.prefs.receiveAccountsReceivable,
   );
 }
 
 export async function listSubscribersForEveningReminder(): Promise<LineSubscriber[]> {
   return (await loadSubscribers()).filter(
-    s => isManagerRole(s.roles) && s.prefs.receiveEveningReminder,
+    s => s.prefs.receiveEveningReminder || s.prefs.receiveAccountsReceivable,
   );
 }
 
 export async function listSubscribersForReceivableCollection(): Promise<LineSubscriber[]> {
-  return (await loadSubscribers()).filter(
-    s => isManagerRole(s.roles) && s.prefs.receiveReceivableCollection,
-  );
+  return (await loadSubscribers()).filter(s => s.prefs.receiveReceivableCollection);
 }
 
 export async function getSubscriberForUser(userId: number): Promise<LineSubscriber | null> {
@@ -298,13 +320,20 @@ export async function getSubscriberForUser(userId: number): Promise<LineSubscrib
       displayName: usersTable.displayName,
       username: usersTable.username,
       lineUserId: usersTable.lineUserId,
-      role: usersTable.role,
-      roles: usersTable.roles,
       receiveMorningBriefing: userLineNotificationPrefsTable.receiveMorningBriefing,
       receiveEveningReminder: userLineNotificationPrefsTable.receiveEveningReminder,
       receivePendingDispatch: userLineNotificationPrefsTable.receivePendingDispatch,
       receiveQuoteFollowUp: userLineNotificationPrefsTable.receiveQuoteFollowUp,
       receiveReceivableCollection: userLineNotificationPrefsTable.receiveReceivableCollection,
+      receiveAccountsReceivable: userLineNotificationPrefsTable.receiveAccountsReceivable,
+      receiveAiWorkReminder: userLineNotificationPrefsTable.receiveAiWorkReminder,
+      receiveNextJobReminder: userLineNotificationPrefsTable.receiveNextJobReminder,
+      receiveFieldDepart: userLineNotificationPrefsTable.receiveFieldDepart,
+      receiveFieldArrive: userLineNotificationPrefsTable.receiveFieldArrive,
+      receiveFieldComplete: userLineNotificationPrefsTable.receiveFieldComplete,
+      receiveFieldDelay: userLineNotificationPrefsTable.receiveFieldDelay,
+      receiveLeaveRequest: userLineNotificationPrefsTable.receiveLeaveRequest,
+      receiveCompanyAnnouncement: userLineNotificationPrefsTable.receiveCompanyAnnouncement,
       receiveWorkReminder60: userLineNotificationPrefsTable.receiveWorkReminder60,
       receiveWorkReminder30: userLineNotificationPrefsTable.receiveWorkReminder30,
       receiveWorkReminder15: userLineNotificationPrefsTable.receiveWorkReminder15,
@@ -313,7 +342,6 @@ export async function getSubscriberForUser(userId: number): Promise<LineSubscrib
       receivePreviousJobIncomplete: userLineNotificationPrefsTable.receivePreviousJobIncomplete,
       receiveReadyForNextJob: userLineNotificationPrefsTable.receiveReadyForNextJob,
       receiveOneTapNavigation: userLineNotificationPrefsTable.receiveOneTapNavigation,
-      receiveCompanyAnnouncement: userLineNotificationPrefsTable.receiveCompanyAnnouncement,
     })
     .from(usersTable)
     .leftJoin(
@@ -323,14 +351,12 @@ export async function getSubscriberForUser(userId: number): Promise<LineSubscrib
     .where(eq(usersTable.id, userId));
 
   if (!row?.lineUserId?.trim()) return null;
-  const roles = effectiveRoleList(row.roles, row.role);
   return {
     userId: row.userId,
     displayName: row.displayName,
     username: row.username,
     lineUserId: row.lineUserId.trim(),
-    roles,
-    prefs: mapPrefsRow(row, defaultLinePrefsForRoles(roles)),
+    prefs: mapDbRowToUserPrefs(row),
   };
 }
 
@@ -339,23 +365,19 @@ export async function adminUnbindLineUser(targetUserId: number): Promise<void> {
 }
 
 export async function getMyLineNotificationPrefsDto(userId: number) {
-  const roles = await getUserRoles(userId);
   await ensureDefaultPrefsForUser(userId);
-  const prefs = await getPrefsForUser(userId);
+  const prefs = await getUserNotificationPrefsDto(userId);
   const subscriber = await getSubscriberForUser(userId);
-  const mapped = mapPrefsRow(prefs, defaultLinePrefsForRoles(roles));
-  return prefsToDto(mapped, Boolean(subscriber), roles);
+  return prefsToDto(prefs, Boolean(subscriber));
 }
 
-export async function updateMyLineNotificationPrefs(
+export async function adminUpdateUserNotificationPrefs(
   userId: number,
-  input: Partial<LineSubscriberPrefs>,
+  input: Partial<UserNotificationPrefs>,
 ) {
-  const roles = await getUserRoles(userId);
   const updated = await updatePrefsForUser(userId, input);
   const subscriber = await getSubscriberForUser(userId);
-  const mapped = mapPrefsRow(updated, defaultLinePrefsForRoles(roles));
-  return prefsToDto(mapped, Boolean(subscriber), roles);
+  return prefsToDto(updated, Boolean(subscriber));
 }
 
 export async function clearLineUserFromOthers(lineUserId: string, keepUserId: number): Promise<void> {
@@ -365,14 +387,20 @@ export async function clearLineUserFromOthers(lineUserId: string, keepUserId: nu
     .where(and(eq(usersTable.lineUserId, lineUserId), ne(usersTable.id, keepUserId)));
 }
 
+export async function userHasNotificationTypeEnabled(
+  userId: number,
+  notificationType: string,
+  context?: NotificationPrefContext,
+): Promise<boolean> {
+  const prefs = await getUserNotificationPrefsDto(userId);
+  return isNotificationTypeEnabled(prefs, notificationType, context);
+}
+
+/** @deprecated */
 export async function getWorkReminderPrefForUser(
   userId: number,
-  prefKey: LineNotificationPrefKey,
+  _prefKey: NotificationPrefKey,
 ): Promise<boolean> {
-  const roles = await getUserRoles(userId);
-  const allowedKeys = sanitizeLinePrefPatch(roles, { [prefKey]: true });
-  if (!(prefKey in allowedKeys)) return false;
-  const prefs = await getPrefsForUser(userId);
-  const mapped = mapPrefsRow(prefs, defaultLinePrefsForRoles(roles));
-  return Boolean(mapped[prefKey as keyof LineSubscriberPrefs]);
+  const prefs = await getUserNotificationPrefsDto(userId);
+  return Boolean(prefs.receiveNextJobReminder || prefs.receiveAiWorkReminder);
 }

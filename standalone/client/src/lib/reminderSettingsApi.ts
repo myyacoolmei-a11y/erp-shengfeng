@@ -142,7 +142,20 @@ export async function getMyLineNotificationPrefs(): Promise<UserLineNotification
   return customFetch("/api/reminder-settings/my-line-notifications");
 }
 
-export async function updateMyLineNotificationPrefs(data: Partial<Omit<UserLineNotificationPrefsDto, "lineLinked">>): Promise<UserLineNotificationPrefsDto> {
+export async function adminUpdateUserNotificationPrefs(
+  userId: number,
+  data: Partial<Omit<UserLineNotificationPrefsDto, "lineLinked" | "canEdit">>,
+): Promise<UserLineNotificationPrefsDto> {
+  return customFetch(`/api/reminder-settings/line-subscriptions/${userId}/notification-prefs`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+/** @deprecated 一般使用者不可自行修改通知權限 */
+export async function updateMyLineNotificationPrefs(
+  data: Partial<Omit<UserLineNotificationPrefsDto, "lineLinked" | "canEdit">>,
+): Promise<UserLineNotificationPrefsDto> {
   return customFetch("/api/reminder-settings/my-line-notifications", {
     method: "PATCH",
     body: JSON.stringify(data),

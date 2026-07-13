@@ -14,7 +14,7 @@ const MAX_ITEMS = 15;
 export function buildPersonalizedMorningBriefingMessage(
   prefs: {
     receiveMorningBriefing: boolean;
-    receivePendingDispatch: boolean;
+    receiveAccountsReceivable: boolean;
     receiveQuoteFollowUp: boolean;
   },
   data: {
@@ -23,8 +23,8 @@ export function buildPersonalizedMorningBriefingMessage(
     quoteFollowUps: Array<{ customerName: string; quoteAmount: number; waitingDays: number }>;
   },
 ): string | null {
-  const includeDispatch = prefs.receivePendingDispatch;
-  const includeReceivables = prefs.receiveMorningBriefing;
+  const includeDispatch = prefs.receiveMorningBriefing;
+  const includeReceivables = prefs.receiveAccountsReceivable;
   const includeQuotes = prefs.receiveQuoteFollowUp;
 
   if (!includeDispatch && !includeReceivables && !includeQuotes) {

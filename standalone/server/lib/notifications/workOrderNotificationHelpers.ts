@@ -13,6 +13,7 @@ export async function notifyManagersFieldProgress(opts: {
   message: string;
   dedupeKey: string;
   lineMessage?: string;
+  fieldProgressAction: "depart" | "arrive" | "complete" | "unable";
 }): Promise<void> {
   try {
     const managerIds = await listActiveManagerUserIds();
@@ -43,6 +44,7 @@ export async function notifyManagersFieldProgress(opts: {
       dedupeKey: opts.dedupeKey,
       lineMessage: opts.lineMessage ?? `📍 ${opts.title}\n\n${opts.message}`,
       channels: ["in_app", "web_push", "line"],
+      fieldProgressAction: opts.fieldProgressAction,
     });
   } catch (err) {
     logger.error({ err, workOrderId: opts.workOrderId }, "notifyManagersFieldProgress failed");
