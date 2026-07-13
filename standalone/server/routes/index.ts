@@ -30,6 +30,7 @@ import partnerRouter from "./partner";
 import notificationsRouter from "./notifications";
 import aiWorkReminderSettingsRouter from "./aiWorkReminderSettings";
 import pushRouter from "./push";
+import dealCalculationsRouter from "./dealCalculations";
 
 import { authenticate } from "../lib/auth";
 
@@ -68,6 +69,7 @@ router.use(aiWorkReminderSettingsRouter);
 router.use(partnerRouter);
 router.use(notificationsRouter);
 router.use(pushRouter);
+router.use(dealCalculationsRouter);
 router.use(workOrderFieldProgressRouter);
 
 export default router;

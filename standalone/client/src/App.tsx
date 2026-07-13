@@ -30,6 +30,7 @@ import WholesaleSettlements from "@/pages/wholesale-settlements";
 import PartnerCultureRoute from "@/pages/partner-culture-route";
 import NotificationSettings from "@/pages/notification-settings";
 import AiAssistant from "@/pages/ai-assistant";
+import DealCalculation from "@/pages/deal-calculation";
 import WorkHoursStats from "@/pages/work-hours-stats";
 
 function ComingSoon({ title }: { title: string }) {
@@ -139,6 +140,11 @@ function AppRoutes() {
                   <CustomerDetail />
                 </RoleGuard>
               )}
+            </Route>
+            <Route path="/deal-calculation">
+              <RoleGuard roles={["super_admin", "owner", "admin", "sales", "accountant"]}>
+                <DealCalculation />
+              </RoleGuard>
             </Route>
             <Route path="/quotes">
               <RoleGuard roles={["super_admin", "owner", "admin", "sales", "distributor"]}>

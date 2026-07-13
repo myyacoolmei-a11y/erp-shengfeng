@@ -12,7 +12,7 @@ import {
   useCreateMaintenanceReminder,
 } from "@workspace/api-client-react";
 import type { Quote, WorkOrder, Receivable, Warranty, MaintenanceReminder } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -22,9 +22,10 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { ArrowLeft, Pencil, Trash2, Plus, ExternalLink, Eye } from "lucide-react";
+import { ArrowLeft, Pencil, Trash2, Plus, ExternalLink, Eye, Calculator } from "lucide-react";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
+import { listCustomerTimeline } from "@/lib/dealCalcApi";
 
 const STATUS_COLORS: Record<string, string> = {
   "草稿": "bg-gray-100 text-gray-700",
@@ -258,6 +259,12 @@ export default function CustomerDetail() {
     }
   });
 
+  const { data: timelineEvents } = useQuery({
+    queryKey: ["customer-timeline", id],
+    queryFn: () => listCustomerTimeline(id),
+    enabled: id > 0,
+  });
+
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState({ name: "", phone: "", address: "", email: "", discountScheme: "", notes: "", primarySalesRepId: 0 });
   const [showAcForm, setShowAcForm] = useState(false);
@@ -301,6 +308,11 @@ export default function CustomerDetail() {
         <Button variant="outline" size="sm" onClick={startEdit}>
           <Pencil className="h-3.5 w-3.5 mr-1" />編輯
         </Button>
+        <Link href={`/deal-calculation?customerId=${id}&customerName=${encodeURIComponent(customer.name)}`}>
+          <Button variant="default" size="sm">
+            <Calculator className="h-3.5 w-3.5 mr-1" />成交試算
+          </Button>
+        </Link>
       </div>
 
       <Tabs defaultValue="info">
@@ -318,6 +330,9 @@ export default function CustomerDetail() {
           </TabsTrigger>
           <TabsTrigger value="warranties" className="flex-1 text-xs">保固</TabsTrigger>
           <TabsTrigger value="reminders" className="flex-1 text-xs">保養提醒</TabsTrigger>
+          <TabsTrigger value="timeline" className="flex-1 text-xs">
+            試算紀錄{timelineEvents && timelineEvents.length > 0 && <span className="ml-1 text-xs text-muted-foreground">({timelineEvents.length})</span>}
+          </TabsTrigger>
         </TabsList>
 
         {/* ── 基本資料 ── */}
@@ -605,6 +620,44 @@ export default function CustomerDetail() {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        <TabsContent value="timeline">
+          <Card>
+            <CardContent className="p-0">
+              {timelineEvents && timelineEvents.length > 0 ? (
+                <div className="divide-y">
+                  {timelineEvents.map(ev => (
+                    <div key={ev.id} className="px-4 py-3 flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium">{ev.title}</p>
+                        {ev.description && <p className="text-xs text-muted-foreground mt-0.5">{ev.description}</p>}
+                        <p className="text-[11px] text-muted-foreground mt-1">
+                          {new Date(ev.createdAt).toLocaleString("zh-TW")}
+                        </p>
+                      </div>
+                      {ev.eventType === "deal_calculation" && (
+                        <Link href={`/deal-calculation?customerId=${id}&customerName=${encodeURIComponent(customer.name)}`}>
+                          <Button variant="ghost" size="sm" className="shrink-0">
+                            <Calculator className="h-3.5 w-3.5 mr-1" />再試算
+                          </Button>
+                        </Link>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="py-8 text-center text-sm text-muted-foreground space-y-2">
+                  <p>尚無試算紀錄</p>
+                  <Link href={`/deal-calculation?customerId=${id}&customerName=${encodeURIComponent(customer.name)}`}>
+                    <Button size="sm" variant="outline">
+                      <Calculator className="h-3.5 w-3.5 mr-1" />開始成交試算
+                    </Button>
+                  </Link>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
       </Tabs>
 

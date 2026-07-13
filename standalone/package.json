@@ -13,6 +13,7 @@
     "db:migrate-product-catalog": "node scripts/db-migrate-product-catalog.mjs",
     "db:studio": "drizzle-kit studio --config drizzle.config.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "tsx --test server/lib/dealCalc/dealCalc.test.ts",
     "pwa:icons": "node scripts/generate-pwa-icons.mjs"
   },
   "dependencies": {

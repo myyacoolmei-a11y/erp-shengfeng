@@ -222,6 +222,7 @@ export const NAV_HREF_FEATURES: Record<string, FeatureKey | FeatureKey[]> = {
   "/partner-home": "company_announce",
   "/partner-culture": "company_announce",
   "/customers": "customers",
+  "/deal-calculation": ["customers", "ai_assistant"],
   "/quotes": "quotes",
   "/work-orders": "work_orders",
   "/repair-cases": "repair_cases",
