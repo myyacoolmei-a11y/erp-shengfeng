@@ -23,11 +23,10 @@ export function buildQuotationHtml(quote: any): string {
     taxType,
   );
 
-  // Max 10 rows for A4 single page
-  const maxRows = 10;
-  const displayItems = items.slice(0, maxRows);
-  const itemRows = displayItems.length > 0
-    ? displayItems.map((item: any, i: number) => `
+  // Only render real item rows — never pad blank rows / never add extra <td>.
+  // Column count must stay exactly 10 to match thead / colgroup.
+  const itemRows = items.length > 0
+    ? items.map((item: any, i: number) => `
       <tr>
         <td class="tac">${i + 1}</td>
         <td class="tac">${esc(item.category)}</td>
@@ -52,14 +51,6 @@ export function buildQuotationHtml(quote: any): string {
         <td class="tar fw7">${fmtMoney(rawTotal)}</td>
         <td class="tal small col-notes"></td>
       </tr>`;
-
-  const padCount = Math.max(0, maxRows - displayItems.length - (items.length === 0 ? 1 : 0));
-  const padRows = Array.from({ length: padCount }, () => `
-    <tr>
-      <td class="tac">&nbsp;</td>
-      <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
-      <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
-    </tr>`).join("");
 
   const notesList = (quote.notes ?? "").split(/\n/).filter((l: string) => l.trim()).slice(0, 3)
     .map((l: string) => `<div class="note-line">${esc(l)}</div>`).join("")
@@ -293,19 +284,33 @@ ${PDF_LAYOUT_CSS}
   <div class="sec">
     <div class="stitle">工程設備明細 Equipment Schedule</div>
     <table>
-      <thead><tr class="head-row">
-        <th class="col-w6">項次</th>
-        <th class="col-w10">類別</th>
-        <th class="col-w8">品牌</th>
-        <th>品項</th>
-        <th class="col-w10">機型</th>
-        <th class="col-w6">數量</th>
-        <th class="col-w6">單位</th>
-        <th class="col-w12">單價</th>
-        <th class="col-w12">小計</th>
-        <th class="col-w12">備註</th>
-      </tr></thead>
-      <tbody>${itemRows}${padRows}</tbody>
+      <colgroup>
+        <col class="col-w6">
+        <col class="col-w10">
+        <col class="col-w8">
+        <col>
+        <col class="col-w10">
+        <col class="col-w6">
+        <col class="col-w6">
+        <col class="col-w12">
+        <col class="col-w12">
+        <col class="col-w12">
+      </colgroup>
+      <thead>
+        <tr class="head-row">
+          <th>項次</th>
+          <th>類別</th>
+          <th>品牌</th>
+          <th>品項</th>
+          <th>機型</th>
+          <th>數量</th>
+          <th>單位</th>
+          <th>單價</th>
+          <th>小計</th>
+          <th>備註</th>
+        </tr>
+      </thead>
+      <tbody>${itemRows}</tbody>
     </table>
   </div>
 
