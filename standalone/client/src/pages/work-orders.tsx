@@ -470,6 +470,11 @@ export default function WorkOrders() {
       return;
     }
     const payload = buildPayload(form);
+    if (payload.quoteId) {
+      console.log("LINK QUOTE WORK ORDER PAYLOAD", payload);
+    } else {
+      console.log("DIRECT WORK ORDER PAYLOAD", payload);
+    }
     if (mode === "create") {
       createMutation.mutate({ data: payload });
       return;

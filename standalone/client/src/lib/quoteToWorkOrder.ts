@@ -1,5 +1,5 @@
 import { makeEmpty, defaultEquipmentItem, type WOForm } from "@/components/work-order-form";
-import { stripQuotePricingFromNotes, categoryToProjectType } from "../../../shared/workOrderNotes.ts";
+import { stripQuotePricingFromNotes, categoryToProjectType, deriveQuoteCustomer } from "../../../shared/workOrderNotes.ts";
 
 export { stripQuotePricingFromNotes, categoryToProjectType };
 
@@ -53,14 +53,25 @@ export function buildWorkOrderFormFromQuote(q: any): WOForm {
   const salesLine = q.salesRepName ? `負責業務：${q.salesRepName}` : "";
   const notesParts = [q.notes, salesLine].filter(Boolean);
 
+  // Resolve the quote's customer using the same rules as the direct
+  // "新增派工單" flow: an official customerId is preserved as-is; otherwise
+  // the quote's name/phone are carried over as the work order's temporary
+  // customer. `customerMode` MUST be set here — buildPayload() relies on it
+  // to decide whether to send customerId or the temporary customer fields,
+  // and previously left it unset, which caused customerId to be dropped and
+  // customerName to be sent as an empty string (HTTP 400).
+  const { customerId, customerName, customerPhone } = deriveQuoteCustomer(q);
+  const hasCustomerId = customerId != null;
+
   return {
     ...makeEmpty(),
     quoteId: q.id,
-    customerId: q.customerId ?? 0,
-    customerName: q.customerId ? "" : (q.customerName ?? ""),
+    customerMode: hasCustomerId ? "existing" : (customerName ? "temporary" : null),
+    customerId: hasCustomerId ? customerId : 0,
+    customerName: hasCustomerId ? "" : customerName,
     title: q.title ?? "",
     contactPerson: q.contactPerson ?? "",
-    mobilePhone: q.customerPhone ?? "",
+    mobilePhone: customerPhone,
     installAddress: q.address ?? "",
     projectType: categoryToProjectType(firstCategory),
     description: q.description ?? "",
