@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { MapPin, Plus, X } from "lucide-react";
 import { CustomerSelector, type CustomerSelectorValue } from "@/components/customer-selector";
-import { stripQuotePricingFromNotes, categoryToProjectType } from "../../../shared/workOrderNotes.ts";
+import { stripQuotePricingFromNotes, categoryToProjectType, deriveQuoteCustomer } from "../../../shared/workOrderNotes.ts";
 import { DEFAULT_AI_REMINDER_SCENARIO_IDS, type AiReminderRuleSource } from "@/lib/aiWorkReminderSettings";
 import { WorkOrderAiReminderSection } from "@/components/work-orders/WorkOrderAiReminderSection";
 
@@ -423,18 +423,25 @@ export function WorkOrderFormFields({
     const qid = parseInt(v, 10);
     const quote = quotes.find(q => q.id === qid);
     if (!quote) return;
-    const linkedId = quote.customerId != null && quote.customerId > 0 ? quote.customerId : 0;
+    // Same resolution rules as buildWorkOrderFormFromQuote(): an official
+    // customerId on the quote must be preserved, and customerMode has to be
+    // set explicitly, otherwise buildPayload() treats the linked customer as
+    // unlinked and sends customerId: null + customerName: "" (HTTP 400).
+    const { customerId: quoteCustomerId, customerName: quoteCustomerName, customerPhone: quoteCustomerPhone } =
+      deriveQuoteCustomer(quote);
+    const linkedId = quoteCustomerId ?? 0;
     const cust = linkedId > 0 ? customers.find((c: any) => c.id === linkedId) : undefined;
     const salesLine = quote.salesRepName ? `負責業務：${quote.salesRepName}` : "";
     const notesParts = [quote.notes, salesLine].filter(Boolean);
     setForm(f => ({
       ...f,
       quoteId: qid,
+      customerMode: linkedId > 0 ? "existing" : (quoteCustomerName ? "temporary" : f.customerMode),
       customerId: linkedId,
-      customerName: linkedId > 0 ? "" : (quote.customerName ?? ""),
+      customerName: linkedId > 0 ? "" : (quoteCustomerName || f.customerName),
       title: quote.title || f.title,
       contactPerson: quote.contactPerson || cust?.contactPerson || f.contactPerson || "",
-      mobilePhone: quote.customerPhone || cust?.mobile || f.mobilePhone || "",
+      mobilePhone: quoteCustomerPhone || cust?.mobile || f.mobilePhone || "",
       telephone: f.telephone || cust?.phone || "",
       installAddress: quote.address || cust?.address || f.installAddress || "",
       projectType: quote.items?.[0]?.category

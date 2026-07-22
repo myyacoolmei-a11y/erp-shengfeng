@@ -531,7 +531,7 @@ export default function QuotesPage() {
       return;
     }
     const payload = buildPayload(woForm);
-    console.log("[work-order submit]", { customerId: payload.customerId, quoteId: payload.quoteId, customerName: payload.customerName });
+    console.log("QUOTE TO WORK ORDER PAYLOAD", payload);
     createWoMutation.mutate({ data: payload });
   }
 
