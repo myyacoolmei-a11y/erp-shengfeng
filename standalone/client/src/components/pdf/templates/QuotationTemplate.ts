@@ -23,34 +23,59 @@ export function buildQuotationHtml(quote: any): string {
     taxType,
   );
 
-  // Only render real item rows — never pad blank rows / never add extra <td>.
-  // Column count must stay exactly 10 to match thead / colgroup.
-  const itemRows = items.length > 0
-    ? items.map((item: any, i: number) => `
-      <tr>
-        <td class="tac">${i + 1}</td>
-        <td class="tac">${esc(item.category)}</td>
-        <td class="tac">${esc(item.brand || "—")}</td>
-        <td class="tal col-item">${esc(item.itemName)}</td>
-        <td class="tac">${esc(item.model || "—")}</td>
-        <td class="tac">${Number(item.quantity)}</td>
-        <td class="tac">${esc(item.unit)}</td>
-        <td class="tar">${fmtMoney(Number(item.unitPrice))}</td>
-        <td class="tar fw7">${fmtMoney(Number(item.subtotal))}</td>
-        <td class="tal small col-notes">${esc(item.notes || "")}</td>
-      </tr>`).join("")
-    : `<tr>
-        <td class="tac">1</td>
-        <td class="tac">工程</td>
-        <td class="tac">—</td>
-        <td class="tal col-item">${esc(quote.title)}</td>
-        <td class="tac">—</td>
-        <td class="tac">1</td>
-        <td class="tac">式</td>
-        <td class="tar">${fmtMoney(rawTotal)}</td>
-        <td class="tar fw7">${fmtMoney(rawTotal)}</td>
-        <td class="tal small col-notes"></td>
-      </tr>`;
+  // ── Equipment table: exactly these 10 columns, no padding rows ──────────
+  // th / td / colgroup MUST stay in sync. Do not add colspan/rowspan fillers.
+  const TABLE_HEADERS = [
+    "項次",
+    "類別",
+    "品牌",
+    "品項",
+    "機型",
+    "數量",
+    "單位",
+    "單價",
+    "小計",
+    "備註",
+  ] as const;
+  const TABLE_COL_WIDTHS = [
+    "5%",
+    "9%",
+    "9%",
+    "22%",
+    "12%",
+    "6%",
+    "5%",
+    "11%",
+    "11%",
+    "10%",
+  ] as const;
+
+  function renderItemRow(item: any, index: number): string {
+    const cells = [
+      `<td class="tac">${index + 1}</td>`,
+      `<td class="tac">${esc(item.category || "")}</td>`,
+      `<td class="tac">${esc(item.brand || "—")}</td>`,
+      `<td class="tal col-item">${esc(item.itemName || "")}</td>`,
+      `<td class="tac">${esc(item.model || "—")}</td>`,
+      `<td class="tac">${Number(item.quantity ?? 0)}</td>`,
+      `<td class="tac">${esc(item.unit || "")}</td>`,
+      `<td class="tar">${fmtMoney(Number(item.unitPrice ?? 0))}</td>`,
+      `<td class="tar fw7">${fmtMoney(Number(item.subtotal ?? 0))}</td>`,
+      `<td class="tal small col-notes">${esc(item.notes || "")}</td>`,
+    ];
+    if (cells.length !== TABLE_HEADERS.length) {
+      throw new Error(
+        `Quotation PDF column mismatch: row has ${cells.length} cells, header has ${TABLE_HEADERS.length}`,
+      );
+    }
+    return `<tr>${cells.join("")}</tr>`;
+  }
+
+  // tbody rows = items only. Never pad blank placeholder / fixed-N filler rows.
+  const itemRows = items.map((item, index) => renderItemRow(item, index)).join("");
+
+  const colgroupHtml = TABLE_COL_WIDTHS.map((w) => `<col style="width:${w}">`).join("");
+  const theadHtml = TABLE_HEADERS.map((label) => `<th>${label}</th>`).join("");
 
   const notesList = (quote.notes ?? "").split(/\n/).filter((l: string) => l.trim()).slice(0, 3)
     .map((l: string) => `<div class="note-line">${esc(l)}</div>`).join("")
@@ -284,32 +309,8 @@ ${PDF_LAYOUT_CSS}
   <div class="sec">
     <div class="stitle">工程設備明細 Equipment Schedule</div>
     <table>
-      <colgroup>
-        <col class="col-w6">
-        <col class="col-w10">
-        <col class="col-w8">
-        <col>
-        <col class="col-w10">
-        <col class="col-w6">
-        <col class="col-w6">
-        <col class="col-w12">
-        <col class="col-w12">
-        <col class="col-w12">
-      </colgroup>
-      <thead>
-        <tr class="head-row">
-          <th>項次</th>
-          <th>類別</th>
-          <th>品牌</th>
-          <th>品項</th>
-          <th>機型</th>
-          <th>數量</th>
-          <th>單位</th>
-          <th>單價</th>
-          <th>小計</th>
-          <th>備註</th>
-        </tr>
-      </thead>
+      <colgroup>${colgroupHtml}</colgroup>
+      <thead><tr class="head-row">${theadHtml}</tr></thead>
       <tbody>${itemRows}</tbody>
     </table>
   </div>

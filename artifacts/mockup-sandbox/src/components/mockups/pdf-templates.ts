@@ -47,8 +47,7 @@ export function buildQuotationHtml(quote: any): string {
   };
   const statusBadge = `<span style="font-size:8pt;font-weight:700;padding:1mm 3mm;border-radius:1mm;${statusStyles[quote.status] ?? ""}">${quote.status ?? ""}</span>`;
 
-  const itemRows = items.length > 0
-    ? items.map((item: any, i: number) => `
+  const itemRows = items.map((item: any, i: number) => `
       <tr>
         <td>${i + 1}</td>
         <td>${esc(item.category)}</td>
@@ -59,11 +58,7 @@ export function buildQuotationHtml(quote: any): string {
         <td style="text-align:right">${fmtMoney(Number(item.unitPrice))}</td>
         <td style="text-align:right;font-weight:600">${fmtMoney(Number(item.subtotal))}</td>
         <td class="tl">${esc(item.notes || "")}</td>
-      </tr>`).join("")
-    : `<tr><td>1</td><td>工程</td><td>—</td><td class="tl">${esc(quote.title)}</td><td>1</td><td>式</td><td style="text-align:right">${fmtMoney(rawTotal)}</td><td style="text-align:right;font-weight:600">${fmtMoney(rawTotal)}</td><td></td></tr>`;
-
-  const padRows = Array.from({ length: Math.max(0, 4 - items.length) }, (_, i) => `
-    <tr><td>${items.length + i + 1}</td><td></td><td></td><td class="tl"></td><td></td><td></td><td></td><td></td><td></td></tr>`).join("");
+      </tr>`).join("");
 
   const notesHtml = (quote.notes ?? "").split(/\n/).filter((l: string) => l.trim()).slice(0, 5)
     .map((l: string, i: number) => `<div style="display:flex;gap:2mm;padding:0.8mm 0;font-size:8pt;line-height:1.4"><span style="color:#9ACD32;font-weight:700;min-width:4mm">${i + 1}.</span><span>${esc(l.replace(/^\d+[.)\u3001\uff0e]\s*/, ""))}</span></div>`).join("")
@@ -165,7 +160,7 @@ tbody tr:last-child td{border-bottom:1.5px solid #9ACD32}
       <th style="width:22mm">單價</th><th style="width:22mm">小計</th>
       <th style="width:18mm">備註</th>
     </tr></thead>
-    <tbody>${itemRows}${padRows}</tbody>
+    <tbody>${itemRows}</tbody>
   </table>
 </div>
 

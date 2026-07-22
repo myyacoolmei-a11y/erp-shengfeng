@@ -23,31 +23,22 @@ export function buildQuotationHtml(quote: any): string {
   const taxAmt = subtotal - preTax;
   const total = preTax + taxAmt;
 
-  // Only render real item rows — never pad blank rows.
-  const itemRows = items.length > 0
-    ? items.map((item: any, i: number) => `
-      <tr>
-        <td class="tac">${i + 1}</td>
-        <td class="tac">${esc(item.category)}</td>
+  function renderItemRow(item: any, index: number): string {
+    return `<tr>
+        <td class="tac">${index + 1}</td>
+        <td class="tac">${esc(item.category || "")}</td>
         <td class="tac">${esc(item.brand || "—")}</td>
-        <td class="tal">${esc(item.itemName)}</td>
-        <td class="tac">${Number(item.quantity)}</td>
-        <td class="tac">${esc(item.unit)}</td>
-        <td class="tar">${fmtMoney(Number(item.unitPrice))}</td>
-        <td class="tar fw7">${fmtMoney(Number(item.subtotal))}</td>
+        <td class="tal">${esc(item.itemName || "")}</td>
+        <td class="tac">${Number(item.quantity ?? 0)}</td>
+        <td class="tac">${esc(item.unit || "")}</td>
+        <td class="tar">${fmtMoney(Number(item.unitPrice ?? 0))}</td>
+        <td class="tar fw7">${fmtMoney(Number(item.subtotal ?? 0))}</td>
         <td class="tal small">${esc(item.notes || "")}</td>
-      </tr>`).join("")
-    : `<tr>
-        <td class="tac">1</td>
-        <td class="tac">工程</td>
-        <td class="tac">—</td>
-        <td class="tal">${esc(quote.title)}</td>
-        <td class="tac">1</td>
-        <td class="tac">式</td>
-        <td class="tar">${fmtMoney(rawTotal)}</td>
-        <td class="tar fw7">${fmtMoney(rawTotal)}</td>
-        <td class="tal small"></td>
       </tr>`;
+  }
+
+  // tbody = items only — never pad blank rows
+  const itemRows = items.map((item, index) => renderItemRow(item, index)).join("");
 
   const notesList = (quote.notes ?? "").split(/\n/).filter((l: string) => l.trim()).slice(0, 3)
     .map((l: string) => `<div class="note-line">${esc(l)}</div>`).join("")

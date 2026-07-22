@@ -88,14 +88,12 @@ function buildQuotationHtml(quote){
   const preTax = taxType === "含稅" ? subtotal / 1.05 : subtotal;
   const taxAmt = subtotal - preTax;
   const total = preTax + taxAmt;
-  const itemRows = items.length > 0 ? items.map((item,i) => `
+  const itemRows = items.map((item,i) => `
     <tr><td class="tac">${i+1}</td><td class="tac">${esc(item.category)}</td><td class="tac">${esc(item.brand||"—")}</td>
-      <td class="tal">${esc(item.itemName)}</td><td class="tac">${Number(item.quantity)}</td><td class="tac">${esc(item.unit)}</td>
+      <td class="tal">${esc(item.itemName)}</td><td class="tac">${esc(item.model||"—")}</td>
+      <td class="tac">${Number(item.quantity)}</td><td class="tac">${esc(item.unit)}</td>
       <td class="tar">${fmtMoney(Number(item.unitPrice))}</td><td class="tar fw7">${fmtMoney(Number(item.subtotal))}</td>
-      <td class="tal small">${esc(item.notes||"")}</td></tr>`).join("") :
-    `<tr><td class="tac">1</td><td class="tac">工程</td><td class="tac">—</td>
-      <td class="tal">${esc(quote.title)}</td><td class="tac">1</td><td class="tac">式</td>
-      <td class="tar">${fmtMoney(rawTotal)}</td><td class="tar fw7">${fmtMoney(rawTotal)}</td><td class="tal small"></td></tr>`;
+      <td class="tal small">${esc(item.notes||"")}</td></tr>`).join("");
   const notesList = (quote.notes??"").split(/\n/).filter(l=>l.trim()).slice(0,3).map(l=>`<div class="note-line">${esc(l)}</div>`).join("") || `<div class="note-line muted">報價單有效期限30日，施工前請支付50%訂金，完工驗收後付清尾款。</div>`;
 
   return `<!DOCTYPE html><html lang="zh-TW"><head><meta charset="UTF-8"><title>報價單 ${quoteNo}</title>
@@ -175,10 +173,10 @@ tr{page-break-inside:avoid;break-inside:avoid}
     <div class="stitle">工程設備明細 Equipment Schedule</div>
     <table>
       <colgroup>
-        <col class="col-w6"><col class="col-w10"><col class="col-w8"><col>
-        <col class="col-w6"><col class="col-w6"><col class="col-w12"><col class="col-w12"><col class="col-w12">
+        <col style="width:5%"><col style="width:9%"><col style="width:9%"><col style="width:22%"><col style="width:12%">
+        <col style="width:6%"><col style="width:5%"><col style="width:11%"><col style="width:11%"><col style="width:10%">
       </colgroup>
-      <thead><tr class="head-row"><th>項次</th><th>類別</th><th>品牌</th><th>品項</th><th>數量</th><th>單位</th><th>單價</th><th>小計</th><th>備註</th></tr></thead>
+      <thead><tr class="head-row"><th>項次</th><th>類別</th><th>品牌</th><th>品項</th><th>機型</th><th>數量</th><th>單位</th><th>單價</th><th>小計</th><th>備註</th></tr></thead>
       <tbody>${itemRows}</tbody>
     </table>
   </div>
