@@ -57,6 +57,18 @@ export function userFeaturePermissions(user: AuthUser | null): FeatureKey[] {
   return resolveFeaturePermissions(user);
 }
 
+/** Default landing path based on user's roles — checks in priority order */
+export function defaultPathForRole(user: AuthUser): string {
+  const roles = effectiveRoles(user);
+  if (roles.includes("super_admin")) return "/users";
+  if (roles.includes("owner") || roles.includes("admin")) return "/";
+  if (roles.includes("accountant")) return "/receivables";
+  if (roles.includes("sales")) return "/customers";
+  if (roles.includes("engineer") || roles.includes("technician")) return "/partner-culture";
+  if (roles.includes("distributor")) return "/quotes";
+  return "/login";
+}
+
 interface AuthContextType {
   user: AuthUser | null;
   isAuthenticated: boolean;
@@ -71,15 +83,22 @@ const AuthContext = createContext<AuthContextType | null>(null);
 const TOKEN_KEY = "erp_auth_token";
 const USER_KEY = "erp_auth_user";
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(() => {
-    try {
-      const stored = localStorage.getItem(USER_KEY);
-      return stored ? (JSON.parse(stored) as AuthUser) : null;
-    } catch {
+function readStoredSession(): AuthUser | null {
+  try {
+    const token = localStorage.getItem(TOKEN_KEY);
+    if (!token) {
+      localStorage.removeItem(USER_KEY);
       return null;
     }
-  });
+    const stored = localStorage.getItem(USER_KEY);
+    return stored ? (JSON.parse(stored) as AuthUser) : null;
+  } catch {
+    return null;
+  }
+}
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<AuthUser | null>(() => readStoredSession());
   const [isLoading, setIsLoading] = useState(true);
 
   const logout = useCallback(() => {
@@ -102,14 +121,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const token = localStorage.getItem(TOKEN_KEY);
     if (!token) {
+      localStorage.removeItem(USER_KEY);
+      setUser(null);
       setIsLoading(false);
       return;
     }
 
+    let cancelled = false;
     fetch("/api/auth/me", {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then(async (res) => {
+        if (cancelled) return;
         if (!res.ok) {
           localStorage.removeItem(TOKEN_KEY);
           localStorage.removeItem(USER_KEY);
@@ -120,8 +143,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(me);
         localStorage.setItem(USER_KEY, JSON.stringify(me));
       })
-      .catch(() => { /* network error — keep existing state */ })
-      .finally(() => setIsLoading(false));
+      .catch(() => {
+        /* network error — keep existing optimistic session until next 401 */
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const login = useCallback(async (username: string, password: string) => {

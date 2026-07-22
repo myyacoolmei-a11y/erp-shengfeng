@@ -1,12 +1,7 @@
-/* Web Push handlers — imported by Workbox service worker via importScripts */
-
-self.addEventListener("install", (event) => {
-  event.waitUntil(self.skipWaiting());
-});
-
-self.addEventListener("activate", (event) => {
-  event.waitUntil(self.clients.claim());
-});
+/* Web Push handlers — imported by Workbox service worker via importScripts.
+ * Do NOT call skipWaiting/clients.claim here — Workbox owns SW lifecycle.
+ * Duplicate claim+reload was contributing to production reload loops.
+ */
 
 function resolveAbsoluteUrl(url) {
   if (!url || typeof url !== "string") {

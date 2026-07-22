@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useLocation } from "wouter";
-import { useAuth } from "@/contexts/auth-context";
+import { useAuth, defaultPathForRole } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -54,11 +54,9 @@ export default function ChangePasswordPage() {
         user: { mustChangePassword: boolean };
       };
 
-      // Update stored token and user state
       localStorage.setItem(TOKEN_KEY, data.token);
       updateUser({ mustChangePassword: false });
-
-      navigate("/");
+      navigate(defaultPathForRole({ ...user!, mustChangePassword: false }), { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "修改密碼失敗，請重試");
     } finally {

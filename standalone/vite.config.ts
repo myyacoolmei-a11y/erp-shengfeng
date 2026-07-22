@@ -15,8 +15,9 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
-      registerType: "autoUpdate",
-      injectRegister: "auto",
+      // prompt + onNeedRefresh no-op in main.tsx → no location.reload() on SW activate
+      registerType: "prompt",
+      injectRegister: false,
       includeAssets: [
         "favicon.svg",
         "logo.png",
@@ -58,9 +59,11 @@ export default defineConfig({
         ],
       },
       workbox: {
-        skipWaiting: true,
-        clientsClaim: true,
+        // Avoid aggressive claim+reload cycles with push-sw importScripts
+        skipWaiting: false,
+        clientsClaim: false,
         navigateFallback: "/index.html",
+        navigateFallbackDenylist: [/^\/api\//],
         importScripts: ["push-sw.js"],
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2,webmanifest}"],
         globIgnores: ["**/push-sw.js"],
@@ -84,11 +87,17 @@ export default defineConfig({
           {
             urlPattern: /\/api\/.*/i,
             handler: "NetworkOnly",
+            method: "GET",
+          },
+          {
+            urlPattern: /\/api\/.*/i,
+            handler: "NetworkOnly",
+            method: "POST",
           },
         ],
       },
       devOptions: {
-        enabled: true,
+        enabled: false,
       },
     }),
   ],

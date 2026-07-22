@@ -5,21 +5,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Wind, AlertCircle, Loader2 } from "lucide-react";
+import { AlertCircle, Loader2 } from "lucide-react";
 import { APP_BRAND } from "@/lib/appBrand";
 import { PwaInstallBanner } from "@/components/pwa/PwaInstallBanner";
 
 export default function LoginPage() {
-  const { login, isAuthenticated } = useAuth();
+  const { login } = useAuth();
   const [, navigate] = useLocation();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  React.useEffect(() => {
-    if (isAuthenticated) navigate("/");
-  }, [isAuthenticated, navigate]);
+  // Auth redirects are owned solely by AppRoutes — do not navigate on isAuthenticated here.
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -27,7 +25,9 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await login(username, password);
-      navigate("/");
+      // Destination is finalized by AppRoutes (mustChangePassword / role home).
+      // Soft-land on "/" once; AppRoutes will replace if needed.
+      navigate("/", { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "登入失敗，請重試");
     } finally {

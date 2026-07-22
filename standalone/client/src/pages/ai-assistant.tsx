@@ -85,6 +85,7 @@ export default function AiAssistantPage() {
     "admin",
     "sales",
     "accountant",
+    "distributor",
     "engineer",
     "technician",
   );
@@ -160,9 +161,10 @@ export default function AiAssistantPage() {
   }, [activeTab]);
 
   useEffect(() => {
-    if (!isAiAssistantTab(requestedTab) || !visibleTabs.some(t => t.id === requestedTab)) {
-      navigate(`/ai-assistant?tab=${defaultTab}`, { replace: true });
-    }
+    if (visibleTabs.length === 0) return;
+    if (isAiAssistantTab(requestedTab) && visibleTabs.some(t => t.id === requestedTab)) return;
+    if (requestedTab === defaultTab) return;
+    navigate(`/ai-assistant?tab=${defaultTab}`, { replace: true });
   }, [requestedTab, defaultTab, visibleTabs, navigate]);
 
   useEffect(() => {

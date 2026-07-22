@@ -3,7 +3,8 @@ import { Switch, Route, Router as WouterRouter, Redirect, useLocation } from "wo
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { AuthProvider, useAuth, hasRole, effectiveRoles, type UserRole, type AuthUser } from "@/contexts/auth-context";
+import { AuthProvider, useAuth, hasRole, defaultPathForRole, type UserRole } from "@/contexts/auth-context";
+import { AccessDenied } from "@/components/access-denied";
 import { Layout } from "@/components/layout";
 import LoginPage from "@/pages/login";
 import ChangePasswordPage from "@/pages/change-password";
@@ -68,21 +69,17 @@ function RoleGuard({
   children: React.ReactNode;
 }) {
   const { user } = useAuth();
+  const [location] = useLocation();
   if (!user) return <Redirect to="/login" />;
-  if (!hasRole(user, ...roles)) return <Redirect to={defaultPathForRole(user)} />;
+  if (!hasRole(user, ...roles)) {
+    const fallback = defaultPathForRole(user);
+    // Same-path redirect would remount forever — show denial instead.
+    if (fallback === location || fallback === "/login") {
+      return <AccessDenied />;
+    }
+    return <Redirect to={fallback} />;
+  }
   return <>{children}</>;
-}
-
-/** Default landing path based on user's roles — checks in priority order */
-function defaultPathForRole(user: AuthUser): string {
-  const roles = effectiveRoles(user);
-  if (roles.includes("super_admin")) return "/users";
-  if (roles.includes("owner") || roles.includes("admin")) return "/";
-  if (roles.includes("accountant")) return "/receivables";
-  if (roles.includes("sales")) return "/customers";
-  if (roles.includes("engineer") || roles.includes("technician")) return "/partner-culture";
-  if (roles.includes("distributor")) return "/quotes";
-  return "/";
 }
 
 function AppRoutes() {
@@ -97,16 +94,20 @@ function AppRoutes() {
     );
   }
 
-  if (!isAuthenticated && location !== "/login") {
-    return <Redirect to="/login" />;
-  }
-
-  if (isAuthenticated && user?.mustChangePassword && location !== "/change-password") {
-    return <Redirect to="/change-password" />;
-  }
-
-  if (isAuthenticated && location === "/login") {
-    return <Redirect to={defaultPathForRole(user!)} />;
+  // Single auth redirect authority — do not also redirect from login.tsx / layout.
+  if (!isAuthenticated) {
+    if (location !== "/login") {
+      return <Redirect to="/login" />;
+    }
+  } else if (user?.mustChangePassword) {
+    if (location !== "/change-password") {
+      return <Redirect to="/change-password" />;
+    }
+  } else if (location === "/login" || location === "/change-password") {
+    const dest = defaultPathForRole(user!);
+    if (dest !== location) {
+      return <Redirect to={dest} />;
+    }
   }
 
   return (
