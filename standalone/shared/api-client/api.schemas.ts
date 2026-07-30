@@ -658,6 +658,7 @@ export interface RepairCase {
   employeeName?: string | null;
   /** @nullable */
   notes?: string | null;
+  subsidyApplied?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -699,6 +700,7 @@ export interface RepairCaseInput {
   /** @nullable */
   notes?: string | null;
   photos?: string[];
+  subsidyApplied?: boolean;
 }
 
 export interface RepairCaseUpdate {
@@ -734,6 +736,7 @@ export interface RepairCaseUpdate {
   /** @nullable */
   notes?: string | null;
   photos?: string[];
+  subsidyApplied?: boolean;
 }
 
 export interface Receivable {

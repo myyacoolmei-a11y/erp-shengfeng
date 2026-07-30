@@ -1646,6 +1646,7 @@ export const ListRepairCasesResponseItem = zod.object({
   "employeeId": zod.number().nullish(),
   "employeeName": zod.string().nullish(),
   "notes": zod.string().nullish(),
+  "subsidyApplied": zod.boolean().optional(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -1673,7 +1674,8 @@ export const CreateRepairCaseBody = zod.object({
   "appointmentTime": zod.string().nullish(),
   "employeeId": zod.number().nullish(),
   "notes": zod.string().nullish(),
-  "photos": zod.array(zod.string()).optional()
+  "photos": zod.array(zod.string()).optional(),
+  "subsidyApplied": zod.boolean().optional()
 })
 
 export const CreateRepairCaseResponse = zod.object({
@@ -1698,6 +1700,7 @@ export const CreateRepairCaseResponse = zod.object({
   "employeeId": zod.number().nullish(),
   "employeeName": zod.string().nullish(),
   "notes": zod.string().nullish(),
+  "subsidyApplied": zod.boolean().optional(),
   "createdAt": zod.string(),
   "updatedAt": zod.string(),
   "photos": zod.array(zod.object({
@@ -1745,7 +1748,8 @@ export const UpdateRepairCaseBody = zod.object({
   "appointmentTime": zod.string().nullish(),
   "employeeId": zod.number().nullish(),
   "notes": zod.string().nullish(),
-  "photos": zod.array(zod.string()).optional()
+  "photos": zod.array(zod.string()).optional(),
+  "subsidyApplied": zod.boolean().optional()
 })
 
 export const UpdateRepairCaseResponse = CreateRepairCaseResponse

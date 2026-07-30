@@ -2588,6 +2588,7 @@ components:
         employeeId: { type: ["integer", "null"] }
         employeeName: { type: ["string", "null"] }
         notes: { type: ["string", "null"] }
+        subsidyApplied: { type: boolean, default: false }
         createdAt: { type: string }
         updatedAt: { type: string }
 
@@ -2625,6 +2626,7 @@ components:
           type: array
           items:
             type: string
+        subsidyApplied: { type: boolean }
 
     RepairCaseUpdate:
       type: object
@@ -2650,6 +2652,7 @@ components:
           type: array
           items:
             type: string
+        subsidyApplied: { type: boolean }
 
     MaintenanceReminder:
       type: object

@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, timestamp, numeric, date } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, timestamp, numeric, date, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { customersTable } from "./customers";
@@ -38,6 +38,8 @@ export const repairCasesTable = pgTable("repair_cases", {
   appointmentTime: text("appointment_time"),
   employeeId: integer("employee_id").references(() => employeesTable.id, { onDelete: "set null" }),
   notes: text("notes"),
+  /** 補助申請狀態：false=未申請、true=已申請 */
+  subsidyApplied: boolean("subsidy_applied").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

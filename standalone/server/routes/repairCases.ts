@@ -43,6 +43,7 @@ function mapRepairCase(row: {
   appointmentTime: string | null;
   employeeId: number | null;
   notes: string | null;
+  subsidyApplied?: boolean | null;
   createdAt: Date | string;
   updatedAt: Date | string;
   customerName?: string | null;
@@ -52,6 +53,7 @@ function mapRepairCase(row: {
     ...row,
     customerName: row.customerName ?? row.tempCustomerName ?? null,
     employeeName: row.employeeName ?? null,
+    subsidyApplied: Boolean(row.subsidyApplied),
     createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt,
     updatedAt: row.updatedAt instanceof Date ? row.updatedAt.toISOString() : row.updatedAt,
   };
@@ -77,6 +79,7 @@ const caseSelect = {
   appointmentTime: repairCasesTable.appointmentTime,
   employeeId: repairCasesTable.employeeId,
   notes: repairCasesTable.notes,
+  subsidyApplied: repairCasesTable.subsidyApplied,
   createdAt: repairCasesTable.createdAt,
   updatedAt: repairCasesTable.updatedAt,
   customerName: customersTable.name,

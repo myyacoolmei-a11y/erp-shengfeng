@@ -104,6 +104,39 @@ function displayAddress(c: RepairCase) {
   return c.siteAddress || c.address || "—";
 }
 
+function SubsidyStatusButton({
+  applied,
+  disabled,
+  onToggle,
+}: {
+  applied: boolean;
+  disabled?: boolean;
+  onToggle: (next: boolean) => void;
+}) {
+  return (
+    <Button
+      type="button"
+      variant="outline"
+      size="sm"
+      disabled={disabled}
+      className={
+        applied
+          ? "h-7 px-2 text-xs border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800"
+          : "h-7 px-2 text-xs text-muted-foreground hover:bg-muted"
+      }
+      onClick={() => {
+        if (applied) {
+          if (window.confirm("是否取消補助申請狀態？")) onToggle(false);
+        } else if (window.confirm("確定此案件已完成補助申請？")) {
+          onToggle(true);
+        }
+      }}
+    >
+      {applied ? "🟢 已申請補助" : "⚪ 未申請補助"}
+    </Button>
+  );
+}
+
 function DetailSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="space-y-2">
@@ -143,10 +176,14 @@ function RepairCaseDetailView({
   detail,
   onClose,
   onStatusChange,
+  onSubsidyToggle,
+  subsidyUpdating,
 }: {
   detail: RepairCaseDetail;
   onClose: () => void;
   onStatusChange: (status: string) => void;
+  onSubsidyToggle: (next: boolean) => void;
+  subsidyUpdating?: boolean;
 }) {
   const { toast } = useToast();
 
@@ -162,6 +199,14 @@ function RepairCaseDetailView({
           <Badge variant="outline" className={PRIORITY_COLORS[detail.priority] ?? ""}>{detail.priority}</Badge>
           <Badge variant="secondary">{detail.source}</Badge>
         </div>
+      </div>
+
+      <div>
+        <SubsidyStatusButton
+          applied={Boolean(detail.subsidyApplied)}
+          disabled={subsidyUpdating}
+          onToggle={onSubsidyToggle}
+        />
       </div>
 
       <Separator />
@@ -288,12 +333,25 @@ export default function RepairCases() {
 
   const updateMutation = useUpdateRepairCase({
     mutation: {
-      onSuccess: () => {
+      onSuccess: (_data, variables) => {
         invalidate();
-        toast({ title: "案件已更新" });
+        if (variables.data.subsidyApplied !== undefined) {
+          toast({
+            title: variables.data.subsidyApplied ? "已標記為已申請補助" : "已取消補助申請狀態",
+          });
+        } else {
+          toast({ title: "案件已更新" });
+        }
+      },
+      onError: (err: unknown) => {
+        toast({ title: "更新失敗", description: String(err), variant: "destructive" });
       },
     },
   });
+
+  function toggleSubsidy(caseId: number, next: boolean) {
+    updateMutation.mutate({ id: caseId, data: { subsidyApplied: next } });
+  }
 
   const deleteMutation = useDeleteRepairCase({
     mutation: {
@@ -376,6 +434,7 @@ export default function RepairCases() {
                   <th className="px-3 py-2 font-medium hidden lg:table-cell">地址</th>
                   <th className="px-3 py-2 font-medium hidden md:table-cell">技師</th>
                   <th className="px-3 py-2 font-medium">狀態</th>
+                  <th className="px-3 py-2 font-medium">補助申請</th>
                   <th className="px-3 py-2 font-medium hidden sm:table-cell">來源</th>
                   <th className="px-3 py-2 font-medium hidden lg:table-cell">預約日期</th>
                   <th className="px-3 py-2 font-medium">操作</th>
@@ -392,6 +451,13 @@ export default function RepairCases() {
                     <td className="px-3 py-2.5 hidden md:table-cell">{c.employeeName ?? "—"}</td>
                     <td className="px-3 py-2.5">
                       <Badge className={`text-[10px] ${STATUS_COLORS[c.status] ?? ""}`}>{c.status}</Badge>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <SubsidyStatusButton
+                        applied={Boolean(c.subsidyApplied)}
+                        disabled={updateMutation.isPending}
+                        onToggle={(next) => toggleSubsidy(c.id, next)}
+                      />
                     </td>
                     <td className="px-3 py-2.5 hidden sm:table-cell text-xs">{c.source}</td>
                     <td className="px-3 py-2.5 hidden lg:table-cell text-muted-foreground">{c.appointmentDate ?? "—"}</td>
@@ -543,6 +609,8 @@ export default function RepairCases() {
               detail={detail}
               onClose={() => setDetailId(null)}
               onStatusChange={status => detailId && updateMutation.mutate({ id: detailId, data: { status } })}
+              onSubsidyToggle={next => detailId && toggleSubsidy(detailId, next)}
+              subsidyUpdating={updateMutation.isPending}
             />
           ) : (
             <Skeleton className="h-40 w-full" />
