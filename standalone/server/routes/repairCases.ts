@@ -43,7 +43,7 @@ function mapRepairCase(row: {
   appointmentTime: string | null;
   employeeId: number | null;
   notes: string | null;
-  subsidyApplied?: boolean | null;
+  subsidyStatus?: string | null;
   createdAt: Date | string;
   updatedAt: Date | string;
   customerName?: string | null;
@@ -53,7 +53,7 @@ function mapRepairCase(row: {
     ...row,
     customerName: row.customerName ?? row.tempCustomerName ?? null,
     employeeName: row.employeeName ?? null,
-    subsidyApplied: Boolean(row.subsidyApplied),
+    subsidyStatus: row.subsidyStatus || "未申請補助",
     createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt,
     updatedAt: row.updatedAt instanceof Date ? row.updatedAt.toISOString() : row.updatedAt,
   };
@@ -79,7 +79,7 @@ const caseSelect = {
   appointmentTime: repairCasesTable.appointmentTime,
   employeeId: repairCasesTable.employeeId,
   notes: repairCasesTable.notes,
-  subsidyApplied: repairCasesTable.subsidyApplied,
+  subsidyStatus: repairCasesTable.subsidyStatus,
   createdAt: repairCasesTable.createdAt,
   updatedAt: repairCasesTable.updatedAt,
   customerName: customersTable.name,
@@ -241,6 +241,14 @@ router.patch("/repair-cases/:id", requireRole(...PATCH_ROLES), async (req, res):
   }
 
   const { photos, ...data } = parsed.data;
+  if (
+    data.subsidyStatus !== undefined &&
+    !["未申請補助", "已申請補助", "不適用"].includes(data.subsidyStatus)
+  ) {
+    res.status(400).json({ error: "無效的補助狀態" });
+    return;
+  }
+
   const [updated] = await db
     .update(repairCasesTable)
     .set(data)

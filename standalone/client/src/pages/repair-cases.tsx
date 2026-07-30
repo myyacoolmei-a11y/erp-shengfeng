@@ -104,36 +104,61 @@ function displayAddress(c: RepairCase) {
   return c.siteAddress || c.address || "—";
 }
 
-function SubsidyStatusButton({
-  applied,
+const SUBSIDY_STATUSES = ["未申請補助", "已申請補助", "不適用"] as const;
+type SubsidyStatus = (typeof SUBSIDY_STATUSES)[number];
+
+/** 與收款狀態 Badge 同風格色票 */
+const SUBSIDY_COLORS: Record<SubsidyStatus, string> = {
+  未申請補助: "bg-gray-100 text-gray-600",
+  已申請補助: "bg-green-100 text-green-700",
+  不適用: "bg-slate-100 text-slate-500",
+};
+
+const SUBSIDY_LABELS: Record<SubsidyStatus, string> = {
+  未申請補助: "🩶 未申請補助",
+  已申請補助: "🟢 已申請補助",
+  不適用: "⚪ 不適用",
+};
+
+function normalizeSubsidyStatus(v: string | null | undefined): SubsidyStatus {
+  if (v === "已申請補助" || v === "不適用") return v;
+  return "未申請補助";
+}
+
+function SubsidyStatusControl({
+  value,
   disabled,
-  onToggle,
+  onChange,
 }: {
-  applied: boolean;
+  value: string | null | undefined;
   disabled?: boolean;
-  onToggle: (next: boolean) => void;
+  onChange: (next: SubsidyStatus) => void;
 }) {
+  const current = normalizeSubsidyStatus(value);
+
+  function requestChange(next: SubsidyStatus) {
+    if (next === current) return;
+    if (next === "已申請補助" && !window.confirm("確定此案件已完成補助申請？")) return;
+    if (current === "已申請補助" && next === "未申請補助" && !window.confirm("是否改回未申請補助？")) return;
+    if (next === "不適用" && !window.confirm("確定此案件不適用補助？")) return;
+    onChange(next);
+  }
+
   return (
-    <Button
-      type="button"
-      variant="outline"
-      size="sm"
-      disabled={disabled}
-      className={
-        applied
-          ? "h-7 px-2 text-xs border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 hover:text-emerald-800"
-          : "h-7 px-2 text-xs text-muted-foreground hover:bg-muted"
-      }
-      onClick={() => {
-        if (applied) {
-          if (window.confirm("是否取消補助申請狀態？")) onToggle(false);
-        } else if (window.confirm("確定此案件已完成補助申請？")) {
-          onToggle(true);
-        }
-      }}
-    >
-      {applied ? "🟢 已申請補助" : "⚪ 未申請補助"}
-    </Button>
+    <Select value={current} onValueChange={(v) => requestChange(v as SubsidyStatus)} disabled={disabled}>
+      <SelectTrigger
+        className={`h-7 w-auto min-w-0 gap-1 border-0 px-2 text-xs font-medium shadow-none focus:ring-0 ${SUBSIDY_COLORS[current]}`}
+      >
+        <SelectValue>{SUBSIDY_LABELS[current]}</SelectValue>
+      </SelectTrigger>
+      <SelectContent>
+        {SUBSIDY_STATUSES.map((s) => (
+          <SelectItem key={s} value={s}>
+            {SUBSIDY_LABELS[s]}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 
@@ -176,13 +201,13 @@ function RepairCaseDetailView({
   detail,
   onClose,
   onStatusChange,
-  onSubsidyToggle,
+  onSubsidyChange,
   subsidyUpdating,
 }: {
   detail: RepairCaseDetail;
   onClose: () => void;
   onStatusChange: (status: string) => void;
-  onSubsidyToggle: (next: boolean) => void;
+  onSubsidyChange: (next: SubsidyStatus) => void;
   subsidyUpdating?: boolean;
 }) {
   const { toast } = useToast();
@@ -202,10 +227,10 @@ function RepairCaseDetailView({
       </div>
 
       <div>
-        <SubsidyStatusButton
-          applied={Boolean(detail.subsidyApplied)}
+        <SubsidyStatusControl
+          value={detail.subsidyStatus}
           disabled={subsidyUpdating}
-          onToggle={onSubsidyToggle}
+          onChange={onSubsidyChange}
         />
       </div>
 
@@ -335,10 +360,8 @@ export default function RepairCases() {
     mutation: {
       onSuccess: (_data, variables) => {
         invalidate();
-        if (variables.data.subsidyApplied !== undefined) {
-          toast({
-            title: variables.data.subsidyApplied ? "已標記為已申請補助" : "已取消補助申請狀態",
-          });
+        if (variables.data.subsidyStatus !== undefined) {
+          toast({ title: SUBSIDY_LABELS[normalizeSubsidyStatus(variables.data.subsidyStatus)] });
         } else {
           toast({ title: "案件已更新" });
         }
@@ -349,8 +372,8 @@ export default function RepairCases() {
     },
   });
 
-  function toggleSubsidy(caseId: number, next: boolean) {
-    updateMutation.mutate({ id: caseId, data: { subsidyApplied: next } });
+  function setSubsidy(caseId: number, next: SubsidyStatus) {
+    updateMutation.mutate({ id: caseId, data: { subsidyStatus: next } });
   }
 
   const deleteMutation = useDeleteRepairCase({
@@ -434,7 +457,7 @@ export default function RepairCases() {
                   <th className="px-3 py-2 font-medium hidden lg:table-cell">地址</th>
                   <th className="px-3 py-2 font-medium hidden md:table-cell">技師</th>
                   <th className="px-3 py-2 font-medium">狀態</th>
-                  <th className="px-3 py-2 font-medium">補助申請</th>
+                  <th className="px-3 py-2 font-medium">補助</th>
                   <th className="px-3 py-2 font-medium hidden sm:table-cell">來源</th>
                   <th className="px-3 py-2 font-medium hidden lg:table-cell">預約日期</th>
                   <th className="px-3 py-2 font-medium">操作</th>
@@ -453,10 +476,10 @@ export default function RepairCases() {
                       <Badge className={`text-[10px] ${STATUS_COLORS[c.status] ?? ""}`}>{c.status}</Badge>
                     </td>
                     <td className="px-3 py-2.5">
-                      <SubsidyStatusButton
-                        applied={Boolean(c.subsidyApplied)}
+                      <SubsidyStatusControl
+                        value={c.subsidyStatus}
                         disabled={updateMutation.isPending}
-                        onToggle={(next) => toggleSubsidy(c.id, next)}
+                        onChange={(next) => setSubsidy(c.id, next)}
                       />
                     </td>
                     <td className="px-3 py-2.5 hidden sm:table-cell text-xs">{c.source}</td>
@@ -609,7 +632,7 @@ export default function RepairCases() {
               detail={detail}
               onClose={() => setDetailId(null)}
               onStatusChange={status => detailId && updateMutation.mutate({ id: detailId, data: { status } })}
-              onSubsidyToggle={next => detailId && toggleSubsidy(detailId, next)}
+              onSubsidyChange={next => detailId && setSubsidy(detailId, next)}
               subsidyUpdating={updateMutation.isPending}
             />
           ) : (

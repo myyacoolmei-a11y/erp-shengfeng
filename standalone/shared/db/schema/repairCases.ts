@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, timestamp, numeric, date, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, timestamp, numeric, date } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { customersTable } from "./customers";
@@ -17,6 +17,9 @@ export const REPAIR_STATUSES = [
 
 export const REPAIR_SOURCES = ["客戶報修", "原廠派案"] as const;
 export const REPAIR_PRIORITIES = ["普通", "急件", "VIP"] as const;
+
+export const SUBSIDY_STATUSES = ["未申請補助", "已申請補助", "不適用"] as const;
+export type SubsidyStatus = (typeof SUBSIDY_STATUSES)[number];
 
 export const repairCasesTable = pgTable("repair_cases", {
   id: serial("id").primaryKey(),
@@ -38,8 +41,8 @@ export const repairCasesTable = pgTable("repair_cases", {
   appointmentTime: text("appointment_time"),
   employeeId: integer("employee_id").references(() => employeesTable.id, { onDelete: "set null" }),
   notes: text("notes"),
-  /** 補助申請狀態：false=未申請、true=已申請 */
-  subsidyApplied: boolean("subsidy_applied").notNull().default(false),
+  /** 未申請補助 | 已申請補助 | 不適用 */
+  subsidyStatus: text("subsidy_status").notNull().default("未申請補助"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

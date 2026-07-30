@@ -658,7 +658,8 @@ export interface RepairCase {
   employeeName?: string | null;
   /** @nullable */
   notes?: string | null;
-  subsidyApplied?: boolean;
+  /** 未申請補助 | 已申請補助 | 不適用 */
+  subsidyStatus?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -700,7 +701,7 @@ export interface RepairCaseInput {
   /** @nullable */
   notes?: string | null;
   photos?: string[];
-  subsidyApplied?: boolean;
+  subsidyStatus?: string;
 }
 
 export interface RepairCaseUpdate {
@@ -736,7 +737,7 @@ export interface RepairCaseUpdate {
   /** @nullable */
   notes?: string | null;
   photos?: string[];
-  subsidyApplied?: boolean;
+  subsidyStatus?: string;
 }
 
 export interface Receivable {

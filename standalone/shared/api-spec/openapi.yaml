@@ -2588,7 +2588,7 @@ components:
         employeeId: { type: ["integer", "null"] }
         employeeName: { type: ["string", "null"] }
         notes: { type: ["string", "null"] }
-        subsidyApplied: { type: boolean, default: false }
+        subsidyStatus: { type: string, default: "未申請補助" }
         createdAt: { type: string }
         updatedAt: { type: string }
 
@@ -2626,7 +2626,7 @@ components:
           type: array
           items:
             type: string
-        subsidyApplied: { type: boolean }
+        subsidyStatus: { type: string }
 
     RepairCaseUpdate:
       type: object
@@ -2652,7 +2652,7 @@ components:
           type: array
           items:
             type: string
-        subsidyApplied: { type: boolean }
+        subsidyStatus: { type: string }
 
     MaintenanceReminder:
       type: object
