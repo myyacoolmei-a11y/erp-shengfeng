@@ -23,8 +23,10 @@ export function buildQuotationHtml(quote: any): string {
     taxType,
   );
 
-  // ── Equipment table: exactly these 10 columns, no padding rows ──────────
-  // th / td / colgroup MUST stay in sync. Do not add colspan/rowspan fillers.
+  // ── Equipment table: exactly 10 columns, items.map only ────────────────
+  // th / td / colgroup MUST stay in sync. No colspan/rowspan fillers.
+  // Widths MUST sum to exactly 100% (print engines round % and can draw a
+  // ghost right strip if the sum overflows by even 1px).
   const TABLE_HEADERS = [
     "項次",
     "類別",
@@ -38,16 +40,16 @@ export function buildQuotationHtml(quote: any): string {
     "備註",
   ] as const;
   const TABLE_COL_WIDTHS = [
-    "5%",
-    "9%",
-    "9%",
-    "22%",
-    "12%",
     "6%",
-    "5%",
-    "11%",
-    "11%",
+    "12%",
     "10%",
+    "14%",
+    "13%",
+    "6%",
+    "6%",
+    "12%",
+    "12%",
+    "9%",
   ] as const;
 
   function renderItemRow(item: any, index: number): string {
@@ -71,7 +73,7 @@ export function buildQuotationHtml(quote: any): string {
     return `<tr>${cells.join("")}</tr>`;
   }
 
-  // tbody rows = items only. Never pad blank placeholder / fixed-N filler rows.
+  // tbody = items only. Never pad blank / fixed-N filler rows.
   const itemRows = items.map((item, index) => renderItemRow(item, index)).join("");
 
   const colgroupHtml = TABLE_COL_WIDTHS.map((w) => `<col style="width:${w}">`).join("");
@@ -123,6 +125,10 @@ body{
 .co-sub{font-size:7.5pt;color:${COLORS.midGray};margin-top:1px}
 .co-info{font-size:7pt;color:${COLORS.lightGray};margin-top:2px;line-height:1.6}
 .doc-r{text-align:right}
+.print-template-mark{
+  font-size:8px;line-height:1;color:#c00;font-family:monospace;
+  letter-spacing:0;margin-bottom:2px;
+}
 .doc-label{font-size:16pt;font-weight:700;color:${COLORS.primary};letter-spacing:4px}
 .doc-en{font-size:7pt;color:#aaa;letter-spacing:1px}
 .doc-no{font-size:9pt;font-weight:700;font-family:monospace;margin-top:2px}
@@ -137,7 +143,35 @@ body{
   display:inline-block;
 }
 
-/* ===== Table ===== */
+/* ===== Equipment table (eq-table) =====
+   Ghost right column on Safari/print is usually % width rounding + cell
+   borders overflowing table-layout:fixed — not an extra <td>.
+   Keep 10 cols, widths sum 100%, box-sizing border-box, clip 1px overflow. */
+.eq-wrap{width:100%;max-width:100%;overflow:hidden}
+.eq-table{
+  width:100%;max-width:100%;
+  border-collapse:collapse;border-spacing:0;
+  table-layout:fixed;font-size:9pt;
+}
+.eq-table .head-row{background:${COLORS.black};color:${COLORS.primary}}
+.eq-table .head-row th{
+  border:1px solid ${COLORS.black};
+  font-size:8.5pt;font-weight:700;text-align:center;
+  box-sizing:border-box;
+  padding:4px 3px!important;
+  min-height:0!important;height:auto!important;
+}
+.eq-table tbody td{
+  border:1px solid ${COLORS.black};
+  vertical-align:middle;font-size:9pt;
+  box-sizing:border-box;
+  padding:4px 3px!important;
+  min-height:0!important;height:auto!important;
+}
+.eq-table .col-notes{padding-left:4px!important;padding-right:4px!important}
+.eq-table tr{page-break-inside:avoid;break-inside:avoid}
+
+/* legacy unused width helpers kept for other classes below */
 table{
   width:100%;border-collapse:collapse;
   table-layout:fixed;font-size:9pt;
@@ -283,6 +317,7 @@ ${PDF_LAYOUT_CSS}
       </div>
     </div>
     <div class="doc-r">
+      <div class="print-template-mark">PRINT-TEMPLATE-V2</div>
       <div class="doc-label">報價單</div>
       <div class="doc-en">QUOTATION</div>
       <div class="doc-no">${quoteNo}</div>
@@ -308,11 +343,13 @@ ${PDF_LAYOUT_CSS}
 
   <div class="sec">
     <div class="stitle">工程設備明細 Equipment Schedule</div>
-    <table>
-      <colgroup>${colgroupHtml}</colgroup>
-      <thead><tr class="head-row">${theadHtml}</tr></thead>
-      <tbody>${itemRows}</tbody>
-    </table>
+    <div class="eq-wrap">
+      <table class="eq-table">
+        <colgroup>${colgroupHtml}</colgroup>
+        <thead><tr class="head-row">${theadHtml}</tr></thead>
+        <tbody>${itemRows}</tbody>
+      </table>
+    </div>
   </div>
 
   <div class="notes-totals-row">

@@ -59,14 +59,15 @@ export default defineConfig({
         ],
       },
       workbox: {
-        // Avoid aggressive claim+reload cycles with push-sw importScripts
-        skipWaiting: false,
-        clientsClaim: false,
+        // Activate updated SW so Railway deploys reach clients (reload is still disabled in main.tsx)
+        skipWaiting: true,
+        clientsClaim: true,
         navigateFallback: "/index.html",
         navigateFallbackDenylist: [/^\/api\//],
         importScripts: ["push-sw.js"],
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2,webmanifest}"],
         globIgnores: ["**/push-sw.js"],
+        cleanupOutdatedCaches: true,
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
