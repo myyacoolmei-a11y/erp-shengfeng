@@ -95,18 +95,29 @@ export function buildQuotationHtml(quote: any): string {
 <style>
 /* ===== Base ===== */
 *{margin:0;padding:0;box-sizing:border-box}
+html,body{margin:0;padding:0}
 body{
   font-family:'Microsoft JhengHei','\\5fae\\8edf\\6b63\\9ed1\\9ad4',Arial,sans-serif;
   font-size:10pt;color:${COLORS.black};background:#fff;
   -webkit-print-color-adjust:exact;print-color-adjust:exact;
 }
 
-/* ===== Page setup ===== */
-@page{size:A4 portrait;margin:12mm}
-.page{
-  width:186mm;min-height:273mm;
-  padding:0;
+/* ===== Page setup =====
+   Printable height = 297mm - 2*8mm = 281mm.
+   NEVER use height/min-height: 297mm or 100vh — that overflows @page
+   margins and creates a blank Safari page 2 (subpixel rounding). */
+@page{size:A4 portrait;margin:8mm}
+.quotation-print-page{
+  width:100%;
+  min-height:calc(297mm - 16mm);
+  margin:0;padding:0;
   display:flex;flex-direction:column;
+  break-after:auto;page-break-after:auto;
+}
+.quotation-print-content{flex:0 0 auto}
+.quotation-signature-section{
+  margin-top:auto;
+  break-inside:avoid;page-break-inside:avoid;
 }
 
 /* ===== Logo & Header ===== */
@@ -125,10 +136,6 @@ body{
 .co-sub{font-size:7.5pt;color:${COLORS.midGray};margin-top:1px}
 .co-info{font-size:7pt;color:${COLORS.lightGray};margin-top:2px;line-height:1.6}
 .doc-r{text-align:right}
-.print-template-mark{
-  font-size:8px;line-height:1;color:#c00;font-family:monospace;
-  letter-spacing:0;margin-bottom:2px;
-}
 .doc-label{font-size:16pt;font-weight:700;color:${COLORS.primary};letter-spacing:4px}
 .doc-en{font-size:7pt;color:#aaa;letter-spacing:1px}
 .doc-no{font-size:9pt;font-weight:700;font-family:monospace;margin-top:2px}
@@ -266,7 +273,7 @@ tr{page-break-inside:avoid;break-inside:avoid}
 .bank-box{
   border:1px solid ${COLORS.borderGray};
   padding:2mm 3mm;
-  margin-bottom:5mm;
+  margin-bottom:3mm;
 }
 .bank-title{
   font-size:7pt;font-weight:700;
@@ -281,7 +288,7 @@ tr{page-break-inside:avoid;break-inside:avoid}
 
 .sig-row{
   display:grid;grid-template-columns:1fr 1fr 1fr;gap:6mm;
-  margin-bottom:6mm;
+  margin-bottom:3mm;
 }
 .sig-box{
   text-align:center;border-top:1.5px solid ${COLORS.black};
@@ -289,21 +296,42 @@ tr{page-break-inside:avoid;break-inside:avoid}
 }
 
 .pf{
-  margin-top:auto;
   display:flex;justify-content:space-between;align-items:center;
   font-size:6.5pt;color:${COLORS.lightGray};
   border-top:1px solid ${COLORS.borderGray};padding-top:1mm;
 }
 
 @media print{
-  .notes-totals-row,.amt-box,.bank-box,.sig-row{page-break-inside:avoid;break-inside:avoid}
+  html,body{
+    width:210mm;
+    margin:0!important;padding:0!important;
+    overflow:visible!important;
+  }
+  .quotation-print-page{
+    width:auto;
+    min-height:calc(297mm - 16mm);
+    height:auto;
+    margin:0;padding:0;
+    overflow:visible;
+    break-after:auto;page-break-after:auto;
+  }
+  .quotation-signature-section{
+    margin-top:auto;
+    break-inside:avoid;page-break-inside:avoid;
+  }
+  .quotation-print-page::after{
+    display:none!important;content:none!important;
+  }
+  .notes-totals-row,.amt-box,.bank-box,.sig-row,.quotation-signature-section{
+    page-break-inside:avoid;break-inside:avoid;
+  }
 }
 ${PDF_LAYOUT_CSS}
 </style>
 </head>
 <body>
-<div class="page">
-  <div class="hdr">
+<div class="quotation-print-page">
+  <header class="hdr">
     <div class="co">
       <img src="${logoUrl()}" class="co-logo" alt="">
       <div>
@@ -317,7 +345,6 @@ ${PDF_LAYOUT_CSS}
       </div>
     </div>
     <div class="doc-r">
-      <div class="print-template-mark">PRINT-TEMPLATE-V2</div>
       <div class="doc-label">報價單</div>
       <div class="doc-en">QUOTATION</div>
       <div class="doc-no">${quoteNo}</div>
@@ -328,74 +355,77 @@ ${PDF_LAYOUT_CSS}
         列印：${printDate}
       </div>
     </div>
-  </div>
+  </header>
 
-  <div class="sec">
-    <div class="stitle">客戶資訊 Client Information</div>
-    <div class="info-grid">
-      <div><span class="info-label">客戶名稱</span> <strong>${esc(quote.customerName) || "—"}</strong></div>
-      <div><span class="info-label">聯絡電話</span> <strong>${esc(quote.customerPhone) || "—"}</strong></div>
-      <div><span class="info-label">負責業務</span> <strong>${esc(quote.salesRepName) || "—"}</strong></div>
-      <div class="full"><span class="info-label">施工地址</span> <strong>${esc(quote.address) || "—"}</strong></div>
-      <div><span class="info-label">稅別</span> <strong>${esc(taxType)}</strong></div>
+  <main class="quotation-print-content">
+    <div class="sec">
+      <div class="stitle">客戶資訊 Client Information</div>
+      <div class="info-grid">
+        <div><span class="info-label">客戶名稱</span> <strong>${esc(quote.customerName) || "—"}</strong></div>
+        <div><span class="info-label">聯絡電話</span> <strong>${esc(quote.customerPhone) || "—"}</strong></div>
+        <div><span class="info-label">負責業務</span> <strong>${esc(quote.salesRepName) || "—"}</strong></div>
+        <div class="full"><span class="info-label">施工地址</span> <strong>${esc(quote.address) || "—"}</strong></div>
+        <div><span class="info-label">稅別</span> <strong>${esc(taxType)}</strong></div>
+      </div>
     </div>
-  </div>
 
-  <div class="sec">
-    <div class="stitle">工程設備明細 Equipment Schedule</div>
-    <div class="eq-wrap">
-      <table class="eq-table">
-        <colgroup>${colgroupHtml}</colgroup>
-        <thead><tr class="head-row">${theadHtml}</tr></thead>
-        <tbody>${itemRows}</tbody>
-      </table>
+    <div class="sec">
+      <div class="stitle">工程設備明細 Equipment Schedule</div>
+      <div class="eq-wrap">
+        <table class="eq-table">
+          <colgroup>${colgroupHtml}</colgroup>
+          <thead><tr class="head-row">${theadHtml}</tr></thead>
+          <tbody>${itemRows}</tbody>
+        </table>
+      </div>
     </div>
-  </div>
 
-  <div class="notes-totals-row">
-    <div class="notes-column">
-      <div class="row2">
-        <div style="flex:0 0 55%">
-          <div class="stitle">服務內容 Notes &amp; Remarks</div>
-          <div class="box">${esc(quote.description) || "施工方式：\n施工天數：\n注意事項："}</div>
+    <div class="notes-totals-row">
+      <div class="notes-column">
+        <div class="row2">
+          <div style="flex:0 0 55%">
+            <div class="stitle">服務內容 Notes &amp; Remarks</div>
+            <div class="box">${esc(quote.description) || "施工方式：\n施工天數：\n注意事項："}</div>
+          </div>
+          <div style="flex:1;min-width:0">
+            <div class="stitle">備註</div>
+            <div class="notes-box">${notesList}</div>
+          </div>
         </div>
-        <div style="flex:1;min-width:0">
-          <div class="stitle">備註</div>
-          <div class="notes-box">${notesList}</div>
+      </div>
+      <div class="totals-column">
+        <div class="stitle">金額總計</div>
+        <div class="amt-box">
+          <div class="amt-r"><span class="lbl">項目小計</span><span class="val">${fmtMoney(rawTotal)}</span></div>
+          <div class="amt-r"><span class="lbl">折扣</span>${discountVal}</div>
+          <div class="amt-r"><span class="lbl">未稅小計</span><span class="val">${fmtMoney(preTax)}</span></div>
+          <div class="amt-r"><span class="lbl">稅額 5%</span><span class="val">${fmtMoney(taxAmt)}</span></div>
+          <div class="amt-total"><span class="lbl">含稅總計</span><span class="val">${fmtMoney(total)}</span></div>
         </div>
       </div>
     </div>
-    <div class="totals-column">
-      <div class="stitle">金額總計</div>
-      <div class="amt-box">
-        <div class="amt-r"><span class="lbl">項目小計</span><span class="val">${fmtMoney(rawTotal)}</span></div>
-        <div class="amt-r"><span class="lbl">折扣</span>${discountVal}</div>
-        <div class="amt-r"><span class="lbl">未稅小計</span><span class="val">${fmtMoney(preTax)}</span></div>
-        <div class="amt-r"><span class="lbl">稅額 5%</span><span class="val">${fmtMoney(taxAmt)}</span></div>
-        <div class="amt-total"><span class="lbl">含稅總計</span><span class="val">${fmtMoney(total)}</span></div>
+
+    <div class="bank-box">
+      <div class="bank-title">匯款資訊</div>
+      <div class="bank-row">
+        <span><strong>銀行代碼：</strong>${COMPANY.bankCode}</span>
+        <span><strong>帳號：</strong>${COMPANY.bankAccount}</span>
+        <span><strong>戶名：</strong>${COMPANY.bankAccountName}</span>
       </div>
     </div>
-  </div>
+  </main>
 
-  <div class="bank-box">
-    <div class="bank-title">匯款資訊</div>
-    <div class="bank-row">
-      <span><strong>銀行代碼：</strong>${COMPANY.bankCode}</span>
-      <span><strong>帳號：</strong>${COMPANY.bankAccount}</span>
-      <span><strong>戶名：</strong>${COMPANY.bankAccountName}</span>
+  <footer class="quotation-signature-section">
+    <div class="sig-row">
+      <div class="sig-box">客戶確認簽名<br><span style="font-size:6.5pt;color:#aaa">日期：________</span></div>
+      <div class="sig-box">業務簽名<br><span style="font-size:6.5pt;color:#aaa">日期：________</span></div>
+      <div class="sig-box">公　司　章<br><span style="font-size:6.5pt;color:#aaa">&nbsp;</span></div>
     </div>
-  </div>
-
-  <div class="sig-row">
-    <div class="sig-box">客戶確認簽名<br><span style="font-size:6.5pt;color:#aaa">日期：________</span></div>
-    <div class="sig-box">業務簽名<br><span style="font-size:6.5pt;color:#aaa">日期：________</span></div>
-    <div class="sig-box">公　司　章<br><span style="font-size:6.5pt;color:#aaa">&nbsp;</span></div>
-  </div>
-
-  <div class="pf">
-    <div>${COMPANY.name}　${COMPANY.phone}　${COMPANY.address}</div>
-    <div>列印：${printDate}</div>
-  </div>
+    <div class="pf">
+      <div>${COMPANY.name}　${COMPANY.phone}　${COMPANY.address}</div>
+      <div>列印：${printDate}</div>
+    </div>
+  </footer>
 </div>
 </body>
 </html>`;
