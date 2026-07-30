@@ -48,6 +48,42 @@ const INVOICE_COLORS: Record<string, string> = {
   "待確認": "bg-blue-100 text-blue-700",
 };
 
+type SubsidyStatus = "未申請補助" | "已申請補助";
+
+function SubsidyStatusButton({
+  status,
+  disabled,
+  onToggle,
+}: {
+  status: string | null | undefined;
+  disabled?: boolean;
+  onToggle: (next: SubsidyStatus) => void;
+}) {
+  const applied = status === "已申請補助";
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant="outline"
+      disabled={disabled}
+      className={
+        applied
+          ? "h-7 text-xs px-2 text-green-700 border-green-300 bg-green-50 hover:bg-green-100"
+          : "h-7 text-xs px-2 text-muted-foreground border-border hover:bg-muted"
+      }
+      onClick={() => {
+        if (applied) {
+          if (window.confirm("是否取消補助申請狀態？")) onToggle("未申請補助");
+        } else if (window.confirm("確定此案件已完成補助申請？")) {
+          onToggle("已申請補助");
+        }
+      }}
+    >
+      {applied ? "已申請補助" : "未申請補助"}
+    </Button>
+  );
+}
+
 function fmtAmt(n: number) {
   return "NT$" + n.toLocaleString("zh-TW", { minimumFractionDigits: 0 });
 }
@@ -116,7 +152,21 @@ export default function Receivables() {
   };
 
   const createMutation = useCreateReceivable({ mutation: { onSuccess: () => { invalidate(); setShowCreate(false); toast({ title: "應收帳款已建立" }); } } });
-  const updateMutation = useUpdateReceivable({ mutation: { onSuccess: () => { invalidate(); setEditItem(null); toast({ title: "已更新" }); } } });
+  const updateMutation = useUpdateReceivable({
+    mutation: {
+      onSuccess: (_data, variables) => {
+        invalidate();
+        setEditItem(null);
+        if (variables.data.subsidyStatus !== undefined) {
+          toast({
+            title: variables.data.subsidyStatus === "已申請補助" ? "已申請補助" : "未申請補助",
+          });
+        } else {
+          toast({ title: "已更新" });
+        }
+      },
+    },
+  });
   const deleteMutation = useDeleteReceivable({ mutation: { onSuccess: () => { invalidate(); setDeleteId(null); toast({ title: "已刪除" }); } } });
   const paymentMutation = useRecordReceivablePayment({
     mutation: {
@@ -374,6 +424,11 @@ export default function Receivables() {
                     <Button size="sm" variant="outline" className="h-7 text-xs px-2 text-emerald-700 border-emerald-300 hover:bg-emerald-50" onClick={() => setLineModal(item)}>
                       <Bell className="h-3 w-3 mr-1" />LINE 提醒
                     </Button>
+                    <SubsidyStatusButton
+                      status={item.subsidyStatus}
+                      disabled={!canWrite || updateMutation.isPending}
+                      onToggle={(next) => updateMutation.mutate({ id: item.id, data: { subsidyStatus: next } })}
+                    />
                     {canWrite && (
                       <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => openEdit(item)}>
                         <Pencil className="h-3 w-3" />

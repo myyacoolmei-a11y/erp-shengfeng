@@ -2713,6 +2713,7 @@ components:
         invoiceNumber: { type: ["string", "null"] }
         invoiceDate: { type: ["string", "null"] }
         invoiceNotes: { type: ["string", "null"] }
+        subsidyStatus: { type: string, default: "未申請補助" }
         createdAt: { type: string }
         updatedAt: { type: string }
 
@@ -2753,6 +2754,7 @@ components:
         invoiceNumber: { type: string }
         invoiceDate: { type: string }
         invoiceNotes: { type: string }
+        subsidyStatus: { type: string }
 
     RecordPaymentInput:
       type: object

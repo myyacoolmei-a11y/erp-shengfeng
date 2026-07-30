@@ -104,64 +104,6 @@ function displayAddress(c: RepairCase) {
   return c.siteAddress || c.address || "—";
 }
 
-const SUBSIDY_STATUSES = ["未申請補助", "已申請補助", "不適用"] as const;
-type SubsidyStatus = (typeof SUBSIDY_STATUSES)[number];
-
-/** 與收款狀態 Badge 同風格色票 */
-const SUBSIDY_COLORS: Record<SubsidyStatus, string> = {
-  未申請補助: "bg-gray-100 text-gray-600",
-  已申請補助: "bg-green-100 text-green-700",
-  不適用: "bg-slate-100 text-slate-500",
-};
-
-const SUBSIDY_LABELS: Record<SubsidyStatus, string> = {
-  未申請補助: "🩶 未申請補助",
-  已申請補助: "🟢 已申請補助",
-  不適用: "⚪ 不適用",
-};
-
-function normalizeSubsidyStatus(v: string | null | undefined): SubsidyStatus {
-  if (v === "已申請補助" || v === "不適用") return v;
-  return "未申請補助";
-}
-
-function SubsidyStatusControl({
-  value,
-  disabled,
-  onChange,
-}: {
-  value: string | null | undefined;
-  disabled?: boolean;
-  onChange: (next: SubsidyStatus) => void;
-}) {
-  const current = normalizeSubsidyStatus(value);
-
-  function requestChange(next: SubsidyStatus) {
-    if (next === current) return;
-    if (next === "已申請補助" && !window.confirm("確定此案件已完成補助申請？")) return;
-    if (current === "已申請補助" && next === "未申請補助" && !window.confirm("是否改回未申請補助？")) return;
-    if (next === "不適用" && !window.confirm("確定此案件不適用補助？")) return;
-    onChange(next);
-  }
-
-  return (
-    <Select value={current} onValueChange={(v) => requestChange(v as SubsidyStatus)} disabled={disabled}>
-      <SelectTrigger
-        className={`h-7 w-auto min-w-0 gap-1 border-0 px-2 text-xs font-medium shadow-none focus:ring-0 ${SUBSIDY_COLORS[current]}`}
-      >
-        <SelectValue>{SUBSIDY_LABELS[current]}</SelectValue>
-      </SelectTrigger>
-      <SelectContent>
-        {SUBSIDY_STATUSES.map((s) => (
-          <SelectItem key={s} value={s}>
-            {SUBSIDY_LABELS[s]}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
-}
-
 function DetailSection({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="space-y-2">
@@ -201,14 +143,10 @@ function RepairCaseDetailView({
   detail,
   onClose,
   onStatusChange,
-  onSubsidyChange,
-  subsidyUpdating,
 }: {
   detail: RepairCaseDetail;
   onClose: () => void;
   onStatusChange: (status: string) => void;
-  onSubsidyChange: (next: SubsidyStatus) => void;
-  subsidyUpdating?: boolean;
 }) {
   const { toast } = useToast();
 
@@ -224,14 +162,6 @@ function RepairCaseDetailView({
           <Badge variant="outline" className={PRIORITY_COLORS[detail.priority] ?? ""}>{detail.priority}</Badge>
           <Badge variant="secondary">{detail.source}</Badge>
         </div>
-      </div>
-
-      <div>
-        <SubsidyStatusControl
-          value={detail.subsidyStatus}
-          disabled={subsidyUpdating}
-          onChange={onSubsidyChange}
-        />
       </div>
 
       <Separator />
@@ -358,23 +288,15 @@ export default function RepairCases() {
 
   const updateMutation = useUpdateRepairCase({
     mutation: {
-      onSuccess: (_data, variables) => {
+      onSuccess: () => {
         invalidate();
-        if (variables.data.subsidyStatus !== undefined) {
-          toast({ title: SUBSIDY_LABELS[normalizeSubsidyStatus(variables.data.subsidyStatus)] });
-        } else {
-          toast({ title: "案件已更新" });
-        }
+        toast({ title: "案件已更新" });
       },
       onError: (err: unknown) => {
         toast({ title: "更新失敗", description: String(err), variant: "destructive" });
       },
     },
   });
-
-  function setSubsidy(caseId: number, next: SubsidyStatus) {
-    updateMutation.mutate({ id: caseId, data: { subsidyStatus: next } });
-  }
 
   const deleteMutation = useDeleteRepairCase({
     mutation: {
@@ -457,7 +379,6 @@ export default function RepairCases() {
                   <th className="px-3 py-2 font-medium hidden lg:table-cell">地址</th>
                   <th className="px-3 py-2 font-medium hidden md:table-cell">技師</th>
                   <th className="px-3 py-2 font-medium">狀態</th>
-                  <th className="px-3 py-2 font-medium">補助</th>
                   <th className="px-3 py-2 font-medium hidden sm:table-cell">來源</th>
                   <th className="px-3 py-2 font-medium hidden lg:table-cell">預約日期</th>
                   <th className="px-3 py-2 font-medium">操作</th>
@@ -474,13 +395,6 @@ export default function RepairCases() {
                     <td className="px-3 py-2.5 hidden md:table-cell">{c.employeeName ?? "—"}</td>
                     <td className="px-3 py-2.5">
                       <Badge className={`text-[10px] ${STATUS_COLORS[c.status] ?? ""}`}>{c.status}</Badge>
-                    </td>
-                    <td className="px-3 py-2.5">
-                      <SubsidyStatusControl
-                        value={c.subsidyStatus}
-                        disabled={updateMutation.isPending}
-                        onChange={(next) => setSubsidy(c.id, next)}
-                      />
                     </td>
                     <td className="px-3 py-2.5 hidden sm:table-cell text-xs">{c.source}</td>
                     <td className="px-3 py-2.5 hidden lg:table-cell text-muted-foreground">{c.appointmentDate ?? "—"}</td>
@@ -632,8 +546,6 @@ export default function RepairCases() {
               detail={detail}
               onClose={() => setDetailId(null)}
               onStatusChange={status => detailId && updateMutation.mutate({ id: detailId, data: { status } })}
-              onSubsidyChange={next => detailId && setSubsidy(detailId, next)}
-              subsidyUpdating={updateMutation.isPending}
             />
           ) : (
             <Skeleton className="h-40 w-full" />

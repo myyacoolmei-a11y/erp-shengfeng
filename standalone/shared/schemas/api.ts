@@ -1797,6 +1797,7 @@ export const ListReceivablesResponseItem = zod.object({
   "invoiceNumber": zod.string().nullish(),
   "invoiceDate": zod.string().nullish(),
   "invoiceNotes": zod.string().nullish(),
+  "subsidyStatus": zod.string().optional(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -1849,6 +1850,7 @@ export const CreateReceivableResponse = zod.object({
   "invoiceNumber": zod.string().nullish(),
   "invoiceDate": zod.string().nullish(),
   "invoiceNotes": zod.string().nullish(),
+  "subsidyStatus": zod.string().optional(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -1884,6 +1886,7 @@ export const GetReceivableResponse = zod.object({
   "invoiceNumber": zod.string().nullish(),
   "invoiceDate": zod.string().nullish(),
   "invoiceNotes": zod.string().nullish(),
+  "subsidyStatus": zod.string().optional(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })
@@ -1908,7 +1911,8 @@ export const UpdateReceivableBody = zod.object({
   "invoiceTitle": zod.string().optional(),
   "invoiceNumber": zod.string().optional(),
   "invoiceDate": zod.string().optional(),
-  "invoiceNotes": zod.string().optional()
+  "invoiceNotes": zod.string().optional(),
+  "subsidyStatus": zod.string().optional()
 })
 
 export const UpdateReceivableResponse = zod.object({
@@ -1934,6 +1938,7 @@ export const UpdateReceivableResponse = zod.object({
   "invoiceNumber": zod.string().nullish(),
   "invoiceDate": zod.string().nullish(),
   "invoiceNotes": zod.string().nullish(),
+  "subsidyStatus": zod.string().optional(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 })

@@ -779,6 +779,8 @@ export interface Receivable {
   invoiceDate?: string | null;
   /** @nullable */
   invoiceNotes?: string | null;
+  /** 未申請補助 | 已申請補助 */
+  subsidyStatus?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -816,6 +818,7 @@ export interface ReceivableUpdate {
   invoiceNumber?: string;
   invoiceDate?: string;
   invoiceNotes?: string;
+  subsidyStatus?: string;
 }
 
 export interface RecordPaymentInput {

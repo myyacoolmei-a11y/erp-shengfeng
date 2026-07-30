@@ -25,6 +25,7 @@ function fmt(r: Record<string, unknown>) {
     ...r,
     totalAmount: parseFloat(String(r.totalAmount ?? "0")),
     receivedAmount: parseFloat(String(r.receivedAmount ?? "0")),
+    subsidyStatus: (r.subsidyStatus as string) || "未申請補助",
     createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : r.createdAt,
     updatedAt: r.updatedAt instanceof Date ? r.updatedAt.toISOString() : r.updatedAt,
   };
@@ -53,6 +54,7 @@ const REC_SELECT = {
   invoiceNumber: receivablesTable.invoiceNumber,
   invoiceDate: receivablesTable.invoiceDate,
   invoiceNotes: receivablesTable.invoiceNotes,
+  subsidyStatus: receivablesTable.subsidyStatus,
   createdAt: receivablesTable.createdAt,
   updatedAt: receivablesTable.updatedAt,
 };
@@ -170,6 +172,7 @@ router.patch("/receivables/:id", requireRole(...WRITE_ROLES), async (req, res): 
     invoiceNumber: z.string().nullable().optional(),
     invoiceDate: z.string().nullable().optional(),
     invoiceNotes: z.string().nullable().optional(),
+    subsidyStatus: z.enum(["未申請補助", "已申請補助"]).optional(),
   });
   const parsed = UpdateSchema.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }

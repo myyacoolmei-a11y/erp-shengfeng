@@ -26,6 +26,8 @@ export const receivablesTable = pgTable("receivables", {
   invoiceNumber: text("invoice_number"),
   invoiceDate: date("invoice_date", { mode: "string" }),
   invoiceNotes: text("invoice_notes"),
+  /** 未申請補助 | 已申請補助 */
+  subsidyStatus: text("subsidy_status").notNull().default("未申請補助"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
