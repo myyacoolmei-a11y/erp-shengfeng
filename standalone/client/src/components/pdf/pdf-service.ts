@@ -55,9 +55,10 @@ export async function generatePdfBlobFromHtml(
       throw new Error("PDF \u751f\u6210\u5931\u6557\uff1aDOM \u5c1a\u672a\u5b8c\u6574 render");
     }
 
-    const pageEl = body.querySelector(".page") as HTMLElement | null;
+    // Quotation uses .quotation-print-page; other templates still use .page
+    const pageEl = body.querySelector(".page, .quotation-print-page") as HTMLElement | null;
     if (!pageEl) {
-      throw new Error("PDF \u751f\u6210\u5931\u6557\uff1a\u627e\u4e0d\u5230 .page \u5217\u5370\u5bb9\u5668");
+      throw new Error("PDF \u751f\u6210\u5931\u6557\uff1a\u627e\u4e0d\u5230 .page / .quotation-print-page \u5217\u5370\u5bb9\u5668");
     }
     pageEl.dataset.templateType = pageFormat;
     console.log("PDF capture target:", pageEl.className, pageEl.dataset.templateType);
