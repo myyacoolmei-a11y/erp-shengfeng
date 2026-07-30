@@ -20,6 +20,7 @@ import { getSpeechService, resolveActiveSpeechProviderId } from "./lib/voice/spe
 import { ensureAiWorkReminderMigration } from "./lib/migrations/ensureAiWorkReminderMigration";
 import { ensureNotificationRolePrefsMigration } from "./lib/migrations/ensureNotificationRolePrefsMigration";
 import { ensureUserNotificationPrefsMigration } from "./lib/migrations/ensureUserNotificationPrefsMigration";
+import { ensureInventoryMigration } from "./lib/migrations/ensureInventoryMigration";
 import { startReminderScheduler } from "./lib/reminders/scheduler.ts";
 
 const rawPort = process.env["PORT"];
@@ -76,5 +77,6 @@ app.listen(port, async (err) => {
   await ensureAiWorkReminderMigration();
   await ensureNotificationRolePrefsMigration();
   await ensureUserNotificationPrefsMigration();
+  await ensureInventoryMigration();
   startReminderScheduler();
 });

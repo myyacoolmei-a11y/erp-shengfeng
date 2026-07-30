@@ -32,16 +32,7 @@ import PartnerCultureRoute from "@/pages/partner-culture-route";
 import NotificationSettings from "@/pages/notification-settings";
 import AiAssistant from "@/pages/ai-assistant";
 import WorkHoursStats from "@/pages/work-hours-stats";
-
-function ComingSoon({ title }: { title: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center py-24 text-center">
-      <p className="text-4xl mb-4">🚧</p>
-      <h2 className="text-xl font-bold mb-2">{title}</h2>
-      <p className="text-muted-foreground text-sm">此功能即將推出，敬請期待。</p>
-    </div>
-  );
-}
+import Inventory from "@/pages/inventory";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -213,7 +204,7 @@ function AppRoutes() {
             </Route>
             <Route path="/inventory">
               <RoleGuard roles={["super_admin", "owner", "admin"]}>
-                <ComingSoon title="庫存管理" />
+                <Inventory />
               </RoleGuard>
             </Route>
             <Route path="/employees">

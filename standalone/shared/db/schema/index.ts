@@ -39,3 +39,5 @@ export * from "./companyAiWorkReminderSettings";
 export * from "./notificationDedup";
 export * from "./inAppNotifications";
 export * from "./userPushSubscriptions";
+export * from "./inventoryItems";
+export * from "./inventoryTransactions";
