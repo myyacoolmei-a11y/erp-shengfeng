@@ -20,8 +20,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Pencil, Trash2, ChevronDown, ChevronUp, CreditCard, Printer, Share2, MapPin, X, FileText, AlertCircle, MoreHorizontal, UserPlus, Eye } from "lucide-react";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Plus, Pencil, Trash2, ChevronDown, ChevronUp, CreditCard, Printer, MapPin, X, FileText, AlertCircle, UserPlus, Eye } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth, hasRole, userHasFeature } from "@/contexts/auth-context";
 import { makeEmpty, type WOForm, buildPayload, hasWorkOrderCustomer, WorkOrderFormFields, equipmentItemsFromOrder } from "@/components/work-order-form";
@@ -37,8 +37,52 @@ import { VoiceAssistantButton } from "@/components/voice-assistant/VoiceAssistan
 import { applyVoiceToWorkOrderForm } from "@/lib/voice/applyVoiceToWorkOrder";
 import type { VoiceAssistantApplyPayload } from "@/components/voice-assistant/types";
 import { PdfPreviewDialog } from "@/components/pdf/pdf-preview-dialog";
-import { handlePdfAction, isMobileDevice, openPrintWindow } from "@/components/pdf/pdf-service";
+import { handlePdfAction, isMobileDevice, openLineShareText, openPrintWindow } from "@/components/pdf/pdf-service";
 import { buildWorkOrderHtml } from "@/components/pdf/templates/WorkOrderTemplate";
+
+/** Same compact icon button as quote list — min 44×44 touch target on mobile. */
+function WoIconButton({
+  label,
+  onClick,
+  disabled,
+  className = "",
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          title={label}
+          aria-label={label}
+          disabled={disabled}
+          onClick={onClick}
+          className={`inline-flex h-11 w-11 sm:h-10 sm:w-10 items-center justify-center rounded-md border border-border bg-background hover:bg-muted disabled:opacity-50 disabled:pointer-events-none shrink-0 ${className}`}
+        >
+          {children}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="top">{label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+function LineGlyph({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <span
+      className={`inline-flex items-center justify-center rounded-[4px] bg-[#06C755] text-[9px] font-bold leading-none text-white ${className}`}
+      aria-hidden
+    >
+      LINE
+    </span>
+  );
+}
 import { FieldProgressDetailSection } from "@/components/field-progress/FieldProgressDetailSection";
 import { WorkOrderReopenDialog } from "@/components/work-orders/WorkOrderReopenDialog";
 import { EngineerWorkOrderCard } from "@/components/field-progress/EngineerWorkOrderCard";
@@ -180,16 +224,40 @@ async function shareWorkOrderViaLine(
 ) {
   const woNum = order.workOrderNumber || `#${order.id}`;
   const html = buildWorkOrderHtml(order);
+  // Keep PDF preview (existing print layout) then open real LINE share — same helper as quotes.
   await handlePdfAction({
     html,
     docNo: woNum,
     filename: `派工單_${woNum}.pdf`,
     title: "晟風工程派工單",
-    action: "share",
+    action: "preview",
     setPdfPreview,
     toast,
     pageFormat: "custom-240x140-landscape",
   });
+
+  const message = [
+    "【晟風工程派工單】",
+    `單號：${woNum}`,
+    `客戶：${order.customerName || "—"}`,
+    order.title ? `工程：${order.title}` : "",
+    order.installAddress ? `地址：${order.installAddress}` : "",
+    order.scheduledDate ? `預定施工：${order.scheduledDate}${order.scheduledTime ? ` ${order.scheduledTime}` : ""}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  const win = openLineShareText(message);
+  if (win) {
+    toast({ title: "已開啟 LINE 分享", description: "請選擇對話傳送派工單資訊" });
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(message);
+    toast({ title: "已複製分享內容", description: "無法直接開啟 LINE，請貼到對話中" });
+  } catch {
+    toast({ title: "請手動開啟 LINE 分享", variant: "destructive" });
+  }
 }
 
 function WorkOrderDetailSummary({ order }: { order: any }) {
@@ -911,98 +979,118 @@ export default function WorkOrders() {
                     )}
                   </div>
 
-                  {/* Primary actions — large buttons */}
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    {canWrite && !o.scheduledDate && statusLabel !== "已完成" && statusLabel !== "已結案" && (
-                      <Button
-                        className="h-10 sm:h-9 flex-1"
-                        variant="default"
-                        onClick={() => openEdit(o)}
-                      >
-                        安排派工
-                      </Button>
-                    )}
-                    <Button
-                      className="h-10 sm:h-9 flex-1"
-                      variant="outline"
-                      onClick={() => setExpandedId(expandedId === o.id ? null : o.id)}
-                    >
-                      <Eye className="h-4 w-4 mr-1" />
-                      {expandedId === o.id ? "收合" : "查看案件"}
-                    </Button>
-                    {(statusLabel === "施工中" || statusLabel === "待施工" || statusLabel === "已完成") && (
-                      <Button
-                        className="h-10 sm:h-9 flex-1"
-                        variant="outline"
-                        onClick={() => setExpandedId(o.id)}
-                      >
-                        查看施工
-                      </Button>
-                    )}
-                    {canWrite && (statusLabel === "已完成" || o.status === "已完成") && (
-                      hasAr ? (
+                  {/* Actions — compact text buttons + icon ops (same pattern as quote list) */}
+                  <TooltipProvider delayDuration={300}>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {canWrite && !o.scheduledDate && statusLabel !== "已完成" && statusLabel !== "已結案" && (
                         <Button
-                          className="h-10 sm:h-9 flex-1 text-emerald-700 border-emerald-300"
-                          variant="outline"
-                          onClick={() => navigate(`/receivables?receivableId=${(o as any).receivableId}`)}
-                        >
-                          <CreditCard className="h-4 w-4 mr-1" />查看帳款
-                        </Button>
-                      ) : needsCustomer ? (
-                        <Button
-                          className="h-10 sm:h-9 flex-1"
+                          size="sm"
+                          className="h-11 sm:h-9 w-auto px-3 shrink-0"
                           variant="default"
-                          onClick={() => setBindForAr(o)}
+                          onClick={() => openEdit(o)}
                         >
-                          <UserPlus className="h-4 w-4 mr-1" />先綁定客戶
+                          安排派工
                         </Button>
-                      ) : (
+                      )}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-11 sm:h-9 w-auto px-3 shrink-0"
+                        onClick={() => setExpandedId(expandedId === o.id ? null : o.id)}
+                        title={expandedId === o.id ? "收合" : "查看案件"}
+                        aria-label={expandedId === o.id ? "收合" : "查看案件"}
+                      >
+                        <Eye className="h-4 w-4 mr-1" />
+                        <span className="sm:hidden">{expandedId === o.id ? "收合" : "查看"}</span>
+                        <span className="hidden sm:inline">{expandedId === o.id ? "收合" : "查看案件"}</span>
+                      </Button>
+                      {(statusLabel === "施工中" || statusLabel === "待施工" || statusLabel === "已完成") && (
                         <Button
-                          className="h-10 sm:h-9 flex-1 text-emerald-700 border-emerald-300"
+                          size="sm"
                           variant="outline"
-                          onClick={() => setArModal({ order: o, amount: "" })}
+                          className="h-11 sm:h-9 w-auto px-3 shrink-0"
+                          onClick={() => setExpandedId(o.id)}
+                          title="查看施工"
+                          aria-label="查看施工"
                         >
-                          <CreditCard className="h-4 w-4 mr-1" />建立帳款
+                          查看施工
                         </Button>
-                      )
-                    )}
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button className="h-10 sm:h-9" variant="ghost">
-                          <MoreHorizontal className="h-4 w-4 mr-1" />更多
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => printWorkOrderPDF(o, setPdfPreview, toast)}>
-                          <Printer className="h-3.5 w-3.5 mr-2" />列印
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => shareWorkOrderViaLine(o, setPdfPreview, toast)}>
-                          <Share2 className="h-3.5 w-3.5 mr-2" />分享
-                        </DropdownMenuItem>
-                        {o.installAddress && (
-                          <DropdownMenuItem asChild>
-                            <a
-                              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(o.installAddress)}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                            >
-                              <MapPin className="h-3.5 w-3.5 mr-2" />導航
-                            </a>
-                          </DropdownMenuItem>
-                        )}
-                        {canWrite && (
-                          <DropdownMenuItem onClick={() => openEdit(o)}>
-                            <Pencil className="h-3.5 w-3.5 mr-2" />編輯
-                          </DropdownMenuItem>
-                        )}
-                        {(user?.role === "owner" || user?.role === "super_admin") && (
-                          <DropdownMenuItem className="text-destructive" onClick={() => setDeleteId(o.id)}>
-                            <Trash2 className="h-3.5 w-3.5 mr-2" />刪除
-                          </DropdownMenuItem>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
+                      )}
+                      {canWrite && (statusLabel === "已完成" || o.status === "已完成") && (
+                        hasAr ? (
+                          <Button
+                            size="sm"
+                            className="h-11 sm:h-9 w-auto px-3 shrink-0 text-emerald-700 border-emerald-300"
+                            variant="outline"
+                            onClick={() => navigate(`/receivables?receivableId=${(o as any).receivableId}`)}
+                          >
+                            <CreditCard className="h-4 w-4 mr-1" />查看帳款
+                          </Button>
+                        ) : needsCustomer ? (
+                          <Button
+                            size="sm"
+                            className="h-11 sm:h-9 w-auto px-3 shrink-0"
+                            variant="default"
+                            onClick={() => setBindForAr(o)}
+                          >
+                            <UserPlus className="h-4 w-4 mr-1" />先綁定客戶
+                          </Button>
+                        ) : (
+                          <Button
+                            size="sm"
+                            className="h-11 sm:h-9 w-auto px-3 shrink-0 text-emerald-700 border-emerald-300"
+                            variant="outline"
+                            onClick={() => setArModal({ order: o, amount: "" })}
+                          >
+                            <CreditCard className="h-4 w-4 mr-1" />建立帳款
+                          </Button>
+                        )
+                      )}
+
+                      <WoIconButton
+                        label="列印派工單"
+                        onClick={() => void printWorkOrderPDF(o, setPdfPreview, toast)}
+                      >
+                        <Printer className="h-4 w-4" />
+                      </WoIconButton>
+                      <WoIconButton
+                        label="LINE 分享派工單"
+                        className="border-[#06C755]/40"
+                        onClick={() => void shareWorkOrderViaLine(o, setPdfPreview, toast as any)}
+                      >
+                        <LineGlyph className="h-5 w-5 px-0.5" />
+                      </WoIconButton>
+                      {!!o.installAddress && (
+                        <WoIconButton
+                          label="導航"
+                          onClick={() => {
+                            const addr = String(o.installAddress);
+                            window.open(
+                              `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}`,
+                              "_blank",
+                              "noopener,noreferrer",
+                            );
+                          }}
+                        >
+                          <MapPin className="h-4 w-4" />
+                        </WoIconButton>
+                      )}
+                      {canWrite && (
+                        <WoIconButton label="編輯派工單" onClick={() => openEdit(o)}>
+                          <Pencil className="h-4 w-4" />
+                        </WoIconButton>
+                      )}
+                      {(user?.role === "owner" || user?.role === "super_admin") && (
+                        <WoIconButton
+                          label="刪除派工單"
+                          className="text-destructive border-destructive/40 hover:bg-destructive/10"
+                          onClick={() => setDeleteId(o.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </WoIconButton>
+                      )}
+                    </div>
+                  </TooltipProvider>
 
                   {expandedId === o.id && (
                     <div className="space-y-3 border-t pt-3">
