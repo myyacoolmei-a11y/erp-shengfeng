@@ -173,6 +173,18 @@ export async function reverseReceivablePayment(opts: {
       },
     });
 
+    if (current.workOrderId) {
+      const { syncAdminWorkflowFromReceivable } = await import(
+        "../workOrders/adminWorkbenchService.ts"
+      );
+      await syncAdminWorkflowFromReceivable(
+        current.workOrderId,
+        opts.user,
+        "未收款",
+        opts.reason,
+      );
+    }
+
     return {
       paymentStatus: "未收款",
       reversedAmount: received,
@@ -227,6 +239,11 @@ export async function reverseReceivablePayment(opts: {
       .where(eq(receivablesTable.id, opts.receivableId));
   });
 
+  const paymentStatus = derivePaymentStatus(
+    Math.max(0, received - reversedTotal),
+    parseAmount(current.totalAmount),
+  );
+
   await writeAuditLog({
     action: "receivable.payment.reversed",
     entityType: "receivable",
@@ -237,13 +254,25 @@ export async function reverseReceivablePayment(opts: {
       reversedPaymentIds,
       reversedAmount: reversedTotal,
       receivedAmount: Math.max(0, received - reversedTotal),
-      paymentStatus: derivePaymentStatus(Math.max(0, received - reversedTotal), parseAmount(current.totalAmount)),
+      paymentStatus,
       totalAmount: parseAmount(current.totalAmount),
     },
   });
 
+  if (current.workOrderId) {
+    const { syncAdminWorkflowFromReceivable } = await import(
+      "../workOrders/adminWorkbenchService.ts"
+    );
+    await syncAdminWorkflowFromReceivable(
+      current.workOrderId,
+      opts.user,
+      paymentStatus,
+      opts.reason,
+    );
+  }
+
   return {
-    paymentStatus: derivePaymentStatus(Math.max(0, received - reversedTotal), parseAmount(current.totalAmount)),
+    paymentStatus,
     reversedAmount: reversedTotal,
     reversedPaymentIds,
   };

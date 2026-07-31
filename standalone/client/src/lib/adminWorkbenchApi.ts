@@ -46,6 +46,18 @@ export type AdminWorkbenchItem = {
   adminWorkflowLabel?: string | null;
   subsidyApplicationId?: number | null;
   closeOverrideAt?: string | null;
+  uploadLinkToken?: string | null;
+  uploadLinkSentAt?: string | null;
+  customerDocumentCount?: number;
+  customerDocuments?: Array<{
+    id: number;
+    docType: string;
+    fileName: string | null;
+    fileUrl: string | null;
+    status: string;
+    note: string | null;
+    uploadedAt: string | null;
+  }>;
 };
 
 export type AdminWorkbenchData = {
@@ -162,6 +174,14 @@ export function markAdminPaid(workOrderId: number, note?: string) {
   });
 }
 
+export function cancelAdminPaid(workOrderId: number, reason?: string) {
+  return customFetch<{ paymentStatus: string }>(`/api/admin-workbench/${workOrderId}/cancel-paid`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
 export function approveAdminCloseOverride(workOrderId: number, note?: string) {
   return customFetch<{ ok: true }>(`/api/admin-workbench/${workOrderId}/close-override`, {
     method: "POST",
@@ -172,6 +192,14 @@ export function approveAdminCloseOverride(workOrderId: number, note?: string) {
 
 export function completeAdminClose(workOrderId: number, note?: string) {
   return customFetch<{ ok: true }>(`/api/admin-workbench/${workOrderId}/complete-close`, {
+    method: "POST",
+    body: JSON.stringify({ note }),
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+export function reopenAdminClosed(workOrderId: number, note?: string) {
+  return customFetch<{ ok: true }>(`/api/admin-workbench/${workOrderId}/reopen`, {
     method: "POST",
     body: JSON.stringify({ note }),
     headers: { "Content-Type": "application/json" },

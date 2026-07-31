@@ -13,7 +13,10 @@ import {
 import type { JwtPayload } from "../auth.ts";
 import { effectiveRoles } from "../auth.ts";
 import { writeAuditLog } from "../audit/auditLogService.ts";
-import { recordReceivablePayment } from "../receivables/receivablePaymentService.ts";
+import {
+  recordReceivablePayment,
+  reverseReceivablePayment,
+} from "../receivables/receivablePaymentService.ts";
 import {
   type AdminBillingInfo,
   type AdminWorkflowStatus,
@@ -260,6 +263,21 @@ export async function getAdminWorkbench() {
   const subByWo = new Map<number, (typeof subsidies)[number]>();
   for (const s of subsidies) subByWo.set(s.workOrderId, s);
 
+  const documents =
+    woIds.length === 0
+      ? []
+      : await db
+          .select()
+          .from(customerDocumentsTable)
+          .where(inArray(customerDocumentsTable.workOrderId, woIds))
+          .orderBy(desc(customerDocumentsTable.createdAt));
+  const docsByWo = new Map<number, typeof documents>();
+  for (const d of documents) {
+    const arr = docsByWo.get(d.workOrderId) ?? [];
+    arr.push(d);
+    docsByWo.set(d.workOrderId, arr);
+  }
+
   const sections = {
     pendingConstructionConfirm: [] as unknown[],
     pendingCreateReceivable: [] as unknown[],
@@ -349,11 +367,22 @@ export async function getAdminWorkbench() {
       subsidyApplicationId: sub?.id ?? null,
       subsidyNote: sub?.note ?? r.wo.adminSubsidyNote,
       uploadLinkSentAt: sub?.uploadLinkSentAt?.toISOString() ?? null,
+      uploadLinkToken: sub?.uploadLinkToken ?? null,
       closeOverrideAt: sub?.closeOverrideAt?.toISOString() ?? null,
+      customerDocuments: (docsByWo.get(r.wo.id) ?? []).slice(0, 20).map((d) => ({
+        id: d.id,
+        docType: d.docType,
+        fileName: d.fileName,
+        fileUrl: d.fileUrl,
+        status: d.status,
+        note: d.note,
+        uploadedAt: d.uploadedAt?.toISOString() ?? null,
+      })),
+      customerDocumentCount: (docsByWo.get(r.wo.id) ?? []).length,
       ...card,
     };
 
-    // Closed list (recent)
+    // Closed list — never drop; always findable
     if (status === "closed") {
       sections.closed.push(base);
       continue;
@@ -364,7 +393,7 @@ export async function getAdminWorkbench() {
       sections.pendingConstructionConfirm.push(base);
     }
 
-    // 2–7 Receivable / collection (independent of subsidy)
+    // 2–7 Receivable / collection (unpaid / partial only)
     if (engConfirmed && !recv) {
       sections.pendingCreateReceivable.push(base);
     } else if (recv && card.receivableStatus !== "paid") {
@@ -374,7 +403,7 @@ export async function getAdminWorkbench() {
       if (card.receivableStatus === "partial") {
         sections.collectionPartial.push(base);
       }
-      if (due && card.receivableStatus !== "paid") {
+      if (due) {
         const d = daysBetween(today, due);
         if (d < 0) sections.collectionOverdue.push(base);
         else if (d === 0) sections.collectionToday.push(base);
@@ -382,8 +411,12 @@ export async function getAdminWorkbench() {
       }
     }
 
-    // 8–12 Subsidy pipeline (independent of payment)
-    if (subsidyType === "company_assisted" && subsidyPipeline) {
+    // 8–12 Subsidy pipeline — keep visible after payment until applied
+    const subsidyStillOpen =
+      subsidyType === "company_assisted" &&
+      subsidyPipeline != null &&
+      subsidyPipeline !== "applied";
+    if (subsidyStillOpen) {
       switch (subsidyPipeline) {
         case "link_not_sent":
           sections.subsidyLinkNotSent.push(base);
@@ -401,15 +434,20 @@ export async function getAdminWorkbench() {
           sections.subsidyPendingApply.push(base);
           break;
         default:
+          sections.subsidyLinkNotSent.push(base);
           break;
       }
     }
 
-    // 13. Pending close
-    if (status === "pending_close" || status === "paid" || card.canClose) {
-      if (status !== "closed" && (status === "pending_close" || card.receivableStatus === "paid")) {
-        sections.pendingClose.push(base);
-      }
+    // 13. Pending close — only when paid AND subsidy not blocking
+    // (needs-subsidy unpaid→paid cases stay in subsidy sections until applied/override)
+    const subsidyBlocksClose =
+      subsidyType === "company_assisted" &&
+      subsidyPipeline !== "applied" &&
+      !sub?.closeOverrideAt;
+    const isPaid = card.receivableStatus === "paid" || status === "pending_close" || status === "paid";
+    if (isPaid && !subsidyBlocksClose) {
+      sections.pendingClose.push(base);
     }
   }
 
@@ -957,31 +995,115 @@ export async function syncAdminWorkflowFromReceivable(
   const cur = normalizeAdminWorkflowStatus(wo.adminWorkflowStatus);
   if (!cur || cur === "closed" || cur === "pending_admin_review") return;
 
-  if (paymentStatus === "部分收款" && cur !== "partially_paid") {
-    await transitionAdminStatus({
-      workOrderId,
-      from: wo.adminWorkflowStatus,
-      to: "partially_paid",
-      user,
-      note: note ?? "部分收款",
-    });
+  if (paymentStatus === "已收款") {
+    if (cur !== "pending_close" && cur !== "paid") {
+      await transitionAdminStatus({
+        workOrderId,
+        from: wo.adminWorkflowStatus,
+        to: "pending_close",
+        user,
+        note: note ?? "已收款，進入待結案",
+      });
+    }
     return;
   }
 
+  if (paymentStatus === "部分收款") {
+    if (cur !== "partially_paid") {
+      await transitionAdminStatus({
+        workOrderId,
+        from: wo.adminWorkflowStatus,
+        to: "partially_paid",
+        user,
+        note: note ?? "部分收款",
+      });
+    }
+    return;
+  }
+
+  // 未收款 — restore from paid / pending_close / partially_paid back to billed
   if (
-    paymentStatus === "已收款" &&
-    cur !== "pending_close" &&
-    cur !== "paid" &&
-    cur !== "closed"
+    paymentStatus === "未收款" &&
+    (cur === "pending_close" || cur === "paid" || cur === "partially_paid")
   ) {
     await transitionAdminStatus({
       workOrderId,
       from: wo.adminWorkflowStatus,
-      to: "pending_close",
+      to: "billed",
       user,
-      note: note ?? "已收款，進入待結案",
+      note: note ?? "取消已收款，恢復待收款",
     });
   }
+}
+
+/** Undo mark-paid: reverse payment records + restore admin workflow to unpaid/partial. */
+export async function cancelFullyPaid(
+  workOrderId: number,
+  user: JwtPayload,
+  reason?: string,
+) {
+  const [wo] = await db.select().from(workOrdersTable).where(eq(workOrdersTable.id, workOrderId)).limit(1);
+  if (!wo) throw new Error("找不到派工單");
+  const cur = normalizeAdminWorkflowStatus(wo.adminWorkflowStatus);
+  if (cur === "closed") {
+    throw new Error("已結案案件請先「取消結案／重新開啟」後再取消已收款");
+  }
+
+  const [recv] = await db
+    .select()
+    .from(receivablesTable)
+    .where(eq(receivablesTable.workOrderId, workOrderId))
+    .limit(1);
+  if (!recv) throw new Error("尚未建立應收帳款");
+
+  const received = num(recv.receivedAmount);
+  if (recv.paymentStatus !== "已收款" && received <= 0) {
+    throw new Error("此案件尚未標記已收款");
+  }
+
+  const result = await reverseReceivablePayment({
+    receivableId: recv.id,
+    reason: reason ?? "取消已收款",
+    user,
+  });
+
+  // reverseReceivablePayment syncs workflow when workOrderId is set; ensure billed/partial anyway
+  await syncAdminWorkflowFromReceivable(
+    workOrderId,
+    user,
+    result.paymentStatus,
+    reason ?? "取消已收款",
+  );
+
+  return result;
+}
+
+/** Undo close — keep payments / subsidy / quote / work-order data. */
+export async function reopenClosedCase(
+  workOrderId: number,
+  user: JwtPayload,
+  note?: string,
+) {
+  const [wo] = await db.select().from(workOrdersTable).where(eq(workOrdersTable.id, workOrderId)).limit(1);
+  if (!wo) throw new Error("找不到派工單");
+  const cur = normalizeAdminWorkflowStatus(wo.adminWorkflowStatus);
+  if (cur !== "closed") throw new Error("此案件尚未結案");
+
+  await transitionAdminStatus({
+    workOrderId,
+    from: wo.adminWorkflowStatus,
+    to: "pending_close",
+    user,
+    note: note ?? "取消結案／重新開啟",
+    extraUpdate: {
+      adminClosedAt: null,
+      adminClosedBy: null,
+      // restore operational status; do not touch payments / subsidy / quote
+      status: wo.status === "已結案" ? "已完成" : wo.status,
+    },
+  });
+
+  return { ok: true as const };
 }
 
 export async function approveCloseOverride(

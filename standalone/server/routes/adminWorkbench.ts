@@ -4,11 +4,13 @@ import { requireRole } from "../lib/auth";
 import {
   advanceSubsidyPipeline,
   approveCloseOverride,
+  cancelFullyPaid,
   completeClose,
   confirmAdminCompletion,
   getAdminWorkbench,
   markBilled,
   markFullyPaid,
+  reopenClosedCase,
   setReceivableExpectedPaymentDate,
   setSubsidyType,
   updateBillingDraft,
@@ -279,6 +281,42 @@ router.post(
     try {
       await markFullyPaid(workOrderId, req.user!, note);
       res.json({ ok: true });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : "操作失敗" });
+    }
+  },
+);
+
+router.post(
+  "/admin-workbench/:workOrderId/cancel-paid",
+  requireAdminOps,
+  async (req, res): Promise<void> => {
+    const workOrderId = Number(req.params.workOrderId);
+    if (!Number.isFinite(workOrderId)) {
+      res.status(400).json({ error: "無效的派工單 ID" });
+      return;
+    }
+    const reason = typeof req.body?.reason === "string" ? req.body.reason : undefined;
+    try {
+      res.json(await cancelFullyPaid(workOrderId, req.user!, reason));
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : "操作失敗" });
+    }
+  },
+);
+
+router.post(
+  "/admin-workbench/:workOrderId/reopen",
+  requireAdminOps,
+  async (req, res): Promise<void> => {
+    const workOrderId = Number(req.params.workOrderId);
+    if (!Number.isFinite(workOrderId)) {
+      res.status(400).json({ error: "無效的派工單 ID" });
+      return;
+    }
+    const note = typeof req.body?.note === "string" ? req.body.note : undefined;
+    try {
+      res.json(await reopenClosedCase(workOrderId, req.user!, note));
     } catch (err) {
       res.status(400).json({ error: err instanceof Error ? err.message : "操作失敗" });
     }
