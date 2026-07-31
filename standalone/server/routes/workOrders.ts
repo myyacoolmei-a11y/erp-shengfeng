@@ -7,6 +7,7 @@ import {
   progressTable,
   customersTable,
   quotesTable,
+  receivablesTable,
 } from "@workspace/db";
 import { CreateWorkOrderBody, UpdateWorkOrderBody, CreateProgressBody } from "@workspace/api-zod";
 import { requireRoleOrFeature, effectiveRoles } from "../lib/auth";
@@ -192,7 +193,11 @@ function deserializeAiReminderFields(order: Record<string, unknown>) {
   };
 }
 
-function formatOrder(o: Record<string, unknown>, equipmentItems: ReturnType<typeof serializeEquipmentItem>[] = []) {
+function formatOrder(
+  o: Record<string, unknown>,
+  equipmentItems: ReturnType<typeof serializeEquipmentItem>[] = [],
+  receivableId: number | null = null,
+) {
   const { storedCustomerName, linkedCustomerName, linkedQuoteCreatedAt, ...rest } = o as any;
   const quoteId = rest.quoteId as number | null | undefined;
   return {
@@ -202,6 +207,7 @@ function formatOrder(o: Record<string, unknown>, equipmentItems: ReturnType<type
     quoteNumber: quoteId != null
       ? formatQuoteNumber(quoteId, linkedQuoteCreatedAt ?? rest.createdAt)
       : null,
+    receivableId: receivableId ?? (rest.receivableId as number | null | undefined) ?? null,
     equipmentItems: resolveEquipmentItems(o, equipmentItems),
     notes: stripQuotePricingFromNotes(rest.notes as string | null | undefined) || null,
     createdAt: isoStr(o.createdAt),
@@ -341,7 +347,20 @@ router.get("/work-orders", async (req, res): Promise<void> => {
   const orderIds = orders.map(o => o.id);
   const equipmentByOrder = await fetchEquipmentByWorkOrderIds(orderIds);
 
-  res.json(orders.map(o => formatOrder(o, equipmentByOrder[o.id] ?? [])));
+  const receivableByWo = new Map<number, number>();
+  if (orderIds.length > 0) {
+    const recRows = await db
+      .select({ id: receivablesTable.id, workOrderId: receivablesTable.workOrderId })
+      .from(receivablesTable)
+      .where(inArray(receivablesTable.workOrderId, orderIds));
+    for (const r of recRows) {
+      if (r.workOrderId != null && !receivableByWo.has(r.workOrderId)) {
+        receivableByWo.set(r.workOrderId, r.id);
+      }
+    }
+  }
+
+  res.json(orders.map(o => formatOrder(o, equipmentByOrder[o.id] ?? [], receivableByWo.get(o.id) ?? null)));
 });
 
 router.post("/work-orders", async (req, res): Promise<void> => {

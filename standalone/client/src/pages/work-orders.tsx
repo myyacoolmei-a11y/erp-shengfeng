@@ -5,14 +5,14 @@ import {
   useListCustomers, useListProgress, useCreateProgress,
   useCreatePayment, useCreateReceivable,
   useListEmployees, useListQuotes,
-  getListWorkOrdersQueryKey, getListProgressQueryKey,
+  getListWorkOrdersQueryKey, getListProgressQueryKey, getListReceivablesQueryKey,
 } from "@workspace/api-client-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { invalidateStatistics } from "@/lib/invalidateStatistics";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -20,11 +20,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Pencil, Trash2, ChevronDown, ChevronUp, CreditCard, Printer, Share2, MapPin, X, FileText, AlertCircle } from "lucide-react";
+import { Plus, Pencil, Trash2, ChevronDown, ChevronUp, CreditCard, Printer, Share2, MapPin, X, FileText, AlertCircle, MoreHorizontal, UserPlus, Eye } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth, hasRole, userHasFeature } from "@/contexts/auth-context";
-import { WO_STATUSES, makeEmpty, type WOForm, buildPayload, hasWorkOrderCustomer, WorkOrderFormFields, equipmentItemsFromOrder } from "@/components/work-order-form";
+import { makeEmpty, type WOForm, buildPayload, hasWorkOrderCustomer, WorkOrderFormFields, equipmentItemsFromOrder } from "@/components/work-order-form";
+import { BindCustomerDialog } from "@/components/bind-customer-dialog";
 import { validateWorkOrderAiReminder } from "@/components/work-orders/WorkOrderAiReminderSection";
 import {
   parseAiReminderScenarioIds,
@@ -48,19 +49,62 @@ import {
   type FieldProgressRecord,
 } from "@/lib/fieldProgressApi";
 
-const STATUSES = WO_STATUSES;
+const ADMIN_FILTER_TABS = ["待派工", "待施工", "施工中", "異常／暫停", "施工完成", "歷史紀錄"] as const;
+type AdminFilterTab = (typeof ADMIN_FILTER_TABS)[number];
 const ENGINEER_FILTERS = ["進行中", "今日", "即將施工", "已完成", "全部"] as const;
 type EngineerFilter = (typeof ENGINEER_FILTERS)[number];
 const WO_COMPLETED = new Set(["已完成", "已結案"]);
 
 const STATUS_COLORS: Record<string, string> = {
+  "待派工": "bg-slate-100 text-slate-700",
   "待施工": "bg-amber-100 text-amber-700",
+  "施工中": "bg-blue-100 text-blue-700",
+  "異常／暫停": "bg-orange-100 text-orange-800",
   "已完成": "bg-green-100 text-green-700",
+  "已結案": "bg-gray-100 text-gray-600",
   // backward compat for old statuses
   "待處理": "bg-amber-100 text-amber-700",
   "進行中": "bg-blue-100 text-blue-700",
   "已取消": "bg-gray-100 text-gray-700",
 };
+
+function normalizeWoStatus(status: string | null | undefined): string {
+  if (!status) return "待施工";
+  if (status === "待處理") return "待施工";
+  if (status === "進行中") return "施工中";
+  if (status === "已取消" || status === "暫停") return "異常／暫停";
+  return status;
+}
+
+/** Schedule bucket for 待施工 sort: overdue → today → tomorrow → future */
+function scheduleSortKey(scheduledDate: string | null | undefined, today: string): number {
+  if (!scheduledDate) return 0; // treat missing as most urgent (待派工-like)
+  if (scheduledDate < today) return 0;
+  if (scheduledDate === today) return 1;
+  const tomorrow = addDaysTaipei(today, 1);
+  if (scheduledDate === tomorrow) return 2;
+  return 3;
+}
+
+function matchesAdminFilter(o: any, tab: AdminFilterTab, _today: string): boolean {
+  const s = normalizeWoStatus(o.status);
+  switch (tab) {
+    case "待派工":
+      return (s === "待派工" || s === "待施工") && !o.scheduledDate && !WO_COMPLETED.has(s);
+    case "待施工":
+      return s === "待施工" && !!o.scheduledDate;
+    case "施工中":
+      return s === "施工中";
+    case "異常／暫停":
+      return s === "異常／暫停";
+    case "施工完成":
+      return s === "已完成";
+    case "歷史紀錄":
+      return s === "已結案";
+    default:
+      return true;
+  }
+}
 
 const PT_COLORS: Record<string, string> = {
   "新裝": "bg-purple-100 text-purple-700",
@@ -314,7 +358,8 @@ export default function WorkOrders() {
   const expandParam = parseInt(urlParams.get("expand") ?? "0", 10) || null;
   const openParam = parseInt(urlParams.get("open") ?? "0", 10) || null;
 
-  const [statusFilter, setStatusFilter] = useState("全部");
+  const [statusFilter, setStatusFilter] = useState<AdminFilterTab>("待施工");
+  const [listSearch, setListSearch] = useState("");
   const [engineerFilter, setEngineerFilter] = useState<EngineerFilter>("進行中");
   const [showCreate, setShowCreate] = useState(false);
   const [editItem, setEditItem] = useState<any>(null);
@@ -322,6 +367,7 @@ export default function WorkOrders() {
   const [expandedId, setExpandedId] = useState<number | null>(expandParam ?? openParam);
   const [form, setForm] = useState<WOForm>(makeEmpty());
   const [arModal, setArModal] = useState<{ order: any; amount: string } | null>(null);
+  const [bindForAr, setBindForAr] = useState<any | null>(null);
   const [pdfPreview, setPdfPreview] = useState<{ url: string; filename: string } | null>(null);
   const pendingARRef = useRef<any>(null);
   const [reopenModal, setReopenModal] = useState<{ payload: Record<string, unknown> } | null>(null);
@@ -346,7 +392,6 @@ export default function WorkOrders() {
     error: ordersErr,
   } = useListWorkOrders({
     ...(filterCustomerId ? { customerId: filterCustomerId } : {}),
-    ...(!isEngineerView && statusFilter !== "全部" ? { status: statusFilter } : {}),
   });
 
   const { data: progressRows = [] } = useQuery({
@@ -365,12 +410,42 @@ export default function WorkOrders() {
 
   const displayedOrders = useMemo(() => {
     const list = orders ?? [];
-    if (!isEngineerView) return list;
+    const q = listSearch.trim().toLowerCase();
+
+    if (!isEngineerView) {
+      let filtered = list.filter((o) => matchesAdminFilter(o, statusFilter, today));
+      if (q) {
+        filtered = filtered.filter((o) => {
+          const hay = [
+            o.workOrderNumber,
+            o.customerName,
+            o.title,
+            o.installAddress,
+            o.mobilePhone,
+          ]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase();
+          return hay.includes(q);
+        });
+      }
+      if (statusFilter === "待施工") {
+        filtered = [...filtered].sort((a, b) => {
+          const ka = scheduleSortKey(a.scheduledDate, today);
+          const kb = scheduleSortKey(b.scheduledDate, today);
+          if (ka !== kb) return ka - kb;
+          const da = a.scheduledDate ?? "";
+          const db = b.scheduledDate ?? "";
+          return da.localeCompare(db);
+        });
+      }
+      return filtered;
+    }
 
     return list.filter((o) => {
       const prog = progressMap.get(o.id);
       const fieldDone = prog?.fieldStatus === "completed" || !!prog?.completedAt;
-      const woDone = WO_COMPLETED.has(o.status ?? "") || fieldDone;
+      const woDone = WO_COMPLETED.has(normalizeWoStatus(o.status)) || fieldDone;
       const sched = o.scheduledDate ?? null;
 
       switch (engineerFilter) {
@@ -397,7 +472,7 @@ export default function WorkOrders() {
           return true;
       }
     });
-  }, [orders, isEngineerView, engineerFilter, progressMap, today, completedSince]);
+  }, [orders, isEngineerView, engineerFilter, progressMap, today, completedSince, statusFilter, listSearch]);
 
   // 工程師不打客戶／報價 API（常因無 customers/quotations 權限而 403）
   const { data: customers } = useListCustomers(
@@ -468,16 +543,39 @@ export default function WorkOrders() {
     mutation: {
       onSuccess: () => {
         invalidateStatistics(queryClient);
+        queryClient.invalidateQueries({ queryKey: getListWorkOrdersQueryKey() });
+        queryClient.invalidateQueries({ queryKey: getListReceivablesQueryKey() });
         setArModal(null);
         toast({ title: "應收帳款已建立", description: "可至「應收帳款」頁面查看" });
       },
       onError: (err: any) => {
-        if (err?.status === 409) {
+        const msg = err?.data?.error ?? err?.response?.data?.error ?? err?.message;
+        if (err?.status === 409 || /已有應收/.test(String(msg))) {
           toast({ title: "此派工單已有應收帳款紀錄" });
+          queryClient.invalidateQueries({ queryKey: getListWorkOrdersQueryKey() });
           setArModal(null);
         } else {
-          toast({ title: "建立失敗，請稍後再試", variant: "destructive" });
+          toast({ title: "建立失敗", description: msg || "請稍後再試", variant: "destructive" });
         }
+      },
+    },
+  });
+
+  const bindCustomerMutation = useUpdateWorkOrder({
+    mutation: {
+      onSuccess: (updated: any) => {
+        queryClient.invalidateQueries({ queryKey: getListWorkOrdersQueryKey() });
+        toast({ title: "客戶已綁定" });
+        const order = { ...bindForAr, ...updated, customerId: updated?.customerId ?? bindForAr?.customerId };
+        setBindForAr(null);
+        if (order) setArModal({ order, amount: arModal?.amount ?? "" });
+      },
+      onError: (err: any) => {
+        toast({
+          title: "綁定失敗",
+          description: err?.data?.error ?? err?.message,
+          variant: "destructive",
+        });
       },
     },
   });
@@ -627,14 +725,26 @@ export default function WorkOrders() {
         </div>
       )}
 
-      {/* Status filter tabs */}
-      <div className="flex gap-1.5 flex-wrap">
+      {/* Sticky search (mobile-first) */}
+      {!isEngineerView && (
+        <div className="sticky top-0 z-10 -mx-1 px-1 py-2 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+          <Input
+            value={listSearch}
+            onChange={(e) => setListSearch(e.target.value)}
+            placeholder="搜尋派工單號、客戶、地址…"
+            className="h-10"
+          />
+        </div>
+      )}
+
+      {/* Status filter tabs — horizontal scroll on mobile */}
+      <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
         {isEngineerView
           ? ENGINEER_FILTERS.map((s) => (
               <button
                 key={s}
                 onClick={() => setEngineerFilter(s)}
-                className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
+                className={`text-xs px-3 py-1.5 rounded-full border transition-colors whitespace-nowrap shrink-0 ${
                   engineerFilter === s
                     ? "bg-primary text-primary-foreground border-primary"
                     : "bg-background border-border hover:bg-muted"
@@ -643,11 +753,11 @@ export default function WorkOrders() {
                 {s}
               </button>
             ))
-          : ["全部", ...STATUSES].map((s) => (
+          : ADMIN_FILTER_TABS.map((s) => (
               <button
                 key={s}
                 onClick={() => setStatusFilter(s)}
-                className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
+                className={`text-xs px-3 py-1.5 rounded-full border transition-colors whitespace-nowrap shrink-0 ${
                   statusFilter === s
                     ? "bg-primary text-primary-foreground border-primary"
                     : "bg-background border-border hover:bg-muted"
@@ -704,153 +814,197 @@ export default function WorkOrders() {
         )
       ) : null}
 
-      {/* Admin / shared list */}
+      {/* Admin / shared list — single column cards */}
       {!isEngineerView && isLoading ? (
-        <div className="space-y-2">{[1, 2, 3].map(i => <Skeleton key={i} className="h-20 w-full" />)}</div>
-      ) : !isEngineerView && !ordersError && orders && orders.length > 0 ? (
-        <Card><CardContent className="p-0">
-          <div className="divide-y">
-            {orders.map(o => {
-              const techDisplay = getTechDisplay(o);
-              return (
-                <div key={o.id} id={`wo-row-${o.id}`} className="px-3 sm:px-4 py-3">
-                  {/* Row 1: number + badges + actions */}
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="text-xs font-mono font-semibold text-muted-foreground">
-                          {o.workOrderNumber || `#${o.id}`}
-                        </span>
-                        <span className={`text-xs px-2 py-0.5 rounded font-medium ${STATUS_COLORS[o.status] ?? "bg-gray-100 text-gray-600"}`}>
-                          {o.status}
-                        </span>
-                        {o.projectType && (
-                          <span className={`text-xs px-2 py-0.5 rounded font-medium ${PT_COLORS[o.projectType] ?? "bg-gray-100 text-gray-600"}`}>
-                            {o.projectType}
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Row 2: customer + title + address */}
-                      <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5">
-                        <span className="text-sm font-semibold">{o.customerName}</span>
-                        {o.title && (
-                          <span className="text-xs text-foreground/80">{o.title}</span>
-                        )}
-                        {o.quoteId && (o as any).quoteNumber && (
-                          <button
-                            type="button"
-                            className="text-xs font-mono text-blue-600 hover:underline"
-                            onClick={() => navigate(`/quotes?focusId=${o.quoteId}`)}
-                          >
-                            來源報價單：{(o as any).quoteNumber}
-                          </button>
-                        )}
-                        {o.installAddress && (
-                          <span className="text-xs text-muted-foreground truncate max-w-[200px]">{o.installAddress}</span>
-                        )}
-                      </div>
-
-                      {/* Row 3: date/time + technician */}
-                      <div className="mt-0.5 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-                        {o.scheduledDate && (
-                          <span>施工：{o.scheduledDate}{o.scheduledTime ? ` ${o.scheduledTime}` : ""}</span>
-                        )}
-                        {techDisplay !== "—" && <span>技師：{techDisplay}</span>}
-                        {o.completedDate && <span className="text-green-600">完成：{o.completedDate}</span>}
-                      </div>
-                    </div>
-
-                    {/* Action buttons */}
-                    <div className="flex gap-0.5 shrink-0 flex-wrap justify-end">
-                      {/* AR button for completed orders */}
-                      {canWrite && o.status === "已完成" && (
-                        <Button
-                          variant="outline" size="sm"
-                          className="h-7 text-xs px-2 text-emerald-700 border-emerald-300 hover:bg-emerald-50"
-                          onClick={() => setArModal({ order: o, amount: "" })}
-                        >
-                          <CreditCard className="h-3.5 w-3.5 mr-1" />建立帳款
-                        </Button>
-                      )}
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="h-7 w-7" title="列印">
-                            <Printer className="h-3.5 w-3.5" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => printWorkOrderPDF(o, setPdfPreview, toast)}>
-                            <Printer className="h-3.5 w-3.5 mr-2" />列印派工單
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-green-600 hover:text-green-700" title="LINE 分享" onClick={() => shareWorkOrderViaLine(o, setPdfPreview, toast)}>
-                        <Share2 className="h-3.5 w-3.5" />
-                      </Button>
-                      {o.installAddress && (
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-blue-600 hover:text-blue-700" title="導航" asChild>
-                          <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(o.installAddress)}`} target="_blank" rel="noopener noreferrer">
-                            <MapPin className="h-3.5 w-3.5" />
-                          </a>
-                        </Button>
-                      )}
-                      <Button variant="ghost" size="icon" className="h-7 w-7" title="進度" onClick={() => setExpandedId(expandedId === o.id ? null : o.id)}>
-                        {expandedId === o.id ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-                      </Button>
-                      {canWrite && (
-                        <Button variant="ghost" size="icon" className="h-7 w-7" title="編輯" onClick={() => openEdit(o)}>
-                          <Pencil className="h-3.5 w-3.5" />
-                        </Button>
-                      )}
-                      {(user?.role === "owner" || user?.role === "super_admin") && (
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" title="刪除" onClick={() => setDeleteId(o.id)}>
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
-                      )}
-                    </div>
+        <div className="space-y-2">{[1, 2, 3].map(i => <Skeleton key={i} className="h-28 w-full" />)}</div>
+      ) : !isEngineerView && !ordersError && displayedOrders.length > 0 ? (
+        <div className="grid grid-cols-1 gap-3 max-w-3xl">
+          {displayedOrders.map(o => {
+            const techDisplay = getTechDisplay(o);
+            const statusLabel = normalizeWoStatus(o.status);
+            const hasAr = !!(o as any).receivableId;
+            const needsCustomer = !o.customerId;
+            return (
+              <Card key={o.id} id={`wo-row-${o.id}`} className="overflow-hidden">
+                <CardContent className="p-3 sm:p-4 space-y-3">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-xs font-mono font-semibold text-muted-foreground">
+                      {o.workOrderNumber || `#${o.id}`}
+                    </span>
+                    <span className={`text-xs px-2 py-0.5 rounded font-medium ${STATUS_COLORS[statusLabel] ?? STATUS_COLORS[o.status] ?? "bg-gray-100 text-gray-600"}`}>
+                      {statusLabel}
+                    </span>
+                    {o.projectType && (
+                      <span className={`text-xs px-2 py-0.5 rounded font-medium ${PT_COLORS[o.projectType] ?? "bg-gray-100 text-gray-600"}`}>
+                        {o.projectType}
+                      </span>
+                    )}
+                    {needsCustomer && (
+                      <span className="text-xs px-2 py-0.5 rounded font-medium bg-red-50 text-red-700">未綁定客戶</span>
+                    )}
                   </div>
 
-                  {/* Progress panel */}
+                  <div>
+                    <p className="text-sm font-semibold">{o.customerName || "—"}</p>
+                    {o.title && <p className="text-xs text-foreground/80 mt-0.5">{o.title}</p>}
+                    {o.installAddress && (
+                      <p className="text-xs text-muted-foreground mt-0.5">{o.installAddress}</p>
+                    )}
+                    <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                      {o.scheduledDate && (
+                        <span>施工：{o.scheduledDate}{o.scheduledTime ? ` ${o.scheduledTime}` : ""}</span>
+                      )}
+                      {techDisplay !== "—" && <span>技師：{techDisplay}</span>}
+                      {o.completedDate && <span className="text-green-600">完成：{o.completedDate}</span>}
+                    </div>
+                    {o.quoteId && (o as any).quoteNumber && (
+                      <button
+                        type="button"
+                        className="text-xs font-mono text-blue-600 hover:underline mt-1"
+                        onClick={() => navigate(`/quotes?focusId=${o.quoteId}`)}
+                      >
+                        來源報價單：{(o as any).quoteNumber}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Primary actions — large buttons */}
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    {canWrite && !o.scheduledDate && statusLabel !== "已完成" && statusLabel !== "已結案" && (
+                      <Button
+                        className="h-10 sm:h-9 flex-1"
+                        variant="default"
+                        onClick={() => openEdit(o)}
+                      >
+                        安排派工
+                      </Button>
+                    )}
+                    <Button
+                      className="h-10 sm:h-9 flex-1"
+                      variant="outline"
+                      onClick={() => setExpandedId(expandedId === o.id ? null : o.id)}
+                    >
+                      <Eye className="h-4 w-4 mr-1" />
+                      {expandedId === o.id ? "收合" : "查看案件"}
+                    </Button>
+                    {(statusLabel === "施工中" || statusLabel === "待施工" || statusLabel === "已完成") && (
+                      <Button
+                        className="h-10 sm:h-9 flex-1"
+                        variant="outline"
+                        onClick={() => setExpandedId(o.id)}
+                      >
+                        查看施工
+                      </Button>
+                    )}
+                    {canWrite && (statusLabel === "已完成" || o.status === "已完成") && (
+                      hasAr ? (
+                        <Button
+                          className="h-10 sm:h-9 flex-1 text-emerald-700 border-emerald-300"
+                          variant="outline"
+                          onClick={() => navigate(`/receivables?receivableId=${(o as any).receivableId}`)}
+                        >
+                          <CreditCard className="h-4 w-4 mr-1" />查看帳款
+                        </Button>
+                      ) : needsCustomer ? (
+                        <Button
+                          className="h-10 sm:h-9 flex-1"
+                          variant="default"
+                          onClick={() => setBindForAr(o)}
+                        >
+                          <UserPlus className="h-4 w-4 mr-1" />先綁定客戶
+                        </Button>
+                      ) : (
+                        <Button
+                          className="h-10 sm:h-9 flex-1 text-emerald-700 border-emerald-300"
+                          variant="outline"
+                          onClick={() => setArModal({ order: o, amount: "" })}
+                        >
+                          <CreditCard className="h-4 w-4 mr-1" />建立帳款
+                        </Button>
+                      )
+                    )}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button className="h-10 sm:h-9" variant="ghost">
+                          <MoreHorizontal className="h-4 w-4 mr-1" />更多
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => printWorkOrderPDF(o, setPdfPreview, toast)}>
+                          <Printer className="h-3.5 w-3.5 mr-2" />列印
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => shareWorkOrderViaLine(o, setPdfPreview, toast)}>
+                          <Share2 className="h-3.5 w-3.5 mr-2" />分享
+                        </DropdownMenuItem>
+                        {o.installAddress && (
+                          <DropdownMenuItem asChild>
+                            <a
+                              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(o.installAddress)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              <MapPin className="h-3.5 w-3.5 mr-2" />導航
+                            </a>
+                          </DropdownMenuItem>
+                        )}
+                        {canWrite && (
+                          <DropdownMenuItem onClick={() => openEdit(o)}>
+                            <Pencil className="h-3.5 w-3.5 mr-2" />編輯
+                          </DropdownMenuItem>
+                        )}
+                        {(user?.role === "owner" || user?.role === "super_admin") && (
+                          <DropdownMenuItem className="text-destructive" onClick={() => setDeleteId(o.id)}>
+                            <Trash2 className="h-3.5 w-3.5 mr-2" />刪除
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+
                   {expandedId === o.id && (
-                    <div className="mt-3 space-y-3 border-t pt-3">
+                    <div className="space-y-3 border-t pt-3">
                       <WorkOrderDetailSummary order={o} />
                       <FieldProgressDetailSection workOrderId={o.id} />
                       <ProgressPanel workOrderId={o.id} customerId={o.customerId ?? 0} workOrderTitle={o.workOrderNumber || o.title} />
                     </div>
                   )}
-                </div>
-              );
-            })}
-          </div>
-        </CardContent></Card>
-      ) : (
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      ) : !isEngineerView && !ordersError ? (
         <Card><CardContent className="py-12 text-center">
-          <p className="text-muted-foreground">尚無派工單資料</p>
+          <p className="text-muted-foreground">目前無「{statusFilter}」的派工單</p>
         </CardContent></Card>
-      )}
+      ) : null}
 
-      {/* Create / Edit Dialog */}
+      {/* Create / Edit Dialog — sticky header/footer, scrollable body (iPhone Safari) */}
       <Dialog open={isDialogOpen} onOpenChange={open => { if (!open) { setShowCreate(false); setEditItem(null); } }}>
-        <DialogContent className="max-w-2xl w-full max-h-[92dvh] overflow-y-auto p-4 sm:p-6">
+        <DialogContent className="max-w-2xl w-[calc(100vw-1rem)] sm:w-full">
           <DialogHeader>
             <DialogTitle>{dialogMode === "create" ? "新增派工單" : `編輯派工單 ${editItem?.workOrderNumber || ""}`}</DialogTitle>
           </DialogHeader>
 
-          <form onSubmit={e => handleSubmit(e, dialogMode)} className="space-y-4 mt-1">
-            <WorkOrderFormFields
-              form={form}
-              setForm={setForm}
-              customers={customers ?? []}
-              technicianOptions={technicianOptions}
-              quotes={quotes ?? []}
-              showQuoteSelector={true}
-              customerDisabled={dialogMode === "edit"}
-              workOrderNumber={editItem?.workOrderNumber}
-              customerDisplayName={editItem?.customerName ?? form.customerName}
-            />
-
-            <DialogFooter className="pt-2">
+          <form
+            id="wo-form"
+            onSubmit={e => handleSubmit(e, dialogMode)}
+            className="flex min-h-0 flex-1 flex-col overflow-hidden"
+          >
+            <DialogBody>
+              <WorkOrderFormFields
+                form={form}
+                setForm={setForm}
+                customers={customers ?? []}
+                technicianOptions={technicianOptions}
+                quotes={quotes ?? []}
+                showQuoteSelector={true}
+                customerDisabled={dialogMode === "edit" && !!editItem?.customerId}
+                workOrderNumber={editItem?.workOrderNumber}
+                customerDisplayName={editItem?.customerName ?? form.customerName}
+              />
+            </DialogBody>
+            <DialogFooter>
               <Button
                 type="button"
                 variant="outline"
@@ -884,37 +1038,44 @@ export default function WorkOrders() {
 
       {/* AR creation modal */}
       <Dialog open={!!arModal} onOpenChange={open => { if (!open) setArModal(null); }}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-sm w-[calc(100vw-1.5rem)]">
           <DialogHeader>
             <DialogTitle>建立應收帳款</DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground">
-            是否為此派工單建立應收帳款？
-          </p>
-          {arModal && (
-            <div className="text-xs text-muted-foreground bg-muted rounded p-2 space-y-1">
-              {arModal.order.workOrderNumber && <div>派工單號：{arModal.order.workOrderNumber}</div>}
-              <div>工程：{arModal.order.title}</div>
-              {arModal.order.customerName && <div>客戶：{arModal.order.customerName}</div>}
-              {arModal.order.projectType && <div>類別：{arModal.order.projectType}</div>}
+          <DialogBody className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              是否為此派工單建立應收帳款？
+            </p>
+            {arModal && (
+              <div className="text-xs text-muted-foreground bg-muted rounded p-2 space-y-1">
+                {arModal.order.workOrderNumber && <div>派工單號：{arModal.order.workOrderNumber}</div>}
+                <div>工程：{arModal.order.title}</div>
+                {arModal.order.customerName && <div>客戶：{arModal.order.customerName}</div>}
+                {arModal.order.projectType && <div>類別：{arModal.order.projectType}</div>}
+              </div>
+            )}
+            <div className="space-y-1">
+              <Label>應收金額 (NT$)</Label>
+              <Input
+                type="number"
+                placeholder="請輸入金額"
+                value={arModal?.amount ?? ""}
+                onChange={e => setArModal(m => m ? { ...m, amount: e.target.value } : m)}
+              />
             </div>
-          )}
-          <div className="space-y-1">
-            <Label>應收金額 (NT$)</Label>
-            <Input
-              type="number"
-              placeholder="請輸入金額"
-              value={arModal?.amount ?? ""}
-              onChange={e => setArModal(m => m ? { ...m, amount: e.target.value } : m)}
-            />
-          </div>
+          </DialogBody>
           <DialogFooter>
             <Button variant="outline" onClick={() => setArModal(null)}>略過</Button>
             <Button
-              disabled={createARMutation.isPending}
+              disabled={createARMutation.isPending || !arModal?.order?.customerId}
               onClick={() => {
                 if (!arModal) return;
                 const o = arModal.order;
+                if (!o.customerId) {
+                  setArModal(null);
+                  setBindForAr(o);
+                  return;
+                }
                 createARMutation.mutate({ data: {
                   customerId: o.customerId,
                   workOrderId: o.id,
@@ -929,6 +1090,33 @@ export default function WorkOrders() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <BindCustomerDialog
+        open={!!bindForAr}
+        onOpenChange={(o) => { if (!o) setBindForAr(null); }}
+        title="先綁定客戶"
+        description="此派工單尚未綁定正式客戶，請搜尋或建立客戶後再建立應收帳款。"
+        initial={bindForAr ? {
+          name: bindForAr.customerName ?? "",
+          mobile: bindForAr.mobilePhone ?? "",
+          address: bindForAr.installAddress ?? "",
+        } : null}
+        confirmLabel="綁定並繼續"
+        pending={bindCustomerMutation.isPending}
+        onConfirm={(v) => {
+          if (!bindForAr || !v.customerId) return;
+          bindCustomerMutation.mutate({
+            id: bindForAr.id,
+            data: {
+              customerId: v.customerId,
+              customerName: v.name,
+              mobilePhone: v.mobile || bindForAr.mobilePhone || undefined,
+              installAddress: v.address || bindForAr.installAddress || undefined,
+              contactPerson: v.contactPerson || bindForAr.contactPerson || undefined,
+            },
+          });
+        }}
+      />
 
       <WorkOrderReopenDialog
         open={!!reopenModal}

@@ -12,9 +12,11 @@ import { stripQuotePricingFromNotes, categoryToProjectType, deriveQuoteCustomer 
 import { DEFAULT_AI_REMINDER_SCENARIO_IDS, type AiReminderRuleSource } from "@/lib/aiWorkReminderSettings";
 import { WorkOrderAiReminderSection } from "@/components/work-orders/WorkOrderAiReminderSection";
 
-export const WO_STATUSES = ["待施工", "已完成"];
+export const WO_STATUSES = ["待派工", "待施工", "施工中", "異常／暫停", "已完成", "已結案"];
 export const WO_PROJECT_TYPES = ["新裝", "維修", "保養", "遷機", "清洗", "保固服務"];
 export const WO_ELEVATOR_OPTIONS = ["有電梯", "無電梯"];
+/** Default status for new work orders */
+export const WO_DEFAULT_STATUS = "待施工";
 
 export interface EquipmentItemForm {
   productId?: number;
@@ -150,19 +152,24 @@ export function makeEmpty() {
 export type WOForm = ReturnType<typeof makeEmpty>;
 
 export function hasWorkOrderCustomer(f: WOForm): boolean {
+  // Work orders require a formal customer binding for AR / billing.
+  if (f.customerMode === "existing" || f.customerId > 0) return f.customerId > 0;
   if (f.customerMode === "temporary") {
     return f.customerName.trim().length > 0 && f.mobilePhone.trim().length > 0;
   }
-  if (f.customerMode === "existing") return f.customerId > 0;
   return f.customerId > 0 || (f.customerName.trim().length > 0 && f.mobilePhone.trim().length > 0);
 }
 
 export function buildPayload(f: WOForm) {
   const title = f.title.trim() || `${f.projectType || "派工"} 派工單`;
-  const isLinked = f.customerMode === "existing" && f.customerId > 0;
+  const isLinked = (f.customerMode === "existing" || f.customerMode == null) && f.customerId > 0;
+  // Snapshot name/phone/address even when linked — display + repair orphans.
+  const snapshotName = (f.customerName || "").trim();
   return {
     customerId: isLinked ? f.customerId : null,
-    customerName: isLinked ? undefined : f.customerName.trim(),
+    customerName: isLinked
+      ? (snapshotName || undefined)
+      : (snapshotName || undefined),
     quoteId: f.quoteId,
     title,
     status: f.status,
@@ -371,7 +378,8 @@ export function WorkOrderFormFields({
     return null;
   }, [form, linkedCustomer, selectedQuote]);
 
-  const customerLockedFromQuote = !!(form.quoteId && selectorValue);
+  /** Bound from quote with formal customer — show card + 更換客戶 (not fully locked). */
+  const boundFromQuote = !!(form.quoteId && form.customerId > 0 && !customerDisabled);
 
   function handleSelectorChange(v: CustomerSelectorValue | null) {
     if (!v) {
@@ -395,11 +403,12 @@ export function WorkOrderFormFields({
       ...f,
       customerMode: "existing",
       customerId: v.customerId ?? 0,
-      customerName: "",
-      contactPerson: f.contactPerson || v.contactPerson || "",
-      mobilePhone: f.mobilePhone || v.mobile || "",
-      telephone: f.telephone || v.phone || "",
-      installAddress: f.installAddress || v.address || "",
+      // Keep snapshot fields for display / AR binding
+      customerName: v.name || f.customerName || "",
+      contactPerson: v.contactPerson || f.contactPerson || "",
+      mobilePhone: v.mobile || f.mobilePhone || "",
+      telephone: v.phone || f.telephone || "",
+      installAddress: v.address || f.installAddress || "",
     }));
   }
 
@@ -436,9 +445,9 @@ export function WorkOrderFormFields({
     setForm(f => ({
       ...f,
       quoteId: qid,
-      customerMode: linkedId > 0 ? "existing" : (quoteCustomerName ? "temporary" : f.customerMode),
+      customerMode: linkedId > 0 ? "existing" : f.customerMode,
       customerId: linkedId,
-      customerName: linkedId > 0 ? "" : (quoteCustomerName || f.customerName),
+      customerName: quoteCustomerName || cust?.name || f.customerName || "",
       title: quote.title || f.title,
       contactPerson: quote.contactPerson || cust?.contactPerson || f.contactPerson || "",
       mobilePhone: quoteCustomerPhone || cust?.mobile || f.mobilePhone || "",
@@ -519,8 +528,8 @@ export function WorkOrderFormFields({
                 ))}
               </SelectContent>
             </Select>
-            {form.quoteId && (
-              <p className="text-xs text-muted-foreground">已自動帶入報價單客戶資料{customerLockedFromQuote ? "（不可更改）" : "，可修改"}</p>
+            {form.quoteId && form.customerId > 0 && (
+              <p className="text-xs text-muted-foreground">已自動帶入報價單客戶（可更換）</p>
             )}
           </div>
         </>
@@ -533,59 +542,18 @@ export function WorkOrderFormFields({
         <Label>
           客戶{!customerDisabled && <span className="text-destructive ml-0.5">*</span>}
         </Label>
-        {form.customerMode === "temporary" && !customerDisabled && !customerLockedFromQuote ? (
-          <div className="rounded-md border border-dashed p-3 space-y-3 bg-muted/10">
-            <div className="flex items-center justify-between gap-2">
-              <p className="text-xs font-medium text-muted-foreground">臨時客戶（不建立正式資料）</p>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-7 text-xs shrink-0"
-                onClick={() => handleCustomerModeChange("existing")}
-              >
-                改選正式客戶
-              </Button>
-            </div>
-            <div className="space-y-1">
-              <Label>客戶名稱 <span className="text-destructive">*</span></Label>
-              <Input
-                placeholder="客戶名稱"
-                value={form.customerName}
-                onChange={e => setForm(f => ({ ...f, customerName: e.target.value }))}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>聯絡人</Label>
-              <Input
-                placeholder="聯絡人"
-                value={form.contactPerson}
-                onChange={e => setForm(f => ({ ...f, contactPerson: e.target.value }))}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label>手機 <span className="text-destructive">*</span></Label>
-              <Input
-                type="tel"
-                placeholder="0912-345-678"
-                value={form.mobilePhone}
-                onChange={e => setForm(f => ({ ...f, mobilePhone: e.target.value }))}
-              />
-            </div>
-          </div>
-        ) : (
-          <CustomerSelector
-            value={selectorValue}
-            onChange={handleSelectorChange}
-            onCustomerModeChange={handleCustomerModeChange}
-            modal={false}
-            disabled={customerDisabled || customerLockedFromQuote}
-            allowTemp={!customerLockedFromQuote}
-            showAddressPicker={form.customerMode !== "temporary"}
-            onAddressSelect={(_, address) => setForm(f => ({ ...f, installAddress: address }))}
-            selectedAddressId={null}
-          />
-        )}
+        <CustomerSelector
+          value={selectorValue}
+          onChange={handleSelectorChange}
+          onCustomerModeChange={handleCustomerModeChange}
+          modal={false}
+          disabled={customerDisabled}
+          boundLabel={boundFromQuote ? "來自報價單" : undefined}
+          allowTemp={false}
+          showAddressPicker
+          onAddressSelect={(_, address) => setForm(f => ({ ...f, installAddress: address }))}
+          selectedAddressId={null}
+        />
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

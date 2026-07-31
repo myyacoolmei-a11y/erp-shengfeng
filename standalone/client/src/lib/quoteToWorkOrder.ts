@@ -66,9 +66,10 @@ export function buildWorkOrderFormFromQuote(q: any): WOForm {
   return {
     ...makeEmpty(),
     quoteId: q.id,
-    customerMode: hasCustomerId ? "existing" : (customerName ? "temporary" : null),
+    // Quote → WO requires formal customer_id; snapshots always kept for display.
+    customerMode: hasCustomerId ? "existing" : null,
     customerId: hasCustomerId ? customerId : 0,
-    customerName: hasCustomerId ? "" : customerName,
+    customerName: customerName || "",
     title: q.title ?? "",
     contactPerson: q.contactPerson ?? "",
     mobilePhone: customerPhone,

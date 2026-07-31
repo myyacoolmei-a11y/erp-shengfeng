@@ -7,20 +7,22 @@ import {
   getListWorkOrdersQueryKey, getListCustomersQueryKey, getListProductsQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { X, Plus, Pencil, Trash2, Printer, Wrench, Copy, Share2, Download, FileText } from "lucide-react";
+import { X, Plus, Pencil, Trash2, Printer, Wrench, Copy, Share2, Download, FileText, MoreHorizontal, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { makeEmpty, buildPayload, hasWorkOrderCustomer, type WOForm } from "@/components/work-order-form";
 import { CustomerSelector, type CustomerSelectorValue } from "@/components/customer-selector";
+import { BindCustomerDialog } from "@/components/bind-customer-dialog";
 import { PdfPreviewDialog } from "@/components/pdf/pdf-preview-dialog";
 import {
   handlePdfAction,
@@ -43,7 +45,8 @@ import type { VoiceAssistantApplyPayload } from "@/components/voice-assistant/ty
 
 // ── Constants ──────────────────────────────────────────────────────────────
 const STATUSES = ["草稿", "已送出", "已成交", "已拒絕"];
-const FILTER_TABS = ["全部", "草稿", "已送出", "已成交", "待派工", "已派工", "已拒絕"];
+const FILTER_TABS = ["待處理", "等待客戶回覆", "已成交待派工", "草稿", "歷史紀錄"] as const;
+type QuoteFilterTab = (typeof FILTER_TABS)[number];
 const STATUS_COLORS: Record<string, string> = {
   "草稿": "bg-gray-100 text-gray-700",
   "已送出": "bg-blue-100 text-blue-700",
@@ -58,11 +61,29 @@ const DISPATCH_COLORS: Record<string, string> = {
   "已完工": "bg-emerald-100 text-emerald-700",
 };
 
-function quoteMatchesFilter(q: any, filter: string): boolean {
-  if (filter === "全部") return true;
-  if (["待派工", "已派工"].includes(filter)) return q.dispatchStatus === filter;
-  if (filter === "已成交") return normalizeQuoteStatus(q.status) === "已成交";
-  return q.status === filter;
+function quoteHasWorkOrder(q: any): boolean {
+  return !!(q.workOrderId || q.workOrderNumber) || ["已派工", "施工中", "已完工"].includes(q.dispatchStatus ?? "");
+}
+
+function quoteMatchesFilter(q: any, filter: QuoteFilterTab): boolean {
+  const status = normalizeQuoteStatus(q.status);
+  const won = status === "已成交";
+  const hasWo = quoteHasWorkOrder(q);
+  switch (filter) {
+    case "待處理":
+      // Active inbox: waiting reply or won pending dispatch
+      return status === "已送出" || (won && !hasWo);
+    case "等待客戶回覆":
+      return status === "已送出";
+    case "已成交待派工":
+      return won && !hasWo;
+    case "草稿":
+      return status === "草稿" || q.status === "草稿";
+    case "歷史紀錄":
+      return status === "已拒絕" || (won && hasWo);
+    default:
+      return true;
+  }
 }
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -427,10 +448,12 @@ export default function QuotesPage() {
   const [editItem, setEditItem] = useState<any>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [convertItem, setConvertItem] = useState<any>(null);
+  const [bindQuoteForWo, setBindQuoteForWo] = useState<any>(null);
   const [form, setForm] = useState<QuoteForm>(emptyForm());
   const [woForm, setWoForm] = useState<WOForm>(makeEmpty());
 
-  const [statusFilter, setStatusFilter] = useState("全部");
+  const [statusFilter, setStatusFilter] = useState<QuoteFilterTab>("待處理");
+  const [listSearch, setListSearch] = useState("");
   const [pdfPreview, setPdfPreview] = useState<{ url: string; filename: string } | null>(null);
 
   const searchParams = new URLSearchParams(search);
@@ -477,8 +500,25 @@ export default function QuotesPage() {
   const filtered = (quotes ?? []).filter((q: any) => {
     if (!quoteMatchesFilter(q, statusFilter)) return false;
     if (filterCustomerName && !q.customerName?.toLowerCase().includes(filterCustomerName.toLowerCase())) return false;
+    const qSearch = listSearch.trim().toLowerCase();
+    if (qSearch) {
+      const hay = [q.title, q.customerName, q.customerPhone, q.address, formatQuoteNumber(q)]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      if (!hay.includes(qSearch)) return false;
+    }
     return true;
   });
+
+  function startConvertToWorkOrder(q: any) {
+    if (!q.customerId) {
+      setBindQuoteForWo(q);
+      return;
+    }
+    setConvertItem(q);
+    setWoForm(buildWorkOrderFormFromQuote(q));
+  }
 
   const invQuotes = () => invalidateStatistics(qc);
   const createMutation = useCreateQuote({ mutation: { onSuccess: () => { invQuotes(); qc.invalidateQueries({ queryKey: getListProductsQueryKey() }); setShowCreate(false); toast({ title: "報價單已新增" }); } } });
@@ -489,6 +529,7 @@ export default function QuotesPage() {
       onSuccess: () => {
         invalidateStatistics(qc);
         invQuotes();
+        qc.invalidateQueries({ queryKey: getListWorkOrdersQueryKey() });
         setConvertItem(null);
         toast({ title: "派工單建立成功" });
       },
@@ -526,12 +567,23 @@ export default function QuotesPage() {
   function handleConvert(e: React.FormEvent) {
     e.preventDefault();
     if (!convertItem) return;
-    if (!hasWorkOrderCustomer(woForm)) {
-      toast({ title: "請填寫客戶資訊", description: "請選擇現有客戶或輸入臨時客戶名稱", variant: "destructive" });
+    if (!convertItem.customerId && !woForm.customerId) {
+      setConvertItem(null);
+      setBindQuoteForWo(convertItem);
       return;
     }
-    const payload = buildPayload(woForm);
-    console.log("QUOTE TO WORK ORDER PAYLOAD", payload);
+    if (!hasWorkOrderCustomer(woForm)) {
+      toast({ title: "請綁定正式客戶", variant: "destructive" });
+      return;
+    }
+    const payload = buildPayload({
+      ...woForm,
+      customerMode: "existing",
+      customerId: woForm.customerId || convertItem.customerId,
+      customerName: woForm.customerName || convertItem.customerName || "",
+      mobilePhone: woForm.mobilePhone || convertItem.customerPhone || "",
+      installAddress: woForm.installAddress || convertItem.address || "",
+    });
     createWoMutation.mutate({ data: payload });
   }
 
@@ -560,13 +612,22 @@ export default function QuotesPage() {
         </div>
       )}
 
-      {/* Status filter */}
-      <div className="flex gap-2 flex-wrap">
+      <div className="sticky top-0 z-10 -mx-1 px-1 py-2 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+        <Input
+          value={listSearch}
+          onChange={(e) => setListSearch(e.target.value)}
+          placeholder="搜尋報價單、客戶、電話…"
+          className="h-10"
+        />
+      </div>
+
+      {/* Status filter — horizontal scroll */}
+      <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
         {FILTER_TABS.map(s => (
           <button key={s} onClick={() => setStatusFilter(s)}
-            className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
+            className={`text-xs px-3 py-1.5 rounded-full border transition-colors whitespace-nowrap shrink-0 ${
               statusFilter === s
-                ? s === "待派工"
+                ? s === "已成交待派工"
                   ? PENDING_DISPATCH_FILTER_ACTIVE
                   : "bg-primary text-primary-foreground border-primary"
                 : "bg-background border-border hover:bg-muted"
@@ -576,63 +637,88 @@ export default function QuotesPage() {
         ))}
       </div>
 
-      {/* List */}
+      {/* List — single column cards */}
       {isLoading ? (
-        <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-16 w-full" />)}</div>
+        <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-24 w-full" />)}</div>
       ) : filtered.length > 0 ? (
-        <Card><CardContent className="p-0">
-          <div className="divide-y">
-            {filtered.map(q => {
-              const qItems = (q.items ?? []) as any[];
-              const qRaw = qItems.length > 0 ? qItems.reduce((s: number, i: any) => s + Number(i.subtotal ?? 0), 0) : Number(q.finalAmount ?? q.amount ?? 0);
-              const qDisc = Number(q.discountAmount ?? 0);
-              const { total: qTotal } = computeQuoteAmounts(qRaw, qDisc, q.taxType ?? "未稅");
-              return (
-                <div key={q.id} className="px-4 py-3 flex items-start justify-between gap-2">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="font-medium text-sm">{q.title}</span>
-                      <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${STATUS_COLORS[normalizeQuoteStatus(q.status)] ?? "bg-gray-100 text-gray-700"}`}>{normalizeQuoteStatus(q.status)}</span>
-                      <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${DISPATCH_COLORS[q.dispatchStatus ?? "未派工"] ?? "bg-slate-100 text-slate-600"}`}>
-                        {q.dispatchStatus === "待派工" ? "● " : q.dispatchStatus === "已派工" ? "🟢 " : ""}{q.dispatchStatus ?? "未派工"}
-                      </span>
-                      {q.workOrderNumber && (
-                        <span className="text-xs px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 font-mono">{q.workOrderNumber}</span>
-                      )}
-                      <span className="text-xs px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">{q.taxType ?? "未稅"}</span>
-                    </div>
-                    <div className="text-xs text-muted-foreground mt-0.5 flex gap-3 flex-wrap">
-                      {q.customerName && <span>{q.customerName}</span>}
-                      {q.customerPhone && <span>{q.customerPhone}</span>}
-                      {q.salesRepName && <span>業務：{q.salesRepName}</span>}
-                      {qItems.length > 0
-                        ? <span>{qItems.length} 項工程・含稅 NT${qTotal.toLocaleString()}</span>
-                        : <span>含稅 NT${qTotal.toLocaleString()}</span>
-                      }
-                      <span>{new Date(q.createdAt).toLocaleDateString("zh-TW")}</span>
-                    </div>
-                    {q.address && <div className="text-xs text-muted-foreground truncate max-w-sm mt-0.5">{q.address}</div>}
-                  </div>
-                  <div className="flex gap-0.5 flex-shrink-0">
-                    <Button variant="ghost" size="icon" className="h-7 w-7" title="列印/PDF" onClick={() => printQuote(q, setPdfPreview, toast)}><Printer className="h-3.5 w-3.5" /></Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-green-600 hover:text-green-700" title="LINE 分享" onClick={() => shareQuoteViaLine(q, setPdfPreview, toast)}><Share2 className="h-3.5 w-3.5" /></Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7" title="複製" onClick={() => handleCopy(q)}><Copy className="h-3.5 w-3.5" /></Button>
-                    {canConvertQuoteToWorkOrder(q) && (
-                      <Button variant="ghost" size="icon" className="h-7 w-7 text-blue-600" title="轉為派工單" onClick={() => {
-                        setConvertItem(q);
-                        setWoForm(buildWorkOrderFormFromQuote(q));
-                      }}><Wrench className="h-3.5 w-3.5" /></Button>
+        <div className="grid grid-cols-1 gap-3 max-w-3xl">
+          {filtered.map(q => {
+            const qItems = (q.items ?? []) as any[];
+            const qRaw = qItems.length > 0 ? qItems.reduce((s: number, i: any) => s + Number(i.subtotal ?? 0), 0) : Number(q.finalAmount ?? q.amount ?? 0);
+            const qDisc = Number(q.discountAmount ?? 0);
+            const { total: qTotal } = computeQuoteAmounts(qRaw, qDisc, q.taxType ?? "未稅");
+            const hasWo = quoteHasWorkOrder(q);
+            return (
+              <Card key={q.id}>
+                <CardContent className="p-3 sm:p-4 space-y-3">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="font-medium text-sm">{q.title}</span>
+                    <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${STATUS_COLORS[normalizeQuoteStatus(q.status)] ?? "bg-gray-100 text-gray-700"}`}>{normalizeQuoteStatus(q.status)}</span>
+                    <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${DISPATCH_COLORS[q.dispatchStatus ?? "未派工"] ?? "bg-slate-100 text-slate-600"}`}>
+                      {q.dispatchStatus === "待派工" ? "● " : ""}{q.dispatchStatus ?? "未派工"}
+                    </span>
+                    {q.workOrderNumber && (
+                      <span className="text-xs px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 font-mono">{q.workOrderNumber}</span>
                     )}
-                    <Button variant="ghost" size="icon" className="h-7 w-7" title="編輯" onClick={() => openEdit(q)}><Pencil className="h-3.5 w-3.5" /></Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" title="刪除" onClick={() => setDeleteId(q.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-        </CardContent></Card>
+                  <div className="text-xs text-muted-foreground flex gap-3 flex-wrap">
+                    {q.customerName && <span>{q.customerName}</span>}
+                    {q.customerPhone && <span>{q.customerPhone}</span>}
+                    {q.salesRepName && <span>業務：{q.salesRepName}</span>}
+                    <span>含稅 NT${qTotal.toLocaleString()}</span>
+                  </div>
+                  {q.address && <div className="text-xs text-muted-foreground">{q.address}</div>}
+
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    {canConvertQuoteToWorkOrder(q) && !hasWo && (
+                      <Button className="h-10 sm:h-9 flex-1" onClick={() => startConvertToWorkOrder(q)}>
+                        <Wrench className="h-4 w-4 mr-1" />安排派工
+                      </Button>
+                    )}
+                    {hasWo && (
+                      <Button
+                        className="h-10 sm:h-9 flex-1"
+                        variant="outline"
+                        onClick={() => navigate(q.workOrderId ? `/work-orders?open=${q.workOrderId}` : "/work-orders")}
+                      >
+                        <Eye className="h-4 w-4 mr-1" />查看派工單
+                      </Button>
+                    )}
+                    <Button className="h-10 sm:h-9 flex-1" variant="outline" onClick={() => openEdit(q)}>
+                      查看案件
+                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button className="h-10 sm:h-9" variant="ghost">
+                          <MoreHorizontal className="h-4 w-4 mr-1" />更多
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => printQuote(q, setPdfPreview, toast)}>
+                          <Printer className="h-3.5 w-3.5 mr-2" />列印
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => shareQuoteViaLine(q, setPdfPreview, toast)}>
+                          <Share2 className="h-3.5 w-3.5 mr-2" />分享
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleCopy(q)}>
+                          <Copy className="h-3.5 w-3.5 mr-2" />複製
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => openEdit(q)}>
+                          <Pencil className="h-3.5 w-3.5 mr-2" />編輯
+                        </DropdownMenuItem>
+                        <DropdownMenuItem className="text-destructive" onClick={() => setDeleteId(q.id)}>
+                          <Trash2 className="h-3.5 w-3.5 mr-2" />刪除
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
       ) : (
-        <Card><CardContent className="py-12 text-center"><p className="text-muted-foreground">{statusFilter === "全部" ? "尚無報價單資料" : `目前無「${statusFilter}」的報價單`}</p></CardContent></Card>
+        <Card><CardContent className="py-12 text-center"><p className="text-muted-foreground">{`目前無「${statusFilter}」的報價單`}</p></CardContent></Card>
       )}
 
       {/* Create / Edit Dialog */}
@@ -805,42 +891,63 @@ export default function QuotesPage() {
       {/* Convert to Work Order */}
       {convertItem && (
         <Dialog open onOpenChange={() => setConvertItem(null)}>
-          <DialogContent className="max-w-lg w-full max-h-[92dvh] overflow-y-auto p-4 sm:p-6">
+          <DialogContent className="max-w-lg w-[calc(100vw-1rem)]">
             <DialogHeader><DialogTitle>由報價單建立派工單</DialogTitle></DialogHeader>
-            <form onSubmit={handleConvert} className="space-y-4 mt-1">
-              <div className="rounded-lg border bg-muted/30 p-3 text-sm space-y-2">
-                <p className="font-mono text-xs text-muted-foreground">{formatQuoteNumber(convertItem)}</p>
-                <p className="font-semibold">{convertItem.title}</p>
-                <div className="text-xs text-muted-foreground space-y-0.5">
-                  <p>客戶：{convertItem.customerName ?? "—"} · {convertItem.customerPhone ?? "—"}</p>
-                  <p>聯絡人：{convertItem.contactPerson ?? "—"} · 業務：{convertItem.salesRepName ?? "—"}</p>
-                  <p>地址：{convertItem.address ?? "—"}</p>
-                  {convertItem.description && <p>服務內容：{convertItem.description}</p>}
-                  {(convertItem.items ?? []).length > 0 && (
-                    <ul className="list-disc pl-4 mt-1">
-                      {(convertItem.items as any[]).map((it: any, i: number) => (
-                        <li key={i}>
-                          {it.category} / {it.brand || "—"} / {it.itemName || it.model || "—"}
-                          {it.model && it.itemName && it.model !== it.itemName ? `（${it.model}）` : ""}
-                          {" "}×{it.quantity}{it.unit}
-                          {it.notes ? ` — ${it.notes}` : ""}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
+            <form
+              onSubmit={handleConvert}
+              className="flex min-h-0 flex-1 flex-col overflow-hidden"
+            >
+              <DialogBody className="space-y-4">
+                <div className="rounded-lg border bg-muted/30 p-3 text-sm space-y-2">
+                  <p className="font-mono text-xs text-muted-foreground">{formatQuoteNumber(convertItem)}</p>
+                  <p className="font-semibold">{convertItem.title}</p>
+                  <div className="rounded-md border bg-background p-2 space-y-1">
+                    <p className="text-xs font-medium text-foreground">已綁定客戶</p>
+                    <p className="text-sm font-medium">{convertItem.customerName ?? "—"}</p>
+                    <p className="text-xs text-muted-foreground">{convertItem.customerPhone ?? "—"}</p>
+                    <p className="text-xs text-muted-foreground">{convertItem.address ?? "—"}</p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="mt-1 h-8"
+                      onClick={() => {
+                        setBindQuoteForWo(convertItem);
+                        setConvertItem(null);
+                      }}
+                    >
+                      更換客戶
+                    </Button>
+                  </div>
+                  <div className="text-xs text-muted-foreground space-y-0.5">
+                    <p>聯絡人：{convertItem.contactPerson ?? "—"} · 業務：{convertItem.salesRepName ?? "—"}</p>
+                    {convertItem.description && <p>服務內容：{convertItem.description}</p>}
+                    {(convertItem.items ?? []).length > 0 && (
+                      <ul className="list-disc pl-4 mt-1">
+                        {(convertItem.items as any[]).map((it: any, i: number) => (
+                          <li key={i}>
+                            {it.category} / {it.brand || "—"} / {it.itemName || it.model || "—"}
+                            {it.model && it.itemName && it.model !== it.itemName ? `（${it.model}）` : ""}
+                            {" "}×{it.quantity}{it.unit}
+                            {it.notes ? ` — ${it.notes}` : ""}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
                 </div>
-              </div>
-              <p className="text-xs text-muted-foreground">以上資料將自動帶入派工單，僅需確認施工排程（選填）。</p>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label>預定施工日</Label>
-                  <Input type="date" value={woForm.scheduledDate} onChange={e => setWoForm(f => ({ ...f, scheduledDate: e.target.value }))} />
+                <p className="text-xs text-muted-foreground">客戶與設備將帶入派工單，僅需確認施工排程（選填）。</p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label>預定施工日</Label>
+                    <Input type="date" value={woForm.scheduledDate} onChange={e => setWoForm(f => ({ ...f, scheduledDate: e.target.value }))} />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>預定時間</Label>
+                    <Input value={woForm.scheduledTime} onChange={e => setWoForm(f => ({ ...f, scheduledTime: e.target.value }))} placeholder="例：09:00" />
+                  </div>
                 </div>
-                <div className="space-y-1.5">
-                  <Label>預定時間</Label>
-                  <Input value={woForm.scheduledTime} onChange={e => setWoForm(f => ({ ...f, scheduledTime: e.target.value }))} placeholder="例：09:00" />
-                </div>
-              </div>
+              </DialogBody>
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setConvertItem(null)}>取消</Button>
                 <Button type="submit" disabled={createWoMutation.isPending}><Wrench className="h-3.5 w-3.5 mr-1" />建立派工單</Button>
@@ -849,6 +956,52 @@ export default function QuotesPage() {
           </DialogContent>
         </Dialog>
       )}
+
+      <BindCustomerDialog
+        open={!!bindQuoteForWo}
+        onOpenChange={(o) => { if (!o) setBindQuoteForWo(null); }}
+        title="此報價單尚未綁定正式客戶"
+        description="請搜尋既有客戶或建立新客戶後，才可建立派工單。"
+        initial={bindQuoteForWo ? {
+          name: bindQuoteForWo.customerName ?? "",
+          mobile: bindQuoteForWo.customerPhone ?? "",
+          address: bindQuoteForWo.address ?? "",
+          contactPerson: bindQuoteForWo.contactPerson ?? "",
+        } : null}
+        confirmLabel="綁定並建立派工"
+        pending={updateMutation.isPending}
+        onConfirm={(v) => {
+          if (!bindQuoteForWo || !v.customerId) return;
+          updateMutation.mutate(
+            {
+              id: bindQuoteForWo.id,
+              data: {
+                customerId: v.customerId,
+                customerName: v.name,
+                customerPhone: v.mobile || v.phone || bindQuoteForWo.customerPhone,
+                address: v.address || bindQuoteForWo.address,
+                contactPerson: v.contactPerson || bindQuoteForWo.contactPerson,
+              } as any,
+            },
+            {
+              onSuccess: () => {
+                const next = {
+                  ...bindQuoteForWo,
+                  customerId: v.customerId,
+                  customerName: v.name,
+                  customerPhone: v.mobile || v.phone || bindQuoteForWo.customerPhone,
+                  address: v.address || bindQuoteForWo.address,
+                  contactPerson: v.contactPerson || bindQuoteForWo.contactPerson,
+                };
+                setBindQuoteForWo(null);
+                setConvertItem(next);
+                setWoForm(buildWorkOrderFormFromQuote(next));
+                toast({ title: "客戶已綁定" });
+              },
+            },
+          );
+        }}
+      />
 
       {/* Delete Confirm */}
       <AlertDialog open={deleteId !== null} onOpenChange={open => !open && setDeleteId(null)}>
