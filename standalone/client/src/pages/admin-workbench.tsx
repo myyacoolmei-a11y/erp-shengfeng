@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link } from "wouter";
-import { AlertCircle, CheckCircle2, ClipboardList, Phone } from "lucide-react";
+import { Link, useLocation, useSearch } from "wouter";
+import { AlertCircle, CheckCircle2, ChevronLeft, ClipboardList, Phone } from "lucide-react";
 import { useAuth, hasRole } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -55,19 +55,14 @@ function caseHref(workOrderId: number) {
 
 function StatusRow({ item }: { item: AdminWorkbenchItem }) {
   return (
-    <div className="grid grid-cols-2 gap-1 text-xs">
-      <p>
-        <span className="text-muted-foreground">工程資料：</span>
-        {item.engineeringStatusLabel ?? "—"}
-      </p>
-      <p>
-        <span className="text-muted-foreground">應收帳款：</span>
-        {item.receivableStatusLabel ?? "—"}
-      </p>
-      <p>
-        <span className="text-muted-foreground">補助：</span>
-        {item.subsidyStatusLabel ?? "不適用補助"}
-      </p>
+    <div className="space-y-1 text-xs">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-muted-foreground">收款狀態：</span>
+        <span>{item.receivableStatusLabel ?? item.paymentStatus ?? "—"}</span>
+        <span className="text-muted-foreground">｜</span>
+        <span className="text-muted-foreground">補助狀態：</span>
+        <SubsidyBadge item={item} />
+      </div>
       <p>
         <span className="text-muted-foreground">可結案：</span>
         <span className={item.canClose ? "text-green-700" : "text-amber-700"}>
@@ -75,6 +70,44 @@ function StatusRow({ item }: { item: AdminWorkbenchItem }) {
         </span>
       </p>
     </div>
+  );
+}
+
+type WorkbenchPanel = "home" | "collection" | "subsidy";
+
+function HubCard({
+  title,
+  count,
+  accent,
+  onClick,
+  hint,
+}: {
+  title: string;
+  count: number;
+  accent?: "red" | "orange" | "normal";
+  onClick: () => void;
+  hint?: string;
+}) {
+  const border =
+    accent === "red"
+      ? "border-red-300"
+      : accent === "orange"
+        ? "border-orange-300"
+        : "border-border";
+  return (
+    <button type="button" onClick={onClick} className="w-full text-left rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+      <Card className={`${border} hover:bg-muted/30 transition-colors`}>
+        <CardHeader className="pb-2 flex-row items-center justify-between space-y-0">
+          <CardTitle className="text-base">{title}</CardTitle>
+          <Badge variant={count > 0 ? "default" : "secondary"}>{count}</Badge>
+        </CardHeader>
+        {hint ? (
+          <CardContent className="pt-0">
+            <p className="text-xs text-muted-foreground">{hint}</p>
+          </CardContent>
+        ) : null}
+      </Card>
+    </button>
   );
 }
 
@@ -271,6 +304,17 @@ export default function AdminWorkbench() {
   const { user } = useAuth();
   const { toast } = useToast();
   const qc = useQueryClient();
+  const [path, navigate] = useLocation();
+  const search = useSearch();
+  const panelParam = new URLSearchParams(search).get("panel");
+  const panel: WorkbenchPanel =
+    panelParam === "collection" || panelParam === "subsidy" ? panelParam : "home";
+  const basePath = path.startsWith("/admin-workbench") ? "/admin-workbench" : "/";
+  const goPanel = (p: WorkbenchPanel) => {
+    if (p === "home") navigate(basePath);
+    else navigate(`${basePath}?panel=${p}`);
+  };
+
   const canOperate = hasRole(user, "super_admin", "owner", "admin");
   const canFinance = canOperate || hasRole(user, "accountant");
   const canOverride = hasRole(user, "super_admin", "owner");
@@ -451,32 +495,48 @@ export default function AdminWorkbench() {
     return computed;
   }
 
-  const sectionOrder = useMemo(() => {
-    if (!data) return [];
+  const hubs = useMemo(() => {
+    if (!data) return null;
     const s = data.sections;
     const c = data.counts;
-    return [
-      { key: "confirm", title: "待確認施工資料", accent: "normal" as const, items: s.pendingConstructionConfirm, count: c.pendingConstructionConfirm ?? 0 },
-      { key: "createAr", title: "待建立應收帳款", accent: "normal" as const, items: s.pendingCreateReceivable, count: c.pendingCreateReceivable ?? 0 },
-      { key: "noDue", title: "未設定收款日", accent: "normal" as const, items: s.noDueDate, count: c.noDueDate ?? 0 },
-      { key: "overdue", title: "已逾期", accent: "red" as const, items: s.collectionOverdue, count: c.collectionOverdue ?? 0 },
-      { key: "today", title: "今日到期", accent: "orange" as const, items: s.collectionToday, count: c.collectionToday ?? 0 },
-      { key: "soon", title: "即將到期", accent: "normal" as const, items: s.collectionSoon, count: c.collectionSoon ?? 0 },
-      { key: "partial", title: "部分收款", accent: "normal" as const, items: s.collectionPartial, count: c.collectionPartial ?? 0 },
-      { key: "subLink", title: "補助申請｜待傳送上傳網址", accent: "normal" as const, items: s.subsidyLinkNotSent, count: c.subsidyLinkNotSent ?? 0 },
-      { key: "subWait", title: "補助申請｜等待客戶上傳", accent: "normal" as const, items: s.subsidyAwaitingUpload, count: c.subsidyAwaitingUpload ?? 0 },
-      { key: "subInc", title: "補助申請｜資料不完整／待人工確認", accent: "orange" as const, items: s.subsidyDocsIncomplete, count: c.subsidyDocsIncomplete ?? 0 },
-      {
-        key: "subOk",
-        title: "補助申請｜補助資料完整",
-        accent: "normal" as const,
-        items: [...(s.subsidyDocsComplete ?? []), ...(s.subsidyPendingApply ?? [])],
-        count: (c.subsidyDocsComplete ?? 0) + (c.subsidyPendingApply ?? 0),
-      },
-      { key: "subDone", title: "補助申請｜已完成補助申請", accent: "normal" as const, items: s.subsidyApplied ?? [], count: c.subsidyApplied ?? 0 },
-      { key: "close", title: "已收款／待結案", accent: "normal" as const, items: s.pendingClose, count: c.pendingClose ?? 0 },
-      { key: "closed", title: "已結案", accent: "normal" as const, items: s.closed, count: c.closed ?? 0 },
-    ];
+    const collectionCount =
+      (c.pendingCreateReceivable ?? 0) +
+      (c.noDueDate ?? 0) +
+      (c.collectionOverdue ?? 0) +
+      (c.collectionToday ?? 0) +
+      (c.collectionSoon ?? 0);
+    const subsidyCount =
+      (c.subsidyLinkNotSent ?? 0) +
+      (c.subsidyAwaitingUpload ?? 0) +
+      (c.subsidyDocsIncomplete ?? 0) +
+      (c.subsidyDocsComplete ?? 0) +
+      (c.subsidyPendingApply ?? 0) +
+      (c.subsidyApplied ?? 0);
+    return {
+      collectionCount,
+      subsidyCount,
+      collectionSections: [
+        { key: "createAr", title: "待建立應收帳款", accent: "normal" as const, items: s.pendingCreateReceivable, count: c.pendingCreateReceivable ?? 0 },
+        { key: "noDue", title: "未設定收款日", accent: "normal" as const, items: s.noDueDate, count: c.noDueDate ?? 0 },
+        { key: "overdue", title: "已逾期", accent: "red" as const, items: s.collectionOverdue, count: c.collectionOverdue ?? 0 },
+        { key: "today", title: "今日到期", accent: "orange" as const, items: s.collectionToday, count: c.collectionToday ?? 0 },
+        { key: "soon", title: "即將到期", accent: "normal" as const, items: s.collectionSoon, count: c.collectionSoon ?? 0 },
+      ],
+      subsidySections: [
+        { key: "subLink", title: "待傳送補助資料連結", accent: "normal" as const, items: s.subsidyLinkNotSent, count: c.subsidyLinkNotSent ?? 0 },
+        { key: "subWait", title: "等待客戶上傳", accent: "normal" as const, items: s.subsidyAwaitingUpload, count: c.subsidyAwaitingUpload ?? 0 },
+        { key: "subInc", title: "客戶資料待補件／等待人工確認", accent: "orange" as const, items: s.subsidyDocsIncomplete, count: c.subsidyDocsIncomplete ?? 0 },
+        { key: "subOk", title: "補助資料完整", accent: "normal" as const, items: s.subsidyDocsComplete ?? [], count: c.subsidyDocsComplete ?? 0 },
+        { key: "subApply", title: "待申請補助", accent: "normal" as const, items: s.subsidyPendingApply ?? [], count: c.subsidyPendingApply ?? 0 },
+        { key: "subDone", title: "補助已完成", accent: "normal" as const, items: s.subsidyApplied ?? [], count: c.subsidyApplied ?? 0 },
+      ],
+      homeSections: [
+        { key: "confirm", title: "📋 待確認施工資料", accent: "normal" as const, items: s.pendingConstructionConfirm, count: c.pendingConstructionConfirm ?? 0 },
+        { key: "partial", title: "💳 部分收款", accent: "normal" as const, items: s.collectionPartial, count: c.collectionPartial ?? 0 },
+        { key: "close", title: "✅ 已收款／待結案", accent: "normal" as const, items: s.pendingClose, count: c.pendingClose ?? 0 },
+        { key: "closed", title: "📦 已結案", accent: "normal" as const, items: s.closed, count: c.closed ?? 0 },
+      ],
+    };
   }, [data]);
 
   if (!user || !canFinance) {
@@ -574,594 +634,550 @@ export default function AdminWorkbench() {
     );
   }
 
+  function renderItem(secKey: string, item: AdminWorkbenchItem) {
+    if (secKey === "confirm") {
+      return (
+        <ItemShell key={item.workOrderId} item={item}>
+          <div className="flex flex-wrap gap-3 text-xs">
+            <span className={item.hasPhotos ? "text-green-700" : "text-destructive"}>
+              {item.hasPhotos ? "✓" : "✗"} 完工照片
+            </span>
+            <span className={item.hasSignature ? "text-green-700" : "text-destructive"}>
+              {item.hasSignature ? "✓" : "✗"} 客戶簽名
+            </span>
+            <span className={item.hasMaterials ? "text-green-700" : "text-destructive"}>
+              {item.hasMaterials ? "✓" : "✗"} 材料紀錄
+            </span>
+          </div>
+          {canOperate && (
+            <Button
+              size="sm"
+              className="h-10 sm:h-9"
+              disabled={confirmMut.isPending}
+              onClick={() => confirmMut.mutate(item.workOrderId)}
+            >
+              確認施工資料
+            </Button>
+          )}
+        </ItemShell>
+      );
+    }
+
+    if (secKey === "createAr") {
+      const draft = draftFor(item);
+      const preview = finalPreview(draft, item);
+      return (
+        <ItemShell key={`createAr-${item.workOrderId}`} item={item} showViewCase>
+          <div className="rounded-md bg-muted/40 p-2 text-xs space-y-1">
+            <p>原報價／成交金額：NT${money(item.quoteOriginalAmount)}</p>
+            <p className="font-medium text-foreground">
+              最終應收金額：NT${preview.toLocaleString("zh-TW")}
+            </p>
+          </div>
+          {canOperate && (
+            <div className="grid sm:grid-cols-2 gap-2">
+              <div>
+                <Label className="text-xs">追加</Label>
+                <Input
+                  value={draft.extra}
+                  onChange={(e) => {
+                    const extra = e.target.value;
+                    const quote = parseFloat(String(item.quoteOriginalAmount ?? "0")) || 0;
+                    const discount = parseFloat(draft.discount) || 0;
+                    const nextFinal = Math.max(0, quote + (parseFloat(extra) || 0) - discount);
+                    setBillDraft((s) => ({
+                      ...s,
+                      [item.workOrderId]: { ...draft, extra, finalAmount: String(nextFinal || "") },
+                    }));
+                  }}
+                />
+              </div>
+              <div>
+                <Label className="text-xs">折讓</Label>
+                <Input
+                  value={draft.discount}
+                  onChange={(e) => {
+                    const discount = e.target.value;
+                    const quote = parseFloat(String(item.quoteOriginalAmount ?? "0")) || 0;
+                    const extra = parseFloat(draft.extra) || 0;
+                    const nextFinal = Math.max(0, quote + extra - (parseFloat(discount) || 0));
+                    setBillDraft((s) => ({
+                      ...s,
+                      [item.workOrderId]: { ...draft, discount, finalAmount: String(nextFinal || "") },
+                    }));
+                  }}
+                />
+              </div>
+              <div>
+                <Label className="text-xs">最終應收金額 <span className="text-destructive">*</span></Label>
+                <Input
+                  type="number"
+                  value={draft.finalAmount}
+                  onChange={(e) =>
+                    setBillDraft((s) => ({
+                      ...s,
+                      [item.workOrderId]: { ...draft, finalAmount: e.target.value },
+                    }))
+                  }
+                />
+              </div>
+              <div>
+                <Label className="text-xs">預計收款日（選填）</Label>
+                <Input
+                  type="date"
+                  value={draft.due}
+                  onChange={(e) =>
+                    setBillDraft((s) => ({
+                      ...s,
+                      [item.workOrderId]: { ...draft, due: e.target.value },
+                    }))
+                  }
+                />
+              </div>
+              <div className="sm:col-span-2">
+                <Label className="text-xs">請款對象</Label>
+                <Input
+                  value={draft.billTo}
+                  onChange={(e) =>
+                    setBillDraft((s) => ({
+                      ...s,
+                      [item.workOrderId]: { ...draft, billTo: e.target.value },
+                    }))
+                  }
+                />
+              </div>
+              <label className="flex items-center gap-2 text-xs col-span-2">
+                <Checkbox
+                  checked={draft.subsidy}
+                  onCheckedChange={(v) =>
+                    setBillDraft((s) => ({
+                      ...s,
+                      [item.workOrderId]: { ...draft, subsidy: !!v },
+                    }))
+                  }
+                />
+                公司協助補助（可與收款並行）
+              </label>
+            </div>
+          )}
+          {canOperate && (
+            <Button
+              size="sm"
+              className="h-10 sm:h-9"
+              disabled={billMut.isPending || !(preview > 0)}
+              onClick={() => {
+                if (!(preview > 0)) {
+                  toast({ title: "請確認最終應收金額", description: "金額必須大於 0", variant: "destructive" });
+                  return;
+                }
+                billMut.mutate({
+                  id: item.workOrderId,
+                  body: {
+                    extraAmount: draft.extra || "0",
+                    discountAmount: draft.discount || "0",
+                    finalAmount: String(preview),
+                    billTo: draft.billTo,
+                    expectedPaymentDate: draft.due || null,
+                    needsSubsidy: draft.subsidy,
+                    subsidyType: draft.subsidy ? "company_assisted" : "none",
+                  },
+                });
+              }}
+            >
+              建立應收帳款（NT${preview.toLocaleString("zh-TW")}）
+            </Button>
+          )}
+        </ItemShell>
+      );
+    }
+
+    if (secKey.startsWith("sub")) {
+      const pipe = item.subsidyPipelineStatus ?? "link_not_sent";
+      const display = item.subsidyDisplayStatus;
+      const paid = item.receivableStatus === "paid";
+      const phone = item.mobilePhone || item.telephone || "—";
+      return (
+        <ItemShell key={`${secKey}-${item.workOrderId}`} item={item}>
+          <p className="text-xs text-muted-foreground">電話：{phone}</p>
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="text-muted-foreground">收款狀態：</span>
+            <span>{item.receivableStatusLabel ?? item.paymentStatus ?? "—"}</span>
+          </div>
+          <SubsidyMetaLines item={item} />
+          {paid && pipe !== "applied" && (
+            <p className="text-xs text-green-700">已收款 — 請完成補助流程後再結案</p>
+          )}
+          {canOperate && (
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" variant="outline" className="h-10 sm:h-9" onClick={() => setDocsModal(item)}>
+                查看補助資料
+                {(item.uploadedDocCount ?? 0) > 0 ? `（${item.uploadedDocCount}）` : ""}
+              </Button>
+              {item.uploadUrl && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-10 sm:h-9"
+                  onClick={() => {
+                    const url = absoluteUploadUrl(item);
+                    if (!url) return;
+                    void navigator.clipboard.writeText(url).then(
+                      () => toast({ title: "已複製上傳網址" }),
+                      () => toast({ title: "複製失敗", variant: "destructive" }),
+                    );
+                  }}
+                >
+                  複製上傳網址
+                </Button>
+              )}
+              {item.uploadUrl && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-10 sm:h-9"
+                  onClick={() => {
+                    const text = subsidyUploadShareText(item);
+                    const win = openLineShareText(text);
+                    if (!win) {
+                      void navigator.clipboard.writeText(text).then(() =>
+                        toast({ title: "已複製分享內容", description: "請貼到 LINE 傳送給客戶" }),
+                      );
+                    }
+                    if (pipe === "link_not_sent") {
+                      subsidyPipeMut.mutate({ id: item.workOrderId, status: "awaiting_upload" });
+                    }
+                  }}
+                >
+                  LINE 傳送上傳網址
+                </Button>
+              )}
+              {pipe === "link_not_sent" && (
+                <Button
+                  size="sm"
+                  className="h-10 sm:h-9"
+                  disabled={subsidyPipeMut.isPending}
+                  onClick={() => {
+                    subsidyPipeMut.mutate(
+                      { id: item.workOrderId, status: "awaiting_upload" },
+                      {
+                        onSuccess: () => {
+                          void navigator.clipboard.writeText(subsidyUploadShareText(item));
+                          toast({ title: "已標記等待客戶上傳", description: "上傳網址已複製，可貼到 LINE" });
+                        },
+                      },
+                    );
+                  }}
+                >
+                  標記已傳送網址
+                </Button>
+              )}
+              {display === "awaiting_manual_review" && (
+                <Button
+                  size="sm"
+                  className="h-10 sm:h-9 bg-yellow-600 hover:bg-yellow-700"
+                  disabled={subsidyConfirmMut.isPending}
+                  onClick={() => {
+                    if (!window.confirm("確認補助資料齊全可用？確認後將標為「補助資料完整」。")) return;
+                    subsidyConfirmMut.mutate(item.workOrderId);
+                  }}
+                >
+                  人工確認資料齊全
+                </Button>
+              )}
+              {(display === "docs_complete" || pipe === "pending_apply" || secKey === "subApply") && pipe !== "applied" && (
+                <Button
+                  size="sm"
+                  className="h-10 sm:h-9 bg-green-700 hover:bg-green-800"
+                  disabled={subsidyPipeMut.isPending}
+                  onClick={() => {
+                    if (!window.confirm("確定此案件已完成補助申請？確認後將同步更新應收帳款頁。")) return;
+                    const remark = window.prompt("備註（選填）") ?? undefined;
+                    subsidyPipeMut.mutate({
+                      id: item.workOrderId,
+                      status: "applied",
+                      note: remark?.trim() || undefined,
+                    });
+                  }}
+                >
+                  補助申請已完成
+                </Button>
+              )}
+              {pipe === "applied" && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-10 sm:h-9 text-orange-700 border-orange-300"
+                  disabled={subsidyUnmarkMut.isPending}
+                  onClick={() => {
+                    if (!window.confirm("取消補助完成／重新開啟？附件與完成紀錄會保留在操作日誌。")) return;
+                    subsidyUnmarkMut.mutate(item.workOrderId);
+                  }}
+                >
+                  取消補助完成／重新開啟
+                </Button>
+              )}
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-10 sm:h-9"
+                disabled={subsidyRegenMut.isPending}
+                onClick={() => {
+                  if (!window.confirm("僅在網址失效時重新產生。確定重新產生上傳網址？")) return;
+                  subsidyRegenMut.mutate({ id: item.workOrderId, force: true });
+                }}
+              >
+                重新產生網址
+              </Button>
+            </div>
+          )}
+        </ItemShell>
+      );
+    }
+
+    if (secKey === "close") {
+      return (
+        <ItemShell key={`close-${item.workOrderId}`} item={item}>
+          <ReceivableSummary item={item} />
+          <p className="text-xs text-green-700 font-medium">
+            {item.canCloseReady ? "可結案" : "已收款／待結案"}
+          </p>
+          {item.subsidyType === "company_assisted" &&
+            item.subsidyPipelineStatus !== "applied" &&
+            !item.closeOverrideAt && (
+              <p className="text-xs text-amber-800">需完成補助申請後才可結案（或由負責人核准先結案）</p>
+            )}
+          {!item.canClose && item.closeBlockers && item.closeBlockers.length > 0 && (
+            <ul className="text-xs text-amber-800 list-disc pl-4">
+              {item.closeBlockers.map((b) => (
+                <li key={b}>{b}</li>
+              ))}
+            </ul>
+          )}
+          <div className="flex flex-wrap gap-2">
+            {canOverride &&
+              item.subsidyType === "company_assisted" &&
+              !item.closeOverrideAt &&
+              item.subsidyPipelineStatus !== "applied" && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-10 sm:h-9"
+                  disabled={overrideMut.isPending}
+                  onClick={() => overrideMut.mutate(item.workOrderId)}
+                >
+                  核准先結案
+                </Button>
+              )}
+            {canOperate && (
+              <Button
+                size="sm"
+                className="h-10 sm:h-9"
+                disabled={closeMut.isPending || !item.canClose}
+                onClick={() => closeMut.mutate(item.workOrderId)}
+              >
+                結案
+              </Button>
+            )}
+            {canOperate && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-10 sm:h-9 text-orange-700 border-orange-300"
+                disabled={cancelPaidMut.isPending}
+                onClick={() => {
+                  if (!window.confirm("確定取消已收款？將恢復為未收款，不會刪除派工單／報價單／施工資料。")) return;
+                  cancelPaidMut.mutate(item.workOrderId);
+                }}
+              >
+                取消已收款
+              </Button>
+            )}
+          </div>
+        </ItemShell>
+      );
+    }
+
+    if (secKey === "closed") {
+      return (
+        <ItemShell key={`closed-${item.workOrderId}`} item={item} showViewCase={false}>
+          <ReceivableSummary item={item} />
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="text-muted-foreground">收款狀態：</span>
+            <span>{item.paymentStatus ?? item.receivableStatusLabel ?? "—"}</span>
+            <span className="text-muted-foreground">｜補助狀態：</span>
+            <SubsidyBadge item={item} />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild size="sm" variant="outline" className="h-10 sm:h-9">
+              <Link href={caseHref(item.workOrderId)}>查看案件</Link>
+            </Button>
+            {item.subsidyType === "company_assisted" && (
+              <Button size="sm" variant="outline" className="h-10 sm:h-9" onClick={() => setDocsModal(item)}>
+                查看補助資料
+              </Button>
+            )}
+            {canOperate && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-10 sm:h-9 text-orange-700 border-orange-300"
+                disabled={reopenMut.isPending}
+                onClick={() => {
+                  if (!window.confirm("確定取消結案／重新開啟？收款紀錄與補助資料將保留。")) return;
+                  reopenMut.mutate(item.workOrderId);
+                }}
+              >
+                取消結案／重新開啟
+              </Button>
+            )}
+          </div>
+        </ItemShell>
+      );
+    }
+
+    // collection / partial
+    return (
+      <ItemShell key={`${secKey}-${item.workOrderId}`} item={item} showViewCase={false}>
+        <ReceivableSummary item={item} />
+        {item.subsidyType === "company_assisted" && (
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="text-muted-foreground">補助狀態：</span>
+            <SubsidyBadge item={item} />
+          </div>
+        )}
+        <CollectionActions item={item} />
+      </ItemShell>
+    );
+  }
+
+  function renderSections(
+    sections: Array<{
+      key: string;
+      title: string;
+      accent: "red" | "orange" | "normal";
+      items: AdminWorkbenchItem[];
+      count: number;
+    }>,
+  ) {
+    return sections.map((sec) => (
+      <Section
+        key={sec.key}
+        title={sec.title}
+        count={sec.count}
+        accent={sec.accent}
+        collapsible={sec.key === "closed"}
+        defaultOpen={sec.key === "closed" ? sec.count > 0 : true}
+      >
+        {sec.items.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-6">
+            {sec.key === "closed" ? "尚無已結案案件" : "目前無待辦"}
+          </p>
+        ) : (
+          sec.items.map((item) => renderItem(sec.key, item))
+        )}
+      </Section>
+    ));
+  }
+
+  if (!hubs) return null;
+
   return (
     <div className="space-y-5 max-w-3xl mx-auto pb-12">
       <div>
-        <h1 className="text-xl font-bold tracking-tight">今日必做事項</h1>
+        {panel !== "home" ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="mb-2 -ml-2 h-8 px-2"
+            onClick={() => goPanel("home")}
+          >
+            <ChevronLeft className="h-4 w-4 mr-1" />
+            返回行政首頁
+          </Button>
+        ) : null}
+        <h1 className="text-xl font-bold tracking-tight">
+          {panel === "collection" ? "💰 待收款" : panel === "subsidy" ? "📄 補助中心" : "今日必做事項"}
+        </h1>
         <p className="text-sm text-muted-foreground mt-1">
-          行政每日工作台 · {data.today} · 未完成待辦 {data.counts.openTodos ?? 0} 件
-        </p>
-        <p className="text-xs text-muted-foreground mt-1">
-          核心：施工資料確認 → 應收帳款與收款 → 補助申請 → 案件結案（不含保固）
+          {panel === "home"
+            ? `行政每日工作台 · ${data.today} · 未完成待辦 ${data.counts.openTodos ?? 0} 件`
+            : panel === "collection"
+              ? "依收款日分類處理；與補助流程並行"
+              : "與應收帳款共用同一補助狀態；施工完成即可開始"}
         </p>
       </div>
 
-      {(data.alerts.hasOverdue || data.alerts.hasDueToday) && (
+      {panel === "home" && (data.alerts.hasOverdue || data.alerts.hasDueToday) && (
         <div className="space-y-2">
           {data.alerts.hasOverdue && (
-            <div className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800">
-              有 {data.alerts.overdueCount} 件逾期收款，請優先處理
-            </div>
+            <button
+              type="button"
+              className="w-full text-left rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800"
+              onClick={() => goPanel("collection")}
+            >
+              有 {data.alerts.overdueCount} 件逾期收款，點此進入待收款
+            </button>
           )}
           {data.alerts.hasDueToday && (
-            <div className="rounded-md border border-orange-300 bg-orange-50 px-3 py-2 text-sm text-orange-900">
-              今日有 {data.alerts.dueTodayCount} 件到期收款
-            </div>
+            <button
+              type="button"
+              className="w-full text-left rounded-md border border-orange-300 bg-orange-50 px-3 py-2 text-sm text-orange-900"
+              onClick={() => goPanel("collection")}
+            >
+              今日有 {data.alerts.dueTodayCount} 件到期收款，點此進入待收款
+            </button>
           )}
         </div>
       )}
 
-      {sectionOrder.map((sec) => (
-        <Section
-          key={sec.key}
-          title={sec.title}
-          count={sec.count}
-          accent={sec.accent}
-          collapsible={sec.key === "closed"}
-          defaultOpen={sec.key === "closed" ? sec.count > 0 : true}
-        >
-          {sec.items.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-6">
-              {sec.key === "closed" ? "尚無已結案案件" : "目前無待辦"}
-            </p>
-          ) : (
-            sec.items.map((item) => {
-              if (sec.key === "confirm") {
-                return (
-                  <ItemShell key={item.workOrderId} item={item}>
-                    <div className="flex flex-wrap gap-3 text-xs">
-                      <span className={item.hasPhotos ? "text-green-700" : "text-destructive"}>
-                        {item.hasPhotos ? "✓" : "✗"} 完工照片
-                      </span>
-                      <span className={item.hasSignature ? "text-green-700" : "text-destructive"}>
-                        {item.hasSignature ? "✓" : "✗"} 客戶簽名
-                      </span>
-                      <span className={item.hasMaterials ? "text-green-700" : "text-destructive"}>
-                        {item.hasMaterials ? "✓" : "✗"} 材料紀錄
-                      </span>
-                    </div>
-                    {canOperate && (
-                      <Button
-                        size="sm"
-                        className="h-10 sm:h-9"
-                        disabled={confirmMut.isPending}
-                        onClick={() => confirmMut.mutate(item.workOrderId)}
-                      >
-                        確認施工資料
-                      </Button>
-                    )}
-                  </ItemShell>
-                );
-              }
-
-              if (sec.key === "createAr") {
-                const draft = draftFor(item);
-                const preview = finalPreview(draft, item);
-                return (
-                  <ItemShell key={`createAr-${item.workOrderId}`} item={item} showViewCase>
-                    <div className="rounded-md bg-muted/40 p-2 text-xs space-y-1">
-                      <p>原報價／成交金額：NT${money(item.quoteOriginalAmount)}</p>
-                      <p className="font-medium text-foreground">
-                        最終應收金額：NT${preview.toLocaleString("zh-TW")}
-                      </p>
-                      <p className="text-muted-foreground">
-                        計算：報價 {money(item.quoteOriginalAmount)} + 追加 {money(draft.extra)} − 折讓 {money(draft.discount)}
-                      </p>
-                    </div>
-                    {canOperate && (
-                      <div className="grid sm:grid-cols-2 gap-2">
-                        <div>
-                          <Label className="text-xs">追加</Label>
-                          <Input
-                            value={draft.extra}
-                            onChange={(e) => {
-                              const extra = e.target.value;
-                              const quote = parseFloat(String(item.quoteOriginalAmount ?? "0")) || 0;
-                              const discount = parseFloat(draft.discount) || 0;
-                              const nextFinal = Math.max(0, quote + (parseFloat(extra) || 0) - discount);
-                              setBillDraft((s) => ({
-                                ...s,
-                                [item.workOrderId]: {
-                                  ...draft,
-                                  extra,
-                                  finalAmount: String(nextFinal || ""),
-                                },
-                              }));
-                            }}
-                          />
-                        </div>
-                        <div>
-                          <Label className="text-xs">折讓</Label>
-                          <Input
-                            value={draft.discount}
-                            onChange={(e) => {
-                              const discount = e.target.value;
-                              const quote = parseFloat(String(item.quoteOriginalAmount ?? "0")) || 0;
-                              const extra = parseFloat(draft.extra) || 0;
-                              const nextFinal = Math.max(0, quote + extra - (parseFloat(discount) || 0));
-                              setBillDraft((s) => ({
-                                ...s,
-                                [item.workOrderId]: {
-                                  ...draft,
-                                  discount,
-                                  finalAmount: String(nextFinal || ""),
-                                },
-                              }));
-                            }}
-                          />
-                        </div>
-                        <div>
-                          <Label className="text-xs">最終應收金額 <span className="text-destructive">*</span></Label>
-                          <Input
-                            type="number"
-                            value={draft.finalAmount}
-                            onChange={(e) =>
-                              setBillDraft((s) => ({
-                                ...s,
-                                [item.workOrderId]: { ...draft, finalAmount: e.target.value },
-                              }))
-                            }
-                          />
-                        </div>
-                        <div>
-                          <Label className="text-xs">預計收款日（選填）</Label>
-                          <Input
-                            type="date"
-                            value={draft.due}
-                            onChange={(e) =>
-                              setBillDraft((s) => ({
-                                ...s,
-                                [item.workOrderId]: { ...draft, due: e.target.value },
-                              }))
-                            }
-                          />
-                        </div>
-                        <div className="sm:col-span-2">
-                          <Label className="text-xs">請款對象</Label>
-                          <Input
-                            value={draft.billTo}
-                            onChange={(e) =>
-                              setBillDraft((s) => ({
-                                ...s,
-                                [item.workOrderId]: { ...draft, billTo: e.target.value },
-                              }))
-                            }
-                          />
-                        </div>
-                        <label className="flex items-center gap-2 text-xs col-span-2">
-                          <Checkbox
-                            checked={draft.subsidy}
-                            onCheckedChange={(v) =>
-                              setBillDraft((s) => ({
-                                ...s,
-                                [item.workOrderId]: { ...draft, subsidy: !!v },
-                              }))
-                            }
-                          />
-                          公司協助補助（可與收款並行）
-                        </label>
-                      </div>
-                    )}
-                    {canOperate && (
-                      <Button
-                        size="sm"
-                        className="h-10 sm:h-9"
-                        disabled={billMut.isPending || !(preview > 0)}
-                        onClick={() => {
-                          if (!(preview > 0)) {
-                            toast({
-                              title: "請確認最終應收金額",
-                              description: "金額必須大於 0",
-                              variant: "destructive",
-                            });
-                            return;
-                          }
-                          billMut.mutate({
-                            id: item.workOrderId,
-                            body: {
-                              extraAmount: draft.extra || "0",
-                              discountAmount: draft.discount || "0",
-                              finalAmount: String(preview),
-                              billTo: draft.billTo,
-                              expectedPaymentDate: draft.due || null,
-                              needsSubsidy: draft.subsidy,
-                              subsidyType: draft.subsidy ? "company_assisted" : "none",
-                            },
-                          });
-                        }}
-                      >
-                        建立應收帳款（NT${preview.toLocaleString("zh-TW")}）
-                      </Button>
-                    )}
-                  </ItemShell>
-                );
-              }
-
-              if (sec.key === "noDue") {
-                return (
-                  <ItemShell key={`noDue-${item.workOrderId}`} item={item} showViewCase={false}>
-                    <ReceivableSummary item={item} />
-                    <CollectionActions item={item} />
-                  </ItemShell>
-                );
-              }
-
-              if (sec.key.startsWith("sub")) {
-                const pipe = item.subsidyPipelineStatus ?? "link_not_sent";
-                const display = item.subsidyDisplayStatus;
-                const paid = item.receivableStatus === "paid";
-                const phone = item.mobilePhone || item.telephone || "—";
-                return (
-                  <ItemShell key={`${sec.key}-${item.workOrderId}`} item={item}>
-                    <ReceivableSummary item={item} />
-                    <p className="text-xs text-muted-foreground">電話：{phone}</p>
-                    <SubsidyMetaLines item={item} />
-                    {paid && pipe !== "applied" && (
-                      <p className="text-xs text-green-700">已收款 — 請完成補助流程後再結案</p>
-                    )}
-                    {canOperate && (
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-10 sm:h-9"
-                          onClick={() => setDocsModal(item)}
-                        >
-                          查看補助資料
-                          {(item.uploadedDocCount ?? 0) > 0
-                            ? `（${item.uploadedDocCount}）`
-                            : ""}
-                        </Button>
-                        {item.uploadUrl && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-10 sm:h-9"
-                            onClick={() => {
-                              const url = absoluteUploadUrl(item);
-                              if (!url) return;
-                              void navigator.clipboard.writeText(url).then(
-                                () => toast({ title: "已複製上傳網址" }),
-                                () => toast({ title: "複製失敗", variant: "destructive" }),
-                              );
-                            }}
-                          >
-                            複製上傳網址
-                          </Button>
-                        )}
-                        {item.uploadUrl && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-10 sm:h-9"
-                            onClick={() => {
-                              const text = subsidyUploadShareText(item);
-                              const win = openLineShareText(text);
-                              if (!win) {
-                                void navigator.clipboard.writeText(text).then(() =>
-                                  toast({
-                                    title: "已複製分享內容",
-                                    description: "請貼到 LINE 傳送給客戶",
-                                  }),
-                                );
-                              }
-                              if (pipe === "link_not_sent") {
-                                subsidyPipeMut.mutate({
-                                  id: item.workOrderId,
-                                  status: "awaiting_upload",
-                                });
-                              }
-                            }}
-                          >
-                            LINE 傳送上傳網址
-                          </Button>
-                        )}
-                        {pipe === "link_not_sent" && (
-                          <Button
-                            size="sm"
-                            className="h-10 sm:h-9"
-                            disabled={subsidyPipeMut.isPending}
-                            onClick={() => {
-                              subsidyPipeMut.mutate(
-                                { id: item.workOrderId, status: "awaiting_upload" },
-                                {
-                                  onSuccess: () => {
-                                    const text = subsidyUploadShareText({
-                                      ...item,
-                                      // token may already exist; refresh after invalidate
-                                    });
-                                    void navigator.clipboard.writeText(text);
-                                    toast({
-                                      title: "已標記等待客戶上傳",
-                                      description: "上傳網址已複製，可貼到 LINE",
-                                    });
-                                  },
-                                },
-                              );
-                            }}
-                          >
-                            標記已傳送網址
-                          </Button>
-                        )}
-                        {display === "awaiting_manual_review" && (
-                          <Button
-                            size="sm"
-                            className="h-10 sm:h-9 bg-yellow-600 hover:bg-yellow-700"
-                            disabled={subsidyConfirmMut.isPending}
-                            onClick={() => {
-                              if (!window.confirm("確認補助資料齊全可用？確認後將標為「補助資料完整」。")) {
-                                return;
-                              }
-                              subsidyConfirmMut.mutate(item.workOrderId);
-                            }}
-                          >
-                            人工確認資料齊全
-                          </Button>
-                        )}
-                        {(display === "docs_complete" || pipe === "pending_apply") && (
-                          <Button
-                            size="sm"
-                            className="h-10 sm:h-9 bg-green-700 hover:bg-green-800"
-                            disabled={subsidyPipeMut.isPending}
-                            onClick={() => {
-                              if (
-                                !window.confirm(
-                                  "確定此案件已完成補助申請？確認後將同步更新應收帳款頁。",
-                                )
-                              ) {
-                                return;
-                              }
-                              const remark = window.prompt("備註（選填）") ?? undefined;
-                              subsidyPipeMut.mutate({
-                                id: item.workOrderId,
-                                status: "applied",
-                                note: remark?.trim() || undefined,
-                              });
-                            }}
-                          >
-                            補助申請已完成
-                          </Button>
-                        )}
-                        {pipe === "applied" && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-10 sm:h-9 text-orange-700 border-orange-300"
-                            disabled={subsidyUnmarkMut.isPending}
-                            onClick={() => {
-                              if (
-                                !window.confirm(
-                                  "取消補助完成／重新開啟？附件與完成紀錄會保留在操作日誌。",
-                                )
-                              ) {
-                                return;
-                              }
-                              subsidyUnmarkMut.mutate(item.workOrderId);
-                            }}
-                          >
-                            取消補助完成／重新開啟
-                          </Button>
-                        )}
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-10 sm:h-9"
-                          disabled={subsidyRegenMut.isPending}
-                          onClick={() => {
-                            if (
-                              !window.confirm(
-                                "僅在網址失效時重新產生。確定重新產生上傳網址？",
-                              )
-                            ) {
-                              return;
-                            }
-                            subsidyRegenMut.mutate({ id: item.workOrderId, force: true });
-                          }}
-                        >
-                          重新產生網址
-                        </Button>
-                        {paid && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-10 sm:h-9 text-orange-700 border-orange-300"
-                            disabled={cancelPaidMut.isPending}
-                            onClick={() => {
-                              if (
-                                !window.confirm(
-                                  "確定取消已收款？將恢復為未收款，不會刪除派工單／報價單／施工資料。",
-                                )
-                              ) {
-                                return;
-                              }
-                              cancelPaidMut.mutate(item.workOrderId);
-                            }}
-                          >
-                            取消已收款
-                          </Button>
-                        )}
-                      </div>
-                    )}
-                  </ItemShell>
-                );
-              }
-
-              if (sec.key === "close") {
-                return (
-                  <ItemShell key={`close-${item.workOrderId}`} item={item}>
-                    <ReceivableSummary item={item} />
-                    <p className="text-xs text-green-700 font-medium">
-                      {item.canCloseReady ? "可結案" : "已收款／待結案"}
-                    </p>
-                    {item.subsidyType === "company_assisted" &&
-                      item.subsidyPipelineStatus !== "applied" &&
-                      !item.closeOverrideAt && (
-                        <p className="text-xs text-amber-800">
-                          需完成補助申請後才可結案（或由負責人核准先結案）
-                        </p>
-                      )}
-                    {!item.canClose && item.closeBlockers && item.closeBlockers.length > 0 && (
-                      <ul className="text-xs text-amber-800 list-disc pl-4">
-                        {item.closeBlockers.map((b) => (
-                          <li key={b}>{b}</li>
-                        ))}
-                      </ul>
-                    )}
-                    <div className="flex flex-wrap gap-2">
-                      {canOverride &&
-                        item.subsidyType === "company_assisted" &&
-                        !item.closeOverrideAt &&
-                        item.subsidyPipelineStatus !== "applied" && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-10 sm:h-9"
-                            disabled={overrideMut.isPending}
-                            onClick={() => overrideMut.mutate(item.workOrderId)}
-                          >
-                            核准先結案
-                          </Button>
-                        )}
-                      {canOperate && (
-                        <Button
-                          size="sm"
-                          className="h-10 sm:h-9"
-                          disabled={closeMut.isPending || !item.canClose}
-                          onClick={() => closeMut.mutate(item.workOrderId)}
-                        >
-                          結案
-                        </Button>
-                      )}
-                      {canOperate && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-10 sm:h-9 text-orange-700 border-orange-300"
-                          disabled={cancelPaidMut.isPending}
-                          onClick={() => {
-                            if (
-                              !window.confirm(
-                                "確定取消已收款？將恢復為未收款，不會刪除派工單／報價單／施工資料。",
-                              )
-                            ) {
-                              return;
-                            }
-                            cancelPaidMut.mutate(item.workOrderId);
-                          }}
-                        >
-                          取消已收款
-                        </Button>
-                      )}
-                    </div>
-                  </ItemShell>
-                );
-              }
-
-              if (sec.key === "closed") {
-                return (
-                  <ItemShell key={`closed-${item.workOrderId}`} item={item} showViewCase={false}>
-                    <ReceivableSummary item={item} />
-                    <p className="text-xs text-muted-foreground">
-                      補助：{item.subsidyStatusLabel ?? "不適用補助"}
-                      {" · "}
-                      收款狀態：{item.paymentStatus ?? item.receivableStatusLabel ?? "—"}
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      <Button asChild size="sm" variant="outline" className="h-10 sm:h-9">
-                        <Link href={caseHref(item.workOrderId)}>查看案件</Link>
-                      </Button>
-                      {item.quoteId != null && (
-                        <Button asChild size="sm" variant="outline" className="h-10 sm:h-9">
-                          <Link href={`/quotes?focusId=${item.quoteId}`}>查看報價單</Link>
-                        </Button>
-                      )}
-                      <Button asChild size="sm" variant="outline" className="h-10 sm:h-9">
-                        <Link href={`/work-orders?highlight=${item.workOrderId}`}>查看派工單</Link>
-                      </Button>
-                      {item.subsidyType === "company_assisted" && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-10 sm:h-9"
-                          onClick={() => setDocsModal(item)}
-                        >
-                          補助資料
-                          {(item.customerDocumentCount ?? 0) > 0
-                            ? `（${item.customerDocumentCount}）`
-                            : ""}
-                        </Button>
-                      )}
-                      {canOperate && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-10 sm:h-9 text-orange-700 border-orange-300"
-                          disabled={reopenMut.isPending}
-                          onClick={() => {
-                            if (
-                              !window.confirm(
-                                "確定取消結案／重新開啟？收款紀錄與補助資料將保留。",
-                              )
-                            ) {
-                              return;
-                            }
-                            reopenMut.mutate(item.workOrderId);
-                          }}
-                        >
-                          取消結案／重新開啟
-                        </Button>
-                      )}
-                    </div>
-                  </ItemShell>
-                );
-              }
-
-              // collection: overdue / today / soon / partial
-              return (
-                <ItemShell key={`${sec.key}-${item.workOrderId}`} item={item} showViewCase={false}>
-                  <ReceivableSummary item={item} />
-                  <CollectionActions item={item} />
-                </ItemShell>
-              );
-            })
-          )}
-        </Section>
-      ))}
-
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base flex items-center gap-2">
-            <CheckCircle2 className="h-4 w-4 text-green-600" />
-            今日完成
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-center">
-            {[
-              ["確認施工", data.todayStats.confirmedToday],
-              ["建立應收", data.todayStats.receivableCreatedToday],
-              ["已收款", data.todayStats.paidToday],
-              ["已結案", data.todayStats.closedToday],
-              ["尚未完成待辦", data.todayStats.openTodos],
-            ].map(([label, value]) => (
-              <div key={String(label)} className="rounded-md border p-2">
-                <p className="text-xs text-muted-foreground">{label}</p>
-                <p className="text-lg font-semibold">{value}</p>
+      {panel === "home" && (
+        <>
+          {renderSections(hubs.homeSections.filter((s) => s.key === "confirm"))}
+          <HubCard
+            title="💰 待收款"
+            count={hubs.collectionCount}
+            accent={data.alerts.hasOverdue ? "red" : data.alerts.hasDueToday ? "orange" : "normal"}
+            onClick={() => goPanel("collection")}
+            hint="未設定收款日／今日到期／即將到期／已逾期（點擊進入）"
+          />
+          {renderSections(hubs.homeSections.filter((s) => s.key === "partial"))}
+          <HubCard
+            title="📄 補助中心"
+            count={hubs.subsidyCount}
+            onClick={() => goPanel("subsidy")}
+            hint="待傳送連結 → 上傳 → 補件 → 完整 → 已完成（點擊進入）"
+          />
+          {renderSections(hubs.homeSections.filter((s) => s.key === "close" || s.key === "closed"))}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-green-600" />
+                今日完成
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-center">
+                {[
+                  ["確認施工", data.todayStats.confirmedToday],
+                  ["建立應收", data.todayStats.receivableCreatedToday],
+                  ["已收款", data.todayStats.paidToday],
+                  ["已結案", data.todayStats.closedToday],
+                  ["尚未完成待辦", data.todayStats.openTodos],
+                ].map(([label, value]) => (
+                  <div key={String(label)} className="rounded-md border p-2">
+                    <p className="text-xs text-muted-foreground">{label}</p>
+                    <p className="text-lg font-semibold">{value}</p>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+            </CardContent>
+          </Card>
+        </>
+      )}
+
+      {panel === "collection" && renderSections(hubs.collectionSections)}
+      {panel === "subsidy" && renderSections(hubs.subsidySections)}
 
       {/* 設定預計收款日 — 簡單 Modal */}
       <Dialog open={!!dueModal} onOpenChange={(o) => { if (!o) setDueModal(null); }}>

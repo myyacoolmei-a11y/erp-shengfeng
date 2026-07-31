@@ -192,7 +192,7 @@ function SubsidyStatusButton({
             ? `\n缺少：${item.missingDocLabels!.join("、")}`
             : "";
         window.alert(
-          `${incompleteLabel}${miss}\n\n請至行政首頁「補助申請」查看客戶上傳資料。不可直接標記完成。`,
+          `${incompleteLabel}${miss}\n\n請至行政首頁「補助中心」查看客戶上傳資料。不可直接標記完成。`,
         );
         onViewIncomplete?.();
       }}
