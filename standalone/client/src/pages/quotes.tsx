@@ -37,6 +37,7 @@ import {
   buildWorkOrderFormFromQuote,
   canConvertQuoteToWorkOrder,
   normalizeQuoteStatus,
+  quoteHasLinkedWorkOrder,
 } from "@/lib/quoteToWorkOrder";
 import { PENDING_DISPATCH_BADGE, PENDING_DISPATCH_FILTER_ACTIVE } from "@/lib/dispatchPendingTheme";
 import { VoiceAssistantButton } from "@/components/voice-assistant/VoiceAssistantDialog";
@@ -79,24 +80,21 @@ const DRAFT_STATUSES = new Set(["草稿", "尚未完成", "尚未送出"]);
 const HISTORY_STATUSES = new Set(["已拒絕", "已取消", "已失效"]);
 const DISPATCHED_STATUSES = new Set(["已派工", "施工中", "已完工"]);
 
-function quoteHasWorkOrder(q: any): boolean {
-  return !!(q.workOrderId || q.workOrderNumber) || DISPATCHED_STATUSES.has(q.dispatchStatus ?? "");
-}
-
 /**
  * Assign each quote to exactly one tab (priority: 歷史 → 已成交待派工 → 等待客戶 → 草稿).
+ * Tab mapping may use dispatchStatus; action buttons must use quoteHasLinkedWorkOrder only.
  */
 function quoteCategory(q: any): QuoteFilterTab {
   const raw = String(q.status ?? "");
   const status = normalizeQuoteStatus(raw);
-  const hasWo = quoteHasWorkOrder(q);
+  const hasWo = quoteHasLinkedWorkOrder(q);
   const dispatched = DISPATCHED_STATUSES.has(q.dispatchStatus ?? "");
 
   // 4. 歷史紀錄 — already dispatched / rejected / cancelled / expired
   if (
     HISTORY_STATUSES.has(raw) ||
     HISTORY_STATUSES.has(status) ||
-    dispatched ||
+    (dispatched && hasWo) ||
     (status === "已成交" && hasWo)
   ) {
     return "歷史紀錄";
@@ -283,6 +281,25 @@ async function shareQuoteViaLine(
     filename: `報價單_${quoteNo}.pdf`,
     title: "晟風工程報價單",
     action: "share",
+    setPdfPreview,
+    toast,
+    pageFormat: "a4",
+  });
+}
+
+async function downloadQuotePdf(
+  quote: any,
+  setPdfPreview: (v: { url: string; filename: string } | null) => void,
+  toast: any,
+) {
+  const quoteNo = getQuoteNo(quote);
+  const html = buildQuotationHtml(quote);
+  await handlePdfAction({
+    html,
+    docNo: quoteNo,
+    filename: `報價單_${quoteNo}.pdf`,
+    title: "晟風工程報價單",
+    action: "download",
     setPdfPreview,
     toast,
     pageFormat: "a4",
@@ -699,17 +716,23 @@ export default function QuotesPage() {
             const qRaw = qItems.length > 0 ? qItems.reduce((s: number, i: any) => s + Number(i.subtotal ?? 0), 0) : Number(q.finalAmount ?? q.amount ?? 0);
             const qDisc = Number(q.discountAmount ?? 0);
             const { total: qTotal } = computeQuoteAmounts(qRaw, qDisc, q.taxType ?? "未稅");
-            const hasWo = quoteHasWorkOrder(q);
+            const hasWo = quoteHasLinkedWorkOrder(q);
+            const cat = quoteCategory(q);
+            const isDraft = cat === "草稿";
+            const isWaiting = cat === "等待客戶回覆";
+            const canCreateWo = canConvertQuoteToWorkOrder(q);
+            const canEdit = !HISTORY_STATUSES.has(normalizeQuoteStatus(q.status)) && !HISTORY_STATUSES.has(String(q.status ?? ""));
+            const canVoid = canEdit && !hasWo;
             return (
               <Card key={q.id}>
                 <CardContent className="p-3 sm:p-4 space-y-3">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="font-medium text-sm">{q.title}</span>
-                    <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${STATUS_COLORS[normalizeQuoteStatus(q.status)] ?? "bg-gray-100 text-gray-700"}`}>{normalizeQuoteStatus(q.status)}</span>
+                    <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${STATUS_COLORS[normalizeQuoteStatus(q.status)] ?? STATUS_COLORS[String(q.status)] ?? "bg-gray-100 text-gray-700"}`}>{normalizeQuoteStatus(q.status)}</span>
                     <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${DISPATCH_COLORS[q.dispatchStatus ?? "未派工"] ?? "bg-slate-100 text-slate-600"}`}>
                       {q.dispatchStatus === "待派工" ? "● " : ""}{q.dispatchStatus ?? "未派工"}
                     </span>
-                    {q.workOrderNumber && (
+                    {hasWo && q.workOrderNumber && (
                       <span className="text-xs px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 font-mono">{q.workOrderNumber}</span>
                     )}
                   </div>
@@ -721,24 +744,70 @@ export default function QuotesPage() {
                   </div>
                   {q.address && <div className="text-xs text-muted-foreground">{q.address}</div>}
 
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    {canConvertQuoteToWorkOrder(q) && !hasWo && (
-                      <Button className="h-10 sm:h-9 flex-1" onClick={() => startConvertToWorkOrder(q)}>
-                        <Wrench className="h-4 w-4 mr-1" />安排派工
+                  {/* Primary actions — status-aware; LINE/列印 stay outside「更多」 */}
+                  <div className="flex flex-col sm:flex-row flex-wrap gap-2">
+                    <Button className="h-10 sm:h-9 flex-1 min-w-[7rem]" variant="outline" onClick={() => openEdit(q)}>
+                      <Eye className="h-4 w-4 mr-1" />查看案件
+                    </Button>
+
+                    {canCreateWo && (
+                      <Button className="h-10 sm:h-9 flex-1 min-w-[7rem]" onClick={() => startConvertToWorkOrder(q)}>
+                        <Wrench className="h-4 w-4 mr-1" />建立派工單
                       </Button>
                     )}
+
                     {hasWo && (
                       <Button
-                        className="h-10 sm:h-9 flex-1"
+                        className="h-10 sm:h-9 flex-1 min-w-[7rem]"
                         variant="outline"
-                        onClick={() => navigate(q.workOrderId ? `/work-orders?open=${q.workOrderId}` : "/work-orders")}
+                        onClick={() =>
+                          navigate(
+                            q.workOrderId
+                              ? `/work-orders?highlight=${q.workOrderId}`
+                              : "/work-orders",
+                          )
+                        }
                       >
-                        <Eye className="h-4 w-4 mr-1" />查看派工單
+                        <FileText className="h-4 w-4 mr-1" />查看派工單
                       </Button>
                     )}
-                    <Button className="h-10 sm:h-9 flex-1" variant="outline" onClick={() => openEdit(q)}>
-                      查看案件
+
+                    <Button
+                      className="h-10 sm:h-9 flex-1 min-w-[7rem]"
+                      variant="outline"
+                      onClick={() => void printQuote(q, setPdfPreview, toast)}
+                    >
+                      <Printer className="h-4 w-4 mr-1" />列印
                     </Button>
+
+                    <Button
+                      className="h-10 sm:h-9 flex-1 min-w-[7rem] text-green-700 border-green-300"
+                      variant="outline"
+                      onClick={() => void shareQuoteViaLine(q, setPdfPreview, toast)}
+                    >
+                      <Share2 className="h-4 w-4 mr-1" />LINE 分享
+                    </Button>
+
+                    {(isDraft || isWaiting || canEdit) && (
+                      <Button
+                        className="h-10 sm:h-9 flex-1 min-w-[7rem]"
+                        variant="outline"
+                        onClick={() => openEdit(q)}
+                      >
+                        <Pencil className="h-4 w-4 mr-1" />編輯
+                      </Button>
+                    )}
+
+                    {isDraft && (
+                      <Button
+                        className="h-10 sm:h-9 flex-1 min-w-[7rem] text-destructive border-destructive/40"
+                        variant="outline"
+                        onClick={() => setDeleteId(q.id)}
+                      >
+                        <Trash2 className="h-4 w-4 mr-1" />刪除
+                      </Button>
+                    )}
+
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button className="h-10 sm:h-9" variant="ghost">
@@ -746,21 +815,30 @@ export default function QuotesPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => printQuote(q, setPdfPreview, toast)}>
-                          <Printer className="h-3.5 w-3.5 mr-2" />列印
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => shareQuoteViaLine(q, setPdfPreview, toast)}>
-                          <Share2 className="h-3.5 w-3.5 mr-2" />分享
-                        </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => handleCopy(q)}>
-                          <Copy className="h-3.5 w-3.5 mr-2" />複製
+                          <Copy className="h-3.5 w-3.5 mr-2" />複製報價
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => openEdit(q)}>
-                          <Pencil className="h-3.5 w-3.5 mr-2" />編輯
+                        <DropdownMenuItem onClick={() => void downloadQuotePdf(q, setPdfPreview, toast)}>
+                          <Download className="h-3.5 w-3.5 mr-2" />下載 PDF
                         </DropdownMenuItem>
-                        <DropdownMenuItem className="text-destructive" onClick={() => setDeleteId(q.id)}>
-                          <Trash2 className="h-3.5 w-3.5 mr-2" />刪除
-                        </DropdownMenuItem>
+                        {canVoid && (
+                          <DropdownMenuItem
+                            onClick={() => {
+                              if (!window.confirm("確定作廢此報價單？作廢後將移至歷史紀錄。")) return;
+                              updateMutation.mutate({
+                                id: q.id,
+                                data: { status: "已失效" } as any,
+                              });
+                            }}
+                          >
+                            <X className="h-3.5 w-3.5 mr-2" />作廢
+                          </DropdownMenuItem>
+                        )}
+                        {!isDraft && (
+                          <DropdownMenuItem className="text-destructive" onClick={() => setDeleteId(q.id)}>
+                            <Trash2 className="h-3.5 w-3.5 mr-2" />刪除
+                          </DropdownMenuItem>
+                        )}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </div>

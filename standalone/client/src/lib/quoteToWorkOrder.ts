@@ -19,13 +19,25 @@ export function isQuoteWon(status: string | null | undefined): boolean {
   return s === "已成交" || s === "已接受";
 }
 
+/** True only when a linked work order id/number exists — not inferred from status alone. */
+export function quoteHasLinkedWorkOrder(q: {
+  workOrderId?: number | string | null;
+  workOrderNumber?: string | null;
+}): boolean {
+  const id = q.workOrderId != null ? Number(q.workOrderId) : NaN;
+  if (Number.isFinite(id) && id > 0) return true;
+  return !!(q.workOrderNumber && String(q.workOrderNumber).trim());
+}
+
+/** Show「建立／安排派工」only for won quotes that do not yet have a work order. */
 export function canConvertQuoteToWorkOrder(q: {
   status?: string | null;
   dispatchStatus?: string | null;
+  workOrderId?: number | string | null;
+  workOrderNumber?: string | null;
 }): boolean {
-  const dispatch = q.dispatchStatus ?? "未派工";
-  if (["已派工", "施工中", "已完工"].includes(dispatch)) return false;
-  return isQuoteWon(q.status) || dispatch === "待派工";
+  if (quoteHasLinkedWorkOrder(q)) return false;
+  return isQuoteWon(q.status);
 }
 
 /** Build a pre-filled work order form from a quote — construction fields only, no pricing. */
