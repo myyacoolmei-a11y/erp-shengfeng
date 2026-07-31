@@ -7,12 +7,16 @@ import {
   cancelFullyPaid,
   completeClose,
   confirmAdminCompletion,
+  confirmSubsidyDocsManually,
   getAdminWorkbench,
   markBilled,
   markFullyPaid,
+  recheckSubsidyDocuments,
+  regenerateSubsidyUploadToken,
   reopenClosedCase,
   setReceivableExpectedPaymentDate,
   setSubsidyType,
+  unmarkSubsidyApplied,
   updateBillingDraft,
   workbenchRecordPayment,
 } from "../lib/workOrders/adminWorkbenchService.ts";
@@ -226,13 +230,83 @@ router.post(
     const applied = !!req.body?.applied;
     const note = typeof req.body?.note === "string" ? req.body.note : undefined;
     try {
-      await advanceSubsidyPipeline(
-        workOrderId,
-        req.user!,
-        applied ? "applied" : "link_not_sent",
-        note,
-      );
+      if (applied) {
+        await advanceSubsidyPipeline(workOrderId, req.user!, "applied", note);
+      } else {
+        await unmarkSubsidyApplied(workOrderId, req.user!, note);
+      }
       res.json({ ok: true });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : "操作失敗" });
+    }
+  },
+);
+
+router.post(
+  "/admin-workbench/:workOrderId/subsidy-unmark-applied",
+  requireAdminOps,
+  async (req, res): Promise<void> => {
+    const workOrderId = Number(req.params.workOrderId);
+    if (!Number.isFinite(workOrderId)) {
+      res.status(400).json({ error: "無效的派工單 ID" });
+      return;
+    }
+    const note = typeof req.body?.note === "string" ? req.body.note : undefined;
+    try {
+      res.json(await unmarkSubsidyApplied(workOrderId, req.user!, note));
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : "操作失敗" });
+    }
+  },
+);
+
+router.post(
+  "/admin-workbench/:workOrderId/subsidy-manual-confirm",
+  requireAdminOps,
+  async (req, res): Promise<void> => {
+    const workOrderId = Number(req.params.workOrderId);
+    if (!Number.isFinite(workOrderId)) {
+      res.status(400).json({ error: "無效的派工單 ID" });
+      return;
+    }
+    const note = typeof req.body?.note === "string" ? req.body.note : undefined;
+    try {
+      res.json(await confirmSubsidyDocsManually(workOrderId, req.user!, note));
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : "操作失敗" });
+    }
+  },
+);
+
+router.post(
+  "/admin-workbench/:workOrderId/subsidy-regenerate-token",
+  requireAdminOps,
+  async (req, res): Promise<void> => {
+    const workOrderId = Number(req.params.workOrderId);
+    if (!Number.isFinite(workOrderId)) {
+      res.status(400).json({ error: "無效的派工單 ID" });
+      return;
+    }
+    const force = !!req.body?.force;
+    try {
+      res.json(await regenerateSubsidyUploadToken(workOrderId, req.user!, force));
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : "操作失敗" });
+    }
+  },
+);
+
+router.post(
+  "/admin-workbench/:workOrderId/subsidy-recheck",
+  requireAdminOps,
+  async (req, res): Promise<void> => {
+    const workOrderId = Number(req.params.workOrderId);
+    if (!Number.isFinite(workOrderId)) {
+      res.status(400).json({ error: "無效的派工單 ID" });
+      return;
+    }
+    try {
+      res.json(await recheckSubsidyDocuments(workOrderId, req.user!));
     } catch (err) {
       res.status(400).json({ error: err instanceof Error ? err.message : "操作失敗" });
     }

@@ -1,12 +1,34 @@
 import { Router, type IRouter } from "express";
-import { eq, and, lt } from "drizzle-orm";
-import { db, receivablesTable, customersTable, workOrdersTable } from "@workspace/db";
+import { eq, and, lt, inArray } from "drizzle-orm";
+import {
+  db,
+  receivablesTable,
+  customersTable,
+  workOrdersTable,
+  subsidyApplicationsTable,
+  customerDocumentsTable,
+} from "@workspace/db";
 import { requireFeature } from "../lib/auth";
 import { z } from "zod/v4";
 import {
   recordReceivablePayment,
   reverseReceivablePayment,
 } from "../lib/receivables/receivablePaymentService.ts";
+import {
+  SUBSIDY_DISPLAY_COLORS,
+  SUBSIDY_DISPLAY_LABELS,
+  SUBSIDY_DOC_TYPE_LABELS,
+  missingRequiredDocs,
+  parseSubsidyMeta,
+  resolveSubsidyDisplayStatus,
+  type SubsidyDocType,
+  type SubsidyDisplayStatus,
+} from "../../shared/subsidyDocs.ts";
+import type { SubsidyPipelineStatus, SubsidyType } from "../../shared/adminWorkflowConstants.ts";
+import {
+  advanceSubsidyPipeline,
+  unmarkSubsidyApplied,
+} from "../lib/workOrders/adminWorkbenchService.ts";
 
 const router: IRouter = Router();
 router.use("/receivables", requireFeature("receivables"));
@@ -25,6 +47,52 @@ function fmt(r: Record<string, unknown>) {
     subsidyStatus: (r.subsidyStatus as string) || "未申請補助",
     createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : r.createdAt,
     updatedAt: r.updatedAt instanceof Date ? r.updatedAt.toISOString() : r.updatedAt,
+  };
+}
+
+function enrichReceivableSubsidy(
+  row: Record<string, unknown>,
+  sub: typeof subsidyApplicationsTable.$inferSelect | null | undefined,
+  docs: Array<typeof customerDocumentsTable.$inferSelect>,
+) {
+  const subsidyType: SubsidyType =
+    sub?.subsidyType === "company_assisted" ? "company_assisted" : "none";
+  const pipeline = (sub?.pipelineStatus ?? null) as SubsidyPipelineStatus | null;
+  const activeDocs = docs.filter((d) => d.status !== "rejected" && d.docType !== "subsidy");
+  const missingDocs = missingRequiredDocs(
+    subsidyType,
+    activeDocs.map((d) => d.docType),
+  );
+  const { meta } = parseSubsidyMeta(sub?.note);
+  const displayStatus: SubsidyDisplayStatus = resolveSubsidyDisplayStatus({
+    subsidyType,
+    pipeline,
+    missingDocs,
+    needsManualReview: !!meta.needsManualReview,
+  });
+  const legacy =
+    displayStatus === "applied"
+      ? "已申請補助"
+      : subsidyType === "none"
+        ? "未申請補助"
+        : "未申請補助";
+
+  return {
+    ...fmt(row),
+    // Prefer pipeline-derived display; keep subsidyStatus for legacy clients
+    subsidyStatus: displayStatus === "applied" ? "已申請補助" : (row.subsidyStatus as string) || legacy,
+    subsidyType,
+    subsidyPipelineStatus: pipeline,
+    subsidyDisplayStatus: displayStatus,
+    subsidyDisplayLabel: SUBSIDY_DISPLAY_LABELS[displayStatus],
+    subsidyDisplayColor: SUBSIDY_DISPLAY_COLORS[displayStatus],
+    missingDocs,
+    missingDocLabels: missingDocs.map((t) => SUBSIDY_DOC_TYPE_LABELS[t as SubsidyDocType] ?? t),
+    uploadedDocCount: activeDocs.length,
+    appliedAt: sub?.appliedAt?.toISOString() ?? null,
+    needsManualReview: !!meta.needsManualReview,
+    aiTips: meta.aiTips ?? [],
+    canMarkSubsidyApplied: displayStatus === "docs_complete",
   };
 }
 
@@ -84,7 +152,43 @@ router.get("/receivables", async (req, res): Promise<void> => {
     .where(conditions.length > 0 ? and(...conditions) : undefined)
     .orderBy(receivablesTable.createdAt);
 
-  res.json(rows.map(fmt));
+  const woIds = rows
+    .map((r) => r.workOrderId)
+    .filter((id): id is number => id != null);
+  const subsidies =
+    woIds.length === 0
+      ? []
+      : await db
+          .select()
+          .from(subsidyApplicationsTable)
+          .where(inArray(subsidyApplicationsTable.workOrderId, woIds));
+  const subByWo = new Map(subsidies.map((s) => [s.workOrderId, s]));
+  const subIds = subsidies.map((s) => s.id);
+  const docs =
+    subIds.length === 0
+      ? []
+      : await db
+          .select()
+          .from(customerDocumentsTable)
+          .where(inArray(customerDocumentsTable.subsidyApplicationId, subIds));
+  const docsBySub = new Map<number, typeof docs>();
+  for (const d of docs) {
+    if (d.subsidyApplicationId == null) continue;
+    const arr = docsBySub.get(d.subsidyApplicationId) ?? [];
+    arr.push(d);
+    docsBySub.set(d.subsidyApplicationId, arr);
+  }
+
+  res.json(
+    rows.map((r) => {
+      const sub = r.workOrderId != null ? subByWo.get(r.workOrderId) : undefined;
+      return enrichReceivableSubsidy(
+        r as Record<string, unknown>,
+        sub,
+        sub ? docsBySub.get(sub.id) ?? [] : [],
+      );
+    }),
+  );
 });
 
 router.post("/receivables", async (req, res): Promise<void> => {
@@ -169,7 +273,21 @@ router.get("/receivables/:id", async (req, res): Promise<void> => {
     .leftJoin(customersTable, eq(receivablesTable.customerId, customersTable.id))
     .where(eq(receivablesTable.id, id));
   if (!row) { res.status(404).json({ error: "找不到應收帳款" }); return; }
-  res.json(fmt(row as Record<string, unknown>));
+  const [sub] =
+    row.workOrderId != null
+      ? await db
+          .select()
+          .from(subsidyApplicationsTable)
+          .where(eq(subsidyApplicationsTable.workOrderId, row.workOrderId))
+          .limit(1)
+      : [null];
+  const docs = sub
+    ? await db
+        .select()
+        .from(customerDocumentsTable)
+        .where(eq(customerDocumentsTable.subsidyApplicationId, sub.id))
+    : [];
+  res.json(enrichReceivableSubsidy(row as Record<string, unknown>, sub, docs));
 });
 
 router.patch("/receivables/:id", async (req, res): Promise<void> => {
@@ -197,14 +315,49 @@ router.patch("/receivables/:id", async (req, res): Promise<void> => {
   const data: Record<string, unknown> = { ...parsed.data };
   if (parsed.data.totalAmount != null) data["totalAmount"] = String(parsed.data.totalAmount);
 
+  // subsidyStatus toggles must go through shared pipeline (not a second source of truth)
+  const subsidyToggle = parsed.data.subsidyStatus;
+  delete data["subsidyStatus"];
+  data.updatedAt = new Date();
+
   await db.update(receivablesTable).set(data).where(eq(receivablesTable.id, id));
+
   const [updated] = await db
     .select(REC_SELECT)
     .from(receivablesTable)
     .leftJoin(customersTable, eq(receivablesTable.customerId, customersTable.id))
     .where(eq(receivablesTable.id, id));
   if (!updated) { res.status(404).json({ error: "找不到應收帳款" }); return; }
-  res.json(fmt(updated as Record<string, unknown>));
+
+  if (subsidyToggle != null && updated.workOrderId != null && req.user) {
+    try {
+      if (subsidyToggle === "已申請補助") {
+        await advanceSubsidyPipeline(updated.workOrderId, req.user, "applied");
+      } else {
+        await unmarkSubsidyApplied(updated.workOrderId, req.user);
+      }
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : "補助狀態更新失敗" });
+      return;
+    }
+  }
+
+  const [sub] =
+    updated.workOrderId != null
+      ? await db
+          .select()
+          .from(subsidyApplicationsTable)
+          .where(eq(subsidyApplicationsTable.workOrderId, updated.workOrderId))
+          .limit(1)
+      : [null];
+  const docs = sub
+    ? await db
+        .select()
+        .from(customerDocumentsTable)
+        .where(eq(customerDocumentsTable.subsidyApplicationId, sub.id))
+    : [];
+
+  res.json(enrichReceivableSubsidy(updated as Record<string, unknown>, sub, docs));
 });
 
 router.post("/receivables/:id/payment", async (req, res): Promise<void> => {

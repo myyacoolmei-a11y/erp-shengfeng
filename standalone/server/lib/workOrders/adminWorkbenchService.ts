@@ -24,13 +24,28 @@ import {
   type SubsidyPipelineStatus,
   type SubsidyType,
   ADMIN_WORKFLOW_LABELS,
-  SUBSIDY_PIPELINE_LABELS,
   SUBSIDY_TYPE_LABELS,
   engineeringStatusLabel,
   normalizeAdminWorkflowStatus,
   receivableStatusLabel,
 } from "../../../shared/adminWorkflowConstants.ts";
 import { taipeiDateString } from "./fieldProgressUtils.ts";
+import {
+  SUBSIDY_DOC_TYPE_LABELS,
+  SUBSIDY_DISPLAY_LABELS,
+  missingRequiredDocs,
+  parseSubsidyMeta,
+  pipelineToReceivableSubsidyStatus,
+  resolveSubsidyDisplayStatus,
+  serializeSubsidyMeta,
+  type SubsidyDocType,
+  type SubsidyDisplayStatus,
+} from "../../../shared/subsidyDocs.ts";
+import {
+  mergeMetaAfterCheck,
+  runSubsidyCompletenessCheck,
+} from "../subsidy/subsidyCheckService.ts";
+import { subsidyPublicUploadPath } from "../subsidy/subsidyPublicHtml.ts";
 
 function num(v: unknown): number {
   const n = parseFloat(String(v ?? "0"));
@@ -173,11 +188,6 @@ function buildCardStatuses(opts: {
     }
   }
 
-  const subsidyLabel =
-    opts.subsidyType === "none"
-      ? SUBSIDY_TYPE_LABELS.none
-      : SUBSIDY_PIPELINE_LABELS[opts.subsidyPipeline ?? "link_not_sent"];
-
   const closeCheck = canCloseCase({
     engineeringConfirmed: opts.engineeringConfirmed,
     hasReceivable: !!opts.recv,
@@ -195,7 +205,6 @@ function buildCardStatuses(opts: {
     subsidyType: opts.subsidyType,
     subsidyTypeLabel: SUBSIDY_TYPE_LABELS[opts.subsidyType],
     subsidyPipelineStatus: opts.subsidyPipeline,
-    subsidyStatusLabel: subsidyLabel,
     canClose: closeCheck.canClose,
     closeBlockers: closeCheck.blockers,
     adminWorkflowStatus: opts.adminStatus,
@@ -291,6 +300,7 @@ export async function getAdminWorkbench() {
     subsidyDocsIncomplete: [] as unknown[],
     subsidyDocsComplete: [] as unknown[],
     subsidyPendingApply: [] as unknown[],
+    subsidyApplied: [] as unknown[],
     pendingClose: [] as unknown[],
     closed: [] as unknown[],
   };
@@ -335,6 +345,35 @@ export async function getAdminWorkbench() {
     const due = billing.expectedPaymentDate ?? recv?.expectedPaymentDate ?? null;
     const overdueDays = due ? daysBetween(due, today) : null;
 
+    const allDocs = docsByWo.get(r.wo.id) ?? [];
+    const subsidyDocs = allDocs.filter(
+      (d) =>
+        d.status !== "rejected" &&
+        d.docType &&
+        d.docType !== "subsidy" &&
+        (d.subsidyApplicationId == null || d.subsidyApplicationId === sub?.id),
+    );
+    const { meta: subsidyMeta, freeNote: subsidyFreeNote } = parseSubsidyMeta(sub?.note);
+    const missingDocs = missingRequiredDocs(
+      subsidyType,
+      subsidyDocs.map((d) => d.docType),
+    );
+    const displayStatus: SubsidyDisplayStatus = resolveSubsidyDisplayStatus({
+      subsidyType,
+      pipeline: subsidyPipeline,
+      missingDocs,
+      needsManualReview: !!subsidyMeta.needsManualReview,
+    });
+    const lastUploadAt =
+      subsidyDocs
+        .map((d) => d.uploadedAt?.getTime() ?? d.createdAt?.getTime() ?? 0)
+        .filter((t) => t > 0)
+        .sort((a, b) => b - a)[0] ?? null;
+    const uploadUrl =
+      sub?.uploadLinkToken != null && sub.uploadLinkToken !== ""
+        ? subsidyPublicUploadPath(sub.uploadLinkToken)
+        : null;
+
     const base = {
       workOrderId: r.wo.id,
       workOrderNumber: r.wo.workOrderNumber,
@@ -365,20 +404,40 @@ export async function getAdminWorkbench() {
       paymentStatus: recv?.paymentStatus ?? null,
       overdueDays: overdueDays != null && overdueDays > 0 ? overdueDays : overdueDays === 0 ? 0 : null,
       subsidyApplicationId: sub?.id ?? null,
-      subsidyNote: sub?.note ?? r.wo.adminSubsidyNote,
+      subsidyNote: subsidyFreeNote || r.wo.adminSubsidyNote,
       uploadLinkSentAt: sub?.uploadLinkSentAt?.toISOString() ?? null,
       uploadLinkToken: sub?.uploadLinkToken ?? null,
+      uploadUrl,
       closeOverrideAt: sub?.closeOverrideAt?.toISOString() ?? null,
-      customerDocuments: (docsByWo.get(r.wo.id) ?? []).slice(0, 20).map((d) => ({
+      appliedAt: sub?.appliedAt?.toISOString() ?? null,
+      appliedBy: sub?.appliedBy ?? null,
+      missingDocs,
+      missingDocLabels: missingDocs.map((t) => SUBSIDY_DOC_TYPE_LABELS[t as SubsidyDocType] ?? t),
+      uploadedDocCount: subsidyDocs.length,
+      lastUploadAt: lastUploadAt ? new Date(lastUploadAt).toISOString() : null,
+      needsManualReview: !!subsidyMeta.needsManualReview,
+      aiTips: subsidyMeta.aiTips ?? [],
+      subsidyDisplayStatus: displayStatus,
+      subsidyStatusLabel: SUBSIDY_DISPLAY_LABELS[displayStatus],
+      canMarkApplied: displayStatus === "docs_complete" || displayStatus === "applied",
+      canCloseReady:
+        subsidyType !== "company_assisted" ||
+        subsidyPipeline === "applied" ||
+        !!sub?.closeOverrideAt,
+      customerDocuments: subsidyDocs.slice(0, 40).map((d) => ({
         id: d.id,
         docType: d.docType,
+        docTypeLabel:
+          d.docType && d.docType in SUBSIDY_DOC_TYPE_LABELS
+            ? SUBSIDY_DOC_TYPE_LABELS[d.docType as SubsidyDocType]
+            : d.docType,
         fileName: d.fileName,
         fileUrl: d.fileUrl,
         status: d.status,
         note: d.note,
         uploadedAt: d.uploadedAt?.toISOString() ?? null,
       })),
-      customerDocumentCount: (docsByWo.get(r.wo.id) ?? []).length,
+      customerDocumentCount: subsidyDocs.length,
       ...card,
     };
 
@@ -412,30 +471,33 @@ export async function getAdminWorkbench() {
     }
 
     // 8–12 Subsidy pipeline — keep visible after payment until applied
-    const subsidyStillOpen =
-      subsidyType === "company_assisted" &&
-      subsidyPipeline != null &&
-      subsidyPipeline !== "applied";
-    if (subsidyStillOpen) {
-      switch (subsidyPipeline) {
-        case "link_not_sent":
-          sections.subsidyLinkNotSent.push(base);
-          break;
-        case "awaiting_upload":
-          sections.subsidyAwaitingUpload.push(base);
-          break;
-        case "docs_incomplete":
-          sections.subsidyDocsIncomplete.push(base);
-          break;
-        case "docs_complete":
-          sections.subsidyDocsComplete.push(base);
-          break;
-        case "pending_apply":
-          sections.subsidyPendingApply.push(base);
-          break;
-        default:
-          sections.subsidyLinkNotSent.push(base);
-          break;
+    if (subsidyType === "company_assisted" && subsidyPipeline != null) {
+      if (subsidyPipeline === "applied") {
+        sections.subsidyApplied.push(base);
+      } else {
+        switch (displayStatus) {
+          case "link_not_sent":
+            sections.subsidyLinkNotSent.push(base);
+            break;
+          case "awaiting_upload":
+            sections.subsidyAwaitingUpload.push(base);
+            break;
+          case "docs_incomplete":
+          case "awaiting_manual_review":
+            sections.subsidyDocsIncomplete.push(base);
+            break;
+          case "docs_complete":
+            // pending_apply maps to docs_complete display — keep both buckets in sync for UI
+            if (subsidyPipeline === "pending_apply") {
+              sections.subsidyPendingApply.push(base);
+            } else {
+              sections.subsidyDocsComplete.push(base);
+            }
+            break;
+          default:
+            sections.subsidyLinkNotSent.push(base);
+            break;
+        }
       }
     }
 
@@ -476,6 +538,7 @@ export async function getAdminWorkbench() {
     subsidyDocsIncomplete: sections.subsidyDocsIncomplete.length,
     subsidyDocsComplete: sections.subsidyDocsComplete.length,
     subsidyPendingApply: sections.subsidyPendingApply.length,
+    subsidyApplied: sections.subsidyApplied.length,
     pendingClose: sections.pendingClose.length,
     closed: sections.closed.length,
   };
@@ -853,9 +916,12 @@ export async function advanceSubsidyPipeline(
   const now = new Date();
   const patch: Partial<typeof subsidyApplicationsTable.$inferInsert> = {
     pipelineStatus: toStatus,
-    note: note ?? sub.note,
     updatedAt: now,
   };
+  if (note != null) {
+    const { meta, freeNote } = parseSubsidyMeta(sub.note);
+    patch.note = serializeSubsidyMeta(note.trim() || freeNote, meta);
+  }
 
   if (toStatus === "awaiting_upload" || toStatus === "link_not_sent") {
     if (toStatus === "awaiting_upload") {
@@ -869,24 +935,20 @@ export async function advanceSubsidyPipeline(
     patch.appliedBy = user.id;
   }
 
+  // Guard: only allow mark applied when docs are complete / pending_apply
+  if (toStatus === "applied") {
+    const allowedFrom: SubsidyPipelineStatus[] = ["docs_complete", "pending_apply", "applied"];
+    if (!allowedFrom.includes(sub.pipelineStatus as SubsidyPipelineStatus)) {
+      throw new Error(
+        "補助資料尚未齊全，無法標記補助申請已完成。請先確認缺件或人工確認資料。",
+      );
+    }
+  }
+
   await db
     .update(subsidyApplicationsTable)
     .set(patch)
     .where(eq(subsidyApplicationsTable.id, sub.id));
-
-  if (toStatus === "docs_incomplete" || toStatus === "docs_complete") {
-    // track a placeholder document row for audit trail
-    await db.insert(customerDocumentsTable).values({
-      workOrderId,
-      customerId: sub.customerId,
-      subsidyApplicationId: sub.id,
-      docType: "subsidy",
-      status: toStatus === "docs_complete" ? "accepted" : "rejected",
-      note: note ?? (toStatus === "docs_complete" ? "資料已齊" : "資料待補"),
-      reviewedBy: user.id,
-      uploadedAt: now,
-    });
-  }
 
   await writeAuditLog({
     action: "admin_workflow.subsidy_pipeline",
@@ -901,39 +963,289 @@ export async function advanceSubsidyPipeline(
     },
   });
 
-  // sync legacy receivable subsidy flag when applied
-  if (toStatus === "applied") {
-    await db
-      .update(receivablesTable)
-      .set({ subsidyStatus: "已申請補助", updatedAt: now })
-      .where(eq(receivablesTable.workOrderId, workOrderId));
-    await db
-      .update(workOrdersTable)
-      .set({
-        adminSubsidyStatus: "已申請補助",
-        adminSubsidyAppliedAt: now,
-        adminSubsidyAppliedBy: user.id,
-        updatedAt: now,
-      })
-      .where(eq(workOrdersTable.id, workOrderId));
-  }
+  // sync legacy receivable / work-order Chinese fields from pipeline (single source)
+  await syncLegacySubsidyFlags(workOrderId, toStatus, user, now);
 
   return { pipelineStatus: toStatus, order: PIPELINE_ORDER };
 }
 
-/** @deprecated simple toggle — maps to applied / link_not_sent */
+async function syncLegacySubsidyFlags(
+  workOrderId: number,
+  pipeline: SubsidyPipelineStatus,
+  user: JwtPayload,
+  now = new Date(),
+) {
+  const zh = pipelineToReceivableSubsidyStatus(pipeline);
+  await db
+    .update(receivablesTable)
+    .set({ subsidyStatus: zh, updatedAt: now })
+    .where(eq(receivablesTable.workOrderId, workOrderId));
+  await db
+    .update(workOrdersTable)
+    .set({
+      adminSubsidyStatus: zh,
+      adminSubsidyAppliedAt: pipeline === "applied" ? now : null,
+      adminSubsidyAppliedBy: pipeline === "applied" ? user.id : null,
+      updatedAt: now,
+    })
+    .where(eq(workOrdersTable.id, workOrderId));
+}
+
+/** Undo mistaken「補助申請已完成」— restore to docs_complete; keep all attachments & audit. */
+export async function unmarkSubsidyApplied(
+  workOrderId: number,
+  user: JwtPayload,
+  note?: string,
+) {
+  const [sub] = await db
+    .select()
+    .from(subsidyApplicationsTable)
+    .where(eq(subsidyApplicationsTable.workOrderId, workOrderId))
+    .limit(1);
+  if (!sub || sub.subsidyType !== "company_assisted") {
+    throw new Error("此案件非公司協助補助");
+  }
+  if (sub.pipelineStatus !== "applied") {
+    throw new Error("目前不是「補助申請已完成」狀態");
+  }
+
+  const now = new Date();
+  const { meta, freeNote } = parseSubsidyMeta(sub.note);
+  const mergedNote = serializeSubsidyMeta(
+    note?.trim() ? `${freeNote}\n${note.trim()}`.trim() : freeNote,
+    meta,
+  );
+
+  await db
+    .update(subsidyApplicationsTable)
+    .set({
+      pipelineStatus: "docs_complete",
+      appliedAt: null,
+      appliedBy: null,
+      note: mergedNote,
+      updatedAt: now,
+    })
+    .where(eq(subsidyApplicationsTable.id, sub.id));
+
+  await syncLegacySubsidyFlags(workOrderId, "docs_complete", user, now);
+
+  await writeAuditLog({
+    action: "admin_workflow.subsidy_unmark_applied",
+    entityType: "work_order",
+    entityId: workOrderId,
+    user,
+    reason: note,
+    metadata: {
+      fromStatus: "applied",
+      toStatus: "docs_complete",
+      subsidyApplicationId: sub.id,
+      previousAppliedAt: sub.appliedAt?.toISOString() ?? null,
+      previousAppliedBy: sub.appliedBy ?? null,
+    },
+  });
+
+  return { pipelineStatus: "docs_complete" as const };
+}
+
+/** Admin confirms docs after AI flagged manual review → docs_complete. */
+export async function confirmSubsidyDocsManually(
+  workOrderId: number,
+  user: JwtPayload,
+  note?: string,
+) {
+  const [sub] = await db
+    .select()
+    .from(subsidyApplicationsTable)
+    .where(eq(subsidyApplicationsTable.workOrderId, workOrderId))
+    .limit(1);
+  if (!sub || sub.subsidyType !== "company_assisted") {
+    throw new Error("此案件非公司協助補助");
+  }
+  if (sub.pipelineStatus === "applied") {
+    throw new Error("補助已完成，無需再確認資料");
+  }
+
+  const docs = await db
+    .select()
+    .from(customerDocumentsTable)
+    .where(eq(customerDocumentsTable.subsidyApplicationId, sub.id));
+  const missing = missingRequiredDocs(
+    "company_assisted",
+    docs.filter((d) => d.status !== "rejected" && d.fileUrl).map((d) => d.docType),
+  );
+  if (missing.length > 0) {
+    throw new Error(
+      `仍缺少必要文件：${missing.map((t) => SUBSIDY_DOC_TYPE_LABELS[t]).join("、")}`,
+    );
+  }
+
+  const { meta, freeNote } = parseSubsidyMeta(sub.note);
+  const now = new Date();
+  const newMeta = {
+    ...meta,
+    needsManualReview: false,
+    manualConfirmedAt: now.toISOString(),
+    manualConfirmedBy: user.id,
+    aiTips: meta.aiTips ?? [],
+  };
+  const merged = serializeSubsidyMeta(
+    note?.trim() ? `${freeNote}\n人工確認：${note.trim()}`.trim() : freeNote,
+    newMeta,
+  );
+
+  await db
+    .update(subsidyApplicationsTable)
+    .set({
+      pipelineStatus: "docs_complete",
+      note: merged,
+      updatedAt: now,
+    })
+    .where(eq(subsidyApplicationsTable.id, sub.id));
+
+  await writeAuditLog({
+    action: "admin_workflow.subsidy_manual_confirm",
+    entityType: "work_order",
+    entityId: workOrderId,
+    user,
+    reason: note,
+    metadata: { subsidyApplicationId: sub.id, toStatus: "docs_complete" },
+  });
+
+  return { pipelineStatus: "docs_complete" as const };
+}
+
+/** Regenerate public upload token (only when expired / missing). */
+export async function regenerateSubsidyUploadToken(
+  workOrderId: number,
+  user: JwtPayload,
+  force = false,
+) {
+  let [sub] = await db
+    .select()
+    .from(subsidyApplicationsTable)
+    .where(eq(subsidyApplicationsTable.workOrderId, workOrderId))
+    .limit(1);
+  if (!sub || sub.subsidyType !== "company_assisted") {
+    const [wo] = await db.select().from(workOrdersTable).where(eq(workOrdersTable.id, workOrderId)).limit(1);
+    if (!wo) throw new Error("找不到派工單");
+    sub = await ensureCompanyAssistedSubsidy(workOrderId, wo.customerId, user);
+  }
+
+  const { SUBSIDY_UPLOAD_TOKEN_TTL_DAYS } = await import("../../../shared/subsidyDocs.ts");
+  const base = sub.uploadLinkSentAt ?? sub.createdAt;
+  const expired =
+    !sub.uploadLinkToken ||
+    Date.now() - base.getTime() > SUBSIDY_UPLOAD_TOKEN_TTL_DAYS * 86400000;
+  if (!force && !expired) {
+    return {
+      token: sub.uploadLinkToken!,
+      uploadUrl: subsidyPublicUploadPath(sub.uploadLinkToken!),
+      regenerated: false,
+    };
+  }
+
+  const token = randomBytes(16).toString("hex");
+  const now = new Date();
+  await db
+    .update(subsidyApplicationsTable)
+    .set({ uploadLinkToken: token, updatedAt: now })
+    .where(eq(subsidyApplicationsTable.id, sub.id));
+
+  await writeAuditLog({
+    action: "admin_workflow.subsidy_regenerate_token",
+    entityType: "work_order",
+    entityId: workOrderId,
+    user,
+    metadata: { subsidyApplicationId: sub.id },
+  });
+
+  return { token, uploadUrl: subsidyPublicUploadPath(token), regenerated: true };
+}
+
+/** Re-run completeness check (admin trigger). */
+export async function recheckSubsidyDocuments(workOrderId: number, user: JwtPayload) {
+  const [sub] = await db
+    .select()
+    .from(subsidyApplicationsTable)
+    .where(eq(subsidyApplicationsTable.workOrderId, workOrderId))
+    .limit(1);
+  if (!sub || sub.subsidyType !== "company_assisted") {
+    throw new Error("此案件非公司協助補助");
+  }
+  if (sub.pipelineStatus === "applied") {
+    return { pipelineStatus: "applied" as const };
+  }
+
+  const docs = await db
+    .select()
+    .from(customerDocumentsTable)
+    .where(eq(customerDocumentsTable.subsidyApplicationId, sub.id));
+  const { meta, freeNote } = parseSubsidyMeta(sub.note);
+
+  let check;
+  try {
+    check = runSubsidyCompletenessCheck({
+      subsidyType: "company_assisted",
+      docs,
+      prevMeta: meta,
+    });
+  } catch {
+    check = runSubsidyCompletenessCheck({
+      subsidyType: "company_assisted",
+      docs,
+      prevMeta: { ...meta, needsManualReview: true, aiTips: ["自動檢查暫時不可用，請行政人工確認"] },
+    });
+    // Force manual review path
+    check.needsManualReview = true;
+    check.suggestedPipeline = "docs_incomplete";
+    if (check.missingDocs.length === 0) {
+      check.aiTips = ["自動檢查暫時不可用，請行政人工確認"];
+    }
+  }
+
+  const note = mergeMetaAfterCheck(freeNote, meta, check);
+  let next = check.suggestedPipeline;
+  if (docs.filter((d) => d.fileUrl).length === 0) {
+    next = sub.pipelineStatus === "link_not_sent" ? "link_not_sent" : "awaiting_upload";
+  }
+
+  await db
+    .update(subsidyApplicationsTable)
+    .set({ pipelineStatus: next, note, updatedAt: new Date() })
+    .where(eq(subsidyApplicationsTable.id, sub.id));
+
+  await writeAuditLog({
+    action: "admin_workflow.subsidy_recheck",
+    entityType: "work_order",
+    entityId: workOrderId,
+    user,
+    metadata: {
+      subsidyApplicationId: sub.id,
+      toStatus: next,
+      needsManualReview: check.needsManualReview,
+    },
+  });
+
+  return {
+    pipelineStatus: next,
+    displayStatus: check.displayStatus,
+    missingDocs: check.missingDocs,
+    aiTips: check.aiTips,
+  };
+}
+
+/** @deprecated simple toggle — maps to applied / unmark */
 export async function toggleSubsidy(
   workOrderId: number,
   user: JwtPayload,
   applied: boolean,
   note?: string,
 ) {
-  await advanceSubsidyPipeline(
-    workOrderId,
-    user,
-    applied ? "applied" : "link_not_sent",
-    note,
-  );
+  if (applied) {
+    await advanceSubsidyPipeline(workOrderId, user, "applied", note);
+  } else {
+    await unmarkSubsidyApplied(workOrderId, user, note);
+  }
 }
 
 export async function workbenchRecordPayment(

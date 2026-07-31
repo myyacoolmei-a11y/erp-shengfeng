@@ -50,36 +50,120 @@ const INVOICE_COLORS: Record<string, string> = {
 
 type SubsidyStatus = "未申請補助" | "已申請補助";
 
+type ReceivableSubsidyFields = {
+  subsidyStatus?: string | null;
+  subsidyType?: string | null;
+  subsidyDisplayStatus?: string | null;
+  subsidyDisplayLabel?: string | null;
+  subsidyDisplayColor?: string | null;
+  missingDocLabels?: string[] | null;
+  appliedAt?: string | null;
+  canMarkSubsidyApplied?: boolean;
+  needsManualReview?: boolean;
+};
+
 function SubsidyStatusButton({
-  status,
+  item,
   disabled,
   onToggle,
+  onViewIncomplete,
 }: {
-  status: string | null | undefined;
+  item: ReceivableSubsidyFields;
   disabled?: boolean;
   onToggle: (next: SubsidyStatus) => void;
+  onViewIncomplete?: () => void;
 }) {
-  const applied = status === "已申請補助";
+  const display = item.subsidyDisplayStatus;
+  const type = item.subsidyType;
+  if (type === "none" || display === "not_applicable") {
+    return (
+      <Badge className="h-7 text-xs px-2 font-normal bg-gray-100 text-gray-600 border-0">
+        不適用補助
+      </Badge>
+    );
+  }
+
+  if (display === "applied") {
+    return (
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        disabled={disabled}
+        className="h-7 text-xs px-2 text-emerald-900 border-emerald-400 bg-emerald-100 hover:bg-emerald-200"
+        onClick={() => {
+          if (window.confirm("是否取消補助完成／重新開啟？附件將保留。")) {
+            onToggle("未申請補助");
+          }
+        }}
+        title={
+          item.appliedAt
+            ? `完成：${new Date(item.appliedAt).toLocaleString("zh-TW")}`
+            : "補助已完成"
+        }
+      >
+        補助已完成
+        {item.appliedAt ? ` · ${new Date(item.appliedAt).toLocaleDateString("zh-TW")}` : ""}
+      </Button>
+    );
+  }
+
+  if (display === "docs_complete") {
+    return (
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        disabled={disabled}
+        className="h-7 text-xs px-2 text-green-800 border-green-400 bg-green-50 hover:bg-green-100"
+        onClick={() => {
+          if (
+            window.confirm("確定此案件已完成補助申請？確認後將同步更新行政首頁。")
+          ) {
+            onToggle("已申請補助");
+          }
+        }}
+      >
+        補助資料完整
+      </Button>
+    );
+  }
+
+  const incompleteLabel =
+    display === "awaiting_manual_review"
+      ? "等待人工確認"
+      : display === "docs_incomplete"
+        ? "補助資料不完整"
+        : item.subsidyDisplayLabel || "補助申請中";
+
+  const colorClass =
+    display === "awaiting_manual_review"
+      ? "text-yellow-800 border-yellow-400 bg-yellow-50 hover:bg-yellow-100"
+      : display === "docs_incomplete"
+        ? "text-orange-800 border-orange-400 bg-orange-50 hover:bg-orange-100"
+        : display === "awaiting_upload"
+          ? "text-blue-700 border-blue-300 bg-blue-50 hover:bg-blue-100"
+          : "text-muted-foreground border-border hover:bg-muted";
+
   return (
     <Button
       type="button"
       size="sm"
       variant="outline"
       disabled={disabled}
-      className={
-        applied
-          ? "h-7 text-xs px-2 text-green-700 border-green-300 bg-green-50 hover:bg-green-100"
-          : "h-7 text-xs px-2 text-muted-foreground border-border hover:bg-muted"
-      }
+      className={`h-7 text-xs px-2 ${colorClass}`}
       onClick={() => {
-        if (applied) {
-          if (window.confirm("是否取消補助申請狀態？")) onToggle("未申請補助");
-        } else if (window.confirm("確定此案件已完成補助申請？")) {
-          onToggle("已申請補助");
-        }
+        const miss =
+          (item.missingDocLabels?.length ?? 0) > 0
+            ? `\n缺少：${item.missingDocLabels!.join("、")}`
+            : "";
+        window.alert(
+          `${incompleteLabel}${miss}\n\n請至行政首頁「補助申請」查看客戶上傳資料。不可直接標記完成。`,
+        );
+        onViewIncomplete?.();
       }}
     >
-      {applied ? "已申請補助" : "未申請補助"}
+      {incompleteLabel}
     </Button>
   );
 }
@@ -149,6 +233,7 @@ export default function Receivables() {
   const invalidate = () => {
     invalidateStatistics(queryClient);
     void queryClient.invalidateQueries({ queryKey: getListReceivablesQueryKey() });
+    void queryClient.invalidateQueries({ queryKey: ["admin-workbench"] });
   };
 
   const createMutation = useCreateReceivable({ mutation: { onSuccess: () => { invalidate(); setShowCreate(false); toast({ title: "應收帳款已建立" }); } } });
@@ -425,9 +510,10 @@ export default function Receivables() {
                       <Bell className="h-3 w-3 mr-1" />LINE 提醒
                     </Button>
                     <SubsidyStatusButton
-                      status={item.subsidyStatus}
+                      item={item as ReceivableSubsidyFields}
                       disabled={!canWrite || updateMutation.isPending}
                       onToggle={(next) => updateMutation.mutate({ id: item.id, data: { subsidyStatus: next } })}
+                      onViewIncomplete={() => setViewItem(item)}
                     />
                     {canWrite && (
                       <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => openEdit(item)}>

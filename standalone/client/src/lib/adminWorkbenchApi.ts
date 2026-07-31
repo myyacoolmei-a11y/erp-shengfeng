@@ -3,6 +3,7 @@ import type {
   SubsidyPipelineStatus,
   SubsidyType,
 } from "../../../shared/adminWorkflowConstants.ts";
+import type { SubsidyDisplayStatus } from "../../../shared/subsidyDocs.ts";
 
 export type AdminWorkbenchItem = {
   workOrderId: number;
@@ -48,10 +49,23 @@ export type AdminWorkbenchItem = {
   closeOverrideAt?: string | null;
   uploadLinkToken?: string | null;
   uploadLinkSentAt?: string | null;
+  uploadUrl?: string | null;
+  appliedAt?: string | null;
+  appliedBy?: number | null;
+  missingDocs?: string[];
+  missingDocLabels?: string[];
+  uploadedDocCount?: number;
+  lastUploadAt?: string | null;
+  needsManualReview?: boolean;
+  aiTips?: string[];
+  subsidyDisplayStatus?: SubsidyDisplayStatus;
+  canMarkApplied?: boolean;
+  canCloseReady?: boolean;
   customerDocumentCount?: number;
   customerDocuments?: Array<{
     id: number;
     docType: string;
+    docTypeLabel?: string | null;
     fileName: string | null;
     fileUrl: string | null;
     status: string;
@@ -82,6 +96,7 @@ export type AdminWorkbenchData = {
     subsidyDocsIncomplete: AdminWorkbenchItem[];
     subsidyDocsComplete: AdminWorkbenchItem[];
     subsidyPendingApply: AdminWorkbenchItem[];
+    subsidyApplied: AdminWorkbenchItem[];
     pendingClose: AdminWorkbenchItem[];
     closed: AdminWorkbenchItem[];
   };
@@ -153,6 +168,33 @@ export function advanceAdminSubsidyPipeline(
     body: JSON.stringify({ status, note }),
     headers: { "Content-Type": "application/json" },
   });
+}
+
+export function unmarkAdminSubsidyApplied(workOrderId: number, note?: string) {
+  return customFetch(`/api/admin-workbench/${workOrderId}/subsidy-unmark-applied`, {
+    method: "POST",
+    body: JSON.stringify({ note }),
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+export function confirmAdminSubsidyDocs(workOrderId: number, note?: string) {
+  return customFetch(`/api/admin-workbench/${workOrderId}/subsidy-manual-confirm`, {
+    method: "POST",
+    body: JSON.stringify({ note }),
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+export function regenerateAdminSubsidyToken(workOrderId: number, force = false) {
+  return customFetch<{ token: string; uploadUrl: string; regenerated: boolean }>(
+    `/api/admin-workbench/${workOrderId}/subsidy-regenerate-token`,
+    {
+      method: "POST",
+      body: JSON.stringify({ force }),
+      headers: { "Content-Type": "application/json" },
+    },
+  );
 }
 
 export function recordAdminPayment(
