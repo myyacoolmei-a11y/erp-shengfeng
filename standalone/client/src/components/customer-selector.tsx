@@ -6,19 +6,24 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
+import { Command, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import { AlertDialog, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { ChevronsUpDown, Check, Plus, User, X, RefreshCw, MapPin } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
-  useListCustomers,
   useCreateCustomer,
   useCheckCustomerDuplicate,
   useListCustomerAddresses,
   getListCustomersQueryKey,
 } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import {
+  type CustomerSearchHit,
+  listRecentCustomers,
+  meetsCustomerSearchThreshold,
+  searchCustomers,
+} from "@/lib/customerSearchApi";
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
@@ -38,6 +43,8 @@ export interface CustomerSelectorProps {
   onChange: (v: CustomerSelectorValue | null) => void
   /** Lock the selector (e.g. when customer comes from a quote) */
   disabled?: boolean
+  /** Optional hint shown below the card when disabled (e.g. bound-from-quote message) */
+  boundLabel?: string
   /** Radix Popover modal — set false when inside Dialog (mobile PWA) */
   modal?: boolean
   /** Called when user enters existing search vs temporary customer flow */
@@ -76,6 +83,25 @@ function customerToValue(c: any): CustomerSelectorValue {
   };
 }
 
+function SearchResultRow({ c }: { c: CustomerSearchHit }) {
+  const company = c.companyName?.trim() || c.name;
+  const phone = c.mobile?.trim() || c.phone?.trim();
+  return (
+    <>
+      <div className="flex items-center gap-1.5 w-full">
+        <Check className="h-3.5 w-3.5 shrink-0 opacity-0" />
+        <span className="font-medium">{c.name}</span>
+        <span className="text-xs text-muted-foreground ml-auto shrink-0">{c.customerCode}</span>
+      </div>
+      <div className="pl-5 flex flex-col gap-0 text-xs text-muted-foreground">
+        <span>{company}</span>
+        {phone && <span>{phone}</span>}
+        {c.address?.trim() && <span className="truncate">{c.address}</span>}
+      </div>
+    </>
+  );
+}
+
 function CustomerCard({ v }: { v: CustomerSelectorValue }) {
   const isPrimary = (s: string | undefined) => s && s.trim();
   return (
@@ -101,6 +127,7 @@ export function CustomerSelector({
   value,
   onChange,
   disabled = false,
+  boundLabel,
   modal = true,
   onCustomerModeChange,
   allowTemp = true,
@@ -134,16 +161,29 @@ export function CustomerSelector({
 
   // Debounce query
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedQuery(query), 280);
+    const t = setTimeout(() => setDebouncedQuery(query), 300);
     return () => clearTimeout(t);
   }, [query]);
 
-  // Search results
-  const { data: searchResults = [], isFetching: searchFetching, isError: searchError } = useListCustomers(
-    debouncedQuery ? { search: debouncedQuery, includeOld: "true" } : undefined,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    { query: { enabled: open && debouncedQuery.length >= 1 } as any }
-  );
+  const trimmedDebounced = debouncedQuery.trim();
+  const hasQuery = trimmedDebounced.length > 0;
+  const meetsThreshold = meetsCustomerSearchThreshold(trimmedDebounced);
+
+  const { data: recentData, isFetching: recentFetching, isError: recentError } = useQuery({
+    queryKey: ["customers", "recent"],
+    queryFn: listRecentCustomers,
+    enabled: open && !hasQuery,
+  });
+
+  const { data: searchData, isFetching: searchFetching, isError: searchError } = useQuery({
+    queryKey: ["customers", "search", trimmedDebounced],
+    queryFn: () => searchCustomers(trimmedDebounced),
+    enabled: open && hasQuery && meetsThreshold,
+  });
+
+  const recentItems = (recentData?.items ?? []).slice(0, 5);
+  const searchItems = searchData?.items ?? [];
+  const searchTruncated = searchData?.truncated ?? false;
 
   function selectCustomer(c: {
     id: number;
@@ -286,8 +326,13 @@ export function CustomerSelector({
   if (disabled && value) {
     return (
       <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
+        {value.type === "linked" && (
+          <p className="text-xs font-medium text-muted-foreground mb-1">已綁定客戶</p>
+        )}
         <CustomerCard v={value} />
-        <p className="text-xs text-muted-foreground mt-1">來自報價單（不可更改）</p>
+        {boundLabel && (
+          <p className="text-xs text-muted-foreground mt-1">{boundLabel}</p>
+        )}
       </div>
     );
   }
@@ -297,6 +342,9 @@ export function CustomerSelector({
       {/* ── Selected state ── */}
       {value ? (
         <div className="rounded-md border bg-muted/20 px-3 py-2 text-sm">
+          {value.type === "linked" && (
+            <p className="text-xs font-medium text-muted-foreground mb-1">已綁定客戶</p>
+          )}
           <div className="flex items-start justify-between gap-2">
             <CustomerCard v={value} />
             <div className="flex gap-1 shrink-0">
@@ -341,19 +389,17 @@ export function CustomerSelector({
                 onValueChange={setQuery}
               />
               <CommandList className="max-h-72 overflow-y-auto">
-                {debouncedQuery.length >= 1 && (
+                {!hasQuery && (
                   <>
-                    {searchFetching && (
-                      <div className="py-3 text-center text-xs text-muted-foreground">搜尋中…</div>
+                    {recentFetching && (
+                      <div className="py-3 text-center text-xs text-muted-foreground">載入中…</div>
                     )}
-                    {searchError && (
-                      <div className="py-3 px-3 text-center text-xs text-destructive">無法搜尋客戶，請確認登入權限</div>
+                    {recentError && (
+                      <div className="py-3 px-3 text-center text-xs text-destructive">無法載入最近使用客戶</div>
                     )}
-                    {!searchFetching && !searchError && searchResults.length === 0 ? (
-                      <CommandEmpty>找不到符合的客戶</CommandEmpty>
-                    ) : (
-                      <CommandGroup heading="搜尋結果">
-                        {searchResults.map((c: any) => (
+                    {!recentFetching && !recentError && recentItems.length > 0 && (
+                      <CommandGroup heading="最近使用">
+                        {recentItems.map((c) => (
                           <CommandItem
                             key={c.id}
                             value={String(c.id)}
@@ -361,24 +407,66 @@ export function CustomerSelector({
                             onPointerDown={(e) => e.preventDefault()}
                             className="flex flex-col items-start gap-0.5 py-2 cursor-pointer"
                           >
-                            <div className="flex items-center gap-1.5 w-full">
-                              <Check className="h-3.5 w-3.5 shrink-0 opacity-0" />
-                              <span className="font-medium">{c.name}</span>
-                              {c.taxId && <span className="text-xs text-muted-foreground ml-auto">統編 {c.taxId}</span>}
-                            </div>
-                            <div className="pl-5 flex flex-wrap gap-x-2 gap-y-0 text-xs text-muted-foreground">
-                              {c.contactPerson && <span>聯絡人：{c.contactPerson}</span>}
-                              {c.mobile && <span>手機：{c.mobile}</span>}
-                              {c.phone && <span>市話：{c.phone}</span>}
-                            </div>
+                            <SearchResultRow c={c} />
                           </CommandItem>
                         ))}
                       </CommandGroup>
                     )}
+                    {!recentFetching && !recentError && recentItems.length === 0 && (
+                      <div className="py-4 text-center text-xs text-muted-foreground">輸入關鍵字搜尋客戶</div>
+                    )}
                   </>
                 )}
-                {debouncedQuery.length < 1 && (
-                  <div className="py-4 text-center text-xs text-muted-foreground">輸入關鍵字搜尋客戶</div>
+                {hasQuery && !meetsThreshold && (
+                  <div className="py-4 px-3 text-center text-xs text-muted-foreground">
+                    請輸入至少 2 個中文字或 3 個數字
+                  </div>
+                )}
+                {hasQuery && meetsThreshold && (
+                  <>
+                    {searchFetching && (
+                      <div className="py-3 text-center text-xs text-muted-foreground">搜尋中…</div>
+                    )}
+                    {searchError && (
+                      <div className="py-3 px-3 text-center text-xs text-destructive">無法搜尋客戶，請確認登入權限</div>
+                    )}
+                    {!searchFetching && !searchError && searchTruncated && (
+                      <div className="py-2 px-3 text-center text-xs text-muted-foreground">請輸入更多關鍵字</div>
+                    )}
+                    {!searchFetching && !searchError && searchItems.length === 0 ? (
+                      <div className="py-4 px-3 text-center space-y-2">
+                        <p className="text-xs text-muted-foreground">找不到客戶？</p>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setOpen(false);
+                            setCreateOpen(true);
+                            onCustomerModeChange?.(null);
+                          }}
+                        >
+                          <Plus className="h-3.5 w-3.5 mr-1" />建立正式客戶
+                        </Button>
+                      </div>
+                    ) : (
+                      !searchFetching && !searchError && searchItems.length > 0 && (
+                        <CommandGroup heading="搜尋結果">
+                          {searchItems.map((c) => (
+                            <CommandItem
+                              key={c.id}
+                              value={String(c.id)}
+                              onSelect={() => selectCustomer(c)}
+                              onPointerDown={(e) => e.preventDefault()}
+                              className="flex flex-col items-start gap-0.5 py-2 cursor-pointer"
+                            >
+                              <SearchResultRow c={c} />
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      )
+                    )}
+                  </>
                 )}
                 <Separator />
                 <CommandGroup>

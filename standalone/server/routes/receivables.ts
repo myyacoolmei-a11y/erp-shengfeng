@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { eq, and, lt } from "drizzle-orm";
-import { db, receivablesTable, customersTable } from "@workspace/db";
+import { db, receivablesTable, customersTable, workOrdersTable } from "@workspace/db";
 import { requireFeature } from "../lib/auth";
 import { z } from "zod/v4";
 import {
@@ -113,7 +113,21 @@ router.post("/receivables", async (req, res): Promise<void> => {
     return;
   }
 
+  let customerId = parsed.data.customerId;
+
   if (parsed.data.workOrderId) {
+    const [wo] = await db
+      .select({ customerId: workOrdersTable.customerId })
+      .from(workOrdersTable)
+      .where(eq(workOrdersTable.id, parsed.data.workOrderId));
+
+    if (wo?.customerId == null) {
+      res.status(400).json({ error: "派工單未綁定客戶，無法建立應收帳款" });
+      return;
+    }
+
+    customerId = wo.customerId;
+
     const existing = await db
       .select({ id: receivablesTable.id })
       .from(receivablesTable)
@@ -126,6 +140,7 @@ router.post("/receivables", async (req, res): Promise<void> => {
 
   const data = {
     ...parsed.data,
+    customerId,
     totalAmount: String(parsed.data.totalAmount),
     receivedAmount: "0",
     paymentStatus: "未收款",
