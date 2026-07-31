@@ -1,7 +1,15 @@
 // Brand configuration shared across all PDF templates
 // Only constants & utility functions — each template has its own independent HTML+CSS layout
 
-export const logoUrl = () => `${window.location.origin}/logo.png`;
+/** Logo absolute URL; pass baseOrigin on the server (no `window`). */
+export function logoUrl(baseOrigin?: string): string {
+  const origin =
+    baseOrigin ??
+    (typeof window !== "undefined" && window.location?.origin
+      ? window.location.origin
+      : "");
+  return `${origin}/logo.png`;
+}
 
 export const COMPANY = {
   name: "\u665f\u98a8\u5de5\u7a0b\u6709\u9650\u516c\u53f8",

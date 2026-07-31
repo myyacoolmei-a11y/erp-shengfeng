@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSearch, useLocation } from "wouter";
 import {
   useListQuotes, useCreateQuote, useUpdateQuote, useDeleteQuote,
@@ -7,7 +7,7 @@ import {
   getListWorkOrdersQueryKey, getListCustomersQueryKey, getListProductsQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { X, Plus, Pencil, Trash2, Printer, Wrench, Copy, Share2, Download, FileText, MoreHorizontal, Eye } from "lucide-react";
+import { X, Plus, Pencil, Trash2, Printer, Wrench, Copy, Download, FileText, MoreHorizontal, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -19,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { makeEmpty, buildPayload, hasWorkOrderCustomer, type WOForm } from "@/components/work-order-form";
 import { CustomerSelector, type CustomerSelectorValue } from "@/components/customer-selector";
@@ -26,8 +27,7 @@ import { BindCustomerDialog } from "@/components/bind-customer-dialog";
 import { PdfPreviewDialog } from "@/components/pdf/pdf-preview-dialog";
 import {
   handlePdfAction,
-  isMobileDevice,
-  openPrintWindow,
+  openLineShareText,
 } from "@/components/pdf/pdf-service";
 import { buildQuotationHtml } from "@/components/pdf/templates/QuotationTemplate";
 import { computeQuoteAmounts } from "@/components/pdf/quote-amounts";
@@ -43,6 +43,64 @@ import { PENDING_DISPATCH_BADGE, PENDING_DISPATCH_FILTER_ACTIVE } from "@/lib/di
 import { VoiceAssistantButton } from "@/components/voice-assistant/VoiceAssistantDialog";
 import { applyVoiceToQuoteForm } from "@/lib/voice/applyVoiceToQuote";
 import type { VoiceAssistantApplyPayload } from "@/components/voice-assistant/types";
+
+const AUTH_TOKEN_KEY = "erp_auth_token";
+
+function authFetch(url: string, options: RequestInit = {}) {
+  const token = localStorage.getItem(AUTH_TOKEN_KEY);
+  return fetch(url, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(options.headers ?? {}),
+    },
+  });
+}
+
+/** Compact icon action button — min 44×44 touch target on mobile. */
+function QuoteIconButton({
+  label,
+  onClick,
+  disabled,
+  className = "",
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          title={label}
+          aria-label={label}
+          disabled={disabled}
+          onClick={onClick}
+          className={`inline-flex h-11 w-11 sm:h-10 sm:w-10 items-center justify-center rounded-md border border-border bg-background hover:bg-muted disabled:opacity-50 disabled:pointer-events-none shrink-0 ${className}`}
+        >
+          {children}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="top">{label}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+function LineGlyph({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <span
+      className={`inline-flex items-center justify-center rounded-[4px] bg-[#06C755] text-[9px] font-bold leading-none text-white ${className}`}
+      aria-hidden
+    >
+      LINE
+    </span>
+  );
+}
 
 // ── Constants ──────────────────────────────────────────────────────────────
 const STATUSES = ["草稿", "已送出", "已成交", "已拒絕"];
@@ -240,35 +298,52 @@ function quoteToForm(q: any): QuoteForm {
   };
 }
 
-// ── Shared PDF V2 helpers ────────────────────────────────────────────────
+// ── Shared PDF helpers (client-side A4 html2pdf; same source for print / LINE / download) ──
 function getQuoteNo(quote: any): string {
   return formatQuoteNumber(quote);
 }
 
-async function printQuote(
-  quote: any,
-  setPdfPreview: (v: { url: string; filename: string } | null) => void,
-  toast: any,
-) {
+function buildLineShareMessage(quote: any, shareUrl: string): string {
   const quoteNo = getQuoteNo(quote);
-  const html = buildQuotationHtml(quote);
-  if (isMobileDevice()) {
-    await handlePdfAction({
-      html,
-      docNo: quoteNo,
-      filename: `報價單_${quoteNo}.pdf`,
-      title: "晟風工程報價單",
-      action: "download",
-      setPdfPreview,
-      toast,
-      pageFormat: "a4",
-    });
-  } else {
-    openPrintWindow(html, `晟風工程報價單 — ${quoteNo}`);
-  }
+  const name = quote.customerName || quote.title || "客戶";
+  return [
+    "【晟風工程報價單】",
+    `客戶／案件：${name}`,
+    `報價單號：${quoteNo}`,
+    `案件：${quote.title || "—"}`,
+    "",
+    "查看報價單（無需登入）：",
+    shareUrl,
+  ].join("\n");
 }
 
-async function shareQuoteViaLine(
+async function createQuoteShareUrl(quoteId: number): Promise<string> {
+  const res = await authFetch(`/api/quotes/${quoteId}/share-link`, { method: "POST" });
+  const ct = (res.headers.get("Content-Type") || "").toLowerCase();
+  if (!res.ok) {
+    let message = `HTTP ${res.status}`;
+    try {
+      if (ct.includes("application/json")) {
+        const data = await res.json();
+        message = data?.message || data?.error || message;
+      } else {
+        const text = await res.text();
+        if (ct.includes("text/html") || text.trimStart().startsWith("<!")) {
+          message = "建立分享連結失敗：伺服器回傳 HTML 而非 JSON";
+        } else if (text) message = text.slice(0, 200);
+      }
+    } catch { /* keep */ }
+    throw new Error(message);
+  }
+  if (!ct.includes("application/json")) {
+    throw new Error("建立分享連結失敗：回應不是 JSON");
+  }
+  const data = await res.json();
+  if (!data?.url) throw new Error(data?.message || "未取得分享網址");
+  return String(data.url);
+}
+
+async function printQuote(
   quote: any,
   setPdfPreview: (v: { url: string; filename: string } | null) => void,
   toast: any,
@@ -280,7 +355,7 @@ async function shareQuoteViaLine(
     docNo: quoteNo,
     filename: `報價單_${quoteNo}.pdf`,
     title: "晟風工程報價單",
-    action: "share",
+    action: "print",
     setPdfPreview,
     toast,
     pageFormat: "a4",
@@ -511,6 +586,9 @@ export default function QuotesPage() {
   const [statusFilter, setStatusFilter] = useState<QuoteFilterTab>("等待客戶回覆");
   const [listSearch, setListSearch] = useState("");
   const [pdfPreview, setPdfPreview] = useState<{ url: string; filename: string } | null>(null);
+  const [pdfBusyId, setPdfBusyId] = useState<number | null>(null);
+  const [lineFallback, setLineFallback] = useState<{ message: string; url: string } | null>(null);
+  const openEditAfterCopyRef = useRef(false);
 
   const searchParams = new URLSearchParams(search);
   const filterCustomerName = searchParams.get("customer") || "";
@@ -590,7 +668,27 @@ export default function QuotesPage() {
   }
 
   const invQuotes = () => invalidateStatistics(qc);
-  const createMutation = useCreateQuote({ mutation: { onSuccess: () => { invQuotes(); qc.invalidateQueries({ queryKey: getListProductsQueryKey() }); setShowCreate(false); toast({ title: "報價單已新增" }); } } });
+  const createMutation = useCreateQuote({
+    mutation: {
+      onSuccess: (created: any) => {
+        invQuotes();
+        qc.invalidateQueries({ queryKey: getListProductsQueryKey() });
+        setShowCreate(false);
+        if (openEditAfterCopyRef.current && created?.id) {
+          openEditAfterCopyRef.current = false;
+          openEdit(created);
+          toast({ title: "已建立複製草稿", description: "已開啟新草稿編輯" });
+          return;
+        }
+        toast({ title: "報價單已新增" });
+      },
+      onError: (err: any) => {
+        openEditAfterCopyRef.current = false;
+        const msg = err?.response?.data?.error ?? err?.message ?? "建立失敗";
+        toast({ title: "建立報價單失敗", description: msg, variant: "destructive" });
+      },
+    },
+  });
   const updateMutation = useUpdateQuote({ mutation: { onSuccess: () => { invQuotes(); qc.invalidateQueries({ queryKey: getListProductsQueryKey() }); setEditItem(null); toast({ title: "報價單已更新" }); } } });
   const deleteMutation = useDeleteQuote({ mutation: { onSuccess: () => { invQuotes(); setDeleteId(null); toast({ title: "報價單已刪除" }); } } });
   const createWoMutation = useCreateWorkOrder({
@@ -610,11 +708,72 @@ export default function QuotesPage() {
   });
 
   function handleCopy(q: any) {
-    setForm({ ...quoteToForm(q), title: `${q.title}（複製）`, status: "草稿" });
-    setShowCreate(true);
+    if (!window.confirm("確定複製此報價單並建立新草稿？")) return;
+    const draft = {
+      ...quoteToForm(q),
+      title: `${q.title || "報價單"}（複製）`,
+      status: "草稿",
+    };
+    openEditAfterCopyRef.current = true;
+    createMutation.mutate({ data: formToApi(draft) as any });
   }
 
   function openEdit(q: any) { setForm(quoteToForm(q)); setEditItem(q); }
+
+  async function runPdfAction(quoteId: number, fn: () => Promise<void>) {
+    if (pdfBusyId != null) return;
+    setPdfBusyId(quoteId);
+    try {
+      await fn();
+    } finally {
+      setPdfBusyId(null);
+    }
+  }
+
+  async function shareQuoteViaLineWithFallback(q: any) {
+    const quoteNo = getQuoteNo(q);
+    toast({ title: "PDF 產生中…", description: "準備 LINE 分享內容" });
+    let shareUrl = "";
+    try {
+      shareUrl = await createQuoteShareUrl(q.id);
+    } catch (e: any) {
+      toast({
+        title: "無法建立公開分享連結",
+        description: String(e?.message || e),
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const html = buildQuotationHtml(q);
+    const blob = await handlePdfAction({
+      html,
+      docNo: quoteNo,
+      filename: `報價單_${quoteNo}.pdf`,
+      title: "晟風工程報價單",
+      action: "preview",
+      setPdfPreview,
+      toast,
+      pageFormat: "a4",
+    });
+    if (!blob) return;
+
+    const message = buildLineShareMessage(q, shareUrl);
+    const win = openLineShareText(message);
+    if (win) {
+      toast({ title: "已開啟 LINE 分享", description: "分享內容含報價單公開連結" });
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(message);
+      setLineFallback({ message, url: shareUrl });
+      toast({ title: "已複製分享連結", description: "可再點「開啟 LINE」" });
+    } catch {
+      setLineFallback({ message, url: shareUrl });
+      toast({ title: "請手動開啟 LINE", description: shareUrl, variant: "destructive" });
+    }
+  }
 
   function handleVoiceApply({ parsed }: VoiceAssistantApplyPayload) {
     if (parsed.formType !== "quote") return;
@@ -717,9 +876,6 @@ export default function QuotesPage() {
             const qDisc = Number(q.discountAmount ?? 0);
             const { total: qTotal } = computeQuoteAmounts(qRaw, qDisc, q.taxType ?? "未稅");
             const hasWo = quoteHasLinkedWorkOrder(q);
-            const cat = quoteCategory(q);
-            const isDraft = cat === "草稿";
-            const isWaiting = cat === "等待客戶回覆";
             const canCreateWo = canConvertQuoteToWorkOrder(q);
             const canEdit = !HISTORY_STATUSES.has(normalizeQuoteStatus(q.status)) && !HISTORY_STATUSES.has(String(q.status ?? ""));
             const canVoid = canEdit && !hasWo;
@@ -744,104 +900,134 @@ export default function QuotesPage() {
                   </div>
                   {q.address && <div className="text-xs text-muted-foreground">{q.address}</div>}
 
-                  {/* Primary actions — status-aware; LINE/列印 stay outside「更多」 */}
-                  <div className="flex flex-col sm:flex-row flex-wrap gap-2">
-                    <Button className="h-10 sm:h-9 flex-1 min-w-[7rem]" variant="outline" onClick={() => openEdit(q)}>
-                      <Eye className="h-4 w-4 mr-1" />查看案件
-                    </Button>
+                  {/* Compact action bar: 查看 + icon ops; ⋯ for rare/dangerous */}
+                  <TooltipProvider delayDuration={300}>
+                    <div className="flex flex-col gap-2">
+                      {(canCreateWo || hasWo) && (
+                        <div className="flex flex-wrap gap-2">
+                          {canCreateWo && (
+                            <Button
+                              size="sm"
+                              className="h-10 sm:h-9 w-auto px-3"
+                              onClick={() => startConvertToWorkOrder(q)}
+                            >
+                              <Wrench className="h-4 w-4 mr-1" />建立派工單
+                            </Button>
+                          )}
+                          {hasWo && (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-10 sm:h-9 w-auto px-3"
+                              onClick={() =>
+                                navigate(
+                                  q.workOrderId
+                                    ? `/work-orders?highlight=${q.workOrderId}`
+                                    : "/work-orders",
+                                )
+                              }
+                            >
+                              <FileText className="h-4 w-4 mr-1" />查看派工單
+                            </Button>
+                          )}
+                        </div>
+                      )}
 
-                    {canCreateWo && (
-                      <Button className="h-10 sm:h-9 flex-1 min-w-[7rem]" onClick={() => startConvertToWorkOrder(q)}>
-                        <Wrench className="h-4 w-4 mr-1" />建立派工單
-                      </Button>
-                    )}
-
-                    {hasWo && (
-                      <Button
-                        className="h-10 sm:h-9 flex-1 min-w-[7rem]"
-                        variant="outline"
-                        onClick={() =>
-                          navigate(
-                            q.workOrderId
-                              ? `/work-orders?highlight=${q.workOrderId}`
-                              : "/work-orders",
-                          )
-                        }
-                      >
-                        <FileText className="h-4 w-4 mr-1" />查看派工單
-                      </Button>
-                    )}
-
-                    <Button
-                      className="h-10 sm:h-9 flex-1 min-w-[7rem]"
-                      variant="outline"
-                      onClick={() => void printQuote(q, setPdfPreview, toast)}
-                    >
-                      <Printer className="h-4 w-4 mr-1" />列印
-                    </Button>
-
-                    <Button
-                      className="h-10 sm:h-9 flex-1 min-w-[7rem] text-green-700 border-green-300"
-                      variant="outline"
-                      onClick={() => void shareQuoteViaLine(q, setPdfPreview, toast)}
-                    >
-                      <Share2 className="h-4 w-4 mr-1" />LINE 分享
-                    </Button>
-
-                    {(isDraft || isWaiting || canEdit) && (
-                      <Button
-                        className="h-10 sm:h-9 flex-1 min-w-[7rem]"
-                        variant="outline"
-                        onClick={() => openEdit(q)}
-                      >
-                        <Pencil className="h-4 w-4 mr-1" />編輯
-                      </Button>
-                    )}
-
-                    {isDraft && (
-                      <Button
-                        className="h-10 sm:h-9 flex-1 min-w-[7rem] text-destructive border-destructive/40"
-                        variant="outline"
-                        onClick={() => setDeleteId(q.id)}
-                      >
-                        <Trash2 className="h-4 w-4 mr-1" />刪除
-                      </Button>
-                    )}
-
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button className="h-10 sm:h-9" variant="ghost">
-                          <MoreHorizontal className="h-4 w-4 mr-1" />更多
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-11 sm:h-9 w-auto px-3 shrink-0"
+                          onClick={() => openEdit(q)}
+                          title="查看案件"
+                          aria-label="查看案件"
+                        >
+                          <Eye className="h-4 w-4 mr-1" />
+                          <span className="sm:hidden">查看</span>
+                          <span className="hidden sm:inline">查看案件</span>
                         </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => handleCopy(q)}>
-                          <Copy className="h-3.5 w-3.5 mr-2" />複製報價
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => void downloadQuotePdf(q, setPdfPreview, toast)}>
-                          <Download className="h-3.5 w-3.5 mr-2" />下載 PDF
-                        </DropdownMenuItem>
-                        {canVoid && (
-                          <DropdownMenuItem
-                            onClick={() => {
-                              if (!window.confirm("確定作廢此報價單？作廢後將移至歷史紀錄。")) return;
-                              updateMutation.mutate({
-                                id: q.id,
-                                data: { status: "已失效" } as any,
-                              });
-                            }}
-                          >
-                            <X className="h-3.5 w-3.5 mr-2" />作廢
-                          </DropdownMenuItem>
+
+                        <QuoteIconButton
+                          label={pdfBusyId === q.id ? "PDF 產生中…" : "列印報價單"}
+                          disabled={pdfBusyId != null}
+                          onClick={() =>
+                            void runPdfAction(q.id, () => printQuote(q, setPdfPreview, toast as any))
+                          }
+                        >
+                          <Printer className="h-4 w-4" />
+                        </QuoteIconButton>
+
+                        <QuoteIconButton
+                          label={pdfBusyId === q.id ? "PDF 產生中…" : "LINE 分享報價單"}
+                          disabled={pdfBusyId != null}
+                          className="border-[#06C755]/40"
+                          onClick={() =>
+                            void runPdfAction(q.id, () => shareQuoteViaLineWithFallback(q))
+                          }
+                        >
+                          <LineGlyph className="h-5 w-5 px-0.5" />
+                        </QuoteIconButton>
+
+                        <QuoteIconButton
+                          label="複製報價單"
+                          disabled={createMutation.isPending}
+                          onClick={() => handleCopy(q)}
+                        >
+                          <Copy className="h-4 w-4" />
+                        </QuoteIconButton>
+
+                        {canEdit && (
+                          <QuoteIconButton label="編輯報價單" onClick={() => openEdit(q)}>
+                            <Pencil className="h-4 w-4" />
+                          </QuoteIconButton>
                         )}
-                        {!isDraft && (
-                          <DropdownMenuItem className="text-destructive" onClick={() => setDeleteId(q.id)}>
-                            <Trash2 className="h-3.5 w-3.5 mr-2" />刪除
-                          </DropdownMenuItem>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
+
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button
+                              type="button"
+                              title="更多操作"
+                              aria-label="更多操作"
+                              className="inline-flex h-11 w-11 sm:h-10 sm:w-10 items-center justify-center rounded-md border border-border bg-background hover:bg-muted shrink-0"
+                            >
+                              <MoreHorizontal className="h-4 w-4" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              disabled={pdfBusyId != null}
+                              onClick={() =>
+                                void runPdfAction(q.id, () =>
+                                  downloadQuotePdf(q, setPdfPreview, toast as any),
+                                )
+                              }
+                            >
+                              <Download className="h-3.5 w-3.5 mr-2" />下載 PDF
+                            </DropdownMenuItem>
+                            {canVoid && (
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  if (!window.confirm("確定作廢此報價單？作廢後將移至歷史紀錄。")) return;
+                                  updateMutation.mutate({
+                                    id: q.id,
+                                    data: { status: "已失效" } as any,
+                                  });
+                                }}
+                              >
+                                <X className="h-3.5 w-3.5 mr-2" />作廢
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem
+                              className="text-destructive"
+                              onClick={() => setDeleteId(q.id)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5 mr-2" />刪除
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </div>
+                  </TooltipProvider>
                 </CardContent>
               </Card>
             );
@@ -1153,6 +1339,31 @@ export default function QuotesPage() {
           filename={pdfPreview.filename}
         />
       )}
+
+      {/* LINE share fallback when URL scheme blocked */}
+      <AlertDialog open={!!lineFallback} onOpenChange={(open) => !open && setLineFallback(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>已複製分享連結</AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <span className="block">無法直接開啟 LINE 時，請貼到對話中，或點下方按鈕再開一次。</span>
+              {lineFallback?.url && (
+                <span className="block break-all text-xs text-muted-foreground">{lineFallback.url}</span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>關閉</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (lineFallback?.message) openLineShareText(lineFallback.message);
+              }}
+            >
+              開啟 LINE
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

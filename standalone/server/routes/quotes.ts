@@ -6,6 +6,7 @@ import { requireFeature } from "../lib/auth";
 import { syncQuoteDispatchBatch, syncQuoteDispatchStatus } from "../lib/quoteWorkflow";
 import { normalizeQuoteStatus } from "../lib/quoteStatus";
 import { resolveQuoteItemsForSave } from "../lib/productCatalog";
+import { signQuoteShareToken } from "../lib/quoteShareToken";
 
 const router: IRouter = Router();
 router.use("/quotes", requireFeature("quotations"));
@@ -270,6 +271,53 @@ router.delete("/quotes/:id", async (req, res): Promise<void> => {
   const [quote] = await db.delete(quotesTable).where(eq(quotesTable.id, id)).returning();
   if (!quote) { res.status(404).json({ error: "找不到報價單" }); return; }
   res.sendStatus(204);
+});
+
+/**
+ * Create a public share URL for LINE / customers (no login required to view).
+ * POST /api/quotes/:id/share-link
+ */
+router.post("/quotes/:id/share-link", async (req, res): Promise<void> => {
+  try {
+    const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const id = parseInt(raw, 10);
+    if (isNaN(id)) {
+      res.status(400).json({ success: false, message: "Invalid id" });
+      return;
+    }
+
+    const [quote] = await db
+      .select({ id: quotesTable.id, title: quotesTable.title })
+      .from(quotesTable)
+      .where(eq(quotesTable.id, id))
+      .limit(1);
+
+    if (!quote) {
+      res.status(404).json({ success: false, message: "找不到報價單" });
+      return;
+    }
+
+    const token = signQuoteShareToken(id);
+    const envBase = (process.env["PUBLIC_APP_URL"] || process.env["APP_URL"] || "").replace(/\/$/, "");
+    const host = req.get("x-forwarded-host") || req.get("host") || "localhost";
+    const proto = req.get("x-forwarded-proto") || req.protocol || "https";
+    const origin = envBase || `${proto}://${host}`;
+    const url = `${origin}/api/public/quotes/${token}`;
+
+    res.json({
+      success: true,
+      url,
+      token,
+      quoteId: id,
+      title: quote.title,
+      expiresInDays: 30,
+    });
+  } catch (err: any) {
+    res.status(500).json({
+      success: false,
+      message: err?.message || "建立分享連結失敗",
+    });
+  }
 });
 
 export default router;

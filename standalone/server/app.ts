@@ -86,8 +86,20 @@ app.use(
 // Serve other static files (favicon, images, etc.) without long cache
 app.use(express.static(publicDir, { maxAge: 0 }));
 
-// SPA fallback — return index.html for any non-API route
+// SPA fallback — return index.html for any non-API route.
+// Never fall back missing hashed assets to HTML (browsers reject text/html as JS MIME).
 app.use((req, res) => {
+  const p = req.path || "";
+  if (
+    p.startsWith("/assets/") ||
+    p.endsWith(".js") ||
+    p.endsWith(".mjs") ||
+    p.endsWith(".css") ||
+    p.endsWith(".map")
+  ) {
+    res.status(404).type("text/plain; charset=utf-8").send("Asset not found");
+    return;
+  }
   res.sendFile(path.join(publicDir, "index.html"));
 });
 

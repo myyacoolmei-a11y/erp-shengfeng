@@ -1,5 +1,8 @@
 // PDF V5 Shared Service
 // Off-screen iframe render + style injection for mobile PDF generation
+// html2pdf is statically imported so SW/SPA cannot serve index.html as the module.
+
+import html2pdfFactory from "html2pdf.js";
 
 export interface PdfBlobResult {
   blob: Blob;
@@ -13,6 +16,83 @@ const PAGE_CONFIG: Record<PageFormat, { format: string | number[]; orientation: 
   "a4": { format: "a4", orientation: "portrait", margin: [8, 8, 8, 8], scale: 2, renderWidth: 720 },
   "custom-240x140-landscape": { format: [240, 140] as any, orientation: "landscape", margin: [0, 0, 0, 0], scale: 2, renderWidth: 960 },
 };
+
+function resolveHtml2Pdf(): any {
+  const mod: any = html2pdfFactory;
+  return typeof mod === "function" ? mod : mod?.default ?? mod;
+}
+
+/** Ensure a Blob looks like a real PDF before opening/downloading. */
+export function assertPdfBlob(blob: Blob, context = "PDF"): Blob {
+  const type = (blob.type || "").toLowerCase();
+  if (type.includes("text/html")) {
+    throw new Error(
+      `${context} 產生失敗：收到 HTML 而非 PDF（可能是靜態資源被 SPA 攔截）。請重新整理後再試。`,
+    );
+  }
+  if (type && !type.includes("application/pdf") && type !== "application/octet-stream") {
+    throw new Error(`${context} 產生失敗：Content-Type 不是 application/pdf（收到 ${blob.type || "empty"}）`);
+  }
+  if (!blob || blob.size === 0) {
+    throw new Error(`${context} 產生失敗：產生的 PDF 檔案為空`);
+  }
+  // Normalize MIME for Safari / object URLs
+  if (!type.includes("application/pdf")) {
+    return new Blob([blob], { type: "application/pdf" });
+  }
+  return blob;
+}
+
+/**
+ * When fetching a PDF URL: only call response.blob() if Content-Type is application/pdf.
+ * Otherwise surface JSON/text error — never treat HTML as a PDF module/blob.
+ */
+export async function fetchPdfResponse(url: string, init?: RequestInit): Promise<Blob> {
+  const response = await fetch(url, init);
+  const contentType = (response.headers.get("Content-Type") || "").toLowerCase();
+
+  if (!response.ok) {
+    let message = `HTTP ${response.status}`;
+    try {
+      if (contentType.includes("application/json")) {
+        const data = await response.json();
+        message = data?.message || data?.error || message;
+      } else {
+        const text = await response.text();
+        if (text && !text.trimStart().startsWith("<!")) message = text.slice(0, 300);
+        else if (contentType.includes("text/html")) {
+          message = `伺服器回傳 HTML 錯誤頁（HTTP ${response.status}），而非 PDF`;
+        }
+      }
+    } catch {
+      /* keep status message */
+    }
+    throw new Error(message);
+  }
+
+  if (!contentType.includes("application/pdf")) {
+    let detail = `Content-Type: ${contentType || "(missing)"}`;
+    try {
+      if (contentType.includes("application/json")) {
+        const data = await response.json();
+        detail = data?.message || data?.error || detail;
+      } else {
+        const text = await response.text();
+        if (contentType.includes("text/html") || text.trimStart().startsWith("<!")) {
+          detail = "伺服器回傳了 HTML（可能是 SPA fallback / index.html），不是 PDF";
+        } else if (text) {
+          detail = text.slice(0, 300);
+        }
+      }
+    } catch {
+      /* keep detail */
+    }
+    throw new Error(`PDF 下載失敗：${detail}`);
+  }
+
+  const blob = await response.blob();
+  return assertPdfBlob(blob, "PDF 下載");
+}
 
 /** Generate PDF blob from HTML string using off-screen iframe render */
 export async function generatePdfBlobFromHtml(
@@ -52,13 +132,13 @@ export async function generatePdfBlobFromHtml(
 
     if (body.offsetWidth <= 0 || body.offsetHeight <= 0) {
       console.error("[PDF V5] iframe render failed:", body.offsetWidth, body.offsetHeight);
-      throw new Error("PDF \u751f\u6210\u5931\u6557\uff1aDOM \u5c1a\u672a\u5b8c\u6574 render");
+      throw new Error("PDF 產生失敗：DOM 尚未完整 render");
     }
 
     // Quotation uses .quotation-print-page; other templates still use .page
     const pageEl = body.querySelector(".page, .quotation-print-page") as HTMLElement | null;
     if (!pageEl) {
-      throw new Error("PDF \u751f\u6210\u5931\u6557\uff1a\u627e\u4e0d\u5230 .page / .quotation-print-page \u5217\u5370\u5bb9\u5668");
+      throw new Error("PDF 產生失敗：找不到 .page / .quotation-print-page 列印容器");
     }
     pageEl.dataset.templateType = pageFormat;
     console.log("PDF capture target:", pageEl.className, pageEl.dataset.templateType);
@@ -74,7 +154,22 @@ export async function generatePdfBlobFromHtml(
       tempStyles.push(newStyle);
     });
 
-    const html2pdf = await import("html2pdf.js").then((m: any) => m.default || m);
+    let html2pdf: any;
+    try {
+      html2pdf = resolveHtml2Pdf();
+      if (typeof html2pdf !== "function") {
+        throw new Error("html2pdf 模組載入失敗");
+      }
+    } catch (e: any) {
+      const msg = String(e?.message || e);
+      if (msg.includes("MIME type") || msg.includes("text/html")) {
+        throw new Error(
+          "PDF 引擎載入失敗：靜態 JS 被回傳成 HTML（常見於舊版 PWA 快取）。請強制重新整理或清除網站資料後再試。",
+        );
+      }
+      throw e;
+    }
+
     const opt = {
       margin: cfg.margin,
       image: { type: "jpeg", quality: 0.98 },
@@ -86,11 +181,9 @@ export async function generatePdfBlobFromHtml(
     const worker = html2pdf().set(opt).from(pageEl);
     await worker.toPdf();
     const pdf = worker.prop.pdf;
-    const blob: Blob = pdf.output("blob");
+    const rawBlob: Blob = pdf.output("blob");
+    const blob = assertPdfBlob(rawBlob, "PDF");
 
-    if (!blob || blob.size === 0) {
-      throw new Error("PDF \u751f\u6210\u5931\u6557\uff1a\u7522\u751f\u7684 PDF \u6a94\u6848\u70ba\u7a7a");
-    }
     return { blob, docNo, html };
   } finally {
     tempStyles.forEach((el) => el.remove());
@@ -102,7 +195,8 @@ export async function generatePdfBlobFromHtml(
 
 /** Download PDF blob as file */
 export function downloadPdf(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
+  const safe = assertPdfBlob(blob, "下載");
+  const url = URL.createObjectURL(safe);
   const a = document.createElement("a");
   a.href = url;
   a.download = filename;
@@ -110,9 +204,10 @@ export function downloadPdf(blob: Blob, filename: string) {
   setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
 
-/** Print PDF blob in a new window */
-export function printPdf(blob: Blob, filename: string) {
-  const url = URL.createObjectURL(blob);
+/** Open PDF blob in a new tab for print / preview */
+export function printPdf(blob: Blob, _filename: string) {
+  const safe = assertPdfBlob(blob, "列印");
+  const url = URL.createObjectURL(safe);
   const win = window.open(url, "_blank");
   if (win) {
     win.focus();
@@ -129,12 +224,13 @@ export async function sharePdf(
   title: string,
   setPdfPreview: (v: { url: string; filename: string } | null) => void,
 ): Promise<{ shared: boolean; via: string }> {
-  const file = new File([blob], filename, { type: "application/pdf" });
+  const safe = assertPdfBlob(blob, "分享");
+  const file = new File([safe], filename, { type: "application/pdf" });
   if (navigator.canShare?.({ files: [file] })) {
     await navigator.share({ files: [file], title });
     return { shared: true, via: "navigator.share" };
   }
-  const url = URL.createObjectURL(blob);
+  const url = URL.createObjectURL(safe);
   setPdfPreview({ url, filename });
   return { shared: false, via: "preview" };
 }
@@ -149,53 +245,57 @@ export async function handlePdfAction(options: {
   setPdfPreview: (v: { url: string; filename: string } | null) => void;
   toast: (opts: { title: string; description?: string; variant?: string }) => void;
   pageFormat?: PageFormat;
-}) {
+}): Promise<Blob | null> {
   const { html, docNo, filename, title, action, setPdfPreview, toast, pageFormat } = options;
-  toast({ title: "PDF \u7522\u751f\u4e2d", description: "\u8acb\u7a0d\u5019\u2026" });
+  toast({ title: "PDF 產生中…", description: "請稍候，請勿重複點擊" });
 
   try {
     const { blob } = await generatePdfBlobFromHtml(html, docNo, pageFormat);
 
     if (action === "download") {
       downloadPdf(blob, filename);
-      toast({ title: "\u5df2\u4e0b\u8f09 PDF", description: filename });
-      return;
+      toast({ title: "已下載 PDF", description: filename });
+      return blob;
     }
     if (action === "print") {
-      printPdf(blob, filename);
-      toast({ title: "\u5df2\u958b\u555f\u5217\u5370", description: filename });
-      return;
+      const url = URL.createObjectURL(blob);
+      setPdfPreview({ url, filename });
+      toast({ title: "已開啟 PDF 預覽", description: "可由此列印或下載" });
+      return blob;
     }
     if (action === "share") {
       try {
         const result = await sharePdf(blob, filename, title, setPdfPreview);
         if (result.shared) {
-          toast({ title: "\u5df2\u958b\u555f\u5206\u4eab", description: "\u8acb\u9078\u64c7 LINE \u6216\u5176\u4ed6 App" });
+          toast({ title: "已開啟分享", description: "請選擇 LINE 或其他 App" });
         } else {
-          toast({ title: "\u6b64\u88dd\u7f6e\u4e0d\u652f\u63f4\u76f4\u63a5\u5206\u4eab", description: "\u5df2\u958b\u555f PDF \u9810\u89bd\uff0c\u8acb\u624b\u52d5\u5206\u4eab" });
+          toast({ title: "此裝置不支援直接分享", description: "已開啟 PDF 預覽，請手動分享" });
         }
       } catch (e: any) {
         if (e?.name === "AbortError") {
-          toast({ title: "\u5206\u4eab\u53d6\u6d88", description: "\u4f7f\u7528\u8005\u53d6\u6d88\u4e86\u5206\u4eab" });
+          toast({ title: "分享取消", description: "使用者取消了分享" });
         } else {
-          toast({ title: "\u5206\u4eab\u5931\u6557", description: String(e), variant: "destructive" });
+          toast({ title: "分享失敗", description: String(e?.message || e), variant: "destructive" });
         }
       }
-      return;
+      return blob;
     }
     if (action === "preview") {
       const url = URL.createObjectURL(blob);
       setPdfPreview({ url, filename });
-      toast({ title: "\u5df2\u958b\u555f PDF \u9810\u89bd", description: "\u53ef\u4e0b\u8f09\u3001\u5206\u4eab\u6216\u5217\u5370" });
-      return;
+      toast({ title: "已開啟 PDF 預覽", description: "可下載、分享或列印" });
+      return blob;
     }
+    return blob;
   } catch (e: any) {
-    toast({ title: "PDF \u7522\u751f\u5931\u6557", description: String(e), variant: "destructive" });
+    const msg = String(e?.message || e);
+    toast({ title: "PDF 產生失敗", description: msg, variant: "destructive" });
+    return null;
   }
 }
 
 /** Open HTML in a new print window and trigger browser print dialog */
-export function openPrintWindow(html: string, title: string) {
+export function openPrintWindow(html: string, _title: string) {
   const w = window.open("", "_blank");
   if (!w) {
     toast({ title: "無法開啟列印視窗", description: "請檢查彈出視窗設定", variant: "destructive" });
@@ -205,7 +305,6 @@ export function openPrintWindow(html: string, title: string) {
   w.document.write(html);
   w.document.close();
   w.focus();
-  // Wait for fonts + images then print
   const attemptPrint = () => {
     try {
       w.print();
@@ -221,4 +320,10 @@ export function setPrintToast(t: any) { toast = t; }
 /** Detect if current device is mobile */
 export function isMobileDevice(): boolean {
   return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+}
+
+/** Open LINE share sheet with prefilled text (URL scheme). */
+export function openLineShareText(text: string): Window | null {
+  const url = `https://line.me/R/share?text=${encodeURIComponent(text)}`;
+  return window.open(url, "_blank", "noopener,noreferrer");
 }

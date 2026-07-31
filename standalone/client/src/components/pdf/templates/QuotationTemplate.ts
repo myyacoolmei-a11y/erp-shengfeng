@@ -4,7 +4,7 @@
 import { logoUrl, COMPANY, COLORS, esc, fmtMoney, PDF_LAYOUT_CSS } from "./brand-config";
 import { computeQuoteAmounts } from "../quote-amounts";
 
-export function buildQuotationHtml(quote: any): string {
+export function buildQuotationHtml(quote: any, baseOrigin?: string): string {
   const items: any[] = quote.items ?? [];
   const d = quote.createdAt ? new Date(quote.createdAt) : new Date();
   const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
@@ -333,7 +333,7 @@ ${PDF_LAYOUT_CSS}
 <div class="quotation-print-page">
   <header class="hdr">
     <div class="co">
-      <img src="${logoUrl()}" class="co-logo" alt="">
+      <img src="${logoUrl(baseOrigin)}" class="co-logo" alt="">
       <div>
         <div class="co-name">${COMPANY.name}</div>
         <div class="co-sub">${COMPANY.subTitle}</div>
