@@ -9,7 +9,7 @@ import {
 } from "../lib/receivables/receivablePaymentService.ts";
 
 const router: IRouter = Router();
-router.use(requireFeature("receivables"));
+router.use("/receivables", requireFeature("receivables"));
 
 
 function parseId(raw: unknown): number | null {

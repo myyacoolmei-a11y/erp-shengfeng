@@ -14,7 +14,7 @@ import {
 
 const router: IRouter = Router();
 /** 擁有 inventory 功能權限即可查看／新增／編輯／異動（不再依 role 擋行政） */
-router.use(requireFeature("inventory"));
+router.use("/inventory-items", requireFeature("inventory"));
 
 const ItemInput = z.object({
   brand: z.string().optional().nullable(),

@@ -9,7 +9,7 @@ import {
 } from "../lib/dataPermissionAccess.ts";
 
 const router: IRouter = Router();
-router.use(requireFeature("warranty_maintenance"));
+router.use("/maintenance-reminders", requireFeature("warranty_maintenance"));
 
 
 router.get("/maintenance-reminders", async (req, res): Promise<void> => {

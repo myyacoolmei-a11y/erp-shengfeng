@@ -8,7 +8,7 @@ import {
 import { requireFeature } from "../lib/auth";
 
 const router: IRouter = Router();
-router.use(requireFeature("customers"));
+router.use("/customers", requireFeature("customers"));
 
 
 function mapCustomer(row: typeof customersTable.$inferSelect & { primarySalesRepName?: string | null }) {

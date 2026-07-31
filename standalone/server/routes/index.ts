@@ -43,6 +43,11 @@ router.use(jobsRouter);
 
 router.use(authenticate);
 
+// IMPORTANT: feature/role gates inside each router MUST be path-scoped
+// (e.g. router.use("/customers", requireFeature(...))).
+// Bare router.use(requireFeature(...)) runs for every request that enters
+// the mounted router and will 403 sibling APIs (e.g. engineers blocked by customers).
+
 router.use(usersRouter);
 router.use(customersRouter);
 router.use(customerAddressesRouter);

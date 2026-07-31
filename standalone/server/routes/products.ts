@@ -15,7 +15,7 @@ import {
 import { isProductUsageType, PRODUCT_USAGE_TYPES, type ProductUsageType } from "../../shared/productUsageTypes";
 
 const router: IRouter = Router();
-router.use(requireFeature("products"));
+router.use("/products", requireFeature("products"));
 
 
 const priceField = () =>

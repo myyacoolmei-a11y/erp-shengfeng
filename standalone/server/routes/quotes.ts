@@ -8,7 +8,7 @@ import { normalizeQuoteStatus } from "../lib/quoteStatus";
 import { resolveQuoteItemsForSave } from "../lib/productCatalog";
 
 const router: IRouter = Router();
-router.use(requireFeature("quotations"));
+router.use("/quotes", requireFeature("quotations"));
 
 
 const DISPATCH_FILTER_VALUES = new Set(["待派工", "已派工", "施工中", "已完工"]);

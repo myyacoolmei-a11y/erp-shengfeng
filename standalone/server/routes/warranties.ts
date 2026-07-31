@@ -5,7 +5,7 @@ import { CreateWarrantyBody, UpdateWarrantyBody } from "@workspace/api-zod";
 import { requireFeature } from "../lib/auth";
 
 const router: IRouter = Router();
-router.use(requireFeature("warranty_maintenance"));
+router.use("/warranties", requireFeature("warranty_maintenance"));
 
 
 router.get("/warranties", async (req, res): Promise<void> => {

@@ -17,7 +17,7 @@ import {
 } from "../lib/dataPermissionAccess.ts";
 
 const router: IRouter = Router();
-router.use(requireFeature("repair_cases"));
+router.use("/repair-cases", requireFeature("repair_cases"));
 
 
 function mapRepairCase(row: {

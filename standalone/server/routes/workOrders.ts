@@ -41,6 +41,7 @@ const WO_ADMIN_ROLES = ["super_admin", "owner", "admin"];
 const router: IRouter = Router();
 /** Feature OR field role — engineers can read own jobs even if feature_permissions incomplete */
 router.use(
+  "/work-orders",
   requireRoleOrFeature(
     ["super_admin", "owner", "admin", "engineer", "technician"],
     ["dispatch_orders"],

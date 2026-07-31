@@ -5,7 +5,8 @@ import { CreateAcUnitBody, UpdateAcUnitBody } from "@workspace/api-zod";
 import { requireFeature } from "../lib/auth";
 
 const router: IRouter = Router();
-router.use(requireFeature("customers"));
+router.use("/customers", requireFeature("customers"));
+router.use("/ac-units", requireFeature("customers"));
 
 
 router.get("/customers/:customerId/ac-units", async (req, res): Promise<void> => {

@@ -1,8 +1,9 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { useListWorkOrders } from "@workspace/api-client-react";
 import { useAuth } from "@/contexts/auth-context";
+import { ApiError } from "../../../shared/api-client/custom-fetch.ts";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -29,6 +30,27 @@ export default function EngineerDashboard() {
     refetch: refetchOrders,
   } = useListWorkOrders({});
 
+  // Temporary: log homepage API outcomes (remove after 403 investigation)
+  useEffect(() => {
+    if (ordersLoading) return;
+    if (ordersError) {
+      const e = ordersErr;
+      console.error("[engineer-dashboard API]", {
+        url: e instanceof ApiError ? e.url : "/api/work-orders",
+        method: e instanceof ApiError ? e.method : "GET",
+        status: e instanceof ApiError ? e.status : "?",
+        body: e instanceof ApiError ? e.data : e instanceof Error ? e.message : e,
+      });
+    } else {
+      console.log("[engineer-dashboard API]", {
+        url: "/api/work-orders",
+        method: "GET",
+        status: 200,
+        body: `array(${workOrders.length})`,
+      });
+    }
+  }, [ordersLoading, ordersError, ordersErr, workOrders.length]);
+
   const {
     data: progressRows = [],
     isLoading: progressLoading,
@@ -37,7 +59,27 @@ export default function EngineerDashboard() {
     refetch: refetchProgress,
   } = useQuery({
     queryKey: ["field-progress", "mine"],
-    queryFn: listMyFieldProgress,
+    queryFn: async () => {
+      try {
+        const rows = await listMyFieldProgress();
+        console.log("[engineer-dashboard API]", {
+          url: "/api/field-progress/mine",
+          method: "GET",
+          status: 200,
+          body: Array.isArray(rows) ? `array(${rows.length})` : rows,
+        });
+        return rows;
+      } catch (err) {
+        const e = err as { status?: number; message?: string; data?: unknown; url?: string; method?: string };
+        console.error("[engineer-dashboard API]", {
+          url: e.url ?? "/api/field-progress/mine",
+          method: e.method ?? "GET",
+          status: e.status ?? "?",
+          body: e.data ?? e.message,
+        });
+        throw err;
+      }
+    },
     enabled: !!user,
   });
 

@@ -5,7 +5,7 @@ import { CreatePaymentBody, UpdatePaymentBody } from "@workspace/api-zod";
 import { requireFeature } from "../lib/auth";
 
 const router: IRouter = Router();
-router.use(requireFeature("receivables"));
+router.use("/payments", requireFeature("receivables"));
 
 
 router.get("/payments", async (req, res): Promise<void> => {

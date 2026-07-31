@@ -10,7 +10,7 @@ import {
 } from "../lib/productCatalog";
 
 const router: IRouter = Router();
-router.use(requireFeature("wholesale"));
+router.use("/wholesale/products", requireFeature("wholesale"));
 
 
 

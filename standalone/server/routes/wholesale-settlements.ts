@@ -4,7 +4,7 @@ import { db, wholesaleOrdersTable, wholesaleOrderItemsTable, wholesaleReceivable
 import { requireFeature } from "../lib/auth";
 
 const router: IRouter = Router();
-router.use(requireFeature("wholesale"));
+router.use("/wholesale/settlements", requireFeature("wholesale"));
 
 
 function parseId(raw: string | string[]): number {

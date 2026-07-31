@@ -5,7 +5,7 @@ import { z } from "zod/v4";
 import { requireFeature } from "../lib/auth";
 
 const router: IRouter = Router();
-router.use(requireFeature("wholesale"));
+router.use("/wholesale/receivables", requireFeature("wholesale"));
 
 
 const UpdateInput = z.object({

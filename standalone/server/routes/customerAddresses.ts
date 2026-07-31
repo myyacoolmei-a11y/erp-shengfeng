@@ -5,7 +5,7 @@ import { CreateCustomerAddressBody, UpdateCustomerAddressBody } from "@workspace
 import { requireFeature } from "../lib/auth";
 
 const router: IRouter = Router();
-router.use(requireFeature("customers"));
+router.use("/customers", requireFeature("customers"));
 
 
 router.get("/customers/:customerId/addresses", async (req, res): Promise<void> => {

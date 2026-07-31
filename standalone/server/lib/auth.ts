@@ -204,6 +204,19 @@ export function requireFeature(...allowedFeatures: FeatureKey[]) {
     }
     const perms = resolveFeaturePermissions(req.user as PermissionUserLike);
     if (!allowedFeatures.some((f) => perms.includes(f))) {
+      // Temporary diagnostics for engineer homepage 403 investigations
+      console.log("403 DEBUG", {
+        gate: "requireFeature",
+        path: req.originalUrl,
+        method: req.method,
+        userId: req.user?.id,
+        role: req.user?.role,
+        roles: effectiveRoles(req.user),
+        permissions: perms,
+        requiredFeatures: allowedFeatures,
+        companyId: null,
+        linkedEmployeeId: req.user?.linkedEmployeeId ?? null,
+      });
       logger.warn(
         {
           event: "auth_denied_feature",
