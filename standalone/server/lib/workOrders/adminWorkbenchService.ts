@@ -423,6 +423,7 @@ export async function getAdminWorkbench() {
     subsidyLinkNotSent: [] as unknown[],
     subsidyAwaitingUpload: [] as unknown[],
     subsidyDocsIncomplete: [] as unknown[],
+    subsidyAwaitingManualReview: [] as unknown[],
     subsidyDocsComplete: [] as unknown[],
     subsidyPendingApply: [] as unknown[],
     subsidyApplied: [] as unknown[],
@@ -544,6 +545,7 @@ export async function getAdminWorkbench() {
       aiTips: subsidyMeta.aiTips ?? [],
       subsidyDisplayStatus: displayStatus,
       subsidyStatusLabel: SUBSIDY_DISPLAY_LABELS[displayStatus],
+      needsSubsidy: subsidyType === "company_assisted",
       canMarkApplied: displayStatus === "docs_complete" || displayStatus === "applied",
       canCloseReady:
         subsidyType !== "company_assisted" ||
@@ -577,10 +579,18 @@ export async function getAdminWorkbench() {
       sections.pendingConstructionConfirm.push(base);
     }
 
-    // 2–7 Receivable / collection (unpaid / partial only)
-    if (engConfirmed && !recv) {
-      sections.pendingCreateReceivable.push(base);
-    } else if (recv && card.receivableStatus !== "paid") {
+    // 2–7 Receivable / collection — parallel with construction confirm & subsidy
+    // (do not wait for engConfirmed or payment before showing in 待收款)
+    if (!recv) {
+      if (
+        engConfirmed ||
+        status === "pending_admin_review" ||
+        status === "pending_billing" ||
+        status === "billed"
+      ) {
+        sections.pendingCreateReceivable.push(base);
+      }
+    } else if (card.receivableStatus !== "paid") {
       if (card.receivableStatus === "no_due_date") {
         sections.noDueDate.push(base);
       }
@@ -608,11 +618,13 @@ export async function getAdminWorkbench() {
             sections.subsidyAwaitingUpload.push(base);
             break;
           case "docs_incomplete":
-          case "awaiting_manual_review":
             sections.subsidyDocsIncomplete.push(base);
             break;
+          case "awaiting_manual_review":
+            sections.subsidyAwaitingManualReview.push(base);
+            break;
           case "docs_complete":
-            // pending_apply maps to docs_complete display — keep both buckets in sync for UI
+            // pending_apply still listed separately for API consumers; UI may merge
             if (subsidyPipeline === "pending_apply") {
               sections.subsidyPendingApply.push(base);
             } else {
@@ -661,6 +673,7 @@ export async function getAdminWorkbench() {
     subsidyLinkNotSent: sections.subsidyLinkNotSent.length,
     subsidyAwaitingUpload: sections.subsidyAwaitingUpload.length,
     subsidyDocsIncomplete: sections.subsidyDocsIncomplete.length,
+    subsidyAwaitingManualReview: sections.subsidyAwaitingManualReview.length,
     subsidyDocsComplete: sections.subsidyDocsComplete.length,
     subsidyPendingApply: sections.subsidyPendingApply.length,
     subsidyApplied: sections.subsidyApplied.length,
@@ -679,6 +692,7 @@ export async function getAdminWorkbench() {
     counts.subsidyLinkNotSent +
     counts.subsidyAwaitingUpload +
     counts.subsidyDocsIncomplete +
+    counts.subsidyAwaitingManualReview +
     counts.subsidyDocsComplete +
     counts.subsidyPendingApply +
     counts.pendingClose;

@@ -252,6 +252,34 @@ function SubsidyBadge({ item }: { item: AdminWorkbenchItem }) {
   );
 }
 
+/** Tag only — opens subsidy center / docs; does not change process. */
+function SubsidyNeedTag({
+  item,
+  onNeedSubsidy,
+}: {
+  item: AdminWorkbenchItem;
+  onNeedSubsidy: () => void;
+}) {
+  const needs = item.needsSubsidy === true || item.subsidyType === "company_assisted";
+  if (needs) {
+    return (
+      <button
+        type="button"
+        className="inline-flex items-center rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-xs text-emerald-800 hover:bg-emerald-100"
+        onClick={onNeedSubsidy}
+        title="開啟補助中心／查看補助資料"
+      >
+        🟢【需補助】
+      </button>
+    );
+  }
+  return (
+    <span className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-xs text-gray-600">
+      ⚪【免補助】
+    </span>
+  );
+}
+
 function SubsidyMetaLines({ item }: { item: AdminWorkbenchItem }) {
   return (
     <div className="text-xs space-y-1">
@@ -499,35 +527,48 @@ export default function AdminWorkbench() {
     if (!data) return null;
     const s = data.sections;
     const c = data.counts;
+    // 未設定收款日：含尚未建檔／草稿應收（首頁不另開「待建立」分類）
+    const noDueItems = [...(s.pendingCreateReceivable ?? []), ...(s.noDueDate ?? [])];
+    const noDueCount = (c.pendingCreateReceivable ?? 0) + (c.noDueDate ?? 0);
     const collectionCount =
-      (c.pendingCreateReceivable ?? 0) +
-      (c.noDueDate ?? 0) +
+      noDueCount +
       (c.collectionOverdue ?? 0) +
       (c.collectionToday ?? 0) +
       (c.collectionSoon ?? 0);
+    const docsCompleteItems = [
+      ...(s.subsidyDocsComplete ?? []),
+      ...(s.subsidyPendingApply ?? []),
+    ];
+    const docsCompleteCount =
+      (c.subsidyDocsComplete ?? 0) + (c.subsidyPendingApply ?? 0);
     const subsidyCount =
       (c.subsidyLinkNotSent ?? 0) +
       (c.subsidyAwaitingUpload ?? 0) +
       (c.subsidyDocsIncomplete ?? 0) +
-      (c.subsidyDocsComplete ?? 0) +
-      (c.subsidyPendingApply ?? 0) +
+      (c.subsidyAwaitingManualReview ?? 0) +
+      docsCompleteCount +
       (c.subsidyApplied ?? 0);
     return {
       collectionCount,
       subsidyCount,
       collectionSections: [
-        { key: "createAr", title: "待建立應收帳款", accent: "normal" as const, items: s.pendingCreateReceivable, count: c.pendingCreateReceivable ?? 0 },
-        { key: "noDue", title: "未設定收款日", accent: "normal" as const, items: s.noDueDate, count: c.noDueDate ?? 0 },
-        { key: "overdue", title: "已逾期", accent: "red" as const, items: s.collectionOverdue, count: c.collectionOverdue ?? 0 },
+        { key: "noDue", title: "未設定收款日", accent: "normal" as const, items: noDueItems, count: noDueCount },
         { key: "today", title: "今日到期", accent: "orange" as const, items: s.collectionToday, count: c.collectionToday ?? 0 },
         { key: "soon", title: "即將到期", accent: "normal" as const, items: s.collectionSoon, count: c.collectionSoon ?? 0 },
+        { key: "overdue", title: "已逾期", accent: "red" as const, items: s.collectionOverdue, count: c.collectionOverdue ?? 0 },
       ],
       subsidySections: [
         { key: "subLink", title: "待傳送補助資料連結", accent: "normal" as const, items: s.subsidyLinkNotSent, count: c.subsidyLinkNotSent ?? 0 },
         { key: "subWait", title: "等待客戶上傳", accent: "normal" as const, items: s.subsidyAwaitingUpload, count: c.subsidyAwaitingUpload ?? 0 },
-        { key: "subInc", title: "客戶資料待補件／等待人工確認", accent: "orange" as const, items: s.subsidyDocsIncomplete, count: c.subsidyDocsIncomplete ?? 0 },
-        { key: "subOk", title: "補助資料完整", accent: "normal" as const, items: s.subsidyDocsComplete ?? [], count: c.subsidyDocsComplete ?? 0 },
-        { key: "subApply", title: "待申請補助", accent: "normal" as const, items: s.subsidyPendingApply ?? [], count: c.subsidyPendingApply ?? 0 },
+        { key: "subInc", title: "客戶資料待補件", accent: "orange" as const, items: s.subsidyDocsIncomplete, count: c.subsidyDocsIncomplete ?? 0 },
+        {
+          key: "subManual",
+          title: "等待人工確認",
+          accent: "orange" as const,
+          items: s.subsidyAwaitingManualReview ?? [],
+          count: c.subsidyAwaitingManualReview ?? 0,
+        },
+        { key: "subOk", title: "補助資料完整", accent: "normal" as const, items: docsCompleteItems, count: docsCompleteCount },
         { key: "subDone", title: "補助已完成", accent: "normal" as const, items: s.subsidyApplied ?? [], count: c.subsidyApplied ?? 0 },
       ],
       homeSections: [
@@ -634,40 +675,27 @@ export default function AdminWorkbench() {
     );
   }
 
-  function renderItem(secKey: string, item: AdminWorkbenchItem) {
-    if (secKey === "confirm") {
-      return (
-        <ItemShell key={item.workOrderId} item={item}>
-          <div className="flex flex-wrap gap-3 text-xs">
-            <span className={item.hasPhotos ? "text-green-700" : "text-destructive"}>
-              {item.hasPhotos ? "✓" : "✗"} 完工照片
-            </span>
-            <span className={item.hasSignature ? "text-green-700" : "text-destructive"}>
-              {item.hasSignature ? "✓" : "✗"} 客戶簽名
-            </span>
-            <span className={item.hasMaterials ? "text-green-700" : "text-destructive"}>
-              {item.hasMaterials ? "✓" : "✗"} 材料紀錄
-            </span>
-          </div>
-          {canOperate && (
-            <Button
-              size="sm"
-              className="h-10 sm:h-9"
-              disabled={confirmMut.isPending}
-              onClick={() => confirmMut.mutate(item.workOrderId)}
-            >
-              確認施工資料
-            </Button>
-          )}
-        </ItemShell>
-      );
-    }
+  function openSubsidyForItem(item: AdminWorkbenchItem) {
+    setDocsModal(item);
+  }
 
-    if (secKey === "createAr") {
+  function renderCreateArCard(item: AdminWorkbenchItem) {
       const draft = draftFor(item);
       const preview = finalPreview(draft, item);
       return (
         <ItemShell key={`createAr-${item.workOrderId}`} item={item} showViewCase>
+          <div className="flex flex-wrap items-center gap-2">
+            <SubsidyNeedTag
+              item={item}
+              onNeedSubsidy={() => {
+                if (item.needsSubsidy || item.subsidyType === "company_assisted") {
+                  openSubsidyForItem(item);
+                } else {
+                  goPanel("subsidy");
+                }
+              }}
+            />
+          </div>
           <div className="rounded-md bg-muted/40 p-2 text-xs space-y-1">
             <p>原報價／成交金額：NT${money(item.quoteOriginalAmount)}</p>
             <p className="font-medium text-foreground">
@@ -789,6 +817,44 @@ export default function AdminWorkbench() {
           )}
         </ItemShell>
       );
+  }
+
+  function renderItem(secKey: string, item: AdminWorkbenchItem) {
+    if (secKey === "confirm") {
+      return (
+        <ItemShell key={item.workOrderId} item={item}>
+          <div className="flex flex-wrap gap-3 text-xs">
+            <span className={item.hasPhotos ? "text-green-700" : "text-destructive"}>
+              {item.hasPhotos ? "✓" : "✗"} 完工照片
+            </span>
+            <span className={item.hasSignature ? "text-green-700" : "text-destructive"}>
+              {item.hasSignature ? "✓" : "✗"} 客戶簽名
+            </span>
+            <span className={item.hasMaterials ? "text-green-700" : "text-destructive"}>
+              {item.hasMaterials ? "✓" : "✗"} 材料紀錄
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <SubsidyNeedTag item={item} onNeedSubsidy={() => openSubsidyForItem(item)} />
+            <SubsidyBadge item={item} />
+          </div>
+          {canOperate && (
+            <Button
+              size="sm"
+              className="h-10 sm:h-9"
+              disabled={confirmMut.isPending}
+              onClick={() => confirmMut.mutate(item.workOrderId)}
+            >
+              確認施工資料
+            </Button>
+          )}
+        </ItemShell>
+      );
+    }
+
+    // 未設定收款日內可能含尚未有 receivableId 的草稿建檔案
+    if (secKey === "noDue" && item.receivableId == null) {
+      return renderCreateArCard(item);
     }
 
     if (secKey.startsWith("sub")) {
@@ -800,6 +866,7 @@ export default function AdminWorkbench() {
         <ItemShell key={`${secKey}-${item.workOrderId}`} item={item}>
           <p className="text-xs text-muted-foreground">電話：{phone}</p>
           <div className="flex flex-wrap items-center gap-2 text-xs">
+            <SubsidyNeedTag item={item} onNeedSubsidy={() => openSubsidyForItem(item)} />
             <span className="text-muted-foreground">收款狀態：</span>
             <span>{item.receivableStatusLabel ?? item.paymentStatus ?? "—"}</span>
           </div>
@@ -809,6 +876,9 @@ export default function AdminWorkbench() {
           )}
           {canOperate && (
             <div className="flex flex-wrap gap-2">
+              <Button asChild size="sm" variant="outline" className="h-10 sm:h-9">
+                <Link href={caseHref(item.workOrderId)}>查看案件</Link>
+              </Button>
               <Button size="sm" variant="outline" className="h-10 sm:h-9" onClick={() => setDocsModal(item)}>
                 查看補助資料
                 {(item.uploadedDocCount ?? 0) > 0 ? `（${item.uploadedDocCount}）` : ""}
@@ -884,7 +954,7 @@ export default function AdminWorkbench() {
                   人工確認資料齊全
                 </Button>
               )}
-              {(display === "docs_complete" || pipe === "pending_apply" || secKey === "subApply") && pipe !== "applied" && (
+              {(display === "docs_complete" || pipe === "pending_apply") && pipe !== "applied" && (
                 <Button
                   size="sm"
                   className="h-10 sm:h-9 bg-green-700 hover:bg-green-800"
@@ -938,6 +1008,10 @@ export default function AdminWorkbench() {
       return (
         <ItemShell key={`close-${item.workOrderId}`} item={item}>
           <ReceivableSummary item={item} />
+          <div className="flex flex-wrap items-center gap-2">
+            <SubsidyNeedTag item={item} onNeedSubsidy={() => openSubsidyForItem(item)} />
+            <SubsidyBadge item={item} />
+          </div>
           <p className="text-xs text-green-700 font-medium">
             {item.canCloseReady ? "可結案" : "已收款／待結案"}
           </p>
@@ -1036,16 +1110,76 @@ export default function AdminWorkbench() {
     }
 
     // collection / partial
+    const phone = item.mobilePhone || item.telephone || "—";
     return (
       <ItemShell key={`${secKey}-${item.workOrderId}`} item={item} showViewCase={false}>
         <ReceivableSummary item={item} />
-        {item.subsidyType === "company_assisted" && (
-          <div className="flex flex-wrap items-center gap-2 text-xs">
-            <span className="text-muted-foreground">補助狀態：</span>
-            <SubsidyBadge item={item} />
-          </div>
+        <p className="text-xs text-muted-foreground">電話：{phone}</p>
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <SubsidyNeedTag
+            item={item}
+            onNeedSubsidy={() => {
+              if (item.needsSubsidy || item.subsidyType === "company_assisted") {
+                openSubsidyForItem(item);
+              } else {
+                goPanel("subsidy");
+              }
+            }}
+          />
+          <span className="text-muted-foreground">收款狀態：</span>
+          <span>{item.receivableStatusLabel ?? item.paymentStatus ?? "—"}</span>
+          <span className="text-muted-foreground">｜補助狀態：</span>
+          <SubsidyBadge item={item} />
+        </div>
+        {(item.aiTips?.length ?? 0) > 0 && (
+          <ul className="text-xs text-yellow-800 list-disc pl-4">
+            {item.aiTips!.slice(0, 3).map((t) => (
+              <li key={t}>{t}</li>
+            ))}
+          </ul>
+        )}
+        {(item.missingDocLabels?.length ?? 0) > 0 && (
+          <p className="text-xs text-orange-800">缺少：{item.missingDocLabels!.join("、")}</p>
         )}
         <CollectionActions item={item} />
+        {(item.needsSubsidy || item.subsidyType === "company_assisted") && (
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="outline" className="h-10 sm:h-9" onClick={() => openSubsidyForItem(item)}>
+              查看補助資料
+            </Button>
+            {item.uploadUrl && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-10 sm:h-9"
+                onClick={() => {
+                  const url = absoluteUploadUrl(item);
+                  if (!url) return;
+                  void navigator.clipboard.writeText(url).then(() => toast({ title: "已複製上傳網址" }));
+                }}
+              >
+                複製上傳網址
+              </Button>
+            )}
+            {item.uploadUrl && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-10 sm:h-9"
+                onClick={() => {
+                  const text = subsidyUploadShareText(item);
+                  const win = openLineShareText(text);
+                  if (!win) void navigator.clipboard.writeText(text);
+                }}
+              >
+                LINE 分享
+              </Button>
+            )}
+            <Button size="sm" variant="ghost" className="h-10 sm:h-9" onClick={() => goPanel("subsidy")}>
+              開啟補助中心
+            </Button>
+          </div>
+        )}
       </ItemShell>
     );
   }
@@ -1139,14 +1273,14 @@ export default function AdminWorkbench() {
             count={hubs.collectionCount}
             accent={data.alerts.hasOverdue ? "red" : data.alerts.hasDueToday ? "orange" : "normal"}
             onClick={() => goPanel("collection")}
-            hint="未設定收款日／今日到期／即將到期／已逾期（點擊進入）"
+            hint="未設定收款日／今日到期／即將到期／已逾期"
           />
           {renderSections(hubs.homeSections.filter((s) => s.key === "partial"))}
           <HubCard
             title="📄 補助中心"
             count={hubs.subsidyCount}
             onClick={() => goPanel("subsidy")}
-            hint="待傳送連結 → 上傳 → 補件 → 完整 → 已完成（點擊進入）"
+            hint="點擊進入補助中心"
           />
           {renderSections(hubs.homeSections.filter((s) => s.key === "close" || s.key === "closed"))}
           <Card>

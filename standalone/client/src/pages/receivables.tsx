@@ -514,9 +514,18 @@ export default function Receivables() {
                         <Badge className={`text-xs px-1.5 py-0 ${INVOICE_COLORS[item.invoiceStatus] ?? "bg-gray-100 text-gray-600"}`}>
                           發票：{item.invoiceStatus}
                         </Badge>
-                        {sub.subsidyType === "company_assisted" && (
-                          <Badge className={`text-xs px-1.5 py-0 border-0 ${subColor}`}>
-                            補助：{sub.subsidyDisplayLabel ?? "補助申請中"}
+                        {sub.subsidyType === "company_assisted" ? (
+                          <>
+                            <Badge className="text-xs px-1.5 py-0 border-0 bg-emerald-50 text-emerald-800">
+                              🟢 需補助
+                            </Badge>
+                            <Badge className={`text-xs px-1.5 py-0 border-0 ${subColor}`}>
+                              補助：{sub.subsidyDisplayLabel ?? "補助申請中"}
+                            </Badge>
+                          </>
+                        ) : (
+                          <Badge className="text-xs px-1.5 py-0 border-0 bg-gray-50 text-gray-600">
+                            ⚪ 免補助
                           </Badge>
                         )}
                       </div>

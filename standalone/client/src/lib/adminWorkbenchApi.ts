@@ -59,6 +59,7 @@ export type AdminWorkbenchItem = {
   needsManualReview?: boolean;
   aiTips?: string[];
   subsidyDisplayStatus?: SubsidyDisplayStatus;
+  needsSubsidy?: boolean;
   canMarkApplied?: boolean;
   canCloseReady?: boolean;
   customerDocumentCount?: number;
@@ -94,6 +95,7 @@ export type AdminWorkbenchData = {
     subsidyLinkNotSent: AdminWorkbenchItem[];
     subsidyAwaitingUpload: AdminWorkbenchItem[];
     subsidyDocsIncomplete: AdminWorkbenchItem[];
+    subsidyAwaitingManualReview: AdminWorkbenchItem[];
     subsidyDocsComplete: AdminWorkbenchItem[];
     subsidyPendingApply: AdminWorkbenchItem[];
     subsidyApplied: AdminWorkbenchItem[];
