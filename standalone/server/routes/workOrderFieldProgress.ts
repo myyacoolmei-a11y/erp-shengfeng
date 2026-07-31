@@ -8,7 +8,7 @@ import {
   fieldProgressBackfillRequestsTable,
   customersTable,
 } from "@workspace/db";
-import { requireRole } from "../lib/auth";
+import { requireRole, requireRoleOrFeature } from "../lib/auth";
 import {
   UNABLE_REASONS,
   PAUSE_REASONS,
@@ -38,6 +38,19 @@ const router: IRouter = Router();
 
 const READ_ROLES = ["super_admin", "owner", "admin", "accountant", "engineer", "technician"] as const;
 const OPERATE_ROLES = ["engineer", "technician"] as const;
+/** Field operate: role OR dispatch_orders feature (same pattern as work-orders list) */
+const requireFieldOperate = requireRoleOrFeature(
+  [...OPERATE_ROLES],
+  ["dispatch_orders"],
+);
+const requireFieldMine = requireRoleOrFeature(
+  [...OPERATE_ROLES, "super_admin", "owner", "admin"],
+  ["dispatch_orders"],
+);
+const requireFieldRead = requireRoleOrFeature(
+  [...READ_ROLES],
+  ["dispatch_orders"],
+);
 const STATS_ROLES = ["super_admin", "owner", "admin", "accountant"] as const;
 
 type WoRow = {
@@ -157,7 +170,7 @@ async function loadAccessibleProgress(req: Request, res: Response, workOrderId: 
 /** GET field progress for one work order */
 router.get(
   "/work-orders/:workOrderId/field-progress",
-  requireRole(...READ_ROLES),
+  requireFieldRead,
   async (req, res): Promise<void> => {
     const workOrderId = parseWorkOrderId(req.params.workOrderId);
     if (!workOrderId) {
@@ -194,7 +207,7 @@ router.get(
 
 router.get(
   "/work-orders/:workOrderId/field-progress/snapshots",
-  requireRole(...READ_ROLES),
+  requireFieldRead,
   async (req, res): Promise<void> => {
     const workOrderId = parseWorkOrderId(req.params.workOrderId);
     if (!workOrderId) {
@@ -225,7 +238,7 @@ router.get(
 
 router.get(
   "/field-progress/mine",
-  requireRole(...OPERATE_ROLES),
+  requireFieldMine,
   async (req, res): Promise<void> => {
     const rows = await db
       .select()
@@ -238,7 +251,7 @@ router.get(
 
 router.post(
   "/work-orders/:workOrderId/field-progress/depart",
-  requireRole(...OPERATE_ROLES),
+  requireFieldOperate,
   async (req, res): Promise<void> => {
     const workOrderId = parseWorkOrderId(req.params.workOrderId);
     if (!workOrderId) {
@@ -277,7 +290,7 @@ router.post(
 
 router.post(
   "/work-orders/:workOrderId/field-progress/arrive",
-  requireRole(...OPERATE_ROLES),
+  requireFieldOperate,
   async (req, res): Promise<void> => {
     const workOrderId = parseWorkOrderId(req.params.workOrderId);
     if (!workOrderId) {
@@ -320,7 +333,7 @@ router.post(
 
 router.post(
   "/work-orders/:workOrderId/field-progress/pause",
-  requireRole(...OPERATE_ROLES),
+  requireFieldOperate,
   async (req, res): Promise<void> => {
     const workOrderId = parseWorkOrderId(req.params.workOrderId);
     if (!workOrderId) {
@@ -382,7 +395,7 @@ router.post(
 
 router.post(
   "/work-orders/:workOrderId/field-progress/resume",
-  requireRole(...OPERATE_ROLES),
+  requireFieldOperate,
   async (req, res): Promise<void> => {
     const workOrderId = parseWorkOrderId(req.params.workOrderId);
     if (!workOrderId) {
@@ -431,7 +444,7 @@ router.post(
 
 router.post(
   "/work-orders/:workOrderId/field-progress/complete",
-  requireRole(...OPERATE_ROLES),
+  requireFieldOperate,
   async (req, res): Promise<void> => {
     const workOrderId = parseWorkOrderId(req.params.workOrderId);
     if (!workOrderId) {
@@ -524,7 +537,7 @@ router.post(
 
 router.post(
   "/work-orders/:workOrderId/field-progress/unable",
-  requireRole(...OPERATE_ROLES),
+  requireFieldOperate,
   async (req, res): Promise<void> => {
     const workOrderId = parseWorkOrderId(req.params.workOrderId);
     if (!workOrderId) {
@@ -579,7 +592,7 @@ router.post(
 /** 申請補登 — 不覆蓋原始時間，僅建立 pending 申請 */
 router.post(
   "/work-orders/:workOrderId/field-progress/backfill-request",
-  requireRole(...OPERATE_ROLES),
+  requireFieldOperate,
   async (req, res): Promise<void> => {
     const workOrderId = parseWorkOrderId(req.params.workOrderId);
     if (!workOrderId) {

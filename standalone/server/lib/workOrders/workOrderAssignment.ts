@@ -6,6 +6,8 @@ import { logger } from "../logger";
 import {
   isDataPermissionBypassRole,
   shouldApplyOwnDataFilter,
+  resolveFeaturePermissions,
+  type PermissionUserLike,
 } from "../../../shared/userPermissions.ts";
 
 export interface WorkOrderAssignmentFields {
@@ -65,8 +67,11 @@ export function isWorkOrderListAdmin(user: JwtPayload): boolean {
   );
 }
 
+/** May record field progress: engineer/technician role, or dispatch_orders feature (non-admin). */
 export function isFieldProgressOperator(user: JwtPayload): boolean {
-  return isEngineerRole(user);
+  if (isEngineerRole(user)) return true;
+  if (isWorkOrderListAdmin(user)) return false;
+  return resolveFeaturePermissions(user as PermissionUserLike).includes("dispatch_orders");
 }
 
 export function isFieldProgressAdmin(user: JwtPayload): boolean {

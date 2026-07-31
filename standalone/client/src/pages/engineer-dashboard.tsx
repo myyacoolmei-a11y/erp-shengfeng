@@ -117,12 +117,14 @@ export default function EngineerDashboard() {
   }
 
   const isLoading = ordersLoading || progressLoading;
-  const errorMsg =
-    (ordersError &&
-      (ordersErr instanceof Error ? ordersErr.message : "無法載入派工單")) ||
-    (progressError &&
-      (progressErr instanceof Error ? progressErr.message : "無法載入施工進度")) ||
-    null;
+  // 派工列表失敗才整頁錯誤；施工進度失敗只顯示警告（避免 /field-progress/mine 403 擋住首頁）
+  const ordersErrorMsg = ordersError
+    ? `GET /api/work-orders → ${ordersErr instanceof Error ? ordersErr.message : "無法載入派工單"}`
+    : null;
+  const progressErrorMsg = progressError
+    ? `GET /api/field-progress/mine → ${progressErr instanceof Error ? progressErr.message : "無法載入施工進度"}`
+    : null;
+  const errorMsg = ordersErrorMsg;
 
   const refetchAll = () => {
     void refetchOrders();
@@ -170,9 +172,21 @@ export default function EngineerDashboard() {
           <CardContent className="py-6 text-center space-y-3">
             <AlertCircle className="h-7 w-7 text-destructive mx-auto" />
             <p className="font-medium text-destructive">載入失敗</p>
-            <p className="text-sm text-muted-foreground">{errorMsg}</p>
+            <p className="text-sm text-muted-foreground break-all">{errorMsg}</p>
             <Button type="button" variant="outline" size="sm" onClick={refetchAll}>
               重新整理
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      {!errorMsg && progressErrorMsg && (
+        <Card className="border-amber-300 bg-amber-50">
+          <CardContent className="py-3 text-sm text-amber-900 space-y-2">
+            <p className="font-medium">施工進度載入異常（派工列表仍可顯示）</p>
+            <p className="text-xs break-all">{progressErrorMsg}</p>
+            <Button type="button" variant="outline" size="sm" onClick={() => void refetchProgress()}>
+              重試進度
             </Button>
           </CardContent>
         </Card>
