@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Car, Eye } from "lucide-react";
 import { Label } from "@/components/ui/label";
@@ -33,6 +33,12 @@ interface WorkOrderAiReminderSectionProps {
 }
 
 export function validateWorkOrderAiReminder(form: WOForm): string | null {
+  if (
+    form.estimatedWorkMinutes != null &&
+    (!Number.isInteger(form.estimatedWorkMinutes) || form.estimatedWorkMinutes <= 0)
+  ) {
+    return "預估施工時間須為正整數（分鐘）";
+  }
   if (!form.aiReminderEnabled) return null;
   if (!form.scheduledDate?.trim()) return "啟用 AI 工作提醒時，請填寫預約到場日期";
   if (!form.scheduledTime?.trim()) return "啟用 AI 工作提醒時，請填寫預約到場時間";
@@ -55,6 +61,21 @@ export function WorkOrderAiReminderSection({
     () => parseCompanyAiWorkReminderSettings(companySettingsRaw),
     [companySettingsRaw],
   );
+
+  // Local draft so clearing / multi-digit typing is not forced through parseInt → 1
+  const [minutesDraft, setMinutesDraft] = useState(
+    form.estimatedWorkMinutes != null && Number.isFinite(form.estimatedWorkMinutes)
+      ? String(form.estimatedWorkMinutes)
+      : "",
+  );
+
+  useEffect(() => {
+    const next =
+      form.estimatedWorkMinutes != null && Number.isFinite(form.estimatedWorkMinutes)
+        ? String(form.estimatedWorkMinutes)
+        : "";
+    setMinutesDraft(prev => (prev === next ? prev : next));
+  }, [form.estimatedWorkMinutes]);
 
   const engineerName = form.technicians[0] || "—";
   const customerName = customerDisplayName || form.customerName || "—";
@@ -135,13 +156,25 @@ export function WorkOrderAiReminderSection({
           <Label>預估施工時間（分鐘）</Label>
           <Input
             type="number"
-            min={0}
-            placeholder="例：120"
-            value={form.estimatedWorkMinutes ?? ""}
-            onChange={e => setForm(f => ({
-              ...f,
-              estimatedWorkMinutes: e.target.value ? parseInt(e.target.value, 10) : undefined,
-            }))}
+            inputMode="numeric"
+            min={1}
+            step={1}
+            placeholder="例：60"
+            value={minutesDraft}
+            onChange={e => {
+              const raw = e.target.value;
+              // Allow temporary empty while typing; do not coerce "" → 1
+              if (raw === "") {
+                setMinutesDraft("");
+                setForm(f => ({ ...f, estimatedWorkMinutes: undefined }));
+                return;
+              }
+              if (!/^\d+$/.test(raw)) return;
+              setMinutesDraft(raw);
+              const n = Number.parseInt(raw, 10);
+              if (!Number.isFinite(n)) return;
+              setForm(f => ({ ...f, estimatedWorkMinutes: n }));
+            }}
           />
         </div>
       </div>

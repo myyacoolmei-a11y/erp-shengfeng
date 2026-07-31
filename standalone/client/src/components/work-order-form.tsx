@@ -1,12 +1,14 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useListProducts } from "@workspace/api-client-react";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
-import { MapPin, Plus, X } from "lucide-react";
+import { ChevronsUpDown, MapPin, Plus, X } from "lucide-react";
 import { CustomerSelector, type CustomerSelectorValue } from "@/components/customer-selector";
 import { stripQuotePricingFromNotes, categoryToProjectType, deriveQuoteCustomer } from "../../../shared/workOrderNotes.ts";
 import { DEFAULT_AI_REMINDER_SCENARIO_IDS, type AiReminderRuleSource } from "@/lib/aiWorkReminderSettings";
@@ -140,7 +142,7 @@ export function makeEmpty() {
     hasElevator: "",
     description: "",
     notes: "",
-    estimatedWorkMinutes: undefined as number | undefined,
+    estimatedWorkMinutes: 60 as number | undefined,
     aiReminderEnabled: false,
     aiReminderScenarioIds: [...DEFAULT_AI_REMINDER_SCENARIO_IDS],
     aiNotifySupervisorOnDelay: false,
@@ -223,16 +225,46 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
 function EquipmentItemCard({
   item,
   index,
+  products,
   onChange,
   onDelete,
   canDelete,
 }: {
   item: EquipmentItemForm;
   index: number;
+  products: any[];
   onChange: (updated: EquipmentItemForm) => void;
   onDelete: () => void;
   canDelete: boolean;
 }) {
+  const [modelPickerOpen, setModelPickerOpen] = useState(false);
+  const [modelQuery, setModelQuery] = useState("");
+  const pickerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!modelPickerOpen) return;
+    function onDocDown(e: MouseEvent) {
+      if (!pickerRef.current?.contains(e.target as Node)) setModelPickerOpen(false);
+    }
+    document.addEventListener("mousedown", onDocDown);
+    return () => document.removeEventListener("mousedown", onDocDown);
+  }, [modelPickerOpen]);
+
+  const filteredProducts = useMemo(() => {
+    const q = modelQuery.trim().toLowerCase();
+    const list = products ?? [];
+    if (!q) return list.slice(0, 40);
+    return list
+      .filter((p: any) => {
+        const hay = [p.brand, p.name, p.model, p.category, p.productNumber]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        return hay.includes(q);
+      })
+      .slice(0, 40);
+  }, [products, modelQuery]);
+
   return (
     <div className="border rounded-lg p-3 space-y-2 bg-card/50">
       <div className="flex items-center justify-between">
@@ -259,17 +291,65 @@ function EquipmentItemCard({
             className="h-8 text-sm"
             placeholder="大金、日立…"
             value={item.brand}
-            onChange={e => onChange({ ...item, brand: e.target.value })}
+            onChange={e => onChange({ ...item, brand: e.target.value, productId: undefined })}
           />
         </div>
-        <div className="space-y-1">
+        <div className="space-y-1 relative" ref={pickerRef}>
           <Label className="text-xs">型號</Label>
           <Input
             className="h-8 text-sm"
-            placeholder="型號"
+            placeholder="搜尋或輸入型號"
             value={item.model}
-            onChange={e => onChange({ ...item, model: e.target.value })}
+            onFocus={() => {
+              setModelQuery(item.model || "");
+              setModelPickerOpen(true);
+            }}
+            onChange={e => {
+              const v = e.target.value;
+              setModelQuery(v);
+              setModelPickerOpen(true);
+              onChange({ ...item, model: v, productId: undefined });
+            }}
+            autoComplete="off"
           />
+          {modelPickerOpen && (
+            <div
+              className="absolute z-[200] left-0 right-0 top-full mt-1 max-h-[min(40vh,280px)] overflow-y-auto overscroll-contain touch-pan-y rounded-md border bg-popover text-popover-foreground shadow-md"
+              onWheel={e => e.stopPropagation()}
+              onTouchMove={e => e.stopPropagation()}
+            >
+              {filteredProducts.length === 0 ? (
+                <p className="text-xs text-muted-foreground p-3 text-center">
+                  無符合商品，可直接手動輸入型號
+                </p>
+              ) : (
+                filteredProducts.map((p: any) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    className="w-full text-left px-3 py-2 text-xs hover:bg-muted/60 transition-colors border-b last:border-b-0"
+                    onClick={() => {
+                      onChange({
+                        ...item,
+                        productId: p.id,
+                        brand: p.brand ?? "",
+                        model: p.model ?? "",
+                      });
+                      setModelQuery(p.model ?? "");
+                      setModelPickerOpen(false);
+                    }}
+                  >
+                    <span className="font-medium">
+                      {[p.brand, p.model].filter(Boolean).join("｜") || p.name || `#${p.id}`}
+                    </span>
+                    {p.name && (
+                      <span className="text-muted-foreground ml-1">（{p.name}）</span>
+                    )}
+                  </button>
+                ))
+              )}
+            </div>
+          )}
         </div>
         <div className="space-y-1">
           <Label className="text-xs">數量（台）</Label>
@@ -342,8 +422,28 @@ export function WorkOrderFormFields({
   workOrderNumber,
   customerDisplayName,
 }: WorkOrderFormFieldsProps) {
+  const [quotePickerOpen, setQuotePickerOpen] = useState(false);
+  const [quoteSearch, setQuoteSearch] = useState("");
+
+  const { data: catalogProducts } = useListProducts({
+    usageType: "engineering_quote",
+    isActive: "true",
+  });
+  const products = catalogProducts ?? [];
 
   const selectedQuote = form.quoteId ? quotes.find(q => q.id === form.quoteId) : undefined;
+
+  const filteredQuotes = useMemo(() => {
+    const q = quoteSearch.trim().toLowerCase();
+    if (!q) return quotes;
+    return quotes.filter((item: any) => {
+      const hay = [item.title, item.customerName, item.id]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return hay.includes(q);
+    });
+  }, [quotes, quoteSearch]);
 
   const linkedCustomer = form.customerId > 0
     ? customers.find((x: any) => x.id === form.customerId)
@@ -508,26 +608,83 @@ export function WorkOrderFormFields({
   return (
     <div className="space-y-4">
 
-      {/* ── 對應報價單 ── */}
+      {/* ── 對應報價單（Popover 獨立捲動，避免 Modal 搶滾輪）── */}
       {showQuoteSelector && (
         <>
           <SectionHeading>對應報價單（選填）</SectionHeading>
           <div className="space-y-1">
             <Label>報價單</Label>
-            <Select
-              value={form.quoteId ? String(form.quoteId) : "__none__"}
-              onValueChange={handleQuoteChange}
-            >
-              <SelectTrigger><SelectValue placeholder="選擇報價單（可不填）" /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__none__">（不連結報價單）</SelectItem>
-                {quotes.map(q => (
-                  <SelectItem key={q.id} value={String(q.id)}>
-                    {q.title}{q.customerName ? ` — ${q.customerName}` : ""}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Popover open={quotePickerOpen} onOpenChange={setQuotePickerOpen} modal>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={quotePickerOpen}
+                  className="h-9 w-full justify-between font-normal"
+                >
+                  <span className="truncate text-left">
+                    {selectedQuote
+                      ? `${selectedQuote.title}${selectedQuote.customerName ? ` — ${selectedQuote.customerName}` : ""}`
+                      : "選擇報價單（可不填）"}
+                  </span>
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent
+                className="z-[200] w-[var(--radix-popover-trigger-width)] p-0"
+                align="start"
+                onOpenAutoFocus={e => e.preventDefault()}
+                onWheel={e => e.stopPropagation()}
+                onTouchMove={e => e.stopPropagation()}
+              >
+                <div className="border-b p-2">
+                  <Input
+                    className="h-8 text-sm"
+                    placeholder="搜尋報價單…"
+                    value={quoteSearch}
+                    onChange={e => setQuoteSearch(e.target.value)}
+                    autoFocus
+                  />
+                </div>
+                <div
+                  className="max-h-[min(50vh,420px)] overflow-y-auto overscroll-contain touch-pan-y"
+                  onWheel={e => e.stopPropagation()}
+                >
+                  <button
+                    type="button"
+                    className="w-full px-3 py-2 text-left text-sm hover:bg-muted/60 border-b"
+                    onClick={() => {
+                      handleQuoteChange("__none__");
+                      setQuotePickerOpen(false);
+                      setQuoteSearch("");
+                    }}
+                  >
+                    （不連結報價單）
+                  </button>
+                  {filteredQuotes.length === 0 ? (
+                    <p className="text-xs text-muted-foreground p-3 text-center">找不到符合的報價單</p>
+                  ) : (
+                    filteredQuotes.map((q: any) => (
+                      <button
+                        key={q.id}
+                        type="button"
+                        className={`w-full px-3 py-2 text-left text-sm hover:bg-muted/60 border-b last:border-b-0 ${
+                          form.quoteId === q.id ? "bg-muted/40 font-medium" : ""
+                        }`}
+                        onClick={() => {
+                          handleQuoteChange(String(q.id));
+                          setQuotePickerOpen(false);
+                          setQuoteSearch("");
+                        }}
+                      >
+                        {q.title}{q.customerName ? ` — ${q.customerName}` : ""}
+                      </button>
+                    ))
+                  )}
+                </div>
+              </PopoverContent>
+            </Popover>
             {form.quoteId && form.customerId > 0 && (
               <p className="text-xs text-muted-foreground">已自動帶入報價單客戶（可更換）</p>
             )}
@@ -688,6 +845,7 @@ export function WorkOrderFormFields({
               key={idx}
               item={item}
               index={idx}
+              products={products}
               canDelete={form.equipmentItems.length > 1}
               onChange={updated => updateEquipmentItem(idx, updated)}
               onDelete={() => removeEquipmentItem(idx)}
