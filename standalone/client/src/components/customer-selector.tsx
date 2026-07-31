@@ -213,6 +213,8 @@ export function CustomerSelector({
     mutation: {
       onSuccess: (c) => {
         qc.invalidateQueries({ queryKey: getListCustomersQueryKey() });
+        qc.invalidateQueries({ queryKey: ["customers", "recent"] });
+        qc.invalidateQueries({ queryKey: ["customers", "search"] });
         onChange(customerToValue(c));
         setCreateOpen(false);
         setCreateForm(emptyCreate());
