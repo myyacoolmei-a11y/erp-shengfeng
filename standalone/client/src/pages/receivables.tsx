@@ -29,6 +29,8 @@ import { Separator } from "@/components/ui/separator";
 import { Plus, Pencil, Trash2, CreditCard, FileText, Bell, Copy, X, Undo2, Printer, ExternalLink, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth, hasRole, userHasFeature } from "@/contexts/auth-context";
+import { openLineShareText } from "@/components/pdf/pdf-service";
+import { SUBSIDY_DISPLAY_COLORS } from "../../../shared/subsidyDocs.ts";
 
 const PAYMENT_STATUSES = ["未收款", "部分收款", "已收款"];
 const PAYMENT_METHODS = ["現金", "銀行轉帳", "支票", "信用卡", "LINE Pay", "其他"];
@@ -60,7 +62,39 @@ type ReceivableSubsidyFields = {
   appliedAt?: string | null;
   canMarkSubsidyApplied?: boolean;
   needsManualReview?: boolean;
+  uploadUrl?: string | null;
+  uploadLinkToken?: string | null;
+  uploadedDocCount?: number | null;
+  customerDocuments?: Array<{
+    id: number;
+    docType: string | null;
+    docTypeLabel?: string | null;
+    fileName: string | null;
+    fileUrl: string | null;
+    status: string;
+    uploadedAt: string | null;
+  }> | null;
 };
+
+function absoluteUploadUrl(path: string | null | undefined): string | null {
+  const p = path?.trim();
+  if (!p) return null;
+  if (p.startsWith("http")) return p;
+  return `${window.location.origin}${p.startsWith("/") ? "" : "/"}${p}`;
+}
+
+function subsidyShareText(item: ReceivableSubsidyFields & { customerName?: string | null; workOrderNumber?: string | null }) {
+  const url = absoluteUploadUrl(item.uploadUrl);
+  const lines = [
+    "【晟風工程】補助資料上傳",
+    `客戶：${item.customerName ?? "—"}`,
+    `案件：${item.workOrderNumber ?? "—"}`,
+  ];
+  if (url) {
+    lines.push("請點此上傳（無需登入）：", url);
+  }
+  return lines.join("\n");
+}
 
 function SubsidyStatusButton({
   item,
@@ -205,6 +239,7 @@ export default function Receivables() {
   const [paymentModal, setPaymentModal] = useState<Receivable | null>(null);
   const [invoiceModal, setInvoiceModal] = useState<Receivable | null>(null);
   const [lineModal, setLineModal] = useState<Receivable | null>(null);
+  const [subsidyDocsItem, setSubsidyDocsItem] = useState<(Receivable & ReceivableSubsidyFields) | null>(null);
   const [reverseItem, setReverseItem] = useState<Receivable | null>(null);
   const [reverseReason, setReverseReason] = useState("");
   const [showCreate, setShowCreate] = useState(false);
@@ -458,6 +493,12 @@ export default function Receivables() {
             const remaining = item.totalAmount - item.receivedAmount;
             const od = overdueDays(item.expectedPaymentDate);
             const isOverdue = od > 0 && item.paymentStatus !== "已收款";
+            const sub = item as Receivable & ReceivableSubsidyFields;
+            const subDisplay = sub.subsidyDisplayStatus;
+            const subColor =
+              (subDisplay && SUBSIDY_DISPLAY_COLORS[subDisplay as keyof typeof SUBSIDY_DISPLAY_COLORS]) ||
+              sub.subsidyDisplayColor ||
+              "bg-gray-100 text-gray-600";
             return (
               <Card key={item.id} className={isOverdue ? "border-red-200" : ""}>
                 <CardContent className="p-3 sm:p-4">
@@ -467,11 +508,17 @@ export default function Receivables() {
                         <span className="font-semibold text-sm truncate">{item.customerName ?? "—"}</span>
                         {item.workOrderNumber && <span className="text-xs text-muted-foreground">#{item.workOrderNumber}</span>}
                         <Badge className={`text-xs px-1.5 py-0 ${STATUS_COLORS[item.paymentStatus] ?? "bg-gray-100 text-gray-700"}`}>
-                          {item.paymentStatus}
+                          收款：{item.paymentStatus}
+                          {!item.expectedPaymentDate && item.paymentStatus === "未收款" ? "／未設定收款日" : ""}
                         </Badge>
                         <Badge className={`text-xs px-1.5 py-0 ${INVOICE_COLORS[item.invoiceStatus] ?? "bg-gray-100 text-gray-600"}`}>
                           發票：{item.invoiceStatus}
                         </Badge>
+                        {sub.subsidyType === "company_assisted" && (
+                          <Badge className={`text-xs px-1.5 py-0 border-0 ${subColor}`}>
+                            補助：{sub.subsidyDisplayLabel ?? "補助申請中"}
+                          </Badge>
+                        )}
                       </div>
                       {item.projectName && <p className="text-xs text-muted-foreground mb-1">{item.projectName}{item.projectType ? ` · ${item.projectType}` : ""}</p>}
                       <div className="grid grid-cols-3 gap-x-3 gap-y-0.5 text-xs mt-1">
@@ -510,11 +557,59 @@ export default function Receivables() {
                       <Bell className="h-3 w-3 mr-1" />LINE 提醒
                     </Button>
                     <SubsidyStatusButton
-                      item={item as ReceivableSubsidyFields}
+                      item={sub}
                       disabled={!canWrite || updateMutation.isPending}
                       onToggle={(next) => updateMutation.mutate({ id: item.id, data: { subsidyStatus: next } })}
-                      onViewIncomplete={() => setViewItem(item)}
+                      onViewIncomplete={() => setSubsidyDocsItem(sub)}
                     />
+                    {sub.subsidyType === "company_assisted" && (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs px-2"
+                          onClick={() => setSubsidyDocsItem(sub)}
+                        >
+                          查看補助資料
+                          {(sub.uploadedDocCount ?? 0) > 0 ? `（${sub.uploadedDocCount}）` : ""}
+                        </Button>
+                        {sub.uploadUrl && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs px-2"
+                            onClick={() => {
+                              const url = absoluteUploadUrl(sub.uploadUrl);
+                              if (!url) return;
+                              void navigator.clipboard.writeText(url).then(
+                                () => toast({ title: "已複製上傳網址" }),
+                                () => toast({ title: "複製失敗", variant: "destructive" }),
+                              );
+                            }}
+                          >
+                            <Copy className="h-3 w-3 mr-1" />複製上傳網址
+                          </Button>
+                        )}
+                        {sub.uploadUrl && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs px-2"
+                            onClick={() => {
+                              const text = subsidyShareText(sub);
+                              const win = openLineShareText(text);
+                              if (!win) {
+                                void navigator.clipboard.writeText(text).then(() =>
+                                  toast({ title: "已複製分享內容", description: "請貼到 LINE" }),
+                                );
+                              }
+                            }}
+                          >
+                            LINE 傳送上傳網址
+                          </Button>
+                        )}
+                      </>
+                    )}
                     {canWrite && (
                       <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => openEdit(item)}>
                         <Pencil className="h-3 w-3" />
@@ -767,6 +862,62 @@ export default function Receivables() {
       )}
 
       {/* Delete confirm */}
+      <Dialog open={!!subsidyDocsItem} onOpenChange={(open) => { if (!open) setSubsidyDocsItem(null); }}>
+        <DialogContent className="max-w-md w-[calc(100vw-1.5rem)]">
+          <DialogHeader>
+            <DialogTitle>補助資料</DialogTitle>
+          </DialogHeader>
+          {subsidyDocsItem && (
+            <div className="space-y-3 text-sm">
+              <p className="text-xs text-muted-foreground">
+                {subsidyDocsItem.customerName} · {subsidyDocsItem.workOrderNumber ?? "—"}
+              </p>
+              <Badge className={`border-0 ${subsidyDocsItem.subsidyDisplayColor ?? "bg-gray-100 text-gray-600"}`}>
+                {subsidyDocsItem.subsidyDisplayLabel ?? "—"}
+              </Badge>
+              {(subsidyDocsItem.missingDocLabels?.length ?? 0) > 0 && (
+                <p className="text-xs text-orange-800">缺少：{subsidyDocsItem.missingDocLabels!.join("、")}</p>
+              )}
+              {(subsidyDocsItem.customerDocuments?.length ?? 0) === 0 ? (
+                <p className="text-muted-foreground text-center py-4">尚無客戶上傳紀錄</p>
+              ) : (
+                <ul className="space-y-2">
+                  {subsidyDocsItem.customerDocuments!.map((d) => (
+                    <li key={d.id} className="rounded-md border p-2">
+                      <p className="font-medium">{d.docTypeLabel || d.fileName || d.docType || "文件"}</p>
+                      {d.uploadedAt && (
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(d.uploadedAt).toLocaleString("zh-TW")}
+                        </p>
+                      )}
+                      {d.fileUrl && (
+                        <a href={d.fileUrl} target="_blank" rel="noreferrer" className="text-xs text-primary underline">
+                          預覽／下載
+                        </a>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setSubsidyDocsItem(null)}>關閉</Button>
+                {subsidyDocsItem.uploadUrl && (
+                  <Button
+                    onClick={() => {
+                      const url = absoluteUploadUrl(subsidyDocsItem.uploadUrl);
+                      if (!url) return;
+                      void navigator.clipboard.writeText(url).then(() => toast({ title: "已複製上傳網址" }));
+                    }}
+                  >
+                    複製上傳網址
+                  </Button>
+                )}
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
       <AlertDialog open={!!deleteId} onOpenChange={open => { if (!open) setDeleteId(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>

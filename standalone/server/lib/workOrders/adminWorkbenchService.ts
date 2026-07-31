@@ -117,6 +117,121 @@ async function transitionAdminStatus(opts: {
   });
 }
 
+/**
+ * After construction complete → admin handoff:
+ * - ensure receivable exists (idempotent; never duplicate)
+ * - if case needs subsidy, ensure subsidy_applications row at link_not_sent
+ *   without resetting an existing pipeline / token / attachments
+ */
+export async function syncAdminHandoffAfterConstructionComplete(
+  workOrderId: number,
+  user: JwtPayload,
+): Promise<{
+  receivableId: number | null;
+  receivableCreated: boolean;
+  subsidyEnsured: boolean;
+  subsidyCreated: boolean;
+}> {
+  const [wo] = await db.select().from(workOrdersTable).where(eq(workOrdersTable.id, workOrderId)).limit(1);
+  if (!wo) {
+    return { receivableId: null, receivableCreated: false, subsidyEnsured: false, subsidyCreated: false };
+  }
+
+  let receivableId: number | null = null;
+  let receivableCreated = false;
+
+  if (wo.customerId) {
+    const [existingRecv] = await db
+      .select()
+      .from(receivablesTable)
+      .where(eq(receivablesTable.workOrderId, workOrderId))
+      .limit(1);
+
+    if (existingRecv) {
+      receivableId = existingRecv.id;
+    } else {
+      const [quote] = wo.quoteId
+        ? await db.select().from(quotesTable).where(eq(quotesTable.id, wo.quoteId)).limit(1)
+        : [null];
+      const billing = (wo.adminBillingInfo ?? {}) as AdminBillingInfo;
+      const quoteAmount = num(quote?.finalAmount ?? quote?.amount);
+      const billedAmount = num(billing.finalAmount);
+      const total = billedAmount > 0 ? billedAmount : quoteAmount;
+
+      // Create draft AR so the case appears on 收款／應收帳款 immediately.
+      // Amount may be 0 when quote missing — admin can correct via mark-billed.
+      const [created] = await db
+        .insert(receivablesTable)
+        .values({
+          customerId: wo.customerId,
+          workOrderId: wo.id,
+          workOrderNumber: wo.workOrderNumber,
+          projectName: wo.title,
+          projectType: wo.projectType,
+          completionDate: wo.completedDate ?? taipeiDateString(new Date()),
+          totalAmount: moneyStr(Math.max(0, total)),
+          receivedAmount: "0",
+          paymentStatus: "未收款",
+          expectedPaymentDate: billing.expectedPaymentDate ?? null,
+          invoiceTitle: billing.billTo ?? wo.customerName,
+          subsidyStatus: "未申請補助",
+          notes: "施工完成自動建立應收（與補助流程並行）",
+        })
+        .returning();
+      receivableId = created.id;
+      receivableCreated = true;
+
+      await writeAuditLog({
+        action: "admin_workflow.auto_receivable_on_complete",
+        entityType: "work_order",
+        entityId: workOrderId,
+        user,
+        metadata: { receivableId: created.id, totalAmount: created.totalAmount },
+      });
+    }
+  }
+
+  const [existingSub] = await db
+    .select()
+    .from(subsidyApplicationsTable)
+    .where(eq(subsidyApplicationsTable.workOrderId, workOrderId))
+    .limit(1);
+
+  const needsSubsidy =
+    wo.adminNeedsSubsidy === true || existingSub?.subsidyType === "company_assisted";
+
+  let subsidyEnsured = false;
+  let subsidyCreated = false;
+
+  if (needsSubsidy) {
+    const beforeId = existingSub?.id ?? null;
+    const sub = await ensureCompanyAssistedSubsidy(workOrderId, wo.customerId, user);
+    subsidyEnsured = true;
+    subsidyCreated = beforeId == null;
+
+    if (!wo.adminNeedsSubsidy) {
+      await db
+        .update(workOrdersTable)
+        .set({ adminNeedsSubsidy: true, updatedAt: new Date() })
+        .where(eq(workOrdersTable.id, workOrderId));
+    }
+
+    await writeAuditLog({
+      action: "admin_workflow.auto_subsidy_on_complete",
+      entityType: "work_order",
+      entityId: workOrderId,
+      user,
+      metadata: {
+        subsidyApplicationId: sub.id,
+        subsidyCreated,
+        pipelineStatus: sub.pipelineStatus,
+      },
+    });
+  }
+
+  return { receivableId, receivableCreated, subsidyEnsured, subsidyCreated };
+}
+
 export async function setPendingAdminReviewOnComplete(
   workOrderId: number,
   user: JwtPayload,
@@ -131,13 +246,23 @@ export async function setPendingAdminReviewOnComplete(
     .limit(1);
   if (!wo) return;
 
-  await transitionAdminStatus({
-    workOrderId,
-    from: wo.adminWorkflowStatus,
-    to: "pending_admin_review",
-    user,
-    note: "工程師施工完成，進入待確認施工資料",
-  });
+  // Idempotent: if already in admin flow past review, do not bounce back to pending_admin_review
+  const current = normalizeAdminWorkflowStatus(wo.adminWorkflowStatus);
+  if (
+    !current ||
+    current === "pending_admin_review"
+  ) {
+    await transitionAdminStatus({
+      workOrderId,
+      from: wo.adminWorkflowStatus,
+      to: "pending_admin_review",
+      user,
+      note: "工程師施工完成，進入待確認施工資料",
+    });
+  }
+
+  // Receivable + subsidy todos in parallel (no payment prerequisite)
+  await syncAdminHandoffAfterConstructionComplete(workOrderId, user);
 }
 
 function canCloseCase(input: {
@@ -687,6 +812,9 @@ export async function confirmAdminCompletion(
       ),
     );
 
+  // Idempotent handoff sync (receivable + subsidy if needed) — safe if already done on complete
+  await syncAdminHandoffAfterConstructionComplete(workOrderId, user);
+
   return { ok: true };
 }
 
@@ -823,11 +951,38 @@ async function ensureCompanyAssistedSubsidy(
     .where(eq(subsidyApplicationsTable.workOrderId, workOrderId))
     .limit(1);
   if (existing) {
+    // Never reset pipelineStatus / tokens / attachments — only fill missing essentials.
+    const patch: Partial<typeof subsidyApplicationsTable.$inferInsert> = {
+      updatedAt: new Date(),
+    };
+    let needsPatch = false;
     if (existing.subsidyType !== "company_assisted") {
-      await db
+      patch.subsidyType = "company_assisted";
+      needsPatch = true;
+      // First time becoming company_assisted with no real progress → start at link_not_sent
+      // but do not downgrade an already-advanced pipeline.
+      if (
+        !existing.pipelineStatus ||
+        existing.pipelineStatus === "link_not_sent"
+      ) {
+        patch.pipelineStatus = "link_not_sent";
+      }
+    }
+    if (!existing.uploadLinkToken) {
+      patch.uploadLinkToken = randomBytes(16).toString("hex");
+      needsPatch = true;
+    }
+    if (customerId != null && existing.customerId == null) {
+      patch.customerId = customerId;
+      needsPatch = true;
+    }
+    if (needsPatch) {
+      const [updated] = await db
         .update(subsidyApplicationsTable)
-        .set({ subsidyType: "company_assisted", updatedAt: new Date() })
-        .where(eq(subsidyApplicationsTable.id, existing.id));
+        .set(patch)
+        .where(eq(subsidyApplicationsTable.id, existing.id))
+        .returning();
+      return updated;
     }
     return existing;
   }

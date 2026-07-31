@@ -29,6 +29,7 @@ import {
   advanceSubsidyPipeline,
   unmarkSubsidyApplied,
 } from "../lib/workOrders/adminWorkbenchService.ts";
+import { subsidyPublicUploadPath } from "../lib/subsidy/subsidyPublicHtml.ts";
 
 const router: IRouter = Router();
 router.use("/receivables", requireFeature("receivables"));
@@ -77,6 +78,11 @@ function enrichReceivableSubsidy(
         ? "未申請補助"
         : "未申請補助";
 
+  const uploadUrl =
+    sub?.uploadLinkToken != null && sub.uploadLinkToken !== ""
+      ? subsidyPublicUploadPath(sub.uploadLinkToken)
+      : null;
+
   return {
     ...fmt(row),
     // Prefer pipeline-derived display; keep subsidyStatus for legacy clients
@@ -93,6 +99,20 @@ function enrichReceivableSubsidy(
     needsManualReview: !!meta.needsManualReview,
     aiTips: meta.aiTips ?? [],
     canMarkSubsidyApplied: displayStatus === "docs_complete",
+    uploadUrl,
+    uploadLinkToken: sub?.uploadLinkToken ?? null,
+    customerDocuments: activeDocs.slice(0, 40).map((d) => ({
+      id: d.id,
+      docType: d.docType,
+      docTypeLabel:
+        d.docType && d.docType in SUBSIDY_DOC_TYPE_LABELS
+          ? SUBSIDY_DOC_TYPE_LABELS[d.docType as SubsidyDocType]
+          : d.docType,
+      fileName: d.fileName,
+      fileUrl: d.fileUrl,
+      status: d.status,
+      uploadedAt: d.uploadedAt?.toISOString() ?? null,
+    })),
   };
 }
 
