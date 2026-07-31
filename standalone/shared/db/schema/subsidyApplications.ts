@@ -2,7 +2,11 @@ import { pgTable, text, serial, integer, timestamp, uniqueIndex } from "drizzle-
 import { workOrdersTable } from "./workOrders";
 import { customersTable } from "./customers";
 import { usersTable } from "./users";
-import type { SubsidyPipelineStatus, SubsidyType } from "../../adminWorkflowConstants";
+import type {
+  AssistedProgram,
+  SubsidyPipelineStatus,
+  SubsidyType,
+} from "../../adminWorkflowConstants";
 
 /** Company-assisted subsidy pipeline — independent of payment. */
 export const subsidyApplicationsTable = pgTable(
@@ -13,9 +17,18 @@ export const subsidyApplicationsTable = pgTable(
       .notNull()
       .references(() => workOrdersTable.id, { onDelete: "cascade" }),
     customerId: integer("customer_id").references(() => customersTable.id, { onDelete: "set null" }),
-    /** none | company_assisted */
-    subsidyType: text("subsidy_type").$type<SubsidyType>().notNull().default("none"),
-    /** link_not_sent → … → applied */
+    /**
+     * Handling method:
+     * pending_confirmation | not_needed | customer_self_apply | company_assisted
+     * Legacy: none
+     */
+    subsidyType: text("subsidy_type").$type<SubsidyType>().notNull().default("pending_confirmation"),
+    /**
+     * Only when subsidy_type = company_assisted:
+     * new_unit | trade_in | null (unset — do not auto-fill for legacy rows)
+     */
+    assistedProgram: text("assisted_program").$type<AssistedProgram | null>(),
+    /** link_not_sent → … → applied (company_assisted flow) */
     pipelineStatus: text("pipeline_status")
       .$type<SubsidyPipelineStatus>()
       .notNull()

@@ -7,14 +7,16 @@ import {
   workOrdersTable,
 } from "@workspace/db";
 import {
+  ALL_SUBSIDY_DOC_TYPES,
   ALLOWED_SUBSIDY_UPLOAD_MIME,
-  COMPANY_ASSISTED_REQUIRED_DOC_TYPES,
   SUBSIDY_DOC_TYPE_LABELS,
   SUBSIDY_UPLOAD_TOKEN_TTL_DAYS,
   missingRequiredDocs,
   parseSubsidyMeta,
+  requiredDocTypesForAssistedProgram,
   type SubsidyDocType,
 } from "../../shared/subsidyDocs.ts";
+import { normalizeAssistedProgram } from "../../shared/adminWorkflowConstants.ts";
 import {
   mergeMetaAfterCheck,
   runSubsidyCompletenessCheck,
@@ -71,10 +73,12 @@ async function recomputeAndSave(subId: number, workOrderId: number) {
     .where(eq(customerDocumentsTable.subsidyApplicationId, subId));
 
   const { meta, freeNote } = parseSubsidyMeta(sub.note);
+  const program = normalizeAssistedProgram(sub.assistedProgram);
   let check;
   try {
     check = runSubsidyCompletenessCheck({
       subsidyType: "company_assisted",
+      assistedProgram: program,
       docs,
       prevMeta: meta,
     });
@@ -84,6 +88,7 @@ async function recomputeAndSave(subId: number, workOrderId: number) {
       missingDocs: missingRequiredDocs(
         "company_assisted",
         docs.map((d) => d.docType),
+        program,
       ),
       missingLabels: [] as string[],
       fileIssues: [] as string[],
@@ -137,9 +142,12 @@ router.get("/public/subsidy-upload/:token", async (req, res): Promise<void> => {
     }
     const { sub, wo, docs } = loaded;
     const { meta } = parseSubsidyMeta(sub.note);
+    const program = normalizeAssistedProgram(sub.assistedProgram);
+    const requiredDocs = requiredDocTypesForAssistedProgram(program);
     const missing = missingRequiredDocs(
       "company_assisted",
       docs.filter((d) => d.status !== "rejected").map((d) => d.docType),
+      program,
     );
     res
       .status(200)
@@ -150,9 +158,12 @@ router.get("/public/subsidy-upload/:token", async (req, res): Promise<void> => {
           caseNo: wo.workOrderNumber || `#${wo.id}`,
           customerName: wo.customerName || "客戶",
           docs,
+          requiredDocs,
           missing,
           aiTips: meta.aiTips ?? [],
           pipeline: sub.pipelineStatus,
+          programLabel:
+            program === "trade_in" ? "舊換新補助" : program === "new_unit" ? "新機補助" : "公司協助補助",
         }),
       );
   } catch (err: any) {
@@ -175,16 +186,20 @@ router.get("/public/subsidy-upload/:token/status", async (req, res): Promise<voi
     }
     const { sub, wo, docs } = loaded;
     const { meta } = parseSubsidyMeta(sub.note);
+    const program = normalizeAssistedProgram(sub.assistedProgram);
+    const required = requiredDocTypesForAssistedProgram(program);
     const missing = missingRequiredDocs(
       "company_assisted",
       docs.filter((d) => d.status !== "rejected").map((d) => d.docType),
+      program,
     );
     res.json({
       success: true,
       caseNo: wo.workOrderNumber,
       customerName: wo.customerName,
       pipelineStatus: sub.pipelineStatus,
-      requiredDocs: COMPANY_ASSISTED_REQUIRED_DOC_TYPES.map((t) => ({
+      assistedProgram: program,
+      requiredDocs: required.map((t) => ({
         type: t,
         label: SUBSIDY_DOC_TYPE_LABELS[t],
       })),
@@ -226,8 +241,19 @@ router.post("/public/subsidy-upload/:token", async (req, res): Promise<void> => 
     const fileName = String(req.body?.fileName ?? "upload").slice(0, 200);
     const dataUrl = String(req.body?.dataUrl ?? "");
 
-    if (!(COMPANY_ASSISTED_REQUIRED_DOC_TYPES as readonly string[]).includes(docType)) {
-      res.status(400).json({ success: false, message: "不支援的文件類型" });
+    const program = normalizeAssistedProgram(loaded.sub.assistedProgram);
+    const allowedForCase = requiredDocTypesForAssistedProgram(program);
+    const allowed =
+      allowedForCase.length > 0
+        ? allowedForCase
+        : (ALL_SUBSIDY_DOC_TYPES as readonly string[]);
+    if (!(allowed as readonly string[]).includes(docType)) {
+      res.status(400).json({
+        success: false,
+        message: program
+          ? "此補助方案不需要此文件類型"
+          : "行政尚未選定新機／舊換新方案，暫無法上傳",
+      });
       return;
     }
     if (!dataUrl.startsWith("data:") || !dataUrl.includes(",")) {
@@ -315,15 +341,22 @@ function uploadPageHtml(opts: {
   caseNo: string;
   customerName: string;
   docs: Array<{ id: number; docType: string; fileName: string | null; status: string; uploadedAt: Date | null }>;
+  requiredDocs: SubsidyDocType[];
   missing: SubsidyDocType[];
   aiTips: string[];
   pipeline: string;
+  programLabel: string;
 }) {
   const uploadedTypes = new Set(opts.docs.filter((d) => d.status !== "rejected").map((d) => d.docType));
-  const rows = COMPANY_ASSISTED_REQUIRED_DOC_TYPES.map((t) => {
-    const label = SUBSIDY_DOC_TYPE_LABELS[t];
-    const done = uploadedTypes.has(t);
-    return `<div class="card" data-type="${t}">
+  const docList = opts.requiredDocs.length > 0 ? opts.requiredDocs : [];
+  const rows =
+    docList.length === 0
+      ? `<p class="warn">行政尚未選定補助方案文件清單，請稍後再上傳。</p>`
+      : docList
+          .map((t) => {
+            const label = SUBSIDY_DOC_TYPE_LABELS[t];
+            const done = uploadedTypes.has(t);
+            return `<div class="card" data-type="${t}">
       <div class="row"><strong>${escHtml(label)}</strong>
         <span class="badge ${done ? "ok" : "miss"}">${done ? "已上傳" : "未上傳"}</span>
       </div>
@@ -331,12 +364,15 @@ function uploadPageHtml(opts: {
       <button type="button" class="btn" data-upload="${t}" ${opts.pipeline === "applied" ? "disabled" : ""}>上傳</button>
       <p class="msg" hidden></p>
     </div>`;
-  }).join("");
+          })
+          .join("");
 
   const missList =
-    opts.missing.length === 0
-      ? "<p class='ok'>目前必填文件皆已上傳（仍可能需行政確認）。</p>"
-      : `<p class="warn">尚缺：${opts.missing.map((t) => escHtml(SUBSIDY_DOC_TYPE_LABELS[t])).join("、")}</p>`;
+    docList.length === 0
+      ? ""
+      : opts.missing.length === 0
+        ? "<p class='ok'>目前必填文件皆已上傳（仍可能需行政確認）。</p>"
+        : `<p class="warn">尚缺：${opts.missing.map((t) => escHtml(SUBSIDY_DOC_TYPE_LABELS[t])).join("、")}</p>`;
 
   const tips =
     opts.aiTips.length > 0
@@ -366,7 +402,7 @@ h1{font-size:1.25rem;margin:0 0 4px} .sub{color:#666;font-size:.875rem;margin-bo
 <body>
 <div class="wrap">
   <h1>補助資料上傳</h1>
-  <p class="sub">晟風工程｜${escHtml(opts.customerName)}｜案件 ${escHtml(opts.caseNo)}<br/>此頁僅供本案件上傳，無需登入。</p>
+  <p class="sub">晟風工程｜${escHtml(opts.customerName)}｜案件 ${escHtml(opts.caseNo)}｜${escHtml(opts.programLabel)}<br/>此頁僅供本案件上傳，無需登入。</p>
   ${missList}
   ${tips}
   ${rows}

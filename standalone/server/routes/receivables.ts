@@ -16,15 +16,19 @@ import {
 } from "../lib/receivables/receivablePaymentService.ts";
 import {
   SUBSIDY_DISPLAY_COLORS,
-  SUBSIDY_DISPLAY_LABELS,
   SUBSIDY_DOC_TYPE_LABELS,
   missingRequiredDocs,
   parseSubsidyMeta,
   resolveSubsidyDisplayStatus,
+  subsidyCombinedStatusLabel,
   type SubsidyDocType,
   type SubsidyDisplayStatus,
 } from "../../shared/subsidyDocs.ts";
-import type { SubsidyPipelineStatus, SubsidyType } from "../../shared/adminWorkflowConstants.ts";
+import type {
+  AssistedProgram,
+  SubsidyPipelineStatus,
+  SubsidyType,
+} from "../../shared/adminWorkflowConstants.ts";
 import {
   advanceSubsidyPipeline,
   unmarkSubsidyApplied,
@@ -56,13 +60,14 @@ function enrichReceivableSubsidy(
   sub: typeof subsidyApplicationsTable.$inferSelect | null | undefined,
   docs: Array<typeof customerDocumentsTable.$inferSelect>,
 ) {
-  const subsidyType: SubsidyType =
-    sub?.subsidyType === "company_assisted" ? "company_assisted" : "none";
+  const subsidyType = (sub?.subsidyType ?? null) as SubsidyType | null;
+  const assistedProgram = (sub?.assistedProgram ?? null) as AssistedProgram | null;
   const pipeline = (sub?.pipelineStatus ?? null) as SubsidyPipelineStatus | null;
   const activeDocs = docs.filter((d) => d.status !== "rejected" && d.docType !== "subsidy");
   const missingDocs = missingRequiredDocs(
     subsidyType,
     activeDocs.map((d) => d.docType),
+    assistedProgram,
   );
   const { meta } = parseSubsidyMeta(sub?.note);
   const displayStatus: SubsidyDisplayStatus = resolveSubsidyDisplayStatus({
@@ -70,27 +75,31 @@ function enrichReceivableSubsidy(
     pipeline,
     missingDocs,
     needsManualReview: !!meta.needsManualReview,
+    assistedProgram,
   });
-  const legacy =
-    displayStatus === "applied"
-      ? "已申請補助"
-      : subsidyType === "none"
-        ? "未申請補助"
-        : "未申請補助";
+  const subsidyDisplayLabel = subsidyCombinedStatusLabel({
+    subsidyType,
+    assistedProgram,
+    displayStatus,
+    pipeline,
+  });
+  const legacy = displayStatus === "applied" ? "已申請補助" : "未申請補助";
 
   const uploadUrl =
-    sub?.uploadLinkToken != null && sub.uploadLinkToken !== ""
+    sub?.uploadLinkToken != null &&
+    sub.uploadLinkToken !== "" &&
+    subsidyType === "company_assisted"
       ? subsidyPublicUploadPath(sub.uploadLinkToken)
       : null;
 
   return {
     ...fmt(row),
-    // Prefer pipeline-derived display; keep subsidyStatus for legacy clients
     subsidyStatus: displayStatus === "applied" ? "已申請補助" : (row.subsidyStatus as string) || legacy,
     subsidyType,
+    assistedProgram,
     subsidyPipelineStatus: pipeline,
     subsidyDisplayStatus: displayStatus,
-    subsidyDisplayLabel: SUBSIDY_DISPLAY_LABELS[displayStatus],
+    subsidyDisplayLabel,
     subsidyDisplayColor: SUBSIDY_DISPLAY_COLORS[displayStatus],
     missingDocs,
     missingDocLabels: missingDocs.map((t) => SUBSIDY_DOC_TYPE_LABELS[t as SubsidyDocType] ?? t),
@@ -100,7 +109,7 @@ function enrichReceivableSubsidy(
     aiTips: meta.aiTips ?? [],
     canMarkSubsidyApplied: displayStatus === "docs_complete",
     uploadUrl,
-    uploadLinkToken: sub?.uploadLinkToken ?? null,
+    uploadLinkToken: subsidyType === "company_assisted" ? sub?.uploadLinkToken ?? null : null,
     customerDocuments: activeDocs.slice(0, 40).map((d) => ({
       id: d.id,
       docType: d.docType,

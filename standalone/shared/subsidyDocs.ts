@@ -1,30 +1,62 @@
 /**
  * Company-assisted subsidy document checklist + display helpers.
- * Uses existing pipeline statuses — does NOT add DB enum values.
+ * Document requirements are centralized here — do not hardcode lists in pages.
  */
 
-import type { SubsidyPipelineStatus, SubsidyType } from "./adminWorkflowConstants.ts";
-import { SUBSIDY_PIPELINE_LABELS, SUBSIDY_TYPE_LABELS } from "./adminWorkflowConstants.ts";
+import type {
+  AssistedProgram,
+  SubsidyPipelineStatus,
+  SubsidyType,
+} from "./adminWorkflowConstants.ts";
+import {
+  ASSISTED_PROGRAM_LABELS,
+  SUBSIDY_PIPELINE_LABELS,
+  SUBSIDY_TYPE_LABELS,
+} from "./adminWorkflowConstants.ts";
 
-/** Doc types for company_assisted cases (business default). */
-export const COMPANY_ASSISTED_REQUIRED_DOC_TYPES = [
+/** Common required docs for 新機補助 (no utility bill / scrap form). */
+export const NEW_UNIT_REQUIRED_DOC_TYPES = [
   "id_front",
   "id_back",
-  "utility_bill",
   "invoice",
   "warranty",
   "bank_book",
 ] as const;
 
-export type SubsidyDocType = (typeof COMPANY_ASSISTED_REQUIRED_DOC_TYPES)[number];
+/** 舊換新 = 新機共通 + 電費單 + 廢四機回收聯單 */
+export const TRADE_IN_REQUIRED_DOC_TYPES = [
+  ...NEW_UNIT_REQUIRED_DOC_TYPES,
+  "utility_bill",
+  "scrap_recycle_form",
+] as const;
+
+/** All uploadable subsidy doc types (union). */
+export const ALL_SUBSIDY_DOC_TYPES = [
+  "id_front",
+  "id_back",
+  "invoice",
+  "warranty",
+  "bank_book",
+  "utility_bill",
+  "scrap_recycle_form",
+] as const;
+
+export type SubsidyDocType = (typeof ALL_SUBSIDY_DOC_TYPES)[number];
+
+/**
+ * @deprecated Prefer requiredDocTypesForAssistedProgram.
+ * Kept as the full union for upload-type allowlists.
+ */
+export const COMPANY_ASSISTED_REQUIRED_DOC_TYPES = ALL_SUBSIDY_DOC_TYPES;
 
 export const SUBSIDY_DOC_TYPE_LABELS: Record<SubsidyDocType, string> = {
   id_front: "身分證正面",
   id_back: "身分證反面",
-  utility_bill: "電費單",
   invoice: "發票",
   warranty: "保固書",
   bank_book: "客戶帳戶／存摺封面",
+  utility_bill: "電費單",
+  scrap_recycle_form: "廢四機回收聯單",
 };
 
 export const ALLOWED_SUBSIDY_UPLOAD_MIME = [
@@ -37,28 +69,40 @@ export const ALLOWED_SUBSIDY_UPLOAD_MIME = [
 ] as const;
 
 export type SubsidyDisplayStatus =
+  | "pending_confirmation"
+  | "not_needed"
+  | "customer_self_apply"
   | "not_applicable"
   | "link_not_sent"
   | "awaiting_upload"
   | "docs_incomplete"
   | "awaiting_manual_review"
   | "docs_complete"
-  | "applied";
+  | "applied"
+  | "no_record";
 
 export const SUBSIDY_DISPLAY_LABELS: Record<SubsidyDisplayStatus, string> = {
+  pending_confirmation: "待確認補助方式",
+  not_needed: "不需申請",
+  customer_self_apply: "客戶自行申請",
   not_applicable: "不適用補助",
-  link_not_sent: "待傳送上傳網址",
+  no_record: "尚無補助紀錄",
+  link_not_sent: "待傳送補助資料連結",
   awaiting_upload: "等待客戶上傳",
-  docs_incomplete: "資料不完整",
+  docs_incomplete: "客戶資料待補件",
   awaiting_manual_review: "等待人工確認",
-  docs_complete: "補助資料完整",
+  docs_complete: "補助資料已齊，可進行申請",
   applied: "補助申請已完成",
 };
 
 /** Tailwind badge classes — reuse existing palette tokens. */
 export const SUBSIDY_DISPLAY_COLORS: Record<SubsidyDisplayStatus, string> = {
+  pending_confirmation: "bg-gray-100 text-gray-600",
+  not_needed: "bg-gray-100 text-gray-600",
+  customer_self_apply: "bg-slate-100 text-slate-700",
   not_applicable: "bg-gray-100 text-gray-600",
-  link_not_sent: "bg-gray-100 text-gray-700",
+  no_record: "bg-gray-50 text-gray-500",
+  link_not_sent: "bg-blue-100 text-blue-700",
   awaiting_upload: "bg-blue-100 text-blue-700",
   docs_incomplete: "bg-orange-100 text-orange-800",
   awaiting_manual_review: "bg-yellow-100 text-yellow-800",
@@ -100,18 +144,29 @@ export function serializeSubsidyMeta(freeNote: string, meta: SubsidyMeta): strin
   return base ? `${base}\n${payload}` : payload;
 }
 
-export function requiredDocTypesForSubsidy(subsidyType: SubsidyType | null | undefined): SubsidyDocType[] {
-  if (subsidyType === "company_assisted") {
-    return [...COMPANY_ASSISTED_REQUIRED_DOC_TYPES];
-  }
+export function requiredDocTypesForAssistedProgram(
+  program: AssistedProgram | null | undefined,
+): SubsidyDocType[] {
+  if (program === "trade_in") return [...TRADE_IN_REQUIRED_DOC_TYPES];
+  if (program === "new_unit") return [...NEW_UNIT_REQUIRED_DOC_TYPES];
+  // company_assisted without program yet — no checklist until admin selects
   return [];
+}
+
+export function requiredDocTypesForSubsidy(
+  subsidyType: SubsidyType | null | undefined,
+  assistedProgram?: AssistedProgram | null,
+): SubsidyDocType[] {
+  if (subsidyType !== "company_assisted") return [];
+  return requiredDocTypesForAssistedProgram(assistedProgram);
 }
 
 export function missingRequiredDocs(
   subsidyType: SubsidyType | null | undefined,
   uploadedDocTypes: Array<string | null | undefined>,
+  assistedProgram?: AssistedProgram | null,
 ): SubsidyDocType[] {
-  const required = requiredDocTypesForSubsidy(subsidyType);
+  const required = requiredDocTypesForSubsidy(subsidyType, assistedProgram);
   const have = new Set(
     uploadedDocTypes
       .map((t) => String(t ?? "").trim())
@@ -125,19 +180,64 @@ export function resolveSubsidyDisplayStatus(input: {
   pipeline: SubsidyPipelineStatus | null | undefined;
   missingDocs: string[];
   needsManualReview?: boolean;
+  assistedProgram?: AssistedProgram | null;
 }): SubsidyDisplayStatus {
-  if (!input.subsidyType || input.subsidyType === "none") return "not_applicable";
+  if (!input.subsidyType) return "no_record";
+  if (input.subsidyType === "pending_confirmation") return "pending_confirmation";
+  if (input.subsidyType === "not_needed") return "not_needed";
+  if (input.subsidyType === "customer_self_apply") return "customer_self_apply";
+  if (input.subsidyType === "none") return "not_applicable";
+
+  // company_assisted — pipeline drives status
   if (input.pipeline === "applied") return "applied";
   if (input.pipeline === "link_not_sent" || !input.pipeline) return "link_not_sent";
   if (input.pipeline === "awaiting_upload") return "awaiting_upload";
   if (input.pipeline === "docs_complete" || input.pipeline === "pending_apply") {
     return "docs_complete";
   }
-  // docs_incomplete (or unknown)
   if (input.needsManualReview && input.missingDocs.length === 0) {
     return "awaiting_manual_review";
   }
   return "docs_incomplete";
+}
+
+/** Combined label for receivables / cards: handling + program + pipeline. */
+export function subsidyCombinedStatusLabel(input: {
+  subsidyType: SubsidyType | null | undefined;
+  assistedProgram?: AssistedProgram | null;
+  displayStatus: SubsidyDisplayStatus;
+  pipeline?: SubsidyPipelineStatus | null;
+}): string {
+  const { subsidyType, assistedProgram, displayStatus, pipeline } = input;
+  if (subsidyType === "company_assisted") {
+    const prog =
+      assistedProgram != null ? ASSISTED_PROGRAM_LABELS[assistedProgram] : null;
+    if (displayStatus === "applied") {
+      return prog ? `公司協助－${prog}｜補助已完成` : "補助已完成";
+    }
+    if (displayStatus === "docs_complete") {
+      return prog
+        ? `公司協助－${prog}｜補助資料已齊`
+        : "補助資料已齊，可進行申請";
+    }
+    if (displayStatus === "link_not_sent") {
+      return prog ? `公司協助－${prog}｜待傳送連結` : "待傳送補助資料連結";
+    }
+    if (displayStatus === "awaiting_upload") {
+      return prog ? `公司協助－${prog}｜等待客戶上傳` : "等待客戶上傳";
+    }
+    if (displayStatus === "docs_incomplete") {
+      return prog ? `公司協助－${prog}｜待補件` : "客戶資料待補件";
+    }
+    if (displayStatus === "awaiting_manual_review") {
+      return prog ? `公司協助－${prog}｜等待人工確認` : "等待人工確認";
+    }
+    return prog ? `公司協助－${prog}` : SUBSIDY_TYPE_LABELS.company_assisted;
+  }
+  if (displayStatus === "docs_complete" && pipeline === "pending_apply") {
+    return "補助資料已齊，可進行申請";
+  }
+  return SUBSIDY_DISPLAY_LABELS[displayStatus];
 }
 
 export function subsidyDisplayLabel(
@@ -145,7 +245,7 @@ export function subsidyDisplayLabel(
   pipeline?: SubsidyPipelineStatus | null,
 ): string {
   if (status === "docs_complete" && pipeline === "pending_apply") {
-    return "補助資料完整（可申請）";
+    return "補助資料已齊，可進行申請";
   }
   return SUBSIDY_DISPLAY_LABELS[status];
 }
@@ -156,7 +256,7 @@ export function pipelineLabel(pipeline: SubsidyPipelineStatus | null | undefined
 }
 
 export function typeLabel(t: SubsidyType | null | undefined): string {
-  if (!t) return SUBSIDY_TYPE_LABELS.none;
+  if (!t) return "尚無補助紀錄";
   return SUBSIDY_TYPE_LABELS[t] ?? t;
 }
 

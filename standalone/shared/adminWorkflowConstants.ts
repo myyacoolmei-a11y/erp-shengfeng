@@ -36,13 +36,49 @@ export function normalizeAdminWorkflowStatus(
   return null;
 }
 
-export const SUBSIDY_TYPES = ["none", "company_assisted"] as const;
+/**
+ * Subsidy handling method (subsidy_applications.subsidy_type).
+ * Legacy `none` kept for DB compatibility — do not use for new completions.
+ */
+export const SUBSIDY_TYPES = [
+  "pending_confirmation",
+  "not_needed",
+  "customer_self_apply",
+  "company_assisted",
+  "none",
+] as const;
 export type SubsidyType = (typeof SUBSIDY_TYPES)[number];
 
 export const SUBSIDY_TYPE_LABELS: Record<SubsidyType, string> = {
-  none: "不適用補助",
-  company_assisted: "公司協助補助",
+  pending_confirmation: "待確認補助方式",
+  not_needed: "不需申請",
+  customer_self_apply: "客戶自行申請",
+  company_assisted: "公司協助申請",
+  none: "不適用補助", // legacy only
 };
+
+/** Company-assisted program — only when subsidy_type = company_assisted. Nullable. */
+export const ASSISTED_PROGRAMS = ["new_unit", "trade_in"] as const;
+export type AssistedProgram = (typeof ASSISTED_PROGRAMS)[number];
+
+export const ASSISTED_PROGRAM_LABELS: Record<AssistedProgram, string> = {
+  new_unit: "新機補助",
+  trade_in: "舊換新補助",
+};
+
+export function normalizeSubsidyType(value: string | null | undefined): SubsidyType | null {
+  if (!value) return null;
+  if ((SUBSIDY_TYPES as readonly string[]).includes(value)) return value as SubsidyType;
+  return null;
+}
+
+export function normalizeAssistedProgram(
+  value: string | null | undefined,
+): AssistedProgram | null {
+  if (!value) return null;
+  if ((ASSISTED_PROGRAMS as readonly string[]).includes(value)) return value as AssistedProgram;
+  return null;
+}
 
 /** Independent of payment status */
 export const SUBSIDY_PIPELINE_STATUSES = [

@@ -1,5 +1,6 @@
 import { customFetch } from "../../../shared/api-client/custom-fetch.ts";
 import type {
+  AssistedProgram,
   SubsidyPipelineStatus,
   SubsidyType,
 } from "../../../shared/adminWorkflowConstants.ts";
@@ -37,8 +38,10 @@ export type AdminWorkbenchItem = {
   engineeringStatusLabel?: string;
   receivableStatus?: string;
   receivableStatusLabel?: string;
-  subsidyType?: SubsidyType;
+  subsidyType?: SubsidyType | null;
   subsidyTypeLabel?: string;
+  assistedProgram?: AssistedProgram | null;
+  assistedProgramLabel?: string | null;
   subsidyPipelineStatus?: SubsidyPipelineStatus | null;
   subsidyStatusLabel?: string;
   canClose?: boolean;
@@ -92,6 +95,7 @@ export type AdminWorkbenchData = {
     collectionToday: AdminWorkbenchItem[];
     collectionOverdue: AdminWorkbenchItem[];
     collectionPartial: AdminWorkbenchItem[];
+    subsidyPendingConfirmation: AdminWorkbenchItem[];
     subsidyLinkNotSent: AdminWorkbenchItem[];
     subsidyAwaitingUpload: AdminWorkbenchItem[];
     subsidyDocsIncomplete: AdminWorkbenchItem[];
@@ -99,6 +103,7 @@ export type AdminWorkbenchData = {
     subsidyDocsComplete: AdminWorkbenchItem[];
     subsidyPendingApply: AdminWorkbenchItem[];
     subsidyApplied: AdminWorkbenchItem[];
+    subsidySettled: AdminWorkbenchItem[];
     pendingClose: AdminWorkbenchItem[];
     closed: AdminWorkbenchItem[];
   };
@@ -152,10 +157,18 @@ export function setAdminExpectedPaymentDate(workOrderId: number, expectedPayment
   });
 }
 
-export function setAdminSubsidyType(workOrderId: number, subsidyType: SubsidyType, note?: string) {
+export function setAdminSubsidyType(
+  workOrderId: number,
+  subsidyType: SubsidyType,
+  opts?: { assistedProgram?: AssistedProgram | null; note?: string },
+) {
   return customFetch<{ ok: true }>(`/api/admin-workbench/${workOrderId}/subsidy-type`, {
     method: "POST",
-    body: JSON.stringify({ subsidyType, note }),
+    body: JSON.stringify({
+      subsidyType,
+      assistedProgram: opts?.assistedProgram,
+      note: opts?.note,
+    }),
     headers: { "Content-Type": "application/json" },
   });
 }

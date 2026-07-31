@@ -109,10 +109,38 @@ function SubsidyStatusButton({
 }) {
   const display = item.subsidyDisplayStatus;
   const type = item.subsidyType;
+  if (!type || display === "no_record") {
+    return (
+      <Badge className="h-7 text-xs px-2 font-normal bg-gray-50 text-gray-500 border-0">
+        尚無補助紀錄
+      </Badge>
+    );
+  }
+  if (type === "pending_confirmation" || display === "pending_confirmation") {
+    return (
+      <Badge className="h-7 text-xs px-2 font-normal bg-gray-100 text-gray-600 border-0">
+        待確認補助方式
+      </Badge>
+    );
+  }
+  if (type === "not_needed" || display === "not_needed") {
+    return (
+      <Badge className="h-7 text-xs px-2 font-normal bg-gray-100 text-gray-600 border-0">
+        不需申請
+      </Badge>
+    );
+  }
+  if (type === "customer_self_apply" || display === "customer_self_apply") {
+    return (
+      <Badge className="h-7 text-xs px-2 font-normal bg-slate-100 text-slate-700 border-0">
+        客戶自行申請
+      </Badge>
+    );
+  }
   if (type === "none" || display === "not_applicable") {
     return (
       <Badge className="h-7 text-xs px-2 font-normal bg-gray-100 text-gray-600 border-0">
-        不適用補助
+        尚無補助紀錄
       </Badge>
     );
   }
@@ -514,20 +542,9 @@ export default function Receivables() {
                         <Badge className={`text-xs px-1.5 py-0 ${INVOICE_COLORS[item.invoiceStatus] ?? "bg-gray-100 text-gray-600"}`}>
                           發票：{item.invoiceStatus}
                         </Badge>
-                        {sub.subsidyType === "company_assisted" ? (
-                          <>
-                            <Badge className="text-xs px-1.5 py-0 border-0 bg-emerald-50 text-emerald-800">
-                              🟢 需補助
-                            </Badge>
-                            <Badge className={`text-xs px-1.5 py-0 border-0 ${subColor}`}>
-                              補助：{sub.subsidyDisplayLabel ?? "補助申請中"}
-                            </Badge>
-                          </>
-                        ) : (
-                          <Badge className="text-xs px-1.5 py-0 border-0 bg-gray-50 text-gray-600">
-                            ⚪ 免補助
-                          </Badge>
-                        )}
+                        <Badge className={`text-xs px-1.5 py-0 border-0 ${subColor}`}>
+                          補助：{sub.subsidyDisplayLabel ?? "—"}
+                        </Badge>
                       </div>
                       {item.projectName && <p className="text-xs text-muted-foreground mb-1">{item.projectName}{item.projectType ? ` · ${item.projectType}` : ""}</p>}
                       <div className="grid grid-cols-3 gap-x-3 gap-y-0.5 text-xs mt-1">

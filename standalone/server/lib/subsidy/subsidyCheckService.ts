@@ -8,7 +8,11 @@ import {
   type SubsidyDocType,
   type SubsidyMeta,
 } from "../../../shared/subsidyDocs.ts";
-import type { SubsidyPipelineStatus, SubsidyType } from "../../../shared/adminWorkflowConstants.ts";
+import type {
+  AssistedProgram,
+  SubsidyPipelineStatus,
+  SubsidyType,
+} from "../../../shared/adminWorkflowConstants.ts";
 
 export type UploadedDocLike = {
   docType: string | null;
@@ -51,6 +55,7 @@ function fileLooksEmpty(fileUrl: string | null | undefined): boolean {
 /** Deterministic checks + lightweight heuristic "AI" tips (no external API required). */
 export function runSubsidyCompletenessCheck(input: {
   subsidyType: SubsidyType;
+  assistedProgram?: AssistedProgram | null;
   docs: UploadedDocLike[];
   prevMeta?: SubsidyMeta;
 }): CompletenessResult {
@@ -60,6 +65,7 @@ export function runSubsidyCompletenessCheck(input: {
   const missingDocs = missingRequiredDocs(
     input.subsidyType,
     activeDocs.map((d) => d.docType),
+    input.assistedProgram,
   );
   const missingLabels = missingDocs.map((t) => SUBSIDY_DOC_TYPE_LABELS[t] ?? t);
 
@@ -126,6 +132,7 @@ export function runSubsidyCompletenessCheck(input: {
     pipeline: suggestedPipeline,
     missingDocs,
     needsManualReview,
+    assistedProgram: input.assistedProgram,
   });
 
   return {

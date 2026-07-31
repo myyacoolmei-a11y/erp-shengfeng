@@ -20,24 +20,28 @@ import {
 import {
   type AdminBillingInfo,
   type AdminWorkflowStatus,
+  type AssistedProgram,
   type ReceivableCardStatus,
   type SubsidyPipelineStatus,
   type SubsidyType,
   ADMIN_WORKFLOW_LABELS,
+  ASSISTED_PROGRAM_LABELS,
   SUBSIDY_TYPE_LABELS,
   engineeringStatusLabel,
   normalizeAdminWorkflowStatus,
+  normalizeAssistedProgram,
+  normalizeSubsidyType,
   receivableStatusLabel,
 } from "../../../shared/adminWorkflowConstants.ts";
 import { taipeiDateString } from "./fieldProgressUtils.ts";
 import {
   SUBSIDY_DOC_TYPE_LABELS,
-  SUBSIDY_DISPLAY_LABELS,
   missingRequiredDocs,
   parseSubsidyMeta,
   pipelineToReceivableSubsidyStatus,
   resolveSubsidyDisplayStatus,
   serializeSubsidyMeta,
+  subsidyCombinedStatusLabel,
   type SubsidyDocType,
   type SubsidyDisplayStatus,
 } from "../../../shared/subsidyDocs.ts";
@@ -120,8 +124,9 @@ async function transitionAdminStatus(opts: {
 /**
  * After construction complete → admin handoff:
  * - ensure receivable exists (idempotent; never duplicate)
- * - if case needs subsidy, ensure subsidy_applications row at link_not_sent
- *   without resetting an existing pipeline / token / attachments
+ * - ensure subsidy_applications at pending_confirmation (idempotent)
+ *   WITHOUT resetting existing type / pipeline / token / attachments / program
+ * - NEVER auto-choose not_needed / company_assisted / assisted_program
  */
 export async function syncAdminHandoffAfterConstructionComplete(
   workOrderId: number,
@@ -158,8 +163,6 @@ export async function syncAdminHandoffAfterConstructionComplete(
       const billedAmount = num(billing.finalAmount);
       const total = billedAmount > 0 ? billedAmount : quoteAmount;
 
-      // Create draft AR so the case appears on 收款／應收帳款 immediately.
-      // Amount may be 0 when quote missing — admin can correct via mark-billed.
       const [created] = await db
         .insert(receivablesTable)
         .values({
@@ -197,34 +200,41 @@ export async function syncAdminHandoffAfterConstructionComplete(
     .where(eq(subsidyApplicationsTable.workOrderId, workOrderId))
     .limit(1);
 
-  const needsSubsidy =
-    wo.adminNeedsSubsidy === true || existingSub?.subsidyType === "company_assisted";
-
   let subsidyEnsured = false;
   let subsidyCreated = false;
 
-  if (needsSubsidy) {
-    const beforeId = existingSub?.id ?? null;
-    const sub = await ensureCompanyAssistedSubsidy(workOrderId, wo.customerId, user);
+  if (existingSub) {
+    // Preserve everything — do not reset type/pipeline/token/program/attachments
     subsidyEnsured = true;
-    subsidyCreated = beforeId == null;
-
-    if (!wo.adminNeedsSubsidy) {
+    if (existingSub.customerId == null && wo.customerId != null) {
       await db
-        .update(workOrdersTable)
-        .set({ adminNeedsSubsidy: true, updatedAt: new Date() })
-        .where(eq(workOrdersTable.id, workOrderId));
+        .update(subsidyApplicationsTable)
+        .set({ customerId: wo.customerId, updatedAt: new Date() })
+        .where(eq(subsidyApplicationsTable.id, existingSub.id));
     }
+  } else {
+    const [created] = await db
+      .insert(subsidyApplicationsTable)
+      .values({
+        workOrderId,
+        customerId: wo.customerId,
+        subsidyType: "pending_confirmation",
+        assistedProgram: null,
+        pipelineStatus: "link_not_sent",
+        uploadLinkToken: null,
+      })
+      .returning();
+    subsidyEnsured = true;
+    subsidyCreated = true;
 
     await writeAuditLog({
-      action: "admin_workflow.auto_subsidy_on_complete",
+      action: "admin_workflow.auto_subsidy_pending_confirmation",
       entityType: "work_order",
       entityId: workOrderId,
       user,
       metadata: {
-        subsidyApplicationId: sub.id,
-        subsidyCreated,
-        pipelineStatus: sub.pipelineStatus,
+        subsidyApplicationId: created.id,
+        subsidyType: "pending_confirmation",
       },
     });
   }
@@ -289,7 +299,8 @@ function canCloseCase(input: {
 function buildCardStatuses(opts: {
   engineeringConfirmed: boolean;
   recv: typeof receivablesTable.$inferSelect | null;
-  subsidyType: SubsidyType;
+  subsidyType: SubsidyType | null;
+  assistedProgram: AssistedProgram | null;
   subsidyPipeline: SubsidyPipelineStatus | null;
   hasCloseOverride: boolean;
   adminStatus: AdminWorkflowStatus | null;
@@ -317,10 +328,17 @@ function buildCardStatuses(opts: {
     engineeringConfirmed: opts.engineeringConfirmed,
     hasReceivable: !!opts.recv,
     isPaid: recvStatus === "paid",
-    subsidyType: opts.subsidyType,
+    subsidyType: opts.subsidyType ?? "pending_confirmation",
     subsidyPipeline: opts.subsidyPipeline,
     hasCloseOverride: opts.hasCloseOverride,
   });
+
+  const typeLabel =
+    opts.subsidyType == null
+      ? "尚無補助紀錄"
+      : opts.subsidyType === "company_assisted" && opts.assistedProgram
+        ? `公司協助－${ASSISTED_PROGRAM_LABELS[opts.assistedProgram]}`
+        : SUBSIDY_TYPE_LABELS[opts.subsidyType];
 
   return {
     engineeringStatus: eng,
@@ -328,7 +346,11 @@ function buildCardStatuses(opts: {
     receivableStatus: recvStatus,
     receivableStatusLabel: receivableStatusLabel(recvStatus),
     subsidyType: opts.subsidyType,
-    subsidyTypeLabel: SUBSIDY_TYPE_LABELS[opts.subsidyType],
+    subsidyTypeLabel: typeLabel,
+    assistedProgram: opts.assistedProgram,
+    assistedProgramLabel: opts.assistedProgram
+      ? ASSISTED_PROGRAM_LABELS[opts.assistedProgram]
+      : null,
     subsidyPipelineStatus: opts.subsidyPipeline,
     canClose: closeCheck.canClose,
     closeBlockers: closeCheck.blockers,
@@ -420,6 +442,7 @@ export async function getAdminWorkbench() {
     collectionToday: [] as unknown[],
     collectionOverdue: [] as unknown[],
     collectionPartial: [] as unknown[],
+    subsidyPendingConfirmation: [] as unknown[],
     subsidyLinkNotSent: [] as unknown[],
     subsidyAwaitingUpload: [] as unknown[],
     subsidyDocsIncomplete: [] as unknown[],
@@ -427,6 +450,7 @@ export async function getAdminWorkbench() {
     subsidyDocsComplete: [] as unknown[],
     subsidyPendingApply: [] as unknown[],
     subsidyApplied: [] as unknown[],
+    subsidySettled: [] as unknown[],
     pendingClose: [] as unknown[],
     closed: [] as unknown[],
   };
@@ -447,12 +471,11 @@ export async function getAdminWorkbench() {
 
     const recv = recvByWo.get(r.wo.id) ?? null;
     const sub = subByWo.get(r.wo.id) ?? null;
-    const subsidyType: SubsidyType =
-      sub?.subsidyType === "company_assisted" || r.wo.adminNeedsSubsidy
-        ? "company_assisted"
-        : "none";
-    const subsidyPipeline = (sub?.pipelineStatus ??
-      (subsidyType === "company_assisted" ? "link_not_sent" : null)) as SubsidyPipelineStatus | null;
+    const subsidyType: SubsidyType | null = sub
+      ? normalizeSubsidyType(sub.subsidyType) ?? "pending_confirmation"
+      : null;
+    const assistedProgram = normalizeAssistedProgram(sub?.assistedProgram ?? null);
+    const subsidyPipeline = (sub?.pipelineStatus ?? null) as SubsidyPipelineStatus | null;
 
     const engConfirmed = !!r.wo.adminConfirmedAt;
 
@@ -460,6 +483,7 @@ export async function getAdminWorkbench() {
       engineeringConfirmed: engConfirmed,
       recv,
       subsidyType,
+      assistedProgram,
       subsidyPipeline,
       hasCloseOverride: !!sub?.closeOverrideAt,
       adminStatus: status,
@@ -483,12 +507,20 @@ export async function getAdminWorkbench() {
     const missingDocs = missingRequiredDocs(
       subsidyType,
       subsidyDocs.map((d) => d.docType),
+      assistedProgram,
     );
     const displayStatus: SubsidyDisplayStatus = resolveSubsidyDisplayStatus({
       subsidyType,
       pipeline: subsidyPipeline,
       missingDocs,
       needsManualReview: !!subsidyMeta.needsManualReview,
+      assistedProgram,
+    });
+    const subsidyStatusLabel = subsidyCombinedStatusLabel({
+      subsidyType,
+      assistedProgram,
+      displayStatus,
+      pipeline: subsidyPipeline,
     });
     const lastUploadAt =
       subsidyDocs
@@ -544,7 +576,7 @@ export async function getAdminWorkbench() {
       needsManualReview: !!subsidyMeta.needsManualReview,
       aiTips: subsidyMeta.aiTips ?? [],
       subsidyDisplayStatus: displayStatus,
-      subsidyStatusLabel: SUBSIDY_DISPLAY_LABELS[displayStatus],
+      subsidyStatusLabel,
       needsSubsidy: subsidyType === "company_assisted",
       canMarkApplied: displayStatus === "docs_complete" || displayStatus === "applied",
       canCloseReady:
@@ -605,9 +637,13 @@ export async function getAdminWorkbench() {
       }
     }
 
-    // 8–12 Subsidy pipeline — keep visible after payment until applied
-    if (subsidyType === "company_assisted" && subsidyPipeline != null) {
-      if (subsidyPipeline === "applied") {
+    // Subsidy center buckets
+    if (subsidyType === "pending_confirmation") {
+      sections.subsidyPendingConfirmation.push(base);
+    } else if (subsidyType === "not_needed" || subsidyType === "customer_self_apply") {
+      sections.subsidySettled.push(base);
+    } else if (subsidyType === "company_assisted") {
+      if (subsidyPipeline === "applied" || displayStatus === "applied") {
         sections.subsidyApplied.push(base);
       } else {
         switch (displayStatus) {
@@ -624,7 +660,6 @@ export async function getAdminWorkbench() {
             sections.subsidyAwaitingManualReview.push(base);
             break;
           case "docs_complete":
-            // pending_apply still listed separately for API consumers; UI may merge
             if (subsidyPipeline === "pending_apply") {
               sections.subsidyPendingApply.push(base);
             } else {
@@ -670,6 +705,7 @@ export async function getAdminWorkbench() {
     collectionToday: sections.collectionToday.length,
     collectionOverdue: sections.collectionOverdue.length,
     collectionPartial: sections.collectionPartial.length,
+    subsidyPendingConfirmation: sections.subsidyPendingConfirmation.length,
     subsidyLinkNotSent: sections.subsidyLinkNotSent.length,
     subsidyAwaitingUpload: sections.subsidyAwaitingUpload.length,
     subsidyDocsIncomplete: sections.subsidyDocsIncomplete.length,
@@ -677,6 +713,7 @@ export async function getAdminWorkbench() {
     subsidyDocsComplete: sections.subsidyDocsComplete.length,
     subsidyPendingApply: sections.subsidyPendingApply.length,
     subsidyApplied: sections.subsidyApplied.length,
+    subsidySettled: sections.subsidySettled.length,
     pendingClose: sections.pendingClose.length,
     closed: sections.closed.length,
   };
@@ -689,6 +726,7 @@ export async function getAdminWorkbench() {
     counts.collectionToday +
     counts.collectionOverdue +
     counts.collectionPartial +
+    counts.subsidyPendingConfirmation +
     counts.subsidyLinkNotSent +
     counts.subsidyAwaitingUpload +
     counts.subsidyDocsIncomplete +
@@ -927,14 +965,14 @@ export async function markBilled(
     recv = updated;
   }
 
-  const wantsSubsidy =
-    input.subsidyType === "company_assisted" ||
-    input.needsSubsidy === true ||
-    wo.adminNeedsSubsidy;
-
-  if (wantsSubsidy) {
-    await ensureCompanyAssistedSubsidy(workOrderId, wo.customerId, user);
-  }
+  // Billing no longer decides subsidy handling — handoff already created
+  // pending_confirmation; admin chooses method in 補助中心.
+  const [existingSub] = await db
+    .select()
+    .from(subsidyApplicationsTable)
+    .where(eq(subsidyApplicationsTable.workOrderId, workOrderId))
+    .limit(1);
+  const adminNeedsSubsidy = existingSub?.subsidyType === "company_assisted";
 
   const now = new Date();
   await transitionAdminStatus({
@@ -945,7 +983,7 @@ export async function markBilled(
     note: input.note ?? "建立應收帳款",
     extraUpdate: {
       adminBillingInfo: billing,
-      adminNeedsSubsidy: wantsSubsidy,
+      adminNeedsSubsidy,
       adminBilledAt: now,
       adminBilledBy: user.id,
     },
@@ -954,58 +992,63 @@ export async function markBilled(
   return { receivableId: recv.id };
 }
 
-async function ensureCompanyAssistedSubsidy(
+/**
+ * Activate company-assisted flow for a chosen program.
+ * Only generates token / sets link_not_sent when not already progressed.
+ * Never resets applied / advanced pipeline / existing token / attachments.
+ */
+async function activateCompanyAssistedSubsidy(
   workOrderId: number,
   customerId: number | null,
-  _user: JwtPayload,
+  program: AssistedProgram,
 ) {
   const [existing] = await db
     .select()
     .from(subsidyApplicationsTable)
     .where(eq(subsidyApplicationsTable.workOrderId, workOrderId))
     .limit(1);
+
   if (existing) {
-    // Never reset pipelineStatus / tokens / attachments — only fill missing essentials.
     const patch: Partial<typeof subsidyApplicationsTable.$inferInsert> = {
+      subsidyType: "company_assisted",
+      assistedProgram: program,
       updatedAt: new Date(),
     };
-    let needsPatch = false;
-    if (existing.subsidyType !== "company_assisted") {
-      patch.subsidyType = "company_assisted";
-      needsPatch = true;
-      // First time becoming company_assisted with no real progress → start at link_not_sent
-      // but do not downgrade an already-advanced pipeline.
-      if (
-        !existing.pipelineStatus ||
-        existing.pipelineStatus === "link_not_sent"
-      ) {
+    // Only set pipeline to link_not_sent when still at default / unset —
+    // never downgrade applied or mid-flight statuses.
+    if (
+      existing.subsidyType !== "company_assisted" ||
+      !existing.pipelineStatus ||
+      existing.pipelineStatus === "link_not_sent"
+    ) {
+      if (existing.pipelineStatus !== "applied" && existing.pipelineStatus !== "docs_complete" &&
+          existing.pipelineStatus !== "pending_apply" &&
+          existing.pipelineStatus !== "awaiting_upload" &&
+          existing.pipelineStatus !== "docs_incomplete") {
         patch.pipelineStatus = "link_not_sent";
       }
     }
     if (!existing.uploadLinkToken) {
       patch.uploadLinkToken = randomBytes(16).toString("hex");
-      needsPatch = true;
     }
     if (customerId != null && existing.customerId == null) {
       patch.customerId = customerId;
-      needsPatch = true;
     }
-    if (needsPatch) {
-      const [updated] = await db
-        .update(subsidyApplicationsTable)
-        .set(patch)
-        .where(eq(subsidyApplicationsTable.id, existing.id))
-        .returning();
-      return updated;
-    }
-    return existing;
+    const [updated] = await db
+      .update(subsidyApplicationsTable)
+      .set(patch)
+      .where(eq(subsidyApplicationsTable.id, existing.id))
+      .returning();
+    return updated;
   }
+
   const [created] = await db
     .insert(subsidyApplicationsTable)
     .values({
       workOrderId,
       customerId,
       subsidyType: "company_assisted",
+      assistedProgram: program,
       pipelineStatus: "link_not_sent",
       uploadLinkToken: randomBytes(16).toString("hex"),
     })
@@ -1013,37 +1056,76 @@ async function ensureCompanyAssistedSubsidy(
   return created;
 }
 
+/**
+ * Admin selects subsidy handling method (4-way).
+ * company_assisted requires assistedProgram (new_unit | trade_in).
+ */
 export async function setSubsidyType(
   workOrderId: number,
   user: JwtPayload,
   subsidyType: SubsidyType,
   note?: string,
+  assistedProgram?: AssistedProgram | null,
 ) {
   const [wo] = await db.select().from(workOrdersTable).where(eq(workOrdersTable.id, workOrderId)).limit(1);
   if (!wo) throw new Error("找不到派工單");
 
   if (subsidyType === "none") {
+    throw new Error("請選擇：不需要申請／客戶自行申請／公司協助（新機或舊換新）");
+  }
+
+  if (subsidyType === "company_assisted") {
+    const program = normalizeAssistedProgram(assistedProgram ?? null);
+    if (!program) {
+      throw new Error("公司協助申請須選擇新機補助或舊換新補助");
+    }
+    await activateCompanyAssistedSubsidy(workOrderId, wo.customerId, program);
+    await db
+      .update(workOrdersTable)
+      .set({ adminNeedsSubsidy: true, updatedAt: new Date() })
+      .where(eq(workOrdersTable.id, workOrderId));
+  } else if (
+    subsidyType === "not_needed" ||
+    subsidyType === "customer_self_apply" ||
+    subsidyType === "pending_confirmation"
+  ) {
     const [existing] = await db
       .select()
       .from(subsidyApplicationsTable)
       .where(eq(subsidyApplicationsTable.workOrderId, workOrderId))
       .limit(1);
+
     if (existing) {
+      // Do not wipe tokens/attachments; clear program; do not force pipeline rewind if applied
+      if (existing.pipelineStatus === "applied") {
+        throw new Error("補助已申請完成，不可改回待確認或其他非公司協助方式");
+      }
       await db
         .update(subsidyApplicationsTable)
-        .set({ subsidyType: "none", note: note ?? existing.note, updatedAt: new Date() })
+        .set({
+          subsidyType,
+          assistedProgram: null,
+          note: note ?? existing.note,
+          updatedAt: new Date(),
+        })
         .where(eq(subsidyApplicationsTable.id, existing.id));
+    } else {
+      await db.insert(subsidyApplicationsTable).values({
+        workOrderId,
+        customerId: wo.customerId,
+        subsidyType,
+        assistedProgram: null,
+        pipelineStatus: "link_not_sent",
+        uploadLinkToken: null,
+        note: note ?? null,
+      });
     }
     await db
       .update(workOrdersTable)
       .set({ adminNeedsSubsidy: false, updatedAt: new Date() })
       .where(eq(workOrdersTable.id, workOrderId));
   } else {
-    await ensureCompanyAssistedSubsidy(workOrderId, wo.customerId, user);
-    await db
-      .update(workOrdersTable)
-      .set({ adminNeedsSubsidy: true, updatedAt: new Date() })
-      .where(eq(workOrdersTable.id, workOrderId));
+    throw new Error("無效的補助辦理方式");
   }
 
   await writeAuditLog({
@@ -1052,7 +1134,7 @@ export async function setSubsidyType(
     entityId: workOrderId,
     user,
     reason: note,
-    metadata: { subsidyType },
+    metadata: { subsidyType, assistedProgram: assistedProgram ?? null },
   });
 }
 
@@ -1077,9 +1159,7 @@ export async function advanceSubsidyPipeline(
     .where(eq(subsidyApplicationsTable.workOrderId, workOrderId))
     .limit(1);
   if (!sub || sub.subsidyType !== "company_assisted") {
-    const [wo] = await db.select().from(workOrdersTable).where(eq(workOrdersTable.id, workOrderId)).limit(1);
-    if (!wo) throw new Error("找不到派工單");
-    sub = await ensureCompanyAssistedSubsidy(workOrderId, wo.customerId, user);
+    throw new Error("請先在補助中心選擇公司協助申請（新機或舊換新）");
   }
 
   const now = new Date();
@@ -1238,9 +1318,11 @@ export async function confirmSubsidyDocsManually(
     .select()
     .from(customerDocumentsTable)
     .where(eq(customerDocumentsTable.subsidyApplicationId, sub.id));
+  const program = normalizeAssistedProgram(sub.assistedProgram);
   const missing = missingRequiredDocs(
     "company_assisted",
     docs.filter((d) => d.status !== "rejected" && d.fileUrl).map((d) => d.docType),
+    program,
   );
   if (missing.length > 0) {
     throw new Error(
@@ -1295,9 +1377,7 @@ export async function regenerateSubsidyUploadToken(
     .where(eq(subsidyApplicationsTable.workOrderId, workOrderId))
     .limit(1);
   if (!sub || sub.subsidyType !== "company_assisted") {
-    const [wo] = await db.select().from(workOrdersTable).where(eq(workOrdersTable.id, workOrderId)).limit(1);
-    if (!wo) throw new Error("找不到派工單");
-    sub = await ensureCompanyAssistedSubsidy(workOrderId, wo.customerId, user);
+    throw new Error("請先在補助中心選擇公司協助申請（新機或舊換新）");
   }
 
   const { SUBSIDY_UPLOAD_TOKEN_TTL_DAYS } = await import("../../../shared/subsidyDocs.ts");
@@ -1351,20 +1431,22 @@ export async function recheckSubsidyDocuments(workOrderId: number, user: JwtPayl
     .where(eq(customerDocumentsTable.subsidyApplicationId, sub.id));
   const { meta, freeNote } = parseSubsidyMeta(sub.note);
 
+  const program = normalizeAssistedProgram(sub.assistedProgram);
   let check;
   try {
     check = runSubsidyCompletenessCheck({
       subsidyType: "company_assisted",
+      assistedProgram: program,
       docs,
       prevMeta: meta,
     });
   } catch {
     check = runSubsidyCompletenessCheck({
       subsidyType: "company_assisted",
+      assistedProgram: program,
       docs,
       prevMeta: { ...meta, needsManualReview: true, aiTips: ["自動檢查暫時不可用，請行政人工確認"] },
     });
-    // Force manual review path
     check.needsManualReview = true;
     check.suggestedPipeline = "docs_incomplete";
     if (check.missingDocs.length === 0) {
@@ -1602,9 +1684,7 @@ export async function approveCloseOverride(
     .where(eq(subsidyApplicationsTable.workOrderId, workOrderId))
     .limit(1);
   if (!sub) {
-    const [wo] = await db.select().from(workOrdersTable).where(eq(workOrdersTable.id, workOrderId)).limit(1);
-    if (!wo) throw new Error("找不到派工單");
-    sub = await ensureCompanyAssistedSubsidy(workOrderId, wo.customerId, user);
+    throw new Error("尚無補助中心紀錄，無法核准先結案");
   }
   const now = new Date();
   await db
@@ -1713,7 +1793,6 @@ export async function updateBillingDraft(
     .update(workOrdersTable)
     .set({
       adminBillingInfo: next,
-      adminNeedsSubsidy: billing.needsSubsidy ?? wo.adminNeedsSubsidy,
       updatedAt: new Date(),
     })
     .where(eq(workOrdersTable.id, workOrderId));
@@ -1726,10 +1805,6 @@ export async function updateBillingDraft(
         updatedAt: new Date(),
       })
       .where(eq(receivablesTable.workOrderId, workOrderId));
-  }
-
-  if (billing.needsSubsidy) {
-    await ensureCompanyAssistedSubsidy(workOrderId, wo.customerId, user);
   }
 
   await writeAuditLog({

@@ -20,7 +20,11 @@ import {
   updateBillingDraft,
   workbenchRecordPayment,
 } from "../lib/workOrders/adminWorkbenchService.ts";
-import { SUBSIDY_PIPELINE_STATUSES, SUBSIDY_TYPES } from "../../shared/adminWorkflowConstants.ts";
+import {
+  ASSISTED_PROGRAMS,
+  SUBSIDY_PIPELINE_STATUSES,
+  SUBSIDY_TYPES,
+} from "../../shared/adminWorkflowConstants.ts";
 
 const router: IRouter = Router();
 
@@ -167,6 +171,7 @@ router.post(
     const parsed = z
       .object({
         subsidyType: z.enum(SUBSIDY_TYPES),
+        assistedProgram: z.enum(ASSISTED_PROGRAMS).optional().nullable(),
         note: z.string().optional(),
       })
       .safeParse(req.body);
@@ -175,7 +180,13 @@ router.post(
       return;
     }
     try {
-      await setSubsidyType(workOrderId, req.user!, parsed.data.subsidyType, parsed.data.note);
+      await setSubsidyType(
+        workOrderId,
+        req.user!,
+        parsed.data.subsidyType,
+        parsed.data.note,
+        parsed.data.assistedProgram,
+      );
       res.json({ ok: true });
     } catch (err) {
       res.status(400).json({ error: err instanceof Error ? err.message : "操作失敗" });
