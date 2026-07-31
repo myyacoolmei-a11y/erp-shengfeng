@@ -102,7 +102,7 @@ export function markAdminBilled(
     finalAmount?: string;
     invoiceNeeded?: boolean;
     billTo?: string;
-    expectedPaymentDate?: string;
+    expectedPaymentDate?: string | null;
     needsSubsidy?: boolean;
     subsidyType?: SubsidyType;
     note?: string;
@@ -111,6 +111,14 @@ export function markAdminBilled(
   return customFetch<{ receivableId: number }>(`/api/admin-workbench/${workOrderId}/mark-billed`, {
     method: "POST",
     body: JSON.stringify(body),
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+export function setAdminExpectedPaymentDate(workOrderId: number, expectedPaymentDate: string) {
+  return customFetch<{ ok: true }>(`/api/admin-workbench/${workOrderId}/expected-payment-date`, {
+    method: "POST",
+    body: JSON.stringify({ expectedPaymentDate }),
     headers: { "Content-Type": "application/json" },
   });
 }

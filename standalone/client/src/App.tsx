@@ -224,6 +224,11 @@ function AppRoutes() {
             <Route path="/quotes">
               <Guard feature="quotations"><Quotes /></Guard>
             </Route>
+            <Route path="/work-orders/:workOrderId">
+              {(params) => (
+                <Redirect to={`/work-orders?highlight=${params.workOrderId}`} />
+              )}
+            </Route>
             <Route path="/work-orders">
               <EngineerOrFeatureGuard feature="dispatch_orders"><WorkOrders /></EngineerOrFeatureGuard>
             </Route>

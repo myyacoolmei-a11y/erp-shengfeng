@@ -285,7 +285,7 @@ export async function getAdminWorkbench() {
     const billing = (r.wo.adminBillingInfo ?? {}) as AdminBillingInfo;
     const quoteOriginal = num(r.quoteFinal ?? r.quoteAmount);
     const extra = num(billing.extraAmount);
-    const discount = num(billing.discountAmount ?? r.quoteDiscount);
+    const discount = num(billing.discountAmount);
     const finalAmount =
       billing.finalAmount != null && billing.finalAmount !== ""
         ? num(billing.finalAmount)
@@ -603,18 +603,35 @@ export async function markBilled(
     ? await db.select().from(quotesTable).where(eq(quotesTable.id, wo.quoteId)).limit(1)
     : [null];
 
-  const billing: AdminBillingInfo = {
-    ...((wo.adminBillingInfo ?? {}) as AdminBillingInfo),
-    ...input,
-  };
+  const prevBilling = (wo.adminBillingInfo ?? {}) as AdminBillingInfo;
+  // Merge draft fields but treat null/undefined input as "omit" so we don't wipe amounts.
+  const billing: AdminBillingInfo = { ...prevBilling };
+  for (const [k, v] of Object.entries(input)) {
+    if (k === "needsSubsidy" || k === "subsidyType" || k === "note") continue;
+    if (v !== undefined) (billing as Record<string, unknown>)[k] = v;
+  }
+
+  // quotation final/成交金額 is the base; extra/discount adjust once at billing time.
   const quoteOriginal = num(quote?.finalAmount ?? quote?.amount);
   const extra = num(billing.extraAmount);
-  const discount = num(billing.discountAmount ?? quote?.discountAmount);
+  const discount = num(billing.discountAmount);
+  const computed = Math.max(0, quoteOriginal + extra - discount);
   const finalAmount =
-    billing.finalAmount != null && billing.finalAmount !== ""
-      ? num(billing.finalAmount)
-      : Math.max(0, quoteOriginal + extra - discount);
+    input.finalAmount != null && String(input.finalAmount).trim() !== ""
+      ? num(input.finalAmount)
+      : computed > 0
+        ? computed
+        : num(prevBilling.finalAmount);
+  if (!(finalAmount > 0)) {
+    throw new Error("應收金額必須大於 0（請確認報價金額，或填寫最終應收金額）");
+  }
   billing.finalAmount = moneyStr(finalAmount);
+  billing.extraAmount = moneyStr(extra);
+  billing.discountAmount = moneyStr(discount);
+  // expectedPaymentDate may be null (optional)
+  if (input.expectedPaymentDate !== undefined) {
+    billing.expectedPaymentDate = input.expectedPaymentDate || null;
+  }
 
   let [recv] = await db
     .select()
@@ -641,12 +658,24 @@ export async function markBilled(
       })
       .returning();
     recv = created;
+    if (num(recv.totalAmount) <= 0) {
+      // Guard against numeric write anomalies — force correct amount.
+      const [fixed] = await db
+        .update(receivablesTable)
+        .set({ totalAmount: moneyStr(finalAmount), updatedAt: new Date() })
+        .where(eq(receivablesTable.id, created.id))
+        .returning();
+      recv = fixed;
+    }
   } else {
     const [updated] = await db
       .update(receivablesTable)
       .set({
         totalAmount: moneyStr(finalAmount),
-        expectedPaymentDate: billing.expectedPaymentDate ?? recv.expectedPaymentDate,
+        expectedPaymentDate:
+          input.expectedPaymentDate !== undefined
+            ? billing.expectedPaymentDate ?? null
+            : recv.expectedPaymentDate,
         invoiceTitle: billing.billTo ?? recv.invoiceTitle,
         updatedAt: new Date(),
       })
@@ -1086,10 +1115,13 @@ export async function updateBillingDraft(
     })
     .where(eq(workOrdersTable.id, workOrderId));
 
-  if (billing.expectedPaymentDate) {
+  if (billing.expectedPaymentDate !== undefined) {
     await db
       .update(receivablesTable)
-      .set({ expectedPaymentDate: billing.expectedPaymentDate, updatedAt: new Date() })
+      .set({
+        expectedPaymentDate: billing.expectedPaymentDate || null,
+        updatedAt: new Date(),
+      })
       .where(eq(receivablesTable.workOrderId, workOrderId));
   }
 
@@ -1103,5 +1135,47 @@ export async function updateBillingDraft(
     entityId: workOrderId,
     user,
     metadata: { billing: next },
+  });
+}
+
+/** Simple: set expected_payment_date only (no billing form fields). */
+export async function setReceivableExpectedPaymentDate(
+  workOrderId: number,
+  user: JwtPayload,
+  expectedPaymentDate: string,
+): Promise<void> {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(expectedPaymentDate)) {
+    throw new Error("請選擇有效的預計收款日");
+  }
+  const [wo] = await db.select().from(workOrdersTable).where(eq(workOrdersTable.id, workOrderId)).limit(1);
+  if (!wo) throw new Error("找不到派工單");
+
+  const [recv] = await db
+    .select({ id: receivablesTable.id })
+    .from(receivablesTable)
+    .where(eq(receivablesTable.workOrderId, workOrderId))
+    .limit(1);
+  if (!recv) throw new Error("尚未建立應收帳款");
+
+  await db
+    .update(receivablesTable)
+    .set({ expectedPaymentDate, updatedAt: new Date() })
+    .where(eq(receivablesTable.id, recv.id));
+
+  const prev = (wo.adminBillingInfo ?? {}) as AdminBillingInfo;
+  await db
+    .update(workOrdersTable)
+    .set({
+      adminBillingInfo: { ...prev, expectedPaymentDate },
+      updatedAt: new Date(),
+    })
+    .where(eq(workOrdersTable.id, workOrderId));
+
+  await writeAuditLog({
+    action: "admin_workflow.set_expected_payment_date",
+    entityType: "receivable",
+    entityId: recv.id,
+    user,
+    metadata: { workOrderId, expectedPaymentDate },
   });
 }

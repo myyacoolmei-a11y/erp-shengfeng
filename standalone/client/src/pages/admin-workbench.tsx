@@ -10,6 +10,14 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import type { SubsidyPipelineStatus } from "../../../shared/adminWorkflowConstants.ts";
 import {
@@ -21,6 +29,7 @@ import {
   markAdminBilled,
   markAdminPaid,
   recordAdminPayment,
+  setAdminExpectedPaymentDate,
   setAdminSubsidyType,
   type AdminWorkbenchItem,
 } from "@/lib/adminWorkbenchApi";
@@ -28,6 +37,10 @@ import {
 function money(v?: string | null) {
   const n = parseFloat(String(v ?? "0"));
   return Number.isFinite(n) ? n.toLocaleString("zh-TW") : "0";
+}
+
+function caseHref(workOrderId: number) {
+  return `/work-orders?highlight=${workOrderId}`;
 }
 
 function StatusRow({ item }: { item: AdminWorkbenchItem }) {
@@ -86,12 +99,41 @@ function Section({
   );
 }
 
+function ReceivableSummary({ item }: { item: AdminWorkbenchItem }) {
+  return (
+    <div className="grid grid-cols-2 gap-1 text-xs">
+      <p>
+        <span className="text-muted-foreground">客戶：</span>
+        {item.customerName ?? "—"}
+      </p>
+      <p>
+        <span className="text-muted-foreground">案件：</span>
+        {item.workOrderNumber ?? `#${item.workOrderId}`}
+      </p>
+      <p>應收金額：NT${money(item.totalAmount)}</p>
+      <p>已收金額：NT${money(item.receivedAmount)}</p>
+      <p>未收金額：NT${money(item.unpaidAmount)}</p>
+      <p>
+        收款日：
+        {item.expectedPaymentDate ? item.expectedPaymentDate : (
+          <span className="text-amber-700 font-medium">未設定</span>
+        )}
+      </p>
+      {item.overdueDays != null && item.overdueDays > 0 && (
+        <p className="text-red-700 col-span-2">逾期 {item.overdueDays} 天</p>
+      )}
+    </div>
+  );
+}
+
 function ItemShell({
   item,
   children,
+  showViewCase = true,
 }: {
   item: AdminWorkbenchItem;
   children?: React.ReactNode;
+  showViewCase?: boolean;
 }) {
   return (
     <div className="rounded-lg border p-3 space-y-2 text-sm">
@@ -103,9 +145,11 @@ function ItemShell({
           </p>
           <p className="text-xs mt-0.5">工程師／師傅：{item.engineerName ?? "—"}</p>
         </div>
-        <Button asChild size="sm" variant="outline">
-          <Link href={`/work-orders?highlight=${item.workOrderId}`}>查看案件</Link>
-        </Button>
+        {showViewCase && (
+          <Button asChild size="sm" variant="outline" className="h-9">
+            <Link href={caseHref(item.workOrderId)}>查看案件</Link>
+          </Button>
+        )}
       </div>
       <StatusRow item={item} />
       {children}
@@ -127,6 +171,16 @@ const SUBSIDY_NEXT_LABEL: Partial<Record<SubsidyPipelineStatus, string>> = {
   docs_incomplete: "標記資料已齊",
   docs_complete: "進入待申請",
   pending_apply: "標記已申請",
+};
+
+type BillDraft = {
+  extra: string;
+  discount: string;
+  due: string;
+  billTo: string;
+  subsidy: boolean;
+  /** Explicit final amount — required when no quote */
+  finalAmount: string;
 };
 
 export default function AdminWorkbench() {
@@ -171,6 +225,16 @@ export default function AdminWorkbench() {
     onError: onErr,
   });
 
+  const dueMut = useMutation({
+    mutationFn: (p: { id: number; date: string }) => setAdminExpectedPaymentDate(p.id, p.date),
+    onSuccess: () => {
+      toast({ title: "已設定預計收款日" });
+      setDueModal(null);
+      invalidate();
+    },
+    onError: onErr,
+  });
+
   const subsidyPipeMut = useMutation({
     mutationFn: (p: { id: number; status: SubsidyPipelineStatus }) =>
       advanceAdminSubsidyPipeline(p.id, p.status),
@@ -196,6 +260,7 @@ export default function AdminWorkbench() {
       recordAdminPayment(p.id, p),
     onSuccess: () => {
       toast({ title: "已登記收款" });
+      setPayModal(null);
       invalidate();
     },
     onError: onErr,
@@ -228,10 +293,36 @@ export default function AdminWorkbench() {
     onError: onErr,
   });
 
-  const [payDraft, setPayDraft] = useState<Record<number, string>>({});
-  const [billDraft, setBillDraft] = useState<
-    Record<number, { extra: string; discount: string; due: string; billTo: string; subsidy: boolean }>
-  >({});
+  const [billDraft, setBillDraft] = useState<Record<number, BillDraft>>({});
+  const [dueModal, setDueModal] = useState<{ item: AdminWorkbenchItem; date: string } | null>(null);
+  const [payModal, setPayModal] = useState<{ item: AdminWorkbenchItem; amount: string } | null>(null);
+
+  function draftFor(item: AdminWorkbenchItem): BillDraft {
+    const quote = parseFloat(String(item.quoteOriginalAmount ?? "0")) || 0;
+    const extra = parseFloat(String(item.extraAmount ?? "0")) || 0;
+    const discount = parseFloat(String(item.discountAmount ?? "0")) || 0;
+    const computed = Math.max(0, quote + extra - discount);
+    return (
+      billDraft[item.workOrderId] ?? {
+        extra: item.extraAmount ?? "0",
+        discount: item.discountAmount ?? "0",
+        due: "",
+        billTo: item.billTo ?? item.customerName ?? "",
+        subsidy: item.subsidyType === "company_assisted",
+        finalAmount: String(computed > 0 ? computed : ""),
+      }
+    );
+  }
+
+  function finalPreview(d: BillDraft, item: AdminWorkbenchItem): number {
+    const quote = parseFloat(String(item.quoteOriginalAmount ?? "0")) || 0;
+    const extra = parseFloat(d.extra) || 0;
+    const discount = parseFloat(d.discount) || 0;
+    const computed = Math.max(0, quote + extra - discount);
+    const typed = parseFloat(d.finalAmount);
+    if (Number.isFinite(typed) && typed > 0) return typed;
+    return computed;
+  }
 
   const sectionOrder = useMemo(() => {
     if (!data) return [];
@@ -290,6 +381,66 @@ export default function AdminWorkbench() {
     );
   }
 
+  function CollectionActions({ item }: { item: AdminWorkbenchItem }) {
+    const unpaid = parseFloat(String(item.unpaidAmount ?? "0")) || 0;
+    const phone = item.mobilePhone || item.telephone;
+    return (
+      <div className="flex flex-col sm:flex-row flex-wrap gap-2">
+        {phone && (
+          <Button asChild size="sm" variant="outline" className="h-10 sm:h-9">
+            <a href={`tel:${phone}`}>
+              <Phone className="h-3.5 w-3.5 mr-1" />
+              聯絡客戶
+            </a>
+          </Button>
+        )}
+        {canFinance && unpaid > 0 && (
+          <Button
+            size="sm"
+            className="h-10 sm:h-9"
+            onClick={() =>
+              setPayModal({
+                item,
+                amount: String(unpaid),
+              })
+            }
+          >
+            登記收款
+          </Button>
+        )}
+        {canOperate && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-10 sm:h-9"
+            onClick={() =>
+              setDueModal({
+                item,
+                date: item.expectedPaymentDate ?? "",
+              })
+            }
+          >
+            設定收款日
+          </Button>
+        )}
+        <Button asChild size="sm" variant="outline" className="h-10 sm:h-9">
+          <Link href={caseHref(item.workOrderId)}>查看案件</Link>
+        </Button>
+        {canOperate && unpaid > 0 && (
+          <Button
+            size="sm"
+            variant="secondary"
+            className="h-10 sm:h-9"
+            disabled={markPaidMut.isPending}
+            onClick={() => markPaidMut.mutate(item.workOrderId)}
+          >
+            標記已收款
+          </Button>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5 max-w-3xl mx-auto pb-12">
       <div>
@@ -340,6 +491,7 @@ export default function AdminWorkbench() {
                     {canOperate && (
                       <Button
                         size="sm"
+                        className="h-10 sm:h-9"
                         disabled={confirmMut.isPending}
                         onClick={() => confirmMut.mutate(item.workOrderId)}
                       >
@@ -350,45 +502,77 @@ export default function AdminWorkbench() {
                 );
               }
 
-              if (sec.key === "createAr" || sec.key === "noDue") {
-                const draft = billDraft[item.workOrderId] ?? {
-                  extra: item.extraAmount ?? "0",
-                  discount: item.discountAmount ?? "0",
-                  due: item.expectedPaymentDate ?? "",
-                  billTo: item.billTo ?? item.customerName ?? "",
-                  subsidy: item.subsidyType === "company_assisted",
-                };
+              if (sec.key === "createAr") {
+                const draft = draftFor(item);
+                const preview = finalPreview(draft, item);
                 return (
-                  <ItemShell key={`${sec.key}-${item.workOrderId}`} item={item}>
-                    <p className="text-xs">原報價：${money(item.quoteOriginalAmount)}</p>
+                  <ItemShell key={`createAr-${item.workOrderId}`} item={item} showViewCase>
+                    <div className="rounded-md bg-muted/40 p-2 text-xs space-y-1">
+                      <p>原報價／成交金額：NT${money(item.quoteOriginalAmount)}</p>
+                      <p className="font-medium text-foreground">
+                        最終應收金額：NT${preview.toLocaleString("zh-TW")}
+                      </p>
+                      <p className="text-muted-foreground">
+                        計算：報價 {money(item.quoteOriginalAmount)} + 追加 {money(draft.extra)} − 折讓 {money(draft.discount)}
+                      </p>
+                    </div>
                     {canOperate && (
                       <div className="grid sm:grid-cols-2 gap-2">
                         <div>
                           <Label className="text-xs">追加</Label>
                           <Input
                             value={draft.extra}
-                            onChange={(e) =>
+                            onChange={(e) => {
+                              const extra = e.target.value;
+                              const quote = parseFloat(String(item.quoteOriginalAmount ?? "0")) || 0;
+                              const discount = parseFloat(draft.discount) || 0;
+                              const nextFinal = Math.max(0, quote + (parseFloat(extra) || 0) - discount);
                               setBillDraft((s) => ({
                                 ...s,
-                                [item.workOrderId]: { ...draft, extra: e.target.value },
-                              }))
-                            }
+                                [item.workOrderId]: {
+                                  ...draft,
+                                  extra,
+                                  finalAmount: String(nextFinal || ""),
+                                },
+                              }));
+                            }}
                           />
                         </div>
                         <div>
                           <Label className="text-xs">折讓</Label>
                           <Input
                             value={draft.discount}
+                            onChange={(e) => {
+                              const discount = e.target.value;
+                              const quote = parseFloat(String(item.quoteOriginalAmount ?? "0")) || 0;
+                              const extra = parseFloat(draft.extra) || 0;
+                              const nextFinal = Math.max(0, quote + extra - (parseFloat(discount) || 0));
+                              setBillDraft((s) => ({
+                                ...s,
+                                [item.workOrderId]: {
+                                  ...draft,
+                                  discount,
+                                  finalAmount: String(nextFinal || ""),
+                                },
+                              }));
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-xs">最終應收金額 <span className="text-destructive">*</span></Label>
+                          <Input
+                            type="number"
+                            value={draft.finalAmount}
                             onChange={(e) =>
                               setBillDraft((s) => ({
                                 ...s,
-                                [item.workOrderId]: { ...draft, discount: e.target.value },
+                                [item.workOrderId]: { ...draft, finalAmount: e.target.value },
                               }))
                             }
                           />
                         </div>
                         <div>
-                          <Label className="text-xs">預計收款日</Label>
+                          <Label className="text-xs">預計收款日（選填）</Label>
                           <Input
                             type="date"
                             value={draft.due}
@@ -400,7 +584,7 @@ export default function AdminWorkbench() {
                             }
                           />
                         </div>
-                        <div>
+                        <div className="sm:col-span-2">
                           <Label className="text-xs">請款對象</Label>
                           <Input
                             value={draft.billTo}
@@ -429,24 +613,43 @@ export default function AdminWorkbench() {
                     {canOperate && (
                       <Button
                         size="sm"
-                        disabled={billMut.isPending}
-                        onClick={() =>
+                        className="h-10 sm:h-9"
+                        disabled={billMut.isPending || !(preview > 0)}
+                        onClick={() => {
+                          if (!(preview > 0)) {
+                            toast({
+                              title: "請確認最終應收金額",
+                              description: "金額必須大於 0",
+                              variant: "destructive",
+                            });
+                            return;
+                          }
                           billMut.mutate({
                             id: item.workOrderId,
                             body: {
-                              extraAmount: draft.extra,
-                              discountAmount: draft.discount,
+                              extraAmount: draft.extra || "0",
+                              discountAmount: draft.discount || "0",
+                              finalAmount: String(preview),
                               billTo: draft.billTo,
-                              expectedPaymentDate: draft.due || undefined,
+                              expectedPaymentDate: draft.due || null,
                               needsSubsidy: draft.subsidy,
                               subsidyType: draft.subsidy ? "company_assisted" : "none",
                             },
-                          })
-                        }
+                          });
+                        }}
                       >
-                        {sec.key === "noDue" ? "補設定收款日並更新" : "建立應收帳款"}
+                        建立應收帳款（NT${preview.toLocaleString("zh-TW")}）
                       </Button>
                     )}
+                  </ItemShell>
+                );
+              }
+
+              if (sec.key === "noDue") {
+                return (
+                  <ItemShell key={`noDue-${item.workOrderId}`} item={item} showViewCase={false}>
+                    <ReceivableSummary item={item} />
+                    <CollectionActions item={item} />
                   </ItemShell>
                 );
               }
@@ -462,6 +665,7 @@ export default function AdminWorkbench() {
                           <Button
                             size="sm"
                             variant="outline"
+                            className="h-10 sm:h-9"
                             onClick={() =>
                               subsidyTypeMut.mutate({ id: item.workOrderId, enabled: true })
                             }
@@ -472,6 +676,7 @@ export default function AdminWorkbench() {
                         {next && (
                           <Button
                             size="sm"
+                            className="h-10 sm:h-9"
                             disabled={subsidyPipeMut.isPending}
                             onClick={() =>
                               subsidyPipeMut.mutate({ id: item.workOrderId, status: next })
@@ -484,6 +689,7 @@ export default function AdminWorkbench() {
                           <Button
                             size="sm"
                             variant="secondary"
+                            className="h-10 sm:h-9"
                             onClick={() =>
                               subsidyPipeMut.mutate({
                                 id: item.workOrderId,
@@ -518,6 +724,7 @@ export default function AdminWorkbench() {
                           <Button
                             size="sm"
                             variant="outline"
+                            className="h-10 sm:h-9"
                             disabled={overrideMut.isPending}
                             onClick={() => overrideMut.mutate(item.workOrderId)}
                           >
@@ -527,6 +734,7 @@ export default function AdminWorkbench() {
                       {canOperate && (
                         <Button
                           size="sm"
+                          className="h-10 sm:h-9"
                           disabled={closeMut.isPending || !item.canClose}
                           onClick={() => closeMut.mutate(item.workOrderId)}
                         >
@@ -542,66 +750,11 @@ export default function AdminWorkbench() {
                 return <ItemShell key={`closed-${item.workOrderId}`} item={item} />;
               }
 
-              // collection
-              const amt = payDraft[item.workOrderId] ?? item.unpaidAmount ?? "0";
-              const phone = item.mobilePhone || item.telephone;
+              // collection: overdue / today / soon / partial
               return (
-                <ItemShell key={`${sec.key}-${item.workOrderId}`} item={item}>
-                  <div className="grid grid-cols-2 gap-1 text-xs">
-                    <p>應收：${money(item.totalAmount)}</p>
-                    <p>已收：${money(item.receivedAmount)}</p>
-                    <p>未收：${money(item.unpaidAmount)}</p>
-                    <p>到期：{item.expectedPaymentDate ?? "—"}</p>
-                    {item.overdueDays != null && item.overdueDays > 0 && (
-                      <p className="text-red-700 col-span-2">逾期 {item.overdueDays} 天</p>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap gap-2 items-end">
-                    {phone && (
-                      <Button asChild size="sm" variant="outline">
-                        <a href={`tel:${phone}`}>
-                          <Phone className="h-3.5 w-3.5 mr-1" />
-                          聯絡客戶
-                        </a>
-                      </Button>
-                    )}
-                    {canFinance && (
-                      <>
-                        <div className="w-28">
-                          <Label className="text-xs">收款金額</Label>
-                          <Input
-                            value={amt}
-                            onChange={(e) =>
-                              setPayDraft((s) => ({ ...s, [item.workOrderId]: e.target.value }))
-                            }
-                          />
-                        </div>
-                        <Button
-                          size="sm"
-                          disabled={payMut.isPending}
-                          onClick={() =>
-                            payMut.mutate({
-                              id: item.workOrderId,
-                              amount: parseFloat(amt) || 0,
-                              paymentDate: data.today,
-                            })
-                          }
-                        >
-                          登記收款
-                        </Button>
-                      </>
-                    )}
-                    {canOperate && (
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        disabled={markPaidMut.isPending}
-                        onClick={() => markPaidMut.mutate(item.workOrderId)}
-                      >
-                        標記已收款
-                      </Button>
-                    )}
-                  </div>
+                <ItemShell key={`${sec.key}-${item.workOrderId}`} item={item} showViewCase={false}>
+                  <ReceivableSummary item={item} />
+                  <CollectionActions item={item} />
                 </ItemShell>
               );
             })
@@ -633,6 +786,103 @@ export default function AdminWorkbench() {
           </div>
         </CardContent>
       </Card>
+
+      {/* 設定預計收款日 — 簡單 Modal */}
+      <Dialog open={!!dueModal} onOpenChange={(o) => { if (!o) setDueModal(null); }}>
+        <DialogContent className="max-w-sm w-[calc(100vw-1.5rem)]">
+          <DialogHeader>
+            <DialogTitle>設定預計收款日</DialogTitle>
+          </DialogHeader>
+          <DialogBody className="space-y-3">
+            {dueModal && (
+              <p className="text-xs text-muted-foreground">
+                {dueModal.item.customerName} · {dueModal.item.workOrderNumber ?? `#${dueModal.item.workOrderId}`}
+              </p>
+            )}
+            <div className="space-y-1">
+              <Label>預計收款日</Label>
+              <Input
+                type="date"
+                value={dueModal?.date ?? ""}
+                onChange={(e) =>
+                  setDueModal((m) => (m ? { ...m, date: e.target.value } : m))
+                }
+              />
+            </div>
+          </DialogBody>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDueModal(null)}>取消</Button>
+            <Button
+              disabled={dueMut.isPending || !dueModal?.date}
+              onClick={() => {
+                if (!dueModal?.date) return;
+                dueMut.mutate({ id: dueModal.item.workOrderId, date: dueModal.date });
+              }}
+            >
+              儲存
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 登記收款 Modal */}
+      <Dialog open={!!payModal} onOpenChange={(o) => { if (!o) setPayModal(null); }}>
+        <DialogContent className="max-w-sm w-[calc(100vw-1.5rem)]">
+          <DialogHeader>
+            <DialogTitle>登記收款</DialogTitle>
+          </DialogHeader>
+          <DialogBody className="space-y-3">
+            {payModal && (
+              <>
+                <ReceivableSummary item={payModal.item} />
+                <div className="space-y-1">
+                  <Label>本次收款金額</Label>
+                  <Input
+                    type="number"
+                    value={payModal.amount}
+                    onChange={(e) =>
+                      setPayModal((m) => (m ? { ...m, amount: e.target.value } : m))
+                    }
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    不可超過未收金額 NT${money(payModal.item.unpaidAmount)}
+                  </p>
+                </div>
+              </>
+            )}
+          </DialogBody>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPayModal(null)}>取消</Button>
+            <Button
+              disabled={payMut.isPending}
+              onClick={() => {
+                if (!payModal || !data) return;
+                const unpaid = parseFloat(String(payModal.item.unpaidAmount ?? "0")) || 0;
+                const amount = parseFloat(payModal.amount) || 0;
+                if (!(amount > 0)) {
+                  toast({ title: "請輸入收款金額", variant: "destructive" });
+                  return;
+                }
+                if (amount > unpaid) {
+                  toast({
+                    title: "超過未收金額",
+                    description: `最多可收 NT$${unpaid.toLocaleString("zh-TW")}`,
+                    variant: "destructive",
+                  });
+                  return;
+                }
+                payMut.mutate({
+                  id: payModal.item.workOrderId,
+                  amount,
+                  paymentDate: data.today,
+                });
+              }}
+            >
+              確認收款
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

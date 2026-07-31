@@ -106,6 +106,18 @@ function matchesAdminFilter(o: any, tab: AdminFilterTab, _today: string): boolea
   }
 }
 
+/** Pick the list tab that contains this work order. */
+function tabForWorkOrder(o: any): AdminFilterTab {
+  const s = normalizeWoStatus(o.status);
+  if (s === "已結案") return "歷史紀錄";
+  if (s === "已完成") return "施工完成";
+  if (s === "異常／暫停") return "異常／暫停";
+  if (s === "施工中") return "施工中";
+  if ((s === "待派工" || s === "待施工") && !o.scheduledDate) return "待派工";
+  if (s === "待施工" && o.scheduledDate) return "待施工";
+  return "待施工";
+}
+
 const PT_COLORS: Record<string, string> = {
   "新裝": "bg-purple-100 text-purple-700",
   "維修": "bg-red-100 text-red-700",
@@ -357,6 +369,8 @@ export default function WorkOrders() {
   const filterCustomerName = urlParams.get("customerName") ?? "";
   const expandParam = parseInt(urlParams.get("expand") ?? "0", 10) || null;
   const openParam = parseInt(urlParams.get("open") ?? "0", 10) || null;
+  const highlightParam = parseInt(urlParams.get("highlight") ?? "0", 10) || null;
+  const focusId = highlightParam || openParam || expandParam;
 
   const [statusFilter, setStatusFilter] = useState<AdminFilterTab>("待施工");
   const [listSearch, setListSearch] = useState("");
@@ -364,7 +378,8 @@ export default function WorkOrders() {
   const [showCreate, setShowCreate] = useState(false);
   const [editItem, setEditItem] = useState<any>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
-  const [expandedId, setExpandedId] = useState<number | null>(expandParam ?? openParam);
+  const [expandedId, setExpandedId] = useState<number | null>(focusId);
+  const [highlightId, setHighlightId] = useState<number | null>(focusId);
   const [form, setForm] = useState<WOForm>(makeEmpty());
   const [arModal, setArModal] = useState<{ order: any; amount: string } | null>(null);
   const [bindForAr, setBindForAr] = useState<any | null>(null);
@@ -413,6 +428,12 @@ export default function WorkOrders() {
     const q = listSearch.trim().toLowerCase();
 
     if (!isEngineerView) {
+      // Deep-link focus: show the target case without forcing the user to search.
+      if (focusId) {
+        const focused = list.find((o) => o.id === focusId);
+        if (focused) return [focused];
+      }
+
       let filtered = list.filter((o) => matchesAdminFilter(o, statusFilter, today));
       if (q) {
         filtered = filtered.filter((o) => {
@@ -472,7 +493,7 @@ export default function WorkOrders() {
           return true;
       }
     });
-  }, [orders, isEngineerView, engineerFilter, progressMap, today, completedSince, statusFilter, listSearch]);
+  }, [orders, isEngineerView, engineerFilter, progressMap, today, completedSince, statusFilter, listSearch, focusId]);
 
   // 工程師不打客戶／報價 API（常因無 customers/quotations 權限而 403）
   const { data: customers } = useListCustomers(
@@ -492,21 +513,17 @@ export default function WorkOrders() {
   const technicianOptions = (employees ?? []).filter(e => e.position?.includes("技師") && e.status !== "離職");
 
   useEffect(() => {
-    if (expandParam) setExpandedId(expandParam);
-  }, [expandParam]);
-
-  useEffect(() => {
-    if (openParam) setExpandedId(openParam);
-  }, [openParam]);
-
-  useEffect(() => {
-    if (!openParam || !orders?.length) return;
-    const found = orders.some(o => o.id === openParam);
-    if (!found) return;
+    if (!focusId || !orders?.length) return;
+    const o = orders.find((x) => x.id === focusId);
+    if (!o) return;
+    setExpandedId(focusId);
+    setHighlightId(focusId);
+    setListSearch("");
+    if (!isEngineerView) setStatusFilter(tabForWorkOrder(o));
     requestAnimationFrame(() => {
-      document.getElementById(`wo-row-${openParam}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+      document.getElementById(`wo-row-${focusId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
     });
-  }, [openParam, orders]);
+  }, [focusId, orders, isEngineerView]);
 
   const createMutation = useCreateWorkOrder({
     mutation: {
@@ -725,8 +742,8 @@ export default function WorkOrders() {
         </div>
       )}
 
-      {/* Sticky search (mobile-first) */}
-      {!isEngineerView && (
+      {/* Sticky search (mobile-first) — hidden in deep-link focus mode */}
+      {!isEngineerView && !focusId && (
         <div className="sticky top-0 z-10 -mx-1 px-1 py-2 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
           <Input
             value={listSearch}
@@ -734,6 +751,19 @@ export default function WorkOrders() {
             placeholder="搜尋派工單號、客戶、地址…"
             className="h-10"
           />
+        </div>
+      )}
+
+      {focusId && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-primary/5 border border-primary/20 rounded-lg text-sm">
+          <span>正在查看指定案件 #{focusId}</span>
+          <button
+            type="button"
+            className="ml-auto text-xs text-primary hover:underline"
+            onClick={() => navigate("/work-orders")}
+          >
+            返回全部列表
+          </button>
         </div>
       )}
 
@@ -825,12 +855,25 @@ export default function WorkOrders() {
             const hasAr = !!(o as any).receivableId;
             const needsCustomer = !o.customerId;
             return (
-              <Card key={o.id} id={`wo-row-${o.id}`} className="overflow-hidden">
+              <Card
+                key={o.id}
+                id={`wo-row-${o.id}`}
+                className={`overflow-hidden transition-shadow ${
+                  highlightId === o.id
+                    ? "ring-2 ring-primary shadow-md border-primary/40"
+                    : ""
+                }`}
+              >
                 <CardContent className="p-3 sm:p-4 space-y-3">
                   <div className="flex flex-wrap items-center gap-1.5">
                     <span className="text-xs font-mono font-semibold text-muted-foreground">
                       {o.workOrderNumber || `#${o.id}`}
                     </span>
+                    {highlightId === o.id && (
+                      <span className="text-xs px-2 py-0.5 rounded font-medium bg-primary/10 text-primary">
+                        目前案件
+                      </span>
+                    )}
                     <span className={`text-xs px-2 py-0.5 rounded font-medium ${STATUS_COLORS[statusLabel] ?? STATUS_COLORS[o.status] ?? "bg-gray-100 text-gray-600"}`}>
                       {statusLabel}
                     </span>

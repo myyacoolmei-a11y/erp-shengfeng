@@ -9,6 +9,7 @@ import {
   getAdminWorkbench,
   markBilled,
   markFullyPaid,
+  setReceivableExpectedPaymentDate,
   setSubsidyType,
   updateBillingDraft,
   workbenchRecordPayment,
@@ -123,6 +124,25 @@ router.post(
     }
     try {
       res.json(await markBilled(workOrderId, req.user!, toBilling(parsed.data)));
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : "操作失敗" });
+    }
+  },
+);
+
+router.post(
+  "/admin-workbench/:workOrderId/expected-payment-date",
+  requireAdminOps,
+  async (req, res): Promise<void> => {
+    const workOrderId = Number(req.params.workOrderId);
+    if (!Number.isFinite(workOrderId)) {
+      res.status(400).json({ error: "無效的派工單 ID" });
+      return;
+    }
+    const date = typeof req.body?.expectedPaymentDate === "string" ? req.body.expectedPaymentDate : "";
+    try {
+      await setReceivableExpectedPaymentDate(workOrderId, req.user!, date);
+      res.json({ ok: true });
     } catch (err) {
       res.status(400).json({ error: err instanceof Error ? err.message : "操作失敗" });
     }

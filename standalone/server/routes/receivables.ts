@@ -113,6 +113,11 @@ router.post("/receivables", async (req, res): Promise<void> => {
     return;
   }
 
+  if (!(parsed.data.totalAmount > 0)) {
+    res.status(400).json({ error: "應收金額必須大於 0" });
+    return;
+  }
+
   let customerId = parsed.data.customerId;
 
   if (parsed.data.workOrderId) {
