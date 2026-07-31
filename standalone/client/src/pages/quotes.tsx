@@ -45,13 +45,20 @@ import type { VoiceAssistantApplyPayload } from "@/components/voice-assistant/ty
 
 // ── Constants ──────────────────────────────────────────────────────────────
 const STATUSES = ["草稿", "已送出", "已成交", "已拒絕"];
-const FILTER_TABS = ["待處理", "等待客戶回覆", "已成交待派工", "草稿", "歷史紀錄"] as const;
+/** Mutually exclusive quote list tabs — one quote appears in exactly one tab. */
+const FILTER_TABS = ["草稿", "等待客戶回覆", "已成交待派工", "歷史紀錄"] as const;
 type QuoteFilterTab = (typeof FILTER_TABS)[number];
 const STATUS_COLORS: Record<string, string> = {
   "草稿": "bg-gray-100 text-gray-700",
   "已送出": "bg-blue-100 text-blue-700",
   "已成交": "bg-green-100 text-green-700",
   "已拒絕": "bg-red-100 text-red-700",
+  "已取消": "bg-gray-100 text-gray-600",
+  "已失效": "bg-gray-100 text-gray-600",
+  "等待客戶回覆": "bg-blue-100 text-blue-700",
+  "等待修改": "bg-blue-100 text-blue-700",
+  "等待確認": "bg-blue-100 text-blue-700",
+  "等待成交": "bg-blue-100 text-blue-700",
 };
 const DISPATCH_COLORS: Record<string, string> = {
   "未派工": "bg-slate-100 text-slate-600",
@@ -61,29 +68,61 @@ const DISPATCH_COLORS: Record<string, string> = {
   "已完工": "bg-emerald-100 text-emerald-700",
 };
 
+const WAITING_CLIENT_STATUSES = new Set([
+  "已送出",
+  "等待客戶回覆",
+  "等待修改",
+  "等待確認",
+  "等待成交",
+]);
+const DRAFT_STATUSES = new Set(["草稿", "尚未完成", "尚未送出"]);
+const HISTORY_STATUSES = new Set(["已拒絕", "已取消", "已失效"]);
+const DISPATCHED_STATUSES = new Set(["已派工", "施工中", "已完工"]);
+
 function quoteHasWorkOrder(q: any): boolean {
-  return !!(q.workOrderId || q.workOrderNumber) || ["已派工", "施工中", "已完工"].includes(q.dispatchStatus ?? "");
+  return !!(q.workOrderId || q.workOrderNumber) || DISPATCHED_STATUSES.has(q.dispatchStatus ?? "");
+}
+
+/**
+ * Assign each quote to exactly one tab (priority: 歷史 → 已成交待派工 → 等待客戶 → 草稿).
+ */
+function quoteCategory(q: any): QuoteFilterTab {
+  const raw = String(q.status ?? "");
+  const status = normalizeQuoteStatus(raw);
+  const hasWo = quoteHasWorkOrder(q);
+  const dispatched = DISPATCHED_STATUSES.has(q.dispatchStatus ?? "");
+
+  // 4. 歷史紀錄 — already dispatched / rejected / cancelled / expired
+  if (
+    HISTORY_STATUSES.has(raw) ||
+    HISTORY_STATUSES.has(status) ||
+    dispatched ||
+    (status === "已成交" && hasWo)
+  ) {
+    return "歷史紀錄";
+  }
+
+  // 3. 已成交待派工 — won, no work order yet
+  if (status === "已成交" && !hasWo) {
+    return "已成交待派工";
+  }
+
+  // 2. 等待客戶回覆
+  if (WAITING_CLIENT_STATUSES.has(raw) || WAITING_CLIENT_STATUSES.has(status)) {
+    return "等待客戶回覆";
+  }
+
+  // 1. 草稿 (default for incomplete / not sent)
+  if (DRAFT_STATUSES.has(raw) || DRAFT_STATUSES.has(status) || !raw) {
+    return "草稿";
+  }
+
+  // Fallback: treat unknown non-won statuses as waiting / draft conservatively
+  return "草稿";
 }
 
 function quoteMatchesFilter(q: any, filter: QuoteFilterTab): boolean {
-  const status = normalizeQuoteStatus(q.status);
-  const won = status === "已成交";
-  const hasWo = quoteHasWorkOrder(q);
-  switch (filter) {
-    case "待處理":
-      // Active inbox: waiting reply or won pending dispatch
-      return status === "已送出" || (won && !hasWo);
-    case "等待客戶回覆":
-      return status === "已送出";
-    case "已成交待派工":
-      return won && !hasWo;
-    case "草稿":
-      return status === "草稿" || q.status === "草稿";
-    case "歷史紀錄":
-      return status === "已拒絕" || (won && hasWo);
-    default:
-      return true;
-  }
+  return quoteCategory(q) === filter;
 }
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -452,7 +491,7 @@ export default function QuotesPage() {
   const [form, setForm] = useState<QuoteForm>(emptyForm());
   const [woForm, setWoForm] = useState<WOForm>(makeEmpty());
 
-  const [statusFilter, setStatusFilter] = useState<QuoteFilterTab>("待處理");
+  const [statusFilter, setStatusFilter] = useState<QuoteFilterTab>("等待客戶回覆");
   const [listSearch, setListSearch] = useState("");
   const [pdfPreview, setPdfPreview] = useState<{ url: string; filename: string } | null>(null);
 
@@ -496,6 +535,19 @@ export default function QuotesPage() {
       data: { primarySalesRepId: form.salesRepId } as any,
     });
   }
+
+  const tabCounts = (() => {
+    const counts: Record<QuoteFilterTab, number> = {
+      草稿: 0,
+      等待客戶回覆: 0,
+      已成交待派工: 0,
+      歷史紀錄: 0,
+    };
+    for (const q of quotes ?? []) {
+      counts[quoteCategory(q)] += 1;
+    }
+    return counts;
+  })();
 
   const filtered = (quotes ?? []).filter((q: any) => {
     if (!quoteMatchesFilter(q, statusFilter)) return false;
@@ -621,7 +673,7 @@ export default function QuotesPage() {
         />
       </div>
 
-      {/* Status filter — horizontal scroll */}
+      {/* Status filter — horizontal scroll; counts from mutually exclusive mapping */}
       <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
         {FILTER_TABS.map(s => (
           <button key={s} onClick={() => setStatusFilter(s)}
@@ -632,7 +684,7 @@ export default function QuotesPage() {
                   : "bg-primary text-primary-foreground border-primary"
                 : "bg-background border-border hover:bg-muted"
             }`}>
-            {s}
+            {s} ({tabCounts[s]})
           </button>
         ))}
       </div>
