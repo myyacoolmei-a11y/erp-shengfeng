@@ -60,9 +60,11 @@ export function userFeaturePermissions(user: AuthUser | null): FeatureKey[] {
 /** Default landing path based on user's roles — checks in priority order */
 export function defaultPathForRole(user: AuthUser): string {
   const roles = effectiveRoles(user);
-  if (roles.includes("super_admin")) return "/users";
-  if (roles.includes("owner") || roles.includes("admin")) return "/";
-  if (roles.includes("accountant")) return "/receivables";
+  // Owner / boss → ops dashboard home (not admin workbench)
+  if (roles.includes("owner") || roles.includes("super_admin")) return "/";
+  // Admin / accountant → admin daily workbench
+  if (roles.includes("admin")) return "/";
+  if (roles.includes("accountant")) return "/admin-workbench";
   if (roles.includes("sales")) return "/customers";
   if (roles.includes("engineer") || roles.includes("technician")) return "/engineer-dashboard";
   if (roles.includes("distributor")) return "/quotes";

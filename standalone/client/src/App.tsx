@@ -117,12 +117,26 @@ function isFieldEngineerUser(user: NonNullable<ReturnType<typeof useAuth>["user"
   );
 }
 
-/** Admin / owner daily workbench — not the stats dashboard. */
-function isAdminWorkbenchUser(user: NonNullable<ReturnType<typeof useAuth>["user"]>): boolean {
-  return hasRole(user, "super_admin", "owner", "admin");
+/** Boss / owner ops overview — never the admin daily workbench. */
+function isOwnerDashboardUser(user: NonNullable<ReturnType<typeof useAuth>["user"]>): boolean {
+  return hasRole(user, "super_admin", "owner");
 }
 
-/** Home `/`: engineers → engineer dashboard; admin/owner → admin workbench. */
+/**
+ * Admin daily workbench home — admin / accountant only.
+ * Owner/super_admin must NOT land here (they use the ops Dashboard).
+ */
+function isAdminWorkbenchHomeUser(user: NonNullable<ReturnType<typeof useAuth>["user"]>): boolean {
+  if (isOwnerDashboardUser(user)) return false;
+  return hasRole(user, "admin", "accountant");
+}
+
+/**
+ * Home `/` — role-specific dashboards (do not share one component):
+ * - engineer → EngineerDashboard
+ * - owner / super_admin → Owner Dashboard (營運概況)
+ * - admin / accountant → AdminWorkbench (今日必做事項)
+ */
 function HomeRoute() {
   const { user, isLoading } = useAuth();
   if (isLoading || !user) {
@@ -135,7 +149,14 @@ function HomeRoute() {
   if (isFieldEngineerUser(user)) {
     return <Redirect to="/engineer-dashboard" />;
   }
-  if (isAdminWorkbenchUser(user) || hasRole(user, "accountant")) {
+  if (isOwnerDashboardUser(user)) {
+    return (
+      <Guard feature="dashboard">
+        <Dashboard />
+      </Guard>
+    );
+  }
+  if (isAdminWorkbenchHomeUser(user)) {
     return <AdminWorkbench />;
   }
   return (
@@ -143,6 +164,22 @@ function HomeRoute() {
       <Dashboard />
     </Guard>
   );
+}
+
+function AdminWorkbenchRoute() {
+  const { user, isLoading } = useAuth();
+  if (isLoading || !user) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      </div>
+    );
+  }
+  // Admin home + optional access for owner; engineers stay on their own home.
+  if (hasRole(user, "admin", "accountant", "owner", "super_admin")) {
+    return <AdminWorkbench />;
+  }
+  return <Redirect to={defaultPathForRole(user)} />;
 }
 
 /** Allow engineer/technician role OR feature key (fixes menu-visible but API/guard 403). */
@@ -203,7 +240,7 @@ function AppRoutes() {
               <HomeRoute />
             </Route>
             <Route path="/admin-workbench">
-              <HomeRoute />
+              <AdminWorkbenchRoute />
             </Route>
             <Route path="/boss-dashboard">
               <Guard feature="dashboard"><Dashboard /></Guard>

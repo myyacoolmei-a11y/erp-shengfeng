@@ -97,12 +97,13 @@ function pickDashboardItem(items: NavItemDef[], userRoles: UserRole[]): NavItemD
       dashboards.find((d) => d.preferRoles?.some((r) => r === "engineer" || r === "technician"));
     if (eng) return { ...eng, label: "今日工作" };
   }
-  const isAdminHome =
-    userRoles.includes("super_admin") ||
-    userRoles.includes("owner") ||
-    userRoles.includes("admin") ||
-    userRoles.includes("accountant");
-  if (isAdminHome) {
+  // Owner / boss — ops overview (not admin workbench)
+  if (userRoles.includes("super_admin") || userRoles.includes("owner")) {
+    const home = dashboards.find((d) => d.path === "/") ?? dashboards[0];
+    return home ? { ...home, label: "營運儀表板" } : null;
+  }
+  // Admin / accountant — daily workbench
+  if (userRoles.includes("admin") || userRoles.includes("accountant")) {
     const home = dashboards.find((d) => d.path === "/") ?? dashboards[0];
     return home ? { ...home, label: "今日工作台" } : null;
   }
