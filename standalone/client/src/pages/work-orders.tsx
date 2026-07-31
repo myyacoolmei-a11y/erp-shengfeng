@@ -304,8 +304,6 @@ function ProgressPanel({ workOrderId, customerId, workOrderTitle }: {
 export default function WorkOrders() {
   const { toast } = useToast();
   const { user } = useAuth();
-  const canWrite =
-    hasRole(user, "super_admin", "owner", "admin") || userHasFeature(user, "dispatch_orders");
   const queryClient = useQueryClient();
 
   const search = useSearch();
@@ -335,6 +333,10 @@ export default function WorkOrders() {
   const isEngineerView =
     hasRole(user, "engineer", "technician") &&
     !hasRole(user, "super_admin", "owner", "admin");
+  // 工程師不可新增／管理派工（僅施工檢視）
+  const canWrite =
+    !isEngineerView &&
+    (hasRole(user, "super_admin", "owner", "admin") || userHasFeature(user, "dispatch_orders"));
 
   // 工程師：不寫死 today，一次取回指派案件後前端篩選
   const {
@@ -397,9 +399,19 @@ export default function WorkOrders() {
     });
   }, [orders, isEngineerView, engineerFilter, progressMap, today, completedSince]);
 
-  const { data: customers } = useListCustomers({ includeOld: "true" });
-  const { data: employees } = useListEmployees();
-  const { data: quotes } = useListQuotes({ includeOld: "true" } as any);
+  // 工程師不打客戶／報價 API（常因無 customers/quotations 權限而 403）
+  const { data: customers } = useListCustomers(
+    { includeOld: "true" },
+    { query: { enabled: !isEngineerView } } as any,
+  );
+  const { data: employees } = useListEmployees(
+    undefined,
+    { query: { enabled: !isEngineerView } } as any,
+  );
+  const { data: quotes } = useListQuotes(
+    { includeOld: "true" } as any,
+    { query: { enabled: !isEngineerView } } as any,
+  );
 
   // Technician options: employees whose position contains "技師" and are active
   const technicianOptions = (employees ?? []).filter(e => e.position?.includes("技師") && e.status !== "離職");
@@ -657,22 +669,27 @@ export default function WorkOrders() {
 
       {ordersError && (
         <Card className="border-destructive/50 bg-destructive/5">
-          <CardContent className="py-6 text-center space-y-2">
+          <CardContent className="py-6 text-center space-y-3">
             <AlertCircle className="h-7 w-7 text-destructive mx-auto" />
             <p className="font-medium text-destructive">無法載入派工單</p>
             <p className="text-sm text-muted-foreground">
               {ordersErr instanceof Error ? ordersErr.message : "請稍後再試"}
             </p>
+            <Button type="button" variant="outline" size="sm" onClick={() => window.location.reload()}>
+              重新整理
+            </Button>
           </CardContent>
         </Card>
       )}
 
-      {/* Engineer card list */}
+      {/* Engineer card list — 有 403 時不顯示空資料文案 */}
       {isEngineerView && !ordersError ? (
         isLoading ? (
           <div className="space-y-2">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-32 w-full" />)}</div>
         ) : displayedOrders.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-12">此篩選條件沒有派工單</p>
+          <p className="text-sm text-muted-foreground text-center py-12">
+            目前沒有分配給您的派工單
+          </p>
         ) : (
           <div className="space-y-3 max-w-2xl">
             {displayedOrders.map((o) => (

@@ -9,7 +9,7 @@ import {
   quotesTable,
 } from "@workspace/db";
 import { CreateWorkOrderBody, UpdateWorkOrderBody, CreateProgressBody } from "@workspace/api-zod";
-import { requireFeature, effectiveRoles } from "../lib/auth";
+import { requireRoleOrFeature, effectiveRoles } from "../lib/auth";
 import { syncQuoteDispatchStatus } from "../lib/quoteWorkflow";
 import { formatQuoteNumber } from "../lib/quoteStatus";
 import { stripQuotePricingFromNotes } from "../../shared/workOrderNotes.ts";
@@ -39,7 +39,13 @@ const WO_COMPLETED_STATUSES = ["已完成", "已結案"];
 const WO_ADMIN_ROLES = ["super_admin", "owner", "admin"];
 
 const router: IRouter = Router();
-router.use(requireFeature("dispatch_orders"));
+/** Feature OR field role — engineers can read own jobs even if feature_permissions incomplete */
+router.use(
+  requireRoleOrFeature(
+    ["super_admin", "owner", "admin", "engineer", "technician"],
+    ["dispatch_orders"],
+  ),
+);
 
 
 function isoStr(v: unknown): string | null {

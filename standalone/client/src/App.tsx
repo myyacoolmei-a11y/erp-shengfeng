@@ -108,6 +108,53 @@ function Guard({
   return inner;
 }
 
+/** Field engineer/technician only — not owner/admin (avoids mounting boss dashboard). */
+function isFieldEngineerUser(user: NonNullable<ReturnType<typeof useAuth>["user"]>): boolean {
+  return (
+    hasRole(user, "engineer", "technician") &&
+    !hasRole(user, "super_admin", "owner", "admin")
+  );
+}
+
+/** Home `/`: engineers never mount boss Dashboard (no /dashboard/summary call). */
+function HomeRoute() {
+  const { user, isLoading } = useAuth();
+  if (isLoading || !user) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+      </div>
+    );
+  }
+  if (isFieldEngineerUser(user)) {
+    return <Redirect to="/engineer-dashboard" />;
+  }
+  return (
+    <Guard feature="dashboard">
+      <Dashboard />
+    </Guard>
+  );
+}
+
+/** Allow engineer/technician role OR feature key (fixes menu-visible but API/guard 403). */
+function EngineerOrFeatureGuard({
+  feature,
+  children,
+}: {
+  feature: FeatureKey;
+  children: React.ReactNode;
+}) {
+  const { user } = useAuth();
+  const [location] = useLocation();
+  if (!user) return <Redirect to="/login" />;
+  if (isFieldEngineerUser(user) || userHasFeature(user, feature)) {
+    return <>{children}</>;
+  }
+  const fallback = defaultPathForRole(user);
+  if (fallback === location || fallback === "/login") return <AccessDenied />;
+  return <Redirect to={fallback} />;
+}
+
 function AppRoutes() {
   const { isAuthenticated, isLoading, user } = useAuth();
   const [location] = useLocation();
@@ -144,9 +191,7 @@ function AppRoutes() {
         <Layout>
           <Switch>
             <Route path="/">
-              <Guard feature="dashboard">
-                <Dashboard />
-              </Guard>
+              <HomeRoute />
             </Route>
             <Route path="/customers">
               <Guard feature="customers"><Customers /></Guard>
@@ -165,7 +210,7 @@ function AppRoutes() {
               <Guard feature="quotations"><Quotes /></Guard>
             </Route>
             <Route path="/work-orders">
-              <Guard feature="dispatch_orders"><WorkOrders /></Guard>
+              <EngineerOrFeatureGuard feature="dispatch_orders"><WorkOrders /></EngineerOrFeatureGuard>
             </Route>
             <Route path="/repair-cases">
               <Guard feature="repair_cases"><RepairCases /></Guard>
@@ -183,9 +228,9 @@ function AppRoutes() {
               <Guard feature="warranty_maintenance"><Maintenance /></Guard>
             </Route>
             <Route path="/engineer-dashboard">
-              <Guard feature="dispatch_orders">
+              <EngineerOrFeatureGuard feature="dispatch_orders">
                 <EngineerDashboard />
-              </Guard>
+              </EngineerOrFeatureGuard>
             </Route>
             <Route path="/work-hours-stats">
               <Guard feature="work_hours"><WorkHoursStats /></Guard>

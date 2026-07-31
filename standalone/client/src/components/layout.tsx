@@ -86,6 +86,17 @@ const ROLE_COLORS: Record<UserRole, string> = {
 function pickDashboardItem(items: NavItemDef[], userRoles: UserRole[]): NavItemDef | null {
   const dashboards = items.filter((i) => i.key === "dashboard");
   if (!dashboards.length) return null;
+  const isFieldEngineer =
+    (userRoles.includes("engineer") || userRoles.includes("technician")) &&
+    !userRoles.includes("super_admin") &&
+    !userRoles.includes("owner") &&
+    !userRoles.includes("admin");
+  if (isFieldEngineer) {
+    const eng =
+      dashboards.find((d) => d.path === "/engineer-dashboard") ??
+      dashboards.find((d) => d.preferRoles?.some((r) => r === "engineer" || r === "technician"));
+    if (eng) return { ...eng, label: "今日工作" };
+  }
   const preferred = dashboards.find((d) => d.preferRoles?.some((r) => userRoles.includes(r as UserRole)));
   return preferred ?? dashboards[0];
 }
@@ -154,7 +165,7 @@ function NavContent() {
   return (
     <div className="flex h-full flex-col py-4">
       <div className="px-4 py-3">
-        <Link href="/">
+        <Link href={dash?.path ?? "/"}>
           <div className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity">
             <img src="/logo.png" alt={APP_BRAND.logoAlt} className="h-12 w-12 rounded-full object-cover shrink-0" />
             <div>
