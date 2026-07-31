@@ -31,6 +31,8 @@ export * from "./partnerBoard";
 export * from "./partnerSuggestions";
 export * from "./fieldProgressEvents";
 export * from "./fieldProgressSnapshots";
+export * from "./adminTodos";
+export * from "./fieldProgressBackfillRequests";
 export * from "./userNotificationPrefs";
 export * from "./lineUserBindings";
 export * from "./notificationDeliveryLogs";

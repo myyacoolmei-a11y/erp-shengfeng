@@ -12,7 +12,8 @@ function hasProgressActivity(row: WorkOrderFieldProgress): boolean {
     row.departedAt ||
     row.arrivedAt ||
     row.completedAt ||
-    row.unableToCompleteAt
+    row.unableToCompleteAt ||
+    row.pausedAt
   );
 }
 
@@ -51,15 +52,26 @@ export async function resetWorkOrderFieldProgressOnReopen(workOrderId: number): 
   await db
     .update(workOrderFieldProgressTable)
     .set({
+      fieldStatus: "pending",
       departedAt: null,
       arrivedAt: null,
+      pausedAt: null,
+      resumedAt: null,
       completedAt: null,
+      pauseReason: null,
+      pauseNote: null,
+      pauseTotalMinutes: 0,
+      pauseIntervals: [],
       unableToCompleteAt: null,
       unableReason: null,
       unableNote: null,
       travelDurationMinutes: null,
       workDurationMinutes: null,
       totalDurationMinutes: null,
+      completedBy: null,
+      completionChecklist: null,
+      workflowStatus: null,
+      lastActionBy: null,
       updatedAt: now,
     })
     .where(eq(workOrderFieldProgressTable.workOrderId, workOrderId));

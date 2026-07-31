@@ -5,11 +5,13 @@ import {
   workOrdersTable,
   workOrderFieldProgressTable,
   fieldProgressSnapshotsTable,
+  fieldProgressBackfillRequestsTable,
   customersTable,
 } from "@workspace/db";
 import { requireRole } from "../lib/auth";
 import {
   UNABLE_REASONS,
+  PAUSE_REASONS,
   buildUserAssignmentContext,
   canUserAccessWorkOrder,
   isFieldProgressOperator,
@@ -18,7 +20,17 @@ import {
   serializeFieldProgress,
   serializeFieldProgressSnapshot,
   taipeiDateString,
+  computeDurations,
+  deriveFieldStatus,
 } from "../lib/workOrders/fieldProgressUtils.ts";
+import {
+  BACKFILL_STEPS,
+  emptyCompletionChecklist,
+  isChecklistComplete,
+  type CompletionChecklist,
+  type PauseInterval,
+} from "../../shared/fieldProgressConstants.ts";
+import { upsertAdminFieldCompleteTodo } from "../lib/workOrders/upsertAdminFieldTodo.ts";
 import { notifyFieldProgressEvent } from "../lib/notifications/fieldProgressNotifyService.ts";
 import { logger } from "../lib/logger.ts";
 
@@ -30,6 +42,8 @@ const STATS_ROLES = ["super_admin", "owner", "admin", "accountant"] as const;
 
 type WoRow = {
   id: number;
+  workOrderNumber: string | null;
+  customerName: string | null;
   assignedTo: string | null;
   assistantTo: string | null;
   technicians: string | null;
@@ -40,6 +54,8 @@ async function fetchWorkOrder(id: number): Promise<WoRow | null> {
   const [order] = await db
     .select({
       id: workOrdersTable.id,
+      workOrderNumber: workOrdersTable.workOrderNumber,
+      customerName: workOrdersTable.customerName,
       assignedTo: workOrdersTable.assignedTo,
       assistantTo: workOrdersTable.assistantTo,
       technicians: workOrdersTable.technicians,
@@ -80,7 +96,14 @@ async function getOrCreateProgress(
 
   const [created] = await db
     .insert(workOrderFieldProgressTable)
-    .values({ workOrderId, engineerUserId, engineerName })
+    .values({
+      workOrderId,
+      engineerUserId,
+      engineerName,
+      fieldStatus: "pending",
+      pauseIntervals: [],
+      pauseTotalMinutes: 0,
+    })
     .returning();
   return created;
 }
@@ -106,12 +129,32 @@ function emitFieldProgressNotify(
     actedAt,
     unableReason: extra?.unableReason,
     unableNote: extra?.unableNote,
-  }).catch(err => {
+  }).catch((err) => {
     logger.error({ err, workOrderId, action }, "field progress notify failed");
   });
 }
 
-/** GET field progress for one work order (all engineers for admin; own only for engineer) */
+async function loadAccessibleProgress(req: Request, res: Response, workOrderId: number) {
+  if (!isFieldProgressOperator(req.user!)) {
+    res.status(403).json({ error: "只有工程師可以記錄施工進度" });
+    return null;
+  }
+  const order = await fetchWorkOrder(workOrderId);
+  if (!order) {
+    res.status(404).json({ error: "找不到派工單" });
+    return null;
+  }
+  const ctx = await buildUserAssignmentContext(req.user!);
+  const access = assertWorkOrderAccess(req.user!, order, ctx);
+  if (!access.ok) {
+    res.status(access.status).json({ error: access.message });
+    return null;
+  }
+  const progress = await getOrCreateProgress(workOrderId, req.user!.id, req.user!.displayName);
+  return { order, progress };
+}
+
+/** GET field progress for one work order */
 router.get(
   "/work-orders/:workOrderId/field-progress",
   requireRole(...READ_ROLES),
@@ -149,7 +192,6 @@ router.get(
   },
 );
 
-/** GET archived field progress cycles (admin history after reopen) */
 router.get(
   "/work-orders/:workOrderId/field-progress/snapshots",
   requireRole(...READ_ROLES),
@@ -181,7 +223,6 @@ router.get(
   },
 );
 
-/** GET current user's field progress records (for engineer dashboard) */
 router.get(
   "/field-progress/mine",
   requireRole(...OPERATE_ROLES),
@@ -195,137 +236,290 @@ router.get(
   },
 );
 
-async function handleFieldAction(
-  req: Request,
-  res: Response,
-  action: "depart" | "arrive" | "complete",
-): Promise<void> {
-  const workOrderId = parseWorkOrderId(req.params.workOrderId);
-  if (!workOrderId) {
-    res.status(400).json({ error: "Invalid workOrderId" });
-    return;
-  }
-
-  if (!isFieldProgressOperator(req.user!)) {
-    res.status(403).json({ error: "只有工程師可以記錄施工進度" });
-    return;
-  }
-
-  const order = await fetchWorkOrder(workOrderId);
-  if (!order) {
-    res.status(404).json({ error: "找不到派工單" });
-    return;
-  }
-
-  const ctx = await buildUserAssignmentContext(req.user!);
-  const access = assertWorkOrderAccess(req.user!, order, ctx);
-  if (!access.ok) {
-    res.status(access.status).json({ error: access.message });
-    return;
-  }
-
-  const progress = await getOrCreateProgress(
-    workOrderId,
-    req.user!.id,
-    req.user!.displayName,
-  );
-
-  if (progress.completedAt) {
-    res.status(409).json({ error: "此案件已完工，無法再次操作" });
-    return;
-  }
-
-  const now = new Date();
-
-  if (action === "depart") {
-    if (progress.departedAt) {
-      res.status(409).json({ error: "已記錄前往案場時間" });
-      return;
-    }
-    const [updated] = await db
-      .update(workOrderFieldProgressTable)
-      .set({ departedAt: now, updatedAt: now })
-      .where(eq(workOrderFieldProgressTable.id, progress.id))
-      .returning();
-    emitFieldProgressNotify(req, workOrderId, "depart", now);
-    res.json(serializeFieldProgress(updated));
-    return;
-  }
-
-  if (action === "arrive") {
-    if (!progress.departedAt) {
-      res.status(400).json({ error: "請先記錄「前往案場」" });
-      return;
-    }
-    if (progress.arrivedAt) {
-      res.status(409).json({ error: "已記錄到達施工時間" });
-      return;
-    }
-    const [updated] = await db
-      .update(workOrderFieldProgressTable)
-      .set({ arrivedAt: now, updatedAt: now })
-      .where(eq(workOrderFieldProgressTable.id, progress.id))
-      .returning();
-    emitFieldProgressNotify(req, workOrderId, "arrive", now);
-    res.json(serializeFieldProgress(updated));
-    return;
-  }
-
-  // complete
-  if (!progress.departedAt) {
-    res.status(400).json({ error: "請先記錄「前往案場」" });
-    return;
-  }
-  if (!progress.arrivedAt) {
-    res.status(400).json({ error: "請先記錄「到達施工」" });
-    return;
-  }
-
-  const travelDurationMinutes = diffMinutes(progress.departedAt, progress.arrivedAt);
-  const workDurationMinutes = diffMinutes(progress.arrivedAt, now);
-  const totalDurationMinutes = diffMinutes(progress.departedAt, now);
-
-  const [updated] = await db
-    .update(workOrderFieldProgressTable)
-    .set({
-      completedAt: now,
-      travelDurationMinutes,
-      workDurationMinutes,
-      totalDurationMinutes,
-      updatedAt: now,
-    })
-    .where(eq(workOrderFieldProgressTable.id, progress.id))
-    .returning();
-
-  await db
-    .update(workOrdersTable)
-    .set({
-      status: "已完成",
-      completedDate: taipeiDateString(now),
-      updatedAt: now,
-    })
-    .where(eq(workOrdersTable.id, workOrderId));
-
-  emitFieldProgressNotify(req, workOrderId, "complete", now);
-  res.json(serializeFieldProgress(updated));
-}
-
 router.post(
   "/work-orders/:workOrderId/field-progress/depart",
   requireRole(...OPERATE_ROLES),
-  (req, res) => handleFieldAction(req, res, "depart"),
+  async (req, res): Promise<void> => {
+    const workOrderId = parseWorkOrderId(req.params.workOrderId);
+    if (!workOrderId) {
+      res.status(400).json({ error: "Invalid workOrderId" });
+      return;
+    }
+    const loaded = await loadAccessibleProgress(req, res, workOrderId);
+    if (!loaded) return;
+    const { progress } = loaded;
+
+    if (progress.completedAt) {
+      res.status(409).json({ error: "此案件已完工，無法再次操作" });
+      return;
+    }
+    if (progress.departedAt) {
+      res.status(409).json({ error: "已記錄出發時間" });
+      return;
+    }
+
+    const now = new Date();
+    const [updated] = await db
+      .update(workOrderFieldProgressTable)
+      .set({
+        departedAt: now,
+        fieldStatus: "en_route",
+        lastActionBy: req.user!.id,
+        updatedAt: now,
+      })
+      .where(eq(workOrderFieldProgressTable.id, progress.id))
+      .returning();
+
+    emitFieldProgressNotify(req, workOrderId, "depart", now);
+    res.json(serializeFieldProgress(updated));
+  },
 );
 
 router.post(
   "/work-orders/:workOrderId/field-progress/arrive",
   requireRole(...OPERATE_ROLES),
-  (req, res) => handleFieldAction(req, res, "arrive"),
+  async (req, res): Promise<void> => {
+    const workOrderId = parseWorkOrderId(req.params.workOrderId);
+    if (!workOrderId) {
+      res.status(400).json({ error: "Invalid workOrderId" });
+      return;
+    }
+    const loaded = await loadAccessibleProgress(req, res, workOrderId);
+    if (!loaded) return;
+    const { progress } = loaded;
+
+    if (progress.completedAt) {
+      res.status(409).json({ error: "此案件已完工，無法再次操作" });
+      return;
+    }
+    if (!progress.departedAt) {
+      res.status(400).json({ error: "請先按「出發中」" });
+      return;
+    }
+    if (progress.arrivedAt) {
+      res.status(409).json({ error: "已記錄到場時間" });
+      return;
+    }
+
+    const now = new Date();
+    const [updated] = await db
+      .update(workOrderFieldProgressTable)
+      .set({
+        arrivedAt: now,
+        fieldStatus: "in_progress",
+        lastActionBy: req.user!.id,
+        updatedAt: now,
+      })
+      .where(eq(workOrderFieldProgressTable.id, progress.id))
+      .returning();
+
+    emitFieldProgressNotify(req, workOrderId, "arrive", now);
+    res.json(serializeFieldProgress(updated));
+  },
+);
+
+router.post(
+  "/work-orders/:workOrderId/field-progress/pause",
+  requireRole(...OPERATE_ROLES),
+  async (req, res): Promise<void> => {
+    const workOrderId = parseWorkOrderId(req.params.workOrderId);
+    if (!workOrderId) {
+      res.status(400).json({ error: "Invalid workOrderId" });
+      return;
+    }
+    const { reason, note } = req.body as { reason?: string; note?: string };
+    if (!reason || !(PAUSE_REASONS as readonly string[]).includes(reason)) {
+      res.status(400).json({ error: "請選擇有效的暫停原因" });
+      return;
+    }
+    if (reason === "其他" && (!note || !note.trim())) {
+      res.status(400).json({ error: "選擇「其他」時必須填寫備註" });
+      return;
+    }
+
+    const loaded = await loadAccessibleProgress(req, res, workOrderId);
+    if (!loaded) return;
+    const { progress } = loaded;
+    const status = deriveFieldStatus(progress);
+
+    if (progress.completedAt || status === "completed") {
+      res.status(409).json({ error: "此案件已完工" });
+      return;
+    }
+    if (status !== "in_progress") {
+      res.status(400).json({ error: "僅施工中可暫停" });
+      return;
+    }
+
+    const now = new Date();
+    const intervals: PauseInterval[] = Array.isArray(progress.pauseIntervals)
+      ? [...progress.pauseIntervals]
+      : [];
+    intervals.push({
+      pausedAt: now.toISOString(),
+      resumedAt: null,
+      reason,
+      note: reason === "其他" ? note!.trim() : note?.trim() || null,
+    });
+
+    const [updated] = await db
+      .update(workOrderFieldProgressTable)
+      .set({
+        fieldStatus: "paused",
+        pausedAt: now,
+        pauseReason: reason,
+        pauseNote: reason === "其他" ? note!.trim() : note?.trim() || null,
+        pauseIntervals: intervals,
+        lastActionBy: req.user!.id,
+        updatedAt: now,
+      })
+      .where(eq(workOrderFieldProgressTable.id, progress.id))
+      .returning();
+
+    res.json(serializeFieldProgress(updated));
+  },
+);
+
+router.post(
+  "/work-orders/:workOrderId/field-progress/resume",
+  requireRole(...OPERATE_ROLES),
+  async (req, res): Promise<void> => {
+    const workOrderId = parseWorkOrderId(req.params.workOrderId);
+    if (!workOrderId) {
+      res.status(400).json({ error: "Invalid workOrderId" });
+      return;
+    }
+    const loaded = await loadAccessibleProgress(req, res, workOrderId);
+    if (!loaded) return;
+    const { progress } = loaded;
+    const status = deriveFieldStatus(progress);
+
+    if (status !== "paused" || !progress.pausedAt) {
+      res.status(400).json({ error: "目前不是暫停狀態" });
+      return;
+    }
+
+    const now = new Date();
+    const pauseDelta = diffMinutes(progress.pausedAt, now);
+    const pauseTotalMinutes = (progress.pauseTotalMinutes ?? 0) + pauseDelta;
+    const intervals: PauseInterval[] = Array.isArray(progress.pauseIntervals)
+      ? [...progress.pauseIntervals]
+      : [];
+    if (intervals.length > 0 && intervals[intervals.length - 1]!.resumedAt == null) {
+      intervals[intervals.length - 1] = {
+        ...intervals[intervals.length - 1]!,
+        resumedAt: now.toISOString(),
+      };
+    }
+
+    const [updated] = await db
+      .update(workOrderFieldProgressTable)
+      .set({
+        fieldStatus: "in_progress",
+        resumedAt: now,
+        pauseTotalMinutes,
+        pauseIntervals: intervals,
+        lastActionBy: req.user!.id,
+        updatedAt: now,
+      })
+      .where(eq(workOrderFieldProgressTable.id, progress.id))
+      .returning();
+
+    res.json(serializeFieldProgress(updated));
+  },
 );
 
 router.post(
   "/work-orders/:workOrderId/field-progress/complete",
   requireRole(...OPERATE_ROLES),
-  (req, res) => handleFieldAction(req, res, "complete"),
+  async (req, res): Promise<void> => {
+    const workOrderId = parseWorkOrderId(req.params.workOrderId);
+    if (!workOrderId) {
+      res.status(400).json({ error: "Invalid workOrderId" });
+      return;
+    }
+
+    const body = req.body as { checklist?: CompletionChecklist };
+    const checklist = { ...emptyCompletionChecklist(), ...(body.checklist ?? {}) };
+    if (!isChecklistComplete(checklist)) {
+      res.status(400).json({ error: "請勾選全部施工完成確認項目" });
+      return;
+    }
+
+    const loaded = await loadAccessibleProgress(req, res, workOrderId);
+    if (!loaded) return;
+    const { order, progress } = loaded;
+    const status = deriveFieldStatus(progress);
+
+    if (progress.completedAt) {
+      res.status(409).json({ error: "此案件已完工" });
+      return;
+    }
+    if (!progress.departedAt || !progress.arrivedAt) {
+      res.status(400).json({ error: "請先完成出發與到場" });
+      return;
+    }
+    if (status === "paused") {
+      res.status(400).json({ error: "請先恢復施工後再完成" });
+      return;
+    }
+    if (status !== "in_progress") {
+      res.status(400).json({ error: "僅施工中可完成" });
+      return;
+    }
+
+    const now = new Date();
+    const openPause =
+      progress.pausedAt &&
+      (!progress.resumedAt || progress.pausedAt.getTime() > progress.resumedAt.getTime())
+        ? progress.pausedAt
+        : null;
+
+    const durations = computeDurations({
+      departedAt: progress.departedAt,
+      arrivedAt: progress.arrivedAt,
+      completedAt: now,
+      pauseTotalMinutes: progress.pauseTotalMinutes ?? 0,
+      openPauseStartedAt: openPause,
+    });
+
+    const [updated] = await db
+      .update(workOrderFieldProgressTable)
+      .set({
+        completedAt: now,
+        fieldStatus: "completed",
+        completedBy: req.user!.id,
+        completionChecklist: checklist,
+        workflowStatus: "pending_admin",
+        travelDurationMinutes: durations.travelDurationMinutes,
+        workDurationMinutes: durations.workDurationMinutes,
+        totalDurationMinutes: durations.totalDurationMinutes,
+        pauseTotalMinutes: durations.pauseTotalMinutes,
+        lastActionBy: req.user!.id,
+        updatedAt: now,
+      })
+      .where(eq(workOrderFieldProgressTable.id, progress.id))
+      .returning();
+
+    await db
+      .update(workOrdersTable)
+      .set({
+        status: "已完成",
+        completedDate: taipeiDateString(now),
+        updatedAt: now,
+      })
+      .where(eq(workOrdersTable.id, workOrderId));
+
+    await upsertAdminFieldCompleteTodo({
+      workOrderId,
+      workOrderNumber: order.workOrderNumber,
+      customerName: order.customerName,
+      createdBy: req.user!.id,
+    });
+
+    emitFieldProgressNotify(req, workOrderId, "complete", now);
+    res.json(serializeFieldProgress(updated));
+  },
 );
 
 router.post(
@@ -348,32 +542,16 @@ router.post(
       return;
     }
 
-    const order = await fetchWorkOrder(workOrderId);
-    if (!order) {
-      res.status(404).json({ error: "找不到派工單" });
-      return;
-    }
-
-    const ctx = await buildUserAssignmentContext(req.user!);
-    const access = assertWorkOrderAccess(req.user!, order, ctx);
-    if (!access.ok) {
-      res.status(access.status).json({ error: access.message });
-      return;
-    }
-
-    const progress = await getOrCreateProgress(
-      workOrderId,
-      req.user!.id,
-      req.user!.displayName,
-    );
+    const loaded = await loadAccessibleProgress(req, res, workOrderId);
+    if (!loaded) return;
+    const { progress } = loaded;
 
     if (progress.completedAt) {
       res.status(409).json({ error: "此案件已完工，無法回報異常" });
       return;
     }
-
     if (!progress.departedAt && !progress.arrivedAt) {
-      res.status(400).json({ error: "請先記錄「前往案場」後才能回報無法完成" });
+      res.status(400).json({ error: "請先記錄「出發中」後才能回報無法完成" });
       return;
     }
 
@@ -384,6 +562,7 @@ router.post(
         unableToCompleteAt: now,
         unableReason: reason,
         unableNote: reason === "其他" ? note!.trim() : note?.trim() || null,
+        lastActionBy: req.user!.id,
         updatedAt: now,
       })
       .where(eq(workOrderFieldProgressTable.id, progress.id))
@@ -394,6 +573,68 @@ router.post(
       unableNote: reason === "其他" ? note!.trim() : note?.trim() || null,
     });
     res.json(serializeFieldProgress(updated));
+  },
+);
+
+/** 申請補登 — 不覆蓋原始時間，僅建立 pending 申請 */
+router.post(
+  "/work-orders/:workOrderId/field-progress/backfill-request",
+  requireRole(...OPERATE_ROLES),
+  async (req, res): Promise<void> => {
+    const workOrderId = parseWorkOrderId(req.params.workOrderId);
+    if (!workOrderId) {
+      res.status(400).json({ error: "Invalid workOrderId" });
+      return;
+    }
+
+    const { missedStep, requestedTime, reason, note } = req.body as {
+      missedStep?: string;
+      requestedTime?: string;
+      reason?: string;
+      note?: string;
+    };
+
+    if (!missedStep || !(BACKFILL_STEPS as readonly string[]).includes(missedStep)) {
+      res.status(400).json({ error: "請選擇漏按步驟" });
+      return;
+    }
+    if (!requestedTime || Number.isNaN(Date.parse(requestedTime))) {
+      res.status(400).json({ error: "請填寫實際時間" });
+      return;
+    }
+    if (!reason?.trim()) {
+      res.status(400).json({ error: "請填寫原因" });
+      return;
+    }
+
+    const loaded = await loadAccessibleProgress(req, res, workOrderId);
+    if (!loaded) return;
+
+    const [created] = await db
+      .insert(fieldProgressBackfillRequestsTable)
+      .values({
+        workOrderId,
+        progressId: loaded.progress.id,
+        requestedBy: req.user!.id,
+        missedStep,
+        requestedTime: new Date(requestedTime),
+        reason: reason.trim(),
+        note: note?.trim() || null,
+        approvalStatus: "pending",
+      })
+      .returning();
+
+    res.status(201).json({
+      id: created.id,
+      workOrderId: created.workOrderId,
+      missedStep: created.missedStep,
+      requestedTime: created.requestedTime.toISOString(),
+      reason: created.reason,
+      note: created.note,
+      approvalStatus: created.approvalStatus,
+      requestedAt: created.requestedAt.toISOString(),
+      requestedBy: created.requestedBy,
+    });
   },
 );
 
@@ -424,7 +665,6 @@ function resolveDateRange(preset?: string, from?: string, to?: string): { from: 
   return null;
 }
 
-/** Work hours statistics for admin/accountant */
 router.get(
   "/work-hours/stats",
   requireRole(...STATS_ROLES),
