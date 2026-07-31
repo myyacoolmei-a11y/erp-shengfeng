@@ -1,10 +1,10 @@
 import { Router, type IRouter } from "express";
 import { getDashboardSummary } from "../lib/statistics/statisticsService";
-import { requireRole } from "../lib/auth";
+import { requireFeature } from "../lib/auth";
 
 const router: IRouter = Router();
 
-router.get("/dashboard/summary", requireRole("super_admin", "owner", "admin", "accountant"), async (_req, res): Promise<void> => {
+router.get("/dashboard/summary", requireFeature("dashboard"), async (_req, res): Promise<void> => {
   const summary = await getDashboardSummary();
   res.json(summary);
 });

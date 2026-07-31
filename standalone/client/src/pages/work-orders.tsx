@@ -23,7 +23,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Plus, Pencil, Trash2, ChevronDown, ChevronUp, CreditCard, Printer, Share2, MapPin, X, FileText } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/contexts/auth-context";
+import { useAuth, hasRole, userHasFeature } from "@/contexts/auth-context";
 import { WO_STATUSES, makeEmpty, type WOForm, buildPayload, hasWorkOrderCustomer, WorkOrderFormFields, equipmentItemsFromOrder } from "@/components/work-order-form";
 import { validateWorkOrderAiReminder } from "@/components/work-orders/WorkOrderAiReminderSection";
 import {
@@ -294,7 +294,8 @@ function ProgressPanel({ workOrderId, customerId, workOrderTitle }: {
 export default function WorkOrders() {
   const { toast } = useToast();
   const { user } = useAuth();
-  const canWrite = user?.role === "super_admin" || user?.role === "owner" || user?.role === "admin";
+  const canWrite =
+    hasRole(user, "super_admin", "owner", "admin") || userHasFeature(user, "dispatch_orders");
   const queryClient = useQueryClient();
 
   const search = useSearch();
@@ -317,7 +318,9 @@ export default function WorkOrders() {
   const [reopenModal, setReopenModal] = useState<{ payload: Record<string, unknown> } | null>(null);
 
   const COMPLETED_STATUSES = ["已完成", "已結案"];
-  const isAdmin = user?.role === "super_admin" || user?.role === "owner" || user?.role === "admin";
+  const isAdmin =
+    hasRole(user, "super_admin", "owner", "admin") ||
+    (userHasFeature(user, "dispatch_orders") && userHasFeature(user, "customers"));
 
   const { data: orders, isLoading } = useListWorkOrders({
     ...(filterCustomerId ? { customerId: filterCustomerId } : {}),

@@ -8,7 +8,7 @@ import {
   employeesTable,
 } from "@workspace/db";
 import { CreateRepairCaseBody, UpdateRepairCaseBody } from "@workspace/api-zod";
-import { requireRole } from "../lib/auth";
+import { requireFeature } from "../lib/auth";
 import { shouldApplyOwnDataFilter } from "../../shared/userPermissions.ts";
 import { buildUserAssignmentContext } from "../lib/workOrders/workOrderAssignment.ts";
 import {
@@ -17,11 +17,8 @@ import {
 } from "../lib/dataPermissionAccess.ts";
 
 const router: IRouter = Router();
+router.use(requireFeature("repair_cases"));
 
-const READ_ROLES = ["super_admin", "owner", "admin", "engineer", "technician", "sales"];
-const WRITE_ROLES = ["super_admin", "owner", "admin", "engineer"];
-const PATCH_ROLES = ["super_admin", "owner", "admin", "engineer", "technician"];
-const DELETE_ROLES = ["super_admin", "owner", "admin"];
 
 function mapRepairCase(row: {
   id: number;
@@ -102,7 +99,7 @@ function generateRepairNo(id: number, createdAt: Date | string) {
   return `RC-${y}${m}${day}-${String(id).padStart(4, "0")}`;
 }
 
-router.get("/repair-cases", requireRole(...READ_ROLES), async (req, res): Promise<void> => {
+router.get("/repair-cases", async (req, res): Promise<void> => {
   const { search, status, source } = req.query as { search?: string; status?: string; source?: string };
   const conditions = [];
 
@@ -138,7 +135,7 @@ router.get("/repair-cases", requireRole(...READ_ROLES), async (req, res): Promis
   res.json(filtered.map(mapRepairCase));
 });
 
-router.post("/repair-cases", requireRole(...WRITE_ROLES), async (req, res): Promise<void> => {
+router.post("/repair-cases", async (req, res): Promise<void> => {
   const parsed = CreateRepairCaseBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -184,7 +181,7 @@ router.post("/repair-cases", requireRole(...WRITE_ROLES), async (req, res): Prom
   });
 });
 
-router.get("/repair-cases/:id", requireRole(...READ_ROLES), async (req, res): Promise<void> => {
+router.get("/repair-cases/:id", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
@@ -216,7 +213,7 @@ router.get("/repair-cases/:id", requireRole(...READ_ROLES), async (req, res): Pr
   });
 });
 
-router.patch("/repair-cases/:id", requireRole(...PATCH_ROLES), async (req, res): Promise<void> => {
+router.patch("/repair-cases/:id", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
@@ -286,7 +283,7 @@ router.patch("/repair-cases/:id", requireRole(...PATCH_ROLES), async (req, res):
   });
 });
 
-router.delete("/repair-cases/:id", requireRole(...DELETE_ROLES), async (req, res): Promise<void> => {
+router.delete("/repair-cases/:id", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }

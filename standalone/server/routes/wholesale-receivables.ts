@@ -2,13 +2,11 @@ import { Router, type IRouter } from "express";
 import { eq, and, desc, SQL } from "drizzle-orm";
 import { db, wholesaleReceivablesTable } from "@workspace/db";
 import { z } from "zod/v4";
-import { requireRole, requireFeature } from "../lib/auth";
+import { requireFeature } from "../lib/auth";
 
 const router: IRouter = Router();
 router.use(requireFeature("wholesale"));
 
-const ROLES = ["super_admin", "owner", "admin", "sales", "accountant"] as const;
-const WRITE_ROLES = ["super_admin", "owner", "admin", "accountant"] as const;
 
 const UpdateInput = z.object({
   receivedAmount: z.number().min(0).optional(),
@@ -23,7 +21,7 @@ function parseId(raw: string | string[]): number {
   return parseInt(Array.isArray(raw) ? raw[0] : raw, 10);
 }
 
-router.get("/wholesale/receivables", requireRole(...ROLES), async (req, res): Promise<void> => {
+router.get("/wholesale/receivables", async (req, res): Promise<void> => {
   const orderId = typeof req.query.orderId === "string" ? parseInt(req.query.orderId, 10) : undefined;
   const status = typeof req.query.status === "string" ? req.query.status : undefined;
   const conditions: SQL[] = [];
@@ -37,7 +35,7 @@ router.get("/wholesale/receivables", requireRole(...ROLES), async (req, res): Pr
   res.json(rows);
 });
 
-router.patch("/wholesale/receivables/:id", requireRole(...WRITE_ROLES), async (req, res): Promise<void> => {
+router.patch("/wholesale/receivables/:id", async (req, res): Promise<void> => {
   const id = parseId(req.params.id);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const parsed = UpdateInput.safeParse(req.body);

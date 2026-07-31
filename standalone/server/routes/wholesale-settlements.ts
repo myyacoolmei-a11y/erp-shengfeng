@@ -1,12 +1,11 @@
 import { Router, type IRouter } from "express";
 import { eq, and, gte, lte, sql, desc, inArray } from "drizzle-orm";
 import { db, wholesaleOrdersTable, wholesaleOrderItemsTable, wholesaleReceivablesTable, productsTable } from "@workspace/db";
-import { requireRole, requireFeature } from "../lib/auth";
+import { requireFeature } from "../lib/auth";
 
 const router: IRouter = Router();
 router.use(requireFeature("wholesale"));
 
-const ROLES = ["super_admin", "owner", "admin", "sales", "accountant"] as const;
 
 function parseId(raw: string | string[]): number {
   return parseInt(Array.isArray(raw) ? raw[0] : raw, 10);
@@ -15,7 +14,7 @@ function parseId(raw: string | string[]): number {
 const ACTIVE_STATUSES = ["已出貨"];
 
 // GET /wholesale/settlements/summary?from=YYYY-MM-DD&to=YYYY-MM-DD
-router.get("/wholesale/settlements/summary", requireRole(...ROLES), async (req, res): Promise<void> => {
+router.get("/wholesale/settlements/summary", async (req, res): Promise<void> => {
   const from = typeof req.query.from === "string" ? req.query.from : undefined;
   const to = typeof req.query.to === "string" ? req.query.to : undefined;
   if (!from || !to) {
@@ -86,7 +85,7 @@ router.get("/wholesale/settlements/summary", requireRole(...ROLES), async (req, 
 
 // GET /wholesale/settlements/:customerId?from=&to=
 // Returns orders WITH items (including product spec) for item-level detail
-router.get("/wholesale/settlements/:customerId", requireRole(...ROLES), async (req, res): Promise<void> => {
+router.get("/wholesale/settlements/:customerId", async (req, res): Promise<void> => {
   const customerId = parseId(req.params.customerId);
   if (isNaN(customerId)) { res.status(400).json({ error: "Invalid customerId" }); return; }
 

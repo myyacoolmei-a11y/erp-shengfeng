@@ -144,7 +144,7 @@ function AppRoutes() {
         <Layout>
           <Switch>
             <Route path="/">
-              <Guard feature="dashboard" roles={["super_admin", "owner", "admin", "accountant", "sales", "distributor"]}>
+              <Guard feature="dashboard">
                 <Dashboard />
               </Guard>
             </Route>
@@ -183,7 +183,7 @@ function AppRoutes() {
               <Guard feature="warranty_maintenance"><Maintenance /></Guard>
             </Route>
             <Route path="/engineer-dashboard">
-              <Guard feature="dashboard" roles={["super_admin", "owner", "admin", "engineer", "technician"]}>
+              <Guard feature="dispatch_orders">
                 <EngineerDashboard />
               </Guard>
             </Route>

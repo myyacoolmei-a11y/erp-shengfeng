@@ -2,15 +2,13 @@ import { Router, type IRouter } from "express";
 import { eq, and, desc } from "drizzle-orm";
 import { db, customerAddressesTable } from "@workspace/db";
 import { CreateCustomerAddressBody, UpdateCustomerAddressBody } from "@workspace/api-zod";
-import { requireRole } from "../lib/auth";
+import { requireFeature } from "../lib/auth";
 
 const router: IRouter = Router();
+router.use(requireFeature("customers"));
 
-const READ_ROLES = ["super_admin", "owner", "admin", "sales", "accountant", "engineer", "technician"];
-const WRITE_ROLES = ["super_admin", "owner", "admin", "sales"];
-const DELETE_ROLES = ["super_admin", "owner", "admin"];
 
-router.get("/customers/:customerId/addresses", requireRole(...READ_ROLES), async (req, res): Promise<void> => {
+router.get("/customers/:customerId/addresses", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.customerId) ? req.params.customerId[0] : req.params.customerId;
   const customerId = parseInt(raw, 10);
   if (isNaN(customerId)) { res.status(400).json({ error: "Invalid customerId" }); return; }
@@ -24,7 +22,7 @@ router.get("/customers/:customerId/addresses", requireRole(...READ_ROLES), async
   res.json(addresses);
 });
 
-router.post("/customers/:customerId/addresses", requireRole(...WRITE_ROLES), async (req, res): Promise<void> => {
+router.post("/customers/:customerId/addresses", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.customerId) ? req.params.customerId[0] : req.params.customerId;
   const customerId = parseInt(raw, 10);
   if (isNaN(customerId)) { res.status(400).json({ error: "Invalid customerId" }); return; }
@@ -48,7 +46,7 @@ router.post("/customers/:customerId/addresses", requireRole(...WRITE_ROLES), asy
   res.status(201).json(addr);
 });
 
-router.patch("/customers/:customerId/addresses/:addressId", requireRole(...WRITE_ROLES), async (req, res): Promise<void> => {
+router.patch("/customers/:customerId/addresses/:addressId", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.customerId) ? req.params.customerId[0] : req.params.customerId;
   const rawAddr = Array.isArray(req.params.addressId) ? req.params.addressId[0] : req.params.addressId;
   const customerId = parseInt(raw, 10);
@@ -76,7 +74,7 @@ router.patch("/customers/:customerId/addresses/:addressId", requireRole(...WRITE
   res.json(addr);
 });
 
-router.delete("/customers/:customerId/addresses/:addressId", requireRole(...DELETE_ROLES), async (req, res): Promise<void> => {
+router.delete("/customers/:customerId/addresses/:addressId", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.customerId) ? req.params.customerId[0] : req.params.customerId;
   const rawAddr = Array.isArray(req.params.addressId) ? req.params.addressId[0] : req.params.addressId;
   const customerId = parseInt(raw, 10);

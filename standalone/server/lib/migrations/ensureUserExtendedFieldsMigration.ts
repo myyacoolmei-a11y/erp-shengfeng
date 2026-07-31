@@ -4,6 +4,9 @@ import {
   resolveFeaturePermissions,
   resolveDataPermission,
   normalizeFeaturePermissions,
+  inferRolesFromFeatures,
+  looksLikeAdminFeatureSet,
+  type FeatureKey,
 } from "../../../shared/userPermissions.ts";
 
 /** Idempotent: extended user profile + permission columns */
@@ -82,11 +85,40 @@ export async function migrateUserFeaturePermissions(): Promise<void> {
       if (!prev.length) filled++;
       else if (!arraysEqual(prev, features)) remapped++;
 
-      if (!arraysEqual(prev, features) || row.data_permission !== dataPerm) {
+      // 修正：行政功能組合被誤推成 sales／engineer 的帳號
+      let nextRoles = roles;
+      let nextRole = row.role;
+      if (
+        looksLikeAdminFeatureSet(features) &&
+        !roles.includes("super_admin") &&
+        !roles.includes("owner") &&
+        !roles.includes("admin")
+      ) {
+        nextRoles = ["admin"];
+        nextRole = "admin";
+      } else if (!roles.includes("super_admin") && !roles.includes("owner")) {
+        // 若角色空或與功能明顯不符，用推斷修正（僅在誤判 sales 且實際有派工時）
+        const inferred = inferRolesFromFeatures(features as FeatureKey[]);
+        if (
+          roles.includes("sales") &&
+          inferred[0] === "admin" &&
+          features.includes("dispatch_orders")
+        ) {
+          nextRoles = inferred;
+          nextRole = inferred[0];
+        }
+      }
+
+      const rolesChanged =
+        nextRole !== row.role ||
+        !arraysEqual(roles, nextRoles);
+
+      if (!arraysEqual(prev, features) || row.data_permission !== dataPerm || rolesChanged) {
         await pool.query(
-          `UPDATE users SET feature_permissions = $1, data_permission = $2 WHERE id = $3`,
-          [features, dataPerm, row.id],
+          `UPDATE users SET feature_permissions = $1, data_permission = $2, role = $3, roles = $4 WHERE id = $5`,
+          [features, dataPerm, nextRole, nextRoles, row.id],
         );
+        if (rolesChanged) remapped++;
       }
     }
 

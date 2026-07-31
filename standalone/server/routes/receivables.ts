@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, and, lt } from "drizzle-orm";
 import { db, receivablesTable, customersTable } from "@workspace/db";
-import { requireRole, requireFeature } from "../lib/auth";
+import { requireFeature } from "../lib/auth";
 import { z } from "zod/v4";
 import {
   recordReceivablePayment,
@@ -11,10 +11,6 @@ import {
 const router: IRouter = Router();
 router.use(requireFeature("receivables"));
 
-const READ_ROLES = ["super_admin", "owner", "admin", "accountant"];
-const WRITE_ROLES = ["super_admin", "owner", "admin", "accountant"];
-const DELETE_ROLES = ["super_admin", "owner", "admin"];
-const REVERSE_ROLES = ["super_admin", "owner", "admin"];
 
 function parseId(raw: unknown): number | null {
   const id = parseInt(String(Array.isArray(raw) ? raw[0] : raw), 10);
@@ -60,7 +56,7 @@ const REC_SELECT = {
   updatedAt: receivablesTable.updatedAt,
 };
 
-router.get("/receivables", requireRole(...READ_ROLES), async (req, res): Promise<void> => {
+router.get("/receivables", async (req, res): Promise<void> => {
   const { customerId, status, workOrderId } = req.query as Record<string, string | undefined>;
   const conditions = [];
   if (customerId) {
@@ -91,7 +87,7 @@ router.get("/receivables", requireRole(...READ_ROLES), async (req, res): Promise
   res.json(rows.map(fmt));
 });
 
-router.post("/receivables", requireRole(...WRITE_ROLES), async (req, res): Promise<void> => {
+router.post("/receivables", async (req, res): Promise<void> => {
   const CreateSchema = z.object({
     customerId: z.number().int(),
     workOrderId: z.number().int().optional(),
@@ -144,7 +140,7 @@ router.post("/receivables", requireRole(...WRITE_ROLES), async (req, res): Promi
   res.status(201).json(fmt(joined[0] as Record<string, unknown>));
 });
 
-router.get("/receivables/:id", requireRole(...READ_ROLES), async (req, res): Promise<void> => {
+router.get("/receivables/:id", async (req, res): Promise<void> => {
   const id = parseId(req.params.id);
   if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
   const [row] = await db
@@ -156,7 +152,7 @@ router.get("/receivables/:id", requireRole(...READ_ROLES), async (req, res): Pro
   res.json(fmt(row as Record<string, unknown>));
 });
 
-router.patch("/receivables/:id", requireRole(...WRITE_ROLES), async (req, res): Promise<void> => {
+router.patch("/receivables/:id", async (req, res): Promise<void> => {
   const id = parseId(req.params.id);
   if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
 
@@ -191,7 +187,7 @@ router.patch("/receivables/:id", requireRole(...WRITE_ROLES), async (req, res): 
   res.json(fmt(updated as Record<string, unknown>));
 });
 
-router.post("/receivables/:id/payment", requireRole(...WRITE_ROLES), async (req, res): Promise<void> => {
+router.post("/receivables/:id/payment", async (req, res): Promise<void> => {
   const id = parseId(req.params.id);
   if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
   if (!req.user) { res.status(401).json({ error: "請先登入" }); return; }
@@ -227,7 +223,7 @@ router.post("/receivables/:id/payment", requireRole(...WRITE_ROLES), async (req,
   res.json(fmt(updated as Record<string, unknown>));
 });
 
-router.post("/receivables/:id/reverse-payment", requireRole(...REVERSE_ROLES), async (req, res): Promise<void> => {
+router.post("/receivables/:id/reverse-payment", async (req, res): Promise<void> => {
   const id = parseId(req.params.id);
   if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
   if (!req.user) { res.status(401).json({ error: "請先登入" }); return; }
@@ -259,7 +255,7 @@ router.post("/receivables/:id/reverse-payment", requireRole(...REVERSE_ROLES), a
   res.json(fmt(updated as Record<string, unknown>));
 });
 
-router.delete("/receivables/:id", requireRole(...DELETE_ROLES), async (req, res): Promise<void> => {
+router.delete("/receivables/:id", async (req, res): Promise<void> => {
   const id = parseId(req.params.id);
   if (!id) { res.status(400).json({ error: "Invalid id" }); return; }
   const [row] = await db.delete(receivablesTable).where(eq(receivablesTable.id, id)).returning();

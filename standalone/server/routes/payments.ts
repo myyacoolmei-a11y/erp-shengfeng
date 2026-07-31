@@ -2,14 +2,13 @@ import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
 import { db, paymentsTable, customersTable } from "@workspace/db";
 import { CreatePaymentBody, UpdatePaymentBody } from "@workspace/api-zod";
-import { requireRole } from "../lib/auth";
+import { requireFeature } from "../lib/auth";
 
 const router: IRouter = Router();
+router.use(requireFeature("receivables"));
 
-const READ_WRITE_ROLES = ["super_admin", "owner", "admin", "accountant"];
-const DELETE_ROLES = ["super_admin", "owner"];
 
-router.get("/payments", requireRole(...READ_WRITE_ROLES), async (req, res): Promise<void> => {
+router.get("/payments", async (req, res): Promise<void> => {
   const { customerId } = req.query as { customerId?: string };
   const conditions = [];
   if (customerId) {
@@ -42,7 +41,7 @@ router.get("/payments", requireRole(...READ_WRITE_ROLES), async (req, res): Prom
   })));
 });
 
-router.post("/payments", requireRole(...READ_WRITE_ROLES), async (req, res): Promise<void> => {
+router.post("/payments", async (req, res): Promise<void> => {
   const parsed = CreatePaymentBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -58,7 +57,7 @@ router.post("/payments", requireRole(...READ_WRITE_ROLES), async (req, res): Pro
   });
 });
 
-router.get("/payments/:id", requireRole(...READ_WRITE_ROLES), async (req, res): Promise<void> => {
+router.get("/payments/:id", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   if (isNaN(id)) {
@@ -93,7 +92,7 @@ router.get("/payments/:id", requireRole(...READ_WRITE_ROLES), async (req, res): 
   });
 });
 
-router.patch("/payments/:id", requireRole(...READ_WRITE_ROLES), async (req, res): Promise<void> => {
+router.patch("/payments/:id", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   if (isNaN(id)) {
@@ -120,7 +119,7 @@ router.patch("/payments/:id", requireRole(...READ_WRITE_ROLES), async (req, res)
   });
 });
 
-router.delete("/payments/:id", requireRole(...DELETE_ROLES), async (req, res): Promise<void> => {
+router.delete("/payments/:id", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   if (isNaN(id)) {

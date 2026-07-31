@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq, and, inArray } from "drizzle-orm";
 import { db, quotesTable, customersTable, employeesTable, quoteItemsTable } from "@workspace/db";
 import { CreateQuoteBody, UpdateQuoteBody } from "@workspace/api-zod";
-import { requireRole, requireFeature } from "../lib/auth";
+import { requireFeature } from "../lib/auth";
 import { syncQuoteDispatchBatch, syncQuoteDispatchStatus } from "../lib/quoteWorkflow";
 import { normalizeQuoteStatus } from "../lib/quoteStatus";
 import { resolveQuoteItemsForSave } from "../lib/productCatalog";
@@ -10,9 +10,6 @@ import { resolveQuoteItemsForSave } from "../lib/productCatalog";
 const router: IRouter = Router();
 router.use(requireFeature("quotations"));
 
-const READ_ROLES = ["super_admin", "owner", "admin", "sales", "distributor"];
-const WRITE_ROLES = ["super_admin", "owner", "admin", "sales", "distributor"];
-const DELETE_ROLES = ["super_admin", "owner", "admin"];
 
 const DISPATCH_FILTER_VALUES = new Set(["待派工", "已派工", "施工中", "已完工"]);
 
@@ -105,7 +102,7 @@ const QUOTE_SELECT = {
   updatedAt: quotesTable.updatedAt,
 };
 
-router.get("/quotes", requireRole(...READ_ROLES), async (req, res): Promise<void> => {
+router.get("/quotes", async (req, res): Promise<void> => {
   const { customerId, status, dispatchStatus } = req.query as {
     customerId?: string;
     status?: string;
@@ -150,7 +147,7 @@ router.get("/quotes", requireRole(...READ_ROLES), async (req, res): Promise<void
   res.json(quoteRows.map(q => serializeQuote(q, itemsByQuote[q.id] ?? [], workflowMap.get(q.id))));
 });
 
-router.post("/quotes", requireRole(...WRITE_ROLES), async (req, res): Promise<void> => {
+router.post("/quotes", async (req, res): Promise<void> => {
   const parsed = CreateQuoteBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
@@ -190,7 +187,7 @@ router.post("/quotes", requireRole(...WRITE_ROLES), async (req, res): Promise<vo
   ));
 });
 
-router.get("/quotes/:id", requireRole(...READ_ROLES), async (req, res): Promise<void> => {
+router.get("/quotes/:id", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
@@ -213,7 +210,7 @@ router.get("/quotes/:id", requireRole(...READ_ROLES), async (req, res): Promise<
   res.json(serializeQuote(quote, items.map(serializeItem), workflow ?? undefined));
 });
 
-router.patch("/quotes/:id", requireRole(...WRITE_ROLES), async (req, res): Promise<void> => {
+router.patch("/quotes/:id", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
@@ -265,7 +262,7 @@ router.patch("/quotes/:id", requireRole(...WRITE_ROLES), async (req, res): Promi
   ));
 });
 
-router.delete("/quotes/:id", requireRole(...DELETE_ROLES), async (req, res): Promise<void> => {
+router.delete("/quotes/:id", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }

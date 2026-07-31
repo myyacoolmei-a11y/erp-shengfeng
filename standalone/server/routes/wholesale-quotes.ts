@@ -5,13 +5,11 @@ import {
   wholesaleOrdersTable, wholesaleOrderItemsTable, wholesaleReceivablesTable,
 } from "@workspace/db";
 import { z } from "zod/v4";
-import { requireRole, requireFeature } from "../lib/auth";
+import { requireFeature } from "../lib/auth";
 
 const router: IRouter = Router();
 router.use(requireFeature("wholesale"));
 
-const ROLES = ["super_admin", "owner", "admin", "sales"] as const;
-const DELETE_ROLES = ["super_admin", "owner", "admin"] as const;
 
 const ItemInput = z.object({
   productId: z.number().int().nullable().optional(),
@@ -112,7 +110,7 @@ async function maybeCreateReceivable(order: typeof wholesaleOrdersTable.$inferSe
   }
 }
 
-router.get("/wholesale/quotes", requireRole(...ROLES), async (req, res): Promise<void> => {
+router.get("/wholesale/quotes", async (req, res): Promise<void> => {
   const search = typeof req.query.search === "string" ? req.query.search : undefined;
   const status = typeof req.query.status === "string" ? req.query.status : undefined;
   const conditions: SQL[] = [];
@@ -129,7 +127,7 @@ router.get("/wholesale/quotes", requireRole(...ROLES), async (req, res): Promise
   res.json(rows.map((r) => ({ ...r, items: [] })));
 });
 
-router.post("/wholesale/quotes", requireRole(...ROLES), async (req, res): Promise<void> => {
+router.post("/wholesale/quotes", async (req, res): Promise<void> => {
   const parsed = QuoteInput.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const { items, taxRate, shippingFee, ...header } = parsed.data;
@@ -151,7 +149,7 @@ router.post("/wholesale/quotes", requireRole(...ROLES), async (req, res): Promis
   res.status(201).json(result);
 });
 
-router.post("/wholesale/quotes/:id/convert", requireRole(...ROLES), async (req, res): Promise<void> => {
+router.post("/wholesale/quotes/:id/convert", async (req, res): Promise<void> => {
   const id = parseId(req.params.id);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const quote = await getQuoteWithItems(id);
@@ -202,7 +200,7 @@ router.post("/wholesale/quotes/:id/convert", requireRole(...ROLES), async (req, 
   res.status(201).json({ ...finalOrder, items: orderItems });
 });
 
-router.get("/wholesale/quotes/:id", requireRole(...ROLES), async (req, res): Promise<void> => {
+router.get("/wholesale/quotes/:id", async (req, res): Promise<void> => {
   const id = parseId(req.params.id);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const result = await getQuoteWithItems(id);
@@ -210,7 +208,7 @@ router.get("/wholesale/quotes/:id", requireRole(...ROLES), async (req, res): Pro
   res.json(result);
 });
 
-router.patch("/wholesale/quotes/:id", requireRole(...ROLES), async (req, res): Promise<void> => {
+router.patch("/wholesale/quotes/:id", async (req, res): Promise<void> => {
   const id = parseId(req.params.id);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const parsed = QuoteInput.safeParse(req.body);
@@ -235,7 +233,7 @@ router.patch("/wholesale/quotes/:id", requireRole(...ROLES), async (req, res): P
   res.json(result);
 });
 
-router.delete("/wholesale/quotes/:id", requireRole(...DELETE_ROLES), async (req, res): Promise<void> => {
+router.delete("/wholesale/quotes/:id", async (req, res): Promise<void> => {
   const id = parseId(req.params.id);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   await db.delete(wholesaleQuotesTable).where(eq(wholesaleQuotesTable.id, id));

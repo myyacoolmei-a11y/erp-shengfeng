@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq, ilike, or, and, asc, SQL } from "drizzle-orm";
 import { db, productsTable, productUsageTypesTable, wholesaleProductsTable } from "@workspace/db";
 import { z } from "zod/v4";
-import { requireRole, requireFeature } from "../lib/auth";
+import { requireFeature } from "../lib/auth";
 import {
   serializeProduct,
   fetchUsageTypesByProductIds,
@@ -13,8 +13,6 @@ const router: IRouter = Router();
 router.use(requireFeature("wholesale"));
 
 
-const READ_ROLES = ["super_admin", "owner", "admin", "sales", "accountant", "distributor"];
-const WRITE_ROLES = ["super_admin", "owner", "admin"];
 
 const priceField = () =>
   z.preprocess(
@@ -63,7 +61,7 @@ function serializeWholesaleListItem(
   };
 }
 
-router.get("/wholesale/products", requireRole(...READ_ROLES), async (req, res): Promise<void> => {
+router.get("/wholesale/products", async (req, res): Promise<void> => {
   const search = typeof req.query.search === "string" ? req.query.search : undefined;
   const isEnabled = typeof req.query.isEnabled === "string" ? req.query.isEnabled : undefined;
   const forSelection = req.query.forSelection === "true";
@@ -119,7 +117,7 @@ router.get("/wholesale/products", requireRole(...READ_ROLES), async (req, res): 
   );
 });
 
-router.patch("/wholesale/products/:productId", requireRole(...WRITE_ROLES), async (req, res): Promise<void> => {
+router.patch("/wholesale/products/:productId", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.productId) ? req.params.productId[0] : req.params.productId;
   const productId = parseInt(raw, 10);
   if (isNaN(productId)) { res.status(400).json({ error: "Invalid productId" }); return; }

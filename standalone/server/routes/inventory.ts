@@ -6,17 +6,15 @@ import {
   inventoryTransactionsTable,
 } from "@workspace/db";
 import { z } from "zod/v4";
-import { requireRole, requireFeature } from "../lib/auth";
+import { requireFeature } from "../lib/auth";
 import {
   INVENTORY_STATUSES,
   INVENTORY_TX_REASONS,
 } from "../../shared/inventoryConstants";
 
 const router: IRouter = Router();
+/** 擁有 inventory 功能權限即可查看／新增／編輯／異動（不再依 role 擋行政） */
 router.use(requireFeature("inventory"));
-
-const READ_ROLES = ["super_admin", "owner", "admin"] as const;
-const WRITE_ROLES = ["super_admin", "owner", "admin"] as const;
 
 const ItemInput = z.object({
   brand: z.string().optional().nullable(),
@@ -65,7 +63,7 @@ function serializeItem(item: typeof inventoryItemsTable.$inferSelect, quantity: 
   return { ...item, quantity };
 }
 
-router.get("/inventory-items", requireRole(...READ_ROLES), async (req, res): Promise<void> => {
+router.get("/inventory-items", async (req, res): Promise<void> => {
   const brand = typeof req.query.brand === "string" ? req.query.brand.trim() : "";
   const model = typeof req.query.model === "string" ? req.query.model.trim() : "";
   const status = typeof req.query.status === "string" ? req.query.status.trim() : "";
@@ -89,7 +87,7 @@ router.get("/inventory-items", requireRole(...READ_ROLES), async (req, res): Pro
   res.json(items.map((i) => serializeItem(i, qty.get(i.id) ?? 0)));
 });
 
-router.get("/inventory-items/:id", requireRole(...READ_ROLES), async (req, res): Promise<void> => {
+router.get("/inventory-items/:id", async (req, res): Promise<void> => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) {
     res.status(400).json({ error: "無效的 ID" });
@@ -104,7 +102,7 @@ router.get("/inventory-items/:id", requireRole(...READ_ROLES), async (req, res):
   res.json(serializeItem(item, qty.get(id) ?? 0));
 });
 
-router.post("/inventory-items", requireRole(...WRITE_ROLES), async (req, res): Promise<void> => {
+router.post("/inventory-items", async (req, res): Promise<void> => {
   const parsed = ItemInput.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.issues[0]?.message ?? "資料格式錯誤" });
@@ -129,7 +127,7 @@ router.post("/inventory-items", requireRole(...WRITE_ROLES), async (req, res): P
   res.status(201).json(serializeItem(created, 0));
 });
 
-router.patch("/inventory-items/:id", requireRole(...WRITE_ROLES), async (req, res): Promise<void> => {
+router.patch("/inventory-items/:id", async (req, res): Promise<void> => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) {
     res.status(400).json({ error: "無效的 ID" });
@@ -170,7 +168,7 @@ router.patch("/inventory-items/:id", requireRole(...WRITE_ROLES), async (req, re
   res.json(serializeItem(updated, qty.get(id) ?? 0));
 });
 
-router.delete("/inventory-items/:id", requireRole(...WRITE_ROLES), async (req, res): Promise<void> => {
+router.delete("/inventory-items/:id", async (req, res): Promise<void> => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) {
     res.status(400).json({ error: "無效的 ID" });
@@ -189,7 +187,6 @@ router.delete("/inventory-items/:id", requireRole(...WRITE_ROLES), async (req, r
 
 router.get(
   "/inventory-items/:id/transactions",
-  requireRole(...READ_ROLES),
   async (req, res): Promise<void> => {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) {
@@ -212,7 +209,6 @@ router.get(
 
 router.post(
   "/inventory-items/:id/transactions",
-  requireRole(...WRITE_ROLES),
   async (req, res): Promise<void> => {
     const id = Number(req.params.id);
     if (!Number.isFinite(id)) {

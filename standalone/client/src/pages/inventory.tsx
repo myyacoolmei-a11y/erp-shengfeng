@@ -29,7 +29,7 @@ import {
   History,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/contexts/auth-context";
+import { useAuth, userHasFeature } from "@/contexts/auth-context";
 import { ApiError } from "../../../shared/api-client/custom-fetch.ts";
 import {
   INVENTORY_STATUSES,
@@ -48,7 +48,6 @@ import {
   type InventoryItem,
 } from "@/lib/inventoryApi";
 
-const WRITE_ROLES = ["super_admin", "owner", "admin"] as const;
 const QUERY_KEY = ["inventory-items"] as const;
 
 const STATUS_BADGE: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
@@ -126,7 +125,8 @@ export default function Inventory() {
   const { toast } = useToast();
   const { user } = useAuth();
   const qc = useQueryClient();
-  const canWrite = !!(user && WRITE_ROLES.includes(user.role as (typeof WRITE_ROLES)[number]));
+  // 與 API 一致：有 inventory 功能權限即可新增／編輯／異動
+  const canWrite = !!(user && userHasFeature(user, "inventory"));
 
   const [brand, setBrand] = useState("");
   const [model, setModel] = useState("");

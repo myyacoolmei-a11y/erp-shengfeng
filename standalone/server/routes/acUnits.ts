@@ -2,15 +2,13 @@ import { Router, type IRouter } from "express";
 import { eq } from "drizzle-orm";
 import { db, acUnitsTable } from "@workspace/db";
 import { CreateAcUnitBody, UpdateAcUnitBody } from "@workspace/api-zod";
-import { requireRole } from "../lib/auth";
+import { requireFeature } from "../lib/auth";
 
 const router: IRouter = Router();
+router.use(requireFeature("customers"));
 
-const READ_ROLES = ["super_admin", "owner", "admin", "technician"];
-const WRITE_ROLES = ["super_admin", "owner", "admin"];
-const DELETE_ROLES = ["super_admin", "owner"];
 
-router.get("/customers/:customerId/ac-units", requireRole(...READ_ROLES), async (req, res): Promise<void> => {
+router.get("/customers/:customerId/ac-units", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.customerId) ? req.params.customerId[0] : req.params.customerId;
   const customerId = parseInt(raw, 10);
   if (isNaN(customerId)) {
@@ -21,7 +19,7 @@ router.get("/customers/:customerId/ac-units", requireRole(...READ_ROLES), async 
   res.json(units);
 });
 
-router.post("/customers/:customerId/ac-units", requireRole(...WRITE_ROLES), async (req, res): Promise<void> => {
+router.post("/customers/:customerId/ac-units", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.customerId) ? req.params.customerId[0] : req.params.customerId;
   const customerId = parseInt(raw, 10);
   if (isNaN(customerId)) {
@@ -37,7 +35,7 @@ router.post("/customers/:customerId/ac-units", requireRole(...WRITE_ROLES), asyn
   res.status(201).json(unit);
 });
 
-router.patch("/ac-units/:id", requireRole(...WRITE_ROLES), async (req, res): Promise<void> => {
+router.patch("/ac-units/:id", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   if (isNaN(id)) {
@@ -57,7 +55,7 @@ router.patch("/ac-units/:id", requireRole(...WRITE_ROLES), async (req, res): Pro
   res.json(unit);
 });
 
-router.delete("/ac-units/:id", requireRole(...DELETE_ROLES), async (req, res): Promise<void> => {
+router.delete("/ac-units/:id", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   if (isNaN(id)) {

@@ -226,9 +226,11 @@ export function isDataPermissionBypassRole(roles: string[]): boolean {
 }
 
 export function shouldApplyOwnDataFilter(user: PermissionUserLike): boolean {
+  // 以 data_permission 為準；all = 不依建立者／指派者過濾
+  if (resolveDataPermission(user) === "all") return false;
   const roles = effectiveRolesFromUser(user);
   if (isDataPermissionBypassRole(roles)) return false;
-  return resolveDataPermission(user) === "own";
+  return true;
 }
 
 /** @deprecated use featureForPath */
@@ -242,11 +244,37 @@ export function inferRolesFromFeatures(features: FeatureKey[]): string[] {
     if (match) return [...tpl.roles];
   }
   if (features.includes("users")) return ["owner"];
+  // 行政特徵：派工 + 客戶 + 應收（不可誤判為 sales）
+  if (
+    features.includes("dispatch_orders") &&
+    features.includes("customers") &&
+    (features.includes("receivables") || features.includes("inventory") || features.includes("quotations"))
+  ) {
+    return ["admin"];
+  }
   if (features.includes("employees") && features.includes("dispatch_orders")) return ["admin"];
   if (features.includes("receivables") && !features.includes("dispatch_orders")) return ["accountant"];
-  if (features.includes("customers") && features.includes("quotations")) return ["sales"];
+  // 業務：客戶+報價，但沒有派工／庫存行政組合
+  if (
+    features.includes("customers") &&
+    features.includes("quotations") &&
+    !features.includes("dispatch_orders")
+  ) {
+    return ["sales"];
+  }
   if (features.includes("dispatch_orders")) return ["engineer"];
   return ["technician"];
+}
+
+/** 行政功能組合但角色被誤推成 sales／engineer 時，應修回 admin */
+export function looksLikeAdminFeatureSet(features: string[]): boolean {
+  const set = new Set(features);
+  return (
+    set.has("dispatch_orders") &&
+    set.has("customers") &&
+    (set.has("receivables") || set.has("inventory")) &&
+    !set.has("users")
+  );
 }
 
 export function navHrefAllowed(user: PermissionUserLike, href: string): boolean {

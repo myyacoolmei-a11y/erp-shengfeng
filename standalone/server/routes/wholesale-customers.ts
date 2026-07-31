@@ -2,13 +2,11 @@ import { Router, type IRouter } from "express";
 import { eq, ilike, or, desc } from "drizzle-orm";
 import { db, wholesaleCustomersTable } from "@workspace/db";
 import { z } from "zod/v4";
-import { requireRole, requireFeature } from "../lib/auth";
+import { requireFeature } from "../lib/auth";
 
 const router: IRouter = Router();
 router.use(requireFeature("wholesale"));
 
-const ROLES = ["super_admin", "owner", "admin", "sales"] as const;
-const DELETE_ROLES = ["super_admin", "owner", "admin"] as const;
 
 const CustomerInput = z.object({
   companyName: z.string().min(1),
@@ -31,7 +29,7 @@ function parseId(raw: string | string[]): number {
   return parseInt(s, 10);
 }
 
-router.get("/wholesale/customers", requireRole(...ROLES), async (req, res): Promise<void> => {
+router.get("/wholesale/customers", async (req, res): Promise<void> => {
   const search = typeof req.query.search === "string" ? req.query.search : undefined;
   const rows = await db
     .select()
@@ -49,7 +47,7 @@ router.get("/wholesale/customers", requireRole(...ROLES), async (req, res): Prom
   res.json(rows);
 });
 
-router.post("/wholesale/customers", requireRole(...ROLES), async (req, res): Promise<void> => {
+router.post("/wholesale/customers", async (req, res): Promise<void> => {
   const parsed = CustomerInput.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const { creditLimit, ...rest } = parsed.data;
@@ -60,7 +58,7 @@ router.post("/wholesale/customers", requireRole(...ROLES), async (req, res): Pro
   res.status(201).json(row);
 });
 
-router.get("/wholesale/customers/:id", requireRole(...ROLES), async (req, res): Promise<void> => {
+router.get("/wholesale/customers/:id", async (req, res): Promise<void> => {
   const id = parseId(req.params.id);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const [row] = await db.select().from(wholesaleCustomersTable).where(eq(wholesaleCustomersTable.id, id));
@@ -68,7 +66,7 @@ router.get("/wholesale/customers/:id", requireRole(...ROLES), async (req, res): 
   res.json(row);
 });
 
-router.patch("/wholesale/customers/:id", requireRole(...ROLES), async (req, res): Promise<void> => {
+router.patch("/wholesale/customers/:id", async (req, res): Promise<void> => {
   const id = parseId(req.params.id);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const parsed = CustomerInput.partial().safeParse(req.body);
@@ -81,7 +79,7 @@ router.patch("/wholesale/customers/:id", requireRole(...ROLES), async (req, res)
   res.json(updated);
 });
 
-router.delete("/wholesale/customers/:id", requireRole(...DELETE_ROLES), async (req, res): Promise<void> => {
+router.delete("/wholesale/customers/:id", async (req, res): Promise<void> => {
   const id = parseId(req.params.id);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   await db.delete(wholesaleCustomersTable).where(eq(wholesaleCustomersTable.id, id));

@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq, ilike, or, and, desc, SQL } from "drizzle-orm";
 import { db, productsTable, productUsageTypesTable } from "@workspace/db";
 import { z } from "zod/v4";
-import { requireRole, requireFeature } from "../lib/auth";
+import { requireFeature } from "../lib/auth";
 import {
   enrichProducts,
   setProductUsageTypes,
@@ -17,9 +17,6 @@ import { isProductUsageType, PRODUCT_USAGE_TYPES, type ProductUsageType } from "
 const router: IRouter = Router();
 router.use(requireFeature("products"));
 
-const READ_ROLES = ["super_admin", "owner", "admin", "sales", "accountant", "distributor"];
-const WRITE_ROLES = ["super_admin", "owner", "admin"];
-const DELETE_ROLES = ["super_admin", "owner", "admin"];
 
 const priceField = () =>
   z.preprocess(
@@ -94,7 +91,7 @@ async function applyUsageAndWholesale(
   }
 }
 
-router.get("/products", requireRole(...READ_ROLES), async (req, res): Promise<void> => {
+router.get("/products", async (req, res): Promise<void> => {
   const search = typeof req.query.search === "string" ? req.query.search : undefined;
   const brand = typeof req.query.brand === "string" ? req.query.brand : undefined;
   const category = typeof req.query.category === "string" ? req.query.category : undefined;
@@ -141,7 +138,7 @@ router.get("/products", requireRole(...READ_ROLES), async (req, res): Promise<vo
   res.json(await enrichProducts(products));
 });
 
-router.post("/products", requireRole(...WRITE_ROLES), async (req, res): Promise<void> => {
+router.post("/products", async (req, res): Promise<void> => {
   const parsed = ProductInput.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -166,7 +163,7 @@ router.post("/products", requireRole(...WRITE_ROLES), async (req, res): Promise<
   res.status(201).json(detail);
 });
 
-router.get("/products/:id", requireRole(...READ_ROLES), async (req, res): Promise<void> => {
+router.get("/products/:id", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
@@ -175,7 +172,7 @@ router.get("/products/:id", requireRole(...READ_ROLES), async (req, res): Promis
   res.json(detail);
 });
 
-router.patch("/products/:id", requireRole(...WRITE_ROLES), async (req, res): Promise<void> => {
+router.patch("/products/:id", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
@@ -212,7 +209,7 @@ router.patch("/products/:id", requireRole(...WRITE_ROLES), async (req, res): Pro
   res.json(detail);
 });
 
-router.delete("/products/:id", requireRole(...DELETE_ROLES), async (req, res): Promise<void> => {
+router.delete("/products/:id", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }

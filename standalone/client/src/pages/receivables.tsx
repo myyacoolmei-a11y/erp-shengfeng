@@ -28,7 +28,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Plus, Pencil, Trash2, CreditCard, FileText, Bell, Copy, X, Undo2, Printer, ExternalLink, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth, hasRole } from "@/contexts/auth-context";
+import { useAuth, hasRole, userHasFeature } from "@/contexts/auth-context";
 
 const PAYMENT_STATUSES = ["未收款", "部分收款", "已收款"];
 const PAYMENT_METHODS = ["現金", "銀行轉帳", "支票", "信用卡", "LINE Pay", "其他"];
@@ -103,9 +103,9 @@ type TabFilter = typeof FILTER_TABS[number];
 export default function Receivables() {
   const { toast } = useToast();
   const { user } = useAuth();
-  const canWrite = hasRole(user, "owner", "admin", "accountant", "super_admin");
-  const canDelete = hasRole(user, "owner", "admin", "super_admin");
-  const canReverse = hasRole(user, "owner", "admin", "super_admin");
+  const canWrite = userHasFeature(user, "receivables");
+  const canDelete = hasRole(user, "owner", "admin", "super_admin") || userHasFeature(user, "receivables");
+  const canReverse = hasRole(user, "owner", "admin", "super_admin") || userHasFeature(user, "receivables");
   const queryClient = useQueryClient();
 
   const search = useSearch();

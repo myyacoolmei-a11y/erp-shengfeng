@@ -9,7 +9,7 @@ import {
   quotesTable,
 } from "@workspace/db";
 import { CreateWorkOrderBody, UpdateWorkOrderBody, CreateProgressBody } from "@workspace/api-zod";
-import { requireRole, requireFeature, effectiveRoles } from "../lib/auth";
+import { requireFeature, effectiveRoles } from "../lib/auth";
 import { syncQuoteDispatchStatus } from "../lib/quoteWorkflow";
 import { formatQuoteNumber } from "../lib/quoteStatus";
 import { stripQuotePricingFromNotes } from "../../shared/workOrderNotes.ts";
@@ -41,10 +41,6 @@ const WO_ADMIN_ROLES = ["super_admin", "owner", "admin"];
 const router: IRouter = Router();
 router.use(requireFeature("dispatch_orders"));
 
-const WO_READ_ROLES = ["super_admin", "owner", "admin", "engineer", "technician"];
-const WO_WRITE_ROLES = ["super_admin", "owner", "admin", "engineer"];
-const WO_DELETE_ROLES = ["super_admin", "owner", "admin"];
-const PROGRESS_ROLES = ["super_admin", "owner", "admin", "engineer", "technician"];
 
 function isoStr(v: unknown): string | null {
   if (!v) return null;
@@ -273,7 +269,7 @@ function sanitizeWOData<T extends Record<string, unknown>>(
   return deriveAssignedFromTechnicians(serializeAiReminderFieldsForDb(result));
 }
 
-router.get("/work-orders", requireRole(...WO_READ_ROLES), async (req, res): Promise<void> => {
+router.get("/work-orders", async (req, res): Promise<void> => {
   const { customerId, status } = req.query as { customerId?: string; status?: string };
   const conditions = [];
 
@@ -341,7 +337,7 @@ router.get("/work-orders", requireRole(...WO_READ_ROLES), async (req, res): Prom
   res.json(orders.map(o => formatOrder(o, equipmentByOrder[o.id] ?? [])));
 });
 
-router.post("/work-orders", requireRole(...WO_WRITE_ROLES), async (req, res): Promise<void> => {
+router.post("/work-orders", async (req, res): Promise<void> => {
   const parsed = CreateWorkOrderBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -396,7 +392,7 @@ router.post("/work-orders", requireRole(...WO_WRITE_ROLES), async (req, res): Pr
   res.status(201).json(formatOrder({ ...updated, linkedCustomerName: null }, insertedItems));
 });
 
-router.get("/work-orders/:id", requireRole(...WO_READ_ROLES), async (req, res): Promise<void> => {
+router.get("/work-orders/:id", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
@@ -433,7 +429,7 @@ router.get("/work-orders/:id", requireRole(...WO_READ_ROLES), async (req, res): 
   res.json(formatOrder(order, equipmentByOrder[id] ?? []));
 });
 
-router.patch("/work-orders/:id", requireRole(...WO_WRITE_ROLES), async (req, res): Promise<void> => {
+router.patch("/work-orders/:id", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
@@ -532,7 +528,7 @@ router.patch("/work-orders/:id", requireRole(...WO_WRITE_ROLES), async (req, res
   res.json(formatOrder({ ...order, linkedCustomerName: null }, equipmentItems));
 });
 
-router.delete("/work-orders/:id", requireRole(...WO_DELETE_ROLES), async (req, res): Promise<void> => {
+router.delete("/work-orders/:id", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
@@ -561,7 +557,7 @@ router.delete("/work-orders/:id", requireRole(...WO_DELETE_ROLES), async (req, r
   res.sendStatus(204);
 });
 
-router.get("/work-orders/:workOrderId/progress", requireRole(...PROGRESS_ROLES), async (req, res): Promise<void> => {
+router.get("/work-orders/:workOrderId/progress", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.workOrderId) ? req.params.workOrderId[0] : req.params.workOrderId;
   const workOrderId = parseInt(raw, 10);
   if (isNaN(workOrderId)) { res.status(400).json({ error: "Invalid workOrderId" }); return; }
@@ -590,7 +586,7 @@ router.get("/work-orders/:workOrderId/progress", requireRole(...PROGRESS_ROLES),
   res.json(entries.map(e => ({ ...e, createdAt: isoStr(e.createdAt) })));
 });
 
-router.post("/work-orders/:workOrderId/progress", requireRole(...PROGRESS_ROLES), async (req, res): Promise<void> => {
+router.post("/work-orders/:workOrderId/progress", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.workOrderId) ? req.params.workOrderId[0] : req.params.workOrderId;
   const workOrderId = parseInt(raw, 10);
   if (isNaN(workOrderId)) { res.status(400).json({ error: "Invalid workOrderId" }); return; }

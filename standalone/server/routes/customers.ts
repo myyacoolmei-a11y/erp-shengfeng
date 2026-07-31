@@ -5,13 +5,11 @@ import {
   CreateCustomerBody,
   UpdateCustomerBody,
 } from "@workspace/api-zod";
-import { requireRole } from "../lib/auth";
+import { requireFeature } from "../lib/auth";
 
 const router: IRouter = Router();
+router.use(requireFeature("customers"));
 
-const READ_ROLES = ["super_admin", "owner", "admin", "sales", "accountant", "engineer", "technician"];
-const WRITE_ROLES = ["super_admin", "owner", "admin", "sales"];
-const DELETE_ROLES = ["super_admin", "owner", "admin"];
 
 function mapCustomer(row: typeof customersTable.$inferSelect & { primarySalesRepName?: string | null }) {
   return {
@@ -41,7 +39,7 @@ const customerSelect = {
 };
 
 // NOTE: check-duplicate must come before /:id so Express doesn't capture "check-duplicate" as an id
-router.post("/customers/check-duplicate", requireRole(...READ_ROLES), async (req, res): Promise<void> => {
+router.post("/customers/check-duplicate", async (req, res): Promise<void> => {
   const { phone, mobile, taxId } = req.body as { phone?: string; mobile?: string; taxId?: string };
   const conditions = [];
 
@@ -63,7 +61,7 @@ router.post("/customers/check-duplicate", requireRole(...READ_ROLES), async (req
   res.json(matches);
 });
 
-router.get("/customers", requireRole(...READ_ROLES), async (req, res): Promise<void> => {
+router.get("/customers", async (req, res): Promise<void> => {
   const { search, includeOld } = req.query as { search?: string; includeOld?: string };
   const conditions = [];
 
@@ -97,7 +95,7 @@ router.get("/customers", requireRole(...READ_ROLES), async (req, res): Promise<v
   res.json(customers.map(mapCustomer));
 });
 
-router.post("/customers", requireRole(...WRITE_ROLES), async (req, res): Promise<void> => {
+router.post("/customers", async (req, res): Promise<void> => {
   const parsed = CreateCustomerBody.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: parsed.error.message });
@@ -116,7 +114,7 @@ router.post("/customers", requireRole(...WRITE_ROLES), async (req, res): Promise
   res.status(201).json(mapCustomer({ ...customer, primarySalesRepName: null }));
 });
 
-router.get("/customers/:id", requireRole(...READ_ROLES), async (req, res): Promise<void> => {
+router.get("/customers/:id", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   if (isNaN(id)) {
@@ -135,7 +133,7 @@ router.get("/customers/:id", requireRole(...READ_ROLES), async (req, res): Promi
   res.json(mapCustomer(customer));
 });
 
-router.patch("/customers/:id", requireRole(...WRITE_ROLES), async (req, res): Promise<void> => {
+router.patch("/customers/:id", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   if (isNaN(id)) {
@@ -164,7 +162,7 @@ router.patch("/customers/:id", requireRole(...WRITE_ROLES), async (req, res): Pr
   res.json(mapCustomer(customer ?? { ...updated, primarySalesRepName: null }));
 });
 
-router.delete("/customers/:id", requireRole(...DELETE_ROLES), async (req, res): Promise<void> => {
+router.delete("/customers/:id", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   if (isNaN(id)) {
