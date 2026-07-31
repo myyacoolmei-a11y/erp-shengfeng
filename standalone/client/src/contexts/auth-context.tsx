@@ -64,7 +64,7 @@ export function defaultPathForRole(user: AuthUser): string {
   if (roles.includes("owner") || roles.includes("admin")) return "/";
   if (roles.includes("accountant")) return "/receivables";
   if (roles.includes("sales")) return "/customers";
-  if (roles.includes("engineer") || roles.includes("technician")) return "/partner-culture";
+  if (roles.includes("engineer") || roles.includes("technician")) return "/engineer-dashboard";
   if (roles.includes("distributor")) return "/quotes";
   return "/login";
 }

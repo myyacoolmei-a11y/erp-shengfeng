@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from "react";
-import { useSearch, useLocation } from "wouter";
+import { useState, useRef, useEffect, useMemo } from "react";
+import { useSearch, useLocation, Link } from "wouter";
 import {
   useListWorkOrders, useCreateWorkOrder, useUpdateWorkOrder, useDeleteWorkOrder,
   useListCustomers, useListProgress, useCreateProgress,
@@ -7,7 +7,7 @@ import {
   useListEmployees, useListQuotes,
   getListWorkOrdersQueryKey, getListProgressQueryKey,
 } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { invalidateStatistics } from "@/lib/invalidateStatistics";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,7 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Pencil, Trash2, ChevronDown, ChevronUp, CreditCard, Printer, Share2, MapPin, X, FileText } from "lucide-react";
+import { Plus, Pencil, Trash2, ChevronDown, ChevronUp, CreditCard, Printer, Share2, MapPin, X, FileText, AlertCircle } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth, hasRole, userHasFeature } from "@/contexts/auth-context";
@@ -40,8 +40,18 @@ import { handlePdfAction, isMobileDevice, openPrintWindow } from "@/components/p
 import { buildWorkOrderHtml } from "@/components/pdf/templates/WorkOrderTemplate";
 import { FieldProgressDetailSection } from "@/components/field-progress/FieldProgressDetailSection";
 import { WorkOrderReopenDialog } from "@/components/work-orders/WorkOrderReopenDialog";
+import { EngineerWorkOrderCard } from "@/components/field-progress/EngineerWorkOrderCard";
+import {
+  listMyFieldProgress,
+  taipeiToday,
+  addDaysTaipei,
+  type FieldProgressRecord,
+} from "@/lib/fieldProgressApi";
 
 const STATUSES = WO_STATUSES;
+const ENGINEER_FILTERS = ["進行中", "今日", "即將施工", "已完成", "全部"] as const;
+type EngineerFilter = (typeof ENGINEER_FILTERS)[number];
+const WO_COMPLETED = new Set(["已完成", "已結案"]);
 
 const STATUS_COLORS: Record<string, string> = {
   "待施工": "bg-amber-100 text-amber-700",
@@ -307,6 +317,7 @@ export default function WorkOrders() {
   const openParam = parseInt(urlParams.get("open") ?? "0", 10) || null;
 
   const [statusFilter, setStatusFilter] = useState("全部");
+  const [engineerFilter, setEngineerFilter] = useState<EngineerFilter>("進行中");
   const [showCreate, setShowCreate] = useState(false);
   const [editItem, setEditItem] = useState<any>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
@@ -321,11 +332,71 @@ export default function WorkOrders() {
   const isAdmin =
     hasRole(user, "super_admin", "owner", "admin") ||
     (userHasFeature(user, "dispatch_orders") && userHasFeature(user, "customers"));
+  const isEngineerView =
+    hasRole(user, "engineer", "technician") &&
+    !hasRole(user, "super_admin", "owner", "admin");
 
-  const { data: orders, isLoading } = useListWorkOrders({
+  // 工程師：不寫死 today，一次取回指派案件後前端篩選
+  const {
+    data: orders,
+    isLoading,
+    isError: ordersError,
+    error: ordersErr,
+  } = useListWorkOrders({
     ...(filterCustomerId ? { customerId: filterCustomerId } : {}),
-    ...(statusFilter !== "全部" ? { status: statusFilter } : {}),
+    ...(!isEngineerView && statusFilter !== "全部" ? { status: statusFilter } : {}),
   });
+
+  const { data: progressRows = [] } = useQuery({
+    queryKey: ["field-progress", "mine"],
+    queryFn: listMyFieldProgress,
+    enabled: isEngineerView,
+  });
+  const progressMap = useMemo(() => {
+    const map = new Map<number, FieldProgressRecord>();
+    for (const r of progressRows) map.set(r.workOrderId, r);
+    return map;
+  }, [progressRows]);
+
+  const today = taipeiToday();
+  const completedSince = addDaysTaipei(today, -30);
+
+  const displayedOrders = useMemo(() => {
+    const list = orders ?? [];
+    if (!isEngineerView) return list;
+
+    return list.filter((o) => {
+      const prog = progressMap.get(o.id);
+      const fieldDone = prog?.fieldStatus === "completed" || !!prog?.completedAt;
+      const woDone = WO_COMPLETED.has(o.status ?? "") || fieldDone;
+      const sched = o.scheduledDate ?? null;
+
+      switch (engineerFilter) {
+        case "進行中":
+          return !woDone && (!sched || sched <= today);
+        case "今日":
+          return sched === today;
+        case "即將施工":
+          return !woDone && !!sched && sched > today;
+        case "已完成": {
+          if (!woDone) return false;
+          let doneDay: string | null = null;
+          if (prog?.completedAt) {
+            doneDay = new Date(prog.completedAt).toLocaleDateString("en-CA", {
+              timeZone: "Asia/Taipei",
+            });
+          } else {
+            doneDay = (o as { completedDate?: string | null }).completedDate ?? sched;
+          }
+          return !doneDay || doneDay >= completedSince;
+        }
+        case "全部":
+        default:
+          return true;
+      }
+    });
+  }, [orders, isEngineerView, engineerFilter, progressMap, today, completedSince]);
+
   const { data: customers } = useListCustomers({ includeOld: "true" });
   const { data: employees } = useListEmployees();
   const { data: quotes } = useListQuotes({ includeOld: "true" } as any);
@@ -546,23 +617,80 @@ export default function WorkOrders() {
 
       {/* Status filter tabs */}
       <div className="flex gap-1.5 flex-wrap">
-        {["全部", ...STATUSES].map(s => (
-          <button
-            key={s}
-            onClick={() => setStatusFilter(s)}
-            className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
-              statusFilter === s
-                ? "bg-primary text-primary-foreground border-primary"
-                : "bg-background border-border hover:bg-muted"
-            }`}
-          >{s}</button>
-        ))}
+        {isEngineerView
+          ? ENGINEER_FILTERS.map((s) => (
+              <button
+                key={s}
+                onClick={() => setEngineerFilter(s)}
+                className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
+                  engineerFilter === s
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-background border-border hover:bg-muted"
+                }`}
+              >
+                {s}
+              </button>
+            ))
+          : ["全部", ...STATUSES].map((s) => (
+              <button
+                key={s}
+                onClick={() => setStatusFilter(s)}
+                className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
+                  statusFilter === s
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-background border-border hover:bg-muted"
+                }`}
+              >
+                {s}
+              </button>
+            ))}
       </div>
 
-      {/* List */}
-      {isLoading ? (
+      {isEngineerView && (
+        <p className="text-xs text-muted-foreground">
+          預設顯示進行中（含逾期未完成）。已完成預設最近 30 天。
+          <Link href="/engineer-dashboard" className="ml-2 underline text-primary">
+            前往施工首頁
+          </Link>
+        </p>
+      )}
+
+      {ordersError && (
+        <Card className="border-destructive/50 bg-destructive/5">
+          <CardContent className="py-6 text-center space-y-2">
+            <AlertCircle className="h-7 w-7 text-destructive mx-auto" />
+            <p className="font-medium text-destructive">無法載入派工單</p>
+            <p className="text-sm text-muted-foreground">
+              {ordersErr instanceof Error ? ordersErr.message : "請稍後再試"}
+            </p>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Engineer card list */}
+      {isEngineerView && !ordersError ? (
+        isLoading ? (
+          <div className="space-y-2">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-32 w-full" />)}</div>
+        ) : displayedOrders.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-12">此篩選條件沒有派工單</p>
+        ) : (
+          <div className="space-y-3 max-w-2xl">
+            {displayedOrders.map((o) => (
+              <EngineerWorkOrderCard
+                key={o.id}
+                order={o}
+                progress={progressMap.get(o.id) ?? null}
+                readOnly={engineerFilter === "已完成"}
+              />
+            ))}
+          </div>
+        )
+      ) : null}
+
+      {/* Admin / shared list */}
+      {!isEngineerView && isLoading ? (
         <div className="space-y-2">{[1, 2, 3].map(i => <Skeleton key={i} className="h-20 w-full" />)}</div>
-      ) : orders && orders.length > 0 ? (
+      ) : !isEngineerView && !ordersError && orders && orders.length > 0 ? (
         <Card><CardContent className="p-0">
           <div className="divide-y">
             {orders.map(o => {

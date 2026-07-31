@@ -126,7 +126,7 @@ export default function PartnerHome() {
         asChild
         className="w-full h-[60px] rounded-2xl bg-[#B8FF63] hover:bg-[#A8EF53] text-black font-bold text-lg shadow-md border-0"
       >
-        <Link href="/work-orders">
+        <Link href="/engineer-dashboard">
           <Wrench className="h-5 w-5 mr-2" />
           查看今日派工
         </Link>

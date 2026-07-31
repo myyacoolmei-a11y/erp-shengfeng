@@ -29,12 +29,16 @@ function ProgressRecordBlock({
         )}
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1">
-        <p><span className="text-muted-foreground">前往案場：</span>{formatTaipeiDateTime(record.departedAt)}</p>
-        <p><span className="text-muted-foreground">到達施工：</span>{formatTaipeiDateTime(record.arrivedAt)}</p>
-        <p><span className="text-muted-foreground">完工離場：</span>{formatTaipeiDateTime(record.completedAt)}</p>
-        <p><span className="text-muted-foreground">路程時間：</span>{record.completedAt ? record.travelDurationLabel : "尚未記錄"}</p>
-        <p><span className="text-muted-foreground">施工時間：</span>{record.completedAt ? record.workDurationLabel : "尚未記錄"}</p>
-        <p><span className="text-muted-foreground">總耗時：</span>{record.completedAt ? record.totalDurationLabel : "尚未記錄"}</p>
+        <p><span className="text-muted-foreground">狀態：</span>{record.fieldStatusLabel ?? "—"}</p>
+        <p><span className="text-muted-foreground">出發：</span>{formatTaipeiDateTime(record.departedAt)}</p>
+        <p><span className="text-muted-foreground">到場：</span>{formatTaipeiDateTime(record.arrivedAt)}</p>
+        <p><span className="text-muted-foreground">暫停：</span>{formatTaipeiDateTime(record.pausedAt)}</p>
+        <p><span className="text-muted-foreground">恢復：</span>{formatTaipeiDateTime(record.resumedAt)}</p>
+        <p><span className="text-muted-foreground">完工：</span>{formatTaipeiDateTime(record.completedAt)}</p>
+        <p><span className="text-muted-foreground">交通時間：</span>{record.completedAt ? record.travelDurationLabel : "尚未記錄"}</p>
+        <p><span className="text-muted-foreground">現場工時：</span>{record.completedAt ? record.workDurationLabel : "尚未記錄"}</p>
+        <p><span className="text-muted-foreground">案件總時間：</span>{record.completedAt ? record.totalDurationLabel : "尚未記錄"}</p>
+        <p><span className="text-muted-foreground">暫停累計：</span>{record.pauseTotalMinutes ? `${record.pauseTotalMinutes} 分鐘` : "—"}</p>
       </div>
       {record.unableToCompleteAt && (
         <div className="mt-1 rounded-md bg-amber-50 border border-amber-200 px-2 py-1.5 text-amber-900">
