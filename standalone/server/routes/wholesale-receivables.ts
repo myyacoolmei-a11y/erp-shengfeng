@@ -2,9 +2,11 @@ import { Router, type IRouter } from "express";
 import { eq, and, desc, SQL } from "drizzle-orm";
 import { db, wholesaleReceivablesTable } from "@workspace/db";
 import { z } from "zod/v4";
-import { requireRole } from "../lib/auth";
+import { requireRole, requireFeature } from "../lib/auth";
 
 const router: IRouter = Router();
+router.use(requireFeature("wholesale"));
+
 const ROLES = ["super_admin", "owner", "admin", "sales", "accountant"] as const;
 const WRITE_ROLES = ["super_admin", "owner", "admin", "accountant"] as const;
 

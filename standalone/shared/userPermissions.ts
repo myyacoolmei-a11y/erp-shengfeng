@@ -1,33 +1,29 @@
-/** Feature permission keys — shared between client and server */
-export const FEATURE_KEYS = [
-  "home",
-  "customers",
-  "quotes",
-  "work_orders",
-  "repair_cases",
-  "maintenance",
-  "receivables",
-  "inventory",
-  "company_announce",
-  "ai_assistant",
-  "system_settings",
-] as const;
+/**
+ * Feature permissions + role templates.
+ * Nav catalog lives in navigationPermissions.ts (single source with Sidebar).
+ */
 
-export type FeatureKey = (typeof FEATURE_KEYS)[number];
+export {
+  FEATURE_KEYS,
+  FEATURE_LABELS,
+  type FeatureKey,
+  NAV_GROUP_LABELS,
+  type NavGroupId,
+  NAV_ITEMS,
+  permissionEditorItems,
+  featureForPath,
+  normalizeFeaturePermissions,
+  LEGACY_FEATURE_MAP,
+  sidebarItemsForGroup,
+  wholesaleSubItems,
+} from "./navigationPermissions.ts";
 
-export const FEATURE_LABELS: Record<FeatureKey, string> = {
-  home: "首頁",
-  customers: "客戶",
-  quotes: "報價單",
-  work_orders: "派工單",
-  repair_cases: "維修案件",
-  maintenance: "保養案件",
-  receivables: "收款",
-  inventory: "庫存",
-  company_announce: "公司公告",
-  ai_assistant: "AI 助手",
-  system_settings: "系統設定",
-};
+import {
+  FEATURE_KEYS,
+  type FeatureKey,
+  normalizeFeaturePermissions,
+  featureForPath,
+} from "./navigationPermissions.ts";
 
 export const IDENTITY_TYPES = ["employee", "owner", "contractor", "temporary", "other"] as const;
 export type IdentityType = (typeof IDENTITY_TYPES)[number];
@@ -70,27 +66,40 @@ export const PERMISSION_TEMPLATE_LABELS: Record<PermissionTemplateKey, string> =
 
 const ALL_FEATURES: FeatureKey[] = [...FEATURE_KEYS];
 
+/** Role → default features (used when DB feature_permissions empty) */
 const ROLE_FEATURES: Record<string, FeatureKey[]> = {
   super_admin: ALL_FEATURES,
   owner: ALL_FEATURES,
   admin: [
-    "home",
+    "dashboard",
     "customers",
-    "quotes",
-    "work_orders",
+    "quotations",
+    "dispatch_orders",
     "repair_cases",
-    "maintenance",
+    "warranty_maintenance",
     "receivables",
     "inventory",
-    "company_announce",
-    "ai_assistant",
-    "system_settings",
+    "notifications",
   ],
-  sales: ["home", "customers", "quotes", "ai_assistant"],
-  engineer: ["home", "work_orders", "repair_cases", "maintenance", "company_announce"],
-  technician: ["home", "work_orders", "repair_cases", "maintenance", "company_announce"],
-  accountant: ["home", "customers", "receivables", "ai_assistant"],
-  distributor: ["home", "quotes", "ai_assistant"],
+  sales: ["dashboard", "customers", "quotations", "products", "wholesale", "ai_assistant"],
+  engineer: [
+    "dashboard",
+    "dispatch_orders",
+    "repair_cases",
+    "warranty_maintenance",
+    "company_culture",
+    "notifications",
+  ],
+  technician: [
+    "dashboard",
+    "dispatch_orders",
+    "repair_cases",
+    "warranty_maintenance",
+    "company_culture",
+    "notifications",
+  ],
+  accountant: ["dashboard", "customers", "receivables", "warranty_maintenance", "work_hours", "ai_assistant"],
+  distributor: ["dashboard", "quotations", "ai_assistant"],
 };
 
 export interface PermissionTemplate {
@@ -115,17 +124,15 @@ export const PERMISSION_TEMPLATES: Record<PermissionTemplateKey, PermissionTempl
     label: "行政",
     roles: ["admin"],
     features: [
-      "home",
+      "dashboard",
       "customers",
-      "quotes",
-      "work_orders",
+      "quotations",
+      "dispatch_orders",
       "repair_cases",
-      "maintenance",
+      "warranty_maintenance",
       "receivables",
       "inventory",
-      "company_announce",
-      "ai_assistant",
-      "system_settings",
+      "notifications",
     ],
     dataPermission: "all",
     identityType: "employee",
@@ -134,7 +141,14 @@ export const PERMISSION_TEMPLATES: Record<PermissionTemplateKey, PermissionTempl
   engineer: {
     label: "工程師",
     roles: ["engineer"],
-    features: ["home", "work_orders", "repair_cases", "maintenance", "company_announce"],
+    features: [
+      "dashboard",
+      "dispatch_orders",
+      "repair_cases",
+      "warranty_maintenance",
+      "company_culture",
+      "notifications",
+    ],
     dataPermission: "own",
     identityType: "employee",
     title: "工程師",
@@ -142,7 +156,7 @@ export const PERMISSION_TEMPLATES: Record<PermissionTemplateKey, PermissionTempl
   sales: {
     label: "業務",
     roles: ["sales"],
-    features: ["home", "customers", "quotes", "ai_assistant"],
+    features: ["dashboard", "customers", "quotations", "products", "wholesale", "ai_assistant"],
     dataPermission: "all",
     identityType: "employee",
     title: "業務",
@@ -150,7 +164,7 @@ export const PERMISSION_TEMPLATES: Record<PermissionTemplateKey, PermissionTempl
   accountant: {
     label: "會計",
     roles: ["accountant"],
-    features: ["home", "customers", "receivables", "ai_assistant"],
+    features: ["dashboard", "customers", "receivables", "warranty_maintenance", "work_hours", "ai_assistant"],
     dataPermission: "all",
     identityType: "employee",
     title: "會計",
@@ -158,7 +172,7 @@ export const PERMISSION_TEMPLATES: Record<PermissionTemplateKey, PermissionTempl
   contractor: {
     label: "外包",
     roles: ["technician"],
-    features: ["home", "work_orders", "repair_cases", "company_announce"],
+    features: ["dashboard", "dispatch_orders", "repair_cases", "company_culture", "notifications"],
     dataPermission: "own",
     identityType: "contractor",
     title: "外包",
@@ -176,19 +190,22 @@ export function effectiveRolesFromUser(user: PermissionUserLike): string[] {
   return user.roles?.length ? user.roles : user.role ? [user.role] : [];
 }
 
-/** Resolve feature permissions — explicit list wins; otherwise derive from legacy roles */
+/** Resolve feature permissions — explicit list (normalized) wins; else derive from roles */
 export function resolveFeaturePermissions(user: PermissionUserLike): FeatureKey[] {
-  if (user.featurePermissions?.length) {
-    return user.featurePermissions.filter((f): f is FeatureKey =>
-      (FEATURE_KEYS as readonly string[]).includes(f),
-    );
-  }
   const roles = effectiveRolesFromUser(user);
+  if (roles.includes("super_admin") || roles.includes("owner")) {
+    return ALL_FEATURES;
+  }
+
+  if (user.featurePermissions?.length) {
+    return normalizeFeaturePermissions(user.featurePermissions);
+  }
+
   const set = new Set<FeatureKey>();
   for (const role of roles) {
     for (const f of ROLE_FEATURES[role] ?? []) set.add(f);
   }
-  return [...set];
+  return FEATURE_KEYS.filter((k) => set.has(k));
 }
 
 export function resolveDataPermission(user: PermissionUserLike): DataPermission {
@@ -196,7 +213,7 @@ export function resolveDataPermission(user: PermissionUserLike): DataPermission 
     return user.dataPermission;
   }
   const roles = effectiveRolesFromUser(user);
-  if (roles.some(r => ["engineer", "technician", "distributor"].includes(r))) return "own";
+  if (roles.some((r) => ["engineer", "technician", "distributor"].includes(r))) return "own";
   return "all";
 }
 
@@ -208,61 +225,36 @@ export function isDataPermissionBypassRole(roles: string[]): boolean {
   return roles.includes("super_admin") || roles.includes("owner") || roles.includes("admin");
 }
 
-/** dataPermission=own 且非 admin 角色時，僅能看自己的資料 */
 export function shouldApplyOwnDataFilter(user: PermissionUserLike): boolean {
   const roles = effectiveRolesFromUser(user);
   if (isDataPermissionBypassRole(roles)) return false;
   return resolveDataPermission(user) === "own";
 }
 
-/** Map nav href to required feature (for sidebar filtering) */
-export const NAV_HREF_FEATURES: Record<string, FeatureKey | FeatureKey[]> = {
-  "/": "home",
-  "/engineer-dashboard": "home",
-  "/partner-home": "company_announce",
-  "/partner-culture": "company_announce",
-  "/customers": "customers",
-  "/quotes": "quotes",
-  "/work-orders": "work_orders",
-  "/repair-cases": "repair_cases",
-  "/receivables": "receivables",
-  "/products": "inventory",
-  "/inventory": "inventory",
-  "/warranties": "maintenance",
-  "/employees": "system_settings",
-  "/work-hours-stats": "system_settings",
-  "/reminder-settings": "ai_assistant",
-  "/ai-assistant": ["ai_assistant", "work_orders"],
-  "/ai-work-reminders": "home",
-  "/users": "system_settings",
-  "/wholesale/customers": "customers",
-  "/wholesale/products": "inventory",
-  "/wholesale/orders": "quotes",
-  "/wholesale/settlements": "receivables",
-};
+/** @deprecated use featureForPath */
+export const NAV_HREF_FEATURES: Record<string, FeatureKey | FeatureKey[]> = {};
 
 export function inferRolesFromFeatures(features: FeatureKey[]): string[] {
   for (const key of PERMISSION_TEMPLATE_KEYS) {
     const tpl = PERMISSION_TEMPLATES[key];
     const match =
-      tpl.features.length === features.length &&
-      tpl.features.every(f => features.includes(f));
+      tpl.features.length === features.length && tpl.features.every((f) => features.includes(f));
     if (match) return [...tpl.roles];
   }
-  if (features.includes("system_settings") && features.length >= 8) return ["owner"];
-  if (features.includes("system_settings")) return ["admin"];
-  if (features.includes("receivables") && !features.includes("work_orders")) return ["accountant"];
-  if (features.includes("customers") && features.includes("quotes")) return ["sales"];
-  if (features.includes("work_orders")) return ["engineer"];
+  if (features.includes("users")) return ["owner"];
+  if (features.includes("employees") && features.includes("dispatch_orders")) return ["admin"];
+  if (features.includes("receivables") && !features.includes("dispatch_orders")) return ["accountant"];
+  if (features.includes("customers") && features.includes("quotations")) return ["sales"];
+  if (features.includes("dispatch_orders")) return ["engineer"];
   return ["technician"];
 }
 
 export function navHrefAllowed(user: PermissionUserLike, href: string): boolean {
-  const required = NAV_HREF_FEATURES[href];
+  const roles = effectiveRolesFromUser(user);
+  if (roles.includes("super_admin") || roles.includes("owner")) return true;
+  const required = featureForPath(href);
   if (!required) return true;
-  const perms = resolveFeaturePermissions(user);
-  const list = Array.isArray(required) ? required : [required];
-  return list.some(f => perms.includes(f));
+  return hasFeaturePermission(user, required);
 }
 
 export function rolesFromTemplate(templateKey: PermissionTemplateKey): string[] {

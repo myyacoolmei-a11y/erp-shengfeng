@@ -46,6 +46,7 @@ import {
   DATA_PERMISSION_LABELS,
   PERMISSION_TEMPLATES,
   inferRolesFromFeatures,
+  normalizeFeaturePermissions,
   type FeatureKey,
   type DataPermission,
   type IdentityType,
@@ -122,7 +123,7 @@ function userToForm(u: UserItem): UserFormState {
     title: u.title ?? "",
     notes: u.notes ?? "",
     linkedEmployeeId: u.linkedEmployeeId,
-    featurePermissions: u.featurePermissions ?? [],
+    featurePermissions: normalizeFeaturePermissions(u.featurePermissions ?? []),
     dataPermission: u.dataPermission ?? "all",
     permissionTemplate: "",
     isActive: u.isActive,
@@ -357,7 +358,7 @@ export default function UsersPage() {
                       <div className="flex flex-wrap gap-1 max-w-[200px]">
                         {(u.featurePermissions ?? []).slice(0, 4).map(f => (
                           <span key={f} className="text-[10px] px-1.5 py-0.5 rounded bg-green-50 text-green-800 border border-green-200">
-                            {FEATURE_LABELS[f]}
+                            {FEATURE_LABELS[f as FeatureKey] ?? f}
                           </span>
                         ))}
                         {(u.featurePermissions?.length ?? 0) > 4 && (

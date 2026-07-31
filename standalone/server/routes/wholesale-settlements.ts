@@ -1,9 +1,11 @@
 import { Router, type IRouter } from "express";
 import { eq, and, gte, lte, sql, desc, inArray } from "drizzle-orm";
 import { db, wholesaleOrdersTable, wholesaleOrderItemsTable, wholesaleReceivablesTable, productsTable } from "@workspace/db";
-import { requireRole } from "../lib/auth";
+import { requireRole, requireFeature } from "../lib/auth";
 
 const router: IRouter = Router();
+router.use(requireFeature("wholesale"));
+
 const ROLES = ["super_admin", "owner", "admin", "sales", "accountant"] as const;
 
 function parseId(raw: string | string[]): number {

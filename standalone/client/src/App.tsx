@@ -3,9 +3,10 @@ import { Switch, Route, Router as WouterRouter, Redirect, useLocation } from "wo
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { AuthProvider, useAuth, hasRole, defaultPathForRole, type UserRole } from "@/contexts/auth-context";
+import { AuthProvider, useAuth, hasRole, userHasFeature, defaultPathForRole, type UserRole } from "@/contexts/auth-context";
 import { AccessDenied } from "@/components/access-denied";
 import { Layout } from "@/components/layout";
+import type { FeatureKey } from "../../../shared/userPermissions.ts";
 import LoginPage from "@/pages/login";
 import ChangePasswordPage from "@/pages/change-password";
 import NotFound from "@/pages/not-found";
@@ -64,13 +65,47 @@ function RoleGuard({
   if (!user) return <Redirect to="/login" />;
   if (!hasRole(user, ...roles)) {
     const fallback = defaultPathForRole(user);
-    // Same-path redirect would remount forever — show denial instead.
     if (fallback === location || fallback === "/login") {
       return <AccessDenied />;
     }
     return <Redirect to={fallback} />;
   }
   return <>{children}</>;
+}
+
+/** Sidebar + route share the same feature keys */
+function FeatureGuard({
+  feature,
+  children,
+}: {
+  feature: FeatureKey;
+  children: React.ReactNode;
+}) {
+  const { user } = useAuth();
+  const [location] = useLocation();
+  if (!user) return <Redirect to="/login" />;
+  if (!userHasFeature(user, feature)) {
+    const fallback = defaultPathForRole(user);
+    if (fallback === location || fallback === "/login") {
+      return <AccessDenied />;
+    }
+    return <Redirect to={fallback} />;
+  }
+  return <>{children}</>;
+}
+
+function Guard({
+  feature,
+  roles,
+  children,
+}: {
+  feature: FeatureKey;
+  roles?: UserRole[];
+  children: React.ReactNode;
+}) {
+  const inner = <FeatureGuard feature={feature}>{children}</FeatureGuard>;
+  if (roles?.length) return <RoleGuard roles={roles}>{inner}</RoleGuard>;
+  return inner;
 }
 
 function AppRoutes() {
@@ -109,113 +144,75 @@ function AppRoutes() {
         <Layout>
           <Switch>
             <Route path="/">
-              <RoleGuard roles={["super_admin", "owner", "admin", "accountant"]}>
+              <Guard feature="dashboard" roles={["super_admin", "owner", "admin", "accountant", "sales", "distributor"]}>
                 <Dashboard />
-              </RoleGuard>
+              </Guard>
             </Route>
             <Route path="/customers">
-              <RoleGuard roles={["super_admin", "owner", "admin", "sales", "accountant"]}>
-                <Customers />
-              </RoleGuard>
+              <Guard feature="customers"><Customers /></Guard>
             </Route>
             <Route path="/customers/:id/history">
               {() => (
-                <RoleGuard roles={["super_admin", "owner", "admin", "sales", "accountant"]}>
-                  <CustomerHistory />
-                </RoleGuard>
+                <Guard feature="customers"><CustomerHistory /></Guard>
               )}
             </Route>
             <Route path="/customers/:id">
               {() => (
-                <RoleGuard roles={["super_admin", "owner", "admin", "sales", "accountant"]}>
-                  <CustomerDetail />
-                </RoleGuard>
+                <Guard feature="customers"><CustomerDetail /></Guard>
               )}
             </Route>
             <Route path="/quotes">
-              <RoleGuard roles={["super_admin", "owner", "admin", "sales", "distributor"]}>
-                <Quotes />
-              </RoleGuard>
+              <Guard feature="quotations"><Quotes /></Guard>
             </Route>
             <Route path="/work-orders">
-              <RoleGuard roles={["super_admin", "owner", "admin", "engineer", "technician"]}>
-                <WorkOrders />
-              </RoleGuard>
+              <Guard feature="dispatch_orders"><WorkOrders /></Guard>
             </Route>
             <Route path="/repair-cases">
-              <RoleGuard roles={["super_admin", "owner", "admin", "engineer", "technician", "sales"]}>
-                <RepairCases />
-              </RoleGuard>
+              <Guard feature="repair_cases"><RepairCases /></Guard>
             </Route>
             <Route path="/payments">
-              <RoleGuard roles={["super_admin", "owner", "admin", "accountant"]}>
-                <Payments />
-              </RoleGuard>
+              <Guard feature="receivables"><Payments /></Guard>
             </Route>
             <Route path="/receivables">
-              <RoleGuard roles={["super_admin", "owner", "admin", "accountant"]}>
-                <Receivables />
-              </RoleGuard>
+              <Guard feature="receivables"><Receivables /></Guard>
             </Route>
             <Route path="/warranties">
-              <RoleGuard roles={["super_admin", "owner", "admin", "accountant"]}>
-                <Warranties />
-              </RoleGuard>
+              <Guard feature="warranty_maintenance"><Warranties /></Guard>
             </Route>
             <Route path="/maintenance">
-              <RoleGuard roles={["super_admin", "owner", "admin", "engineer", "technician"]}>
-                <Maintenance />
-              </RoleGuard>
+              <Guard feature="warranty_maintenance"><Maintenance /></Guard>
             </Route>
             <Route path="/engineer-dashboard">
-              <RoleGuard roles={["super_admin", "owner", "admin", "engineer", "technician"]}>
+              <Guard feature="dashboard" roles={["super_admin", "owner", "admin", "engineer", "technician"]}>
                 <EngineerDashboard />
-              </RoleGuard>
+              </Guard>
             </Route>
             <Route path="/work-hours-stats">
-              <RoleGuard roles={["super_admin", "owner", "admin", "accountant"]}>
-                <WorkHoursStats />
-              </RoleGuard>
+              <Guard feature="work_hours"><WorkHoursStats /></Guard>
             </Route>
             <Route path="/products">
-              <RoleGuard roles={["super_admin", "owner", "admin", "sales"]}>
-                <Products />
-              </RoleGuard>
+              <Guard feature="products"><Products /></Guard>
             </Route>
             <Route path="/wholesale/customers">
-              <RoleGuard roles={["super_admin", "owner", "admin", "sales"]}>
-                <WholesaleCustomers />
-              </RoleGuard>
+              <Guard feature="wholesale"><WholesaleCustomers /></Guard>
             </Route>
             <Route path="/wholesale/products">
-              <RoleGuard roles={["super_admin", "owner", "admin", "sales"]}>
-                <WholesaleProducts />
-              </RoleGuard>
+              <Guard feature="wholesale"><WholesaleProducts /></Guard>
             </Route>
             <Route path="/wholesale/orders">
-              <RoleGuard roles={["super_admin", "owner", "admin", "sales"]}>
-                <WholesaleOrders />
-              </RoleGuard>
+              <Guard feature="wholesale"><WholesaleOrders /></Guard>
             </Route>
             <Route path="/wholesale/settlements">
-              <RoleGuard roles={["super_admin", "owner", "admin", "sales", "accountant"]}>
-                <WholesaleSettlements />
-              </RoleGuard>
+              <Guard feature="wholesale"><WholesaleSettlements /></Guard>
             </Route>
             <Route path="/inventory">
-              <RoleGuard roles={["super_admin", "owner", "admin"]}>
-                <Inventory />
-              </RoleGuard>
+              <Guard feature="inventory"><Inventory /></Guard>
             </Route>
             <Route path="/employees">
-              <RoleGuard roles={["super_admin", "owner", "admin"]}>
-                <Employees />
-              </RoleGuard>
+              <Guard feature="employees"><Employees /></Guard>
             </Route>
             <Route path="/partner-culture">
-              <RoleGuard roles={["super_admin", "owner", "admin", "engineer", "technician"]}>
-                <PartnerCultureRoute />
-              </RoleGuard>
+              <Guard feature="company_culture"><PartnerCultureRoute /></Guard>
             </Route>
             <Route path="/partner-home">
               <Redirect to="/partner-culture" />
@@ -224,9 +221,7 @@ function AppRoutes() {
               <Redirect to="/partner-culture" />
             </Route>
             <Route path="/ai-assistant">
-              <RoleGuard roles={["super_admin", "owner", "admin", "sales", "accountant", "distributor", "engineer", "technician"]}>
-                <AiAssistant />
-              </RoleGuard>
+              <Guard feature="ai_assistant"><AiAssistant /></Guard>
             </Route>
             <Route path="/ai-work-reminders">
               <Redirect to="/ai-assistant?tab=work-reminders" />
@@ -235,14 +230,12 @@ function AppRoutes() {
               <Redirect to="/ai-assistant" />
             </Route>
             <Route path="/notification-settings">
-              <RoleGuard roles={["super_admin", "owner", "admin", "sales", "accountant", "engineer", "technician", "distributor"]}>
-                <NotificationSettings />
-              </RoleGuard>
+              <Guard feature="notifications"><NotificationSettings /></Guard>
             </Route>
             <Route path="/users">
-              <RoleGuard roles={["super_admin", "owner"]}>
+              <Guard feature="users" roles={["super_admin", "owner"]}>
                 <Users />
-              </RoleGuard>
+              </Guard>
             </Route>
             <Route component={NotFound} />
           </Switch>

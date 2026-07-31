@@ -6,13 +6,14 @@ import {
   inventoryTransactionsTable,
 } from "@workspace/db";
 import { z } from "zod/v4";
-import { requireRole } from "../lib/auth";
+import { requireRole, requireFeature } from "../lib/auth";
 import {
   INVENTORY_STATUSES,
   INVENTORY_TX_REASONS,
 } from "../../shared/inventoryConstants";
 
 const router: IRouter = Router();
+router.use(requireFeature("inventory"));
 
 const READ_ROLES = ["super_admin", "owner", "admin"] as const;
 const WRITE_ROLES = ["super_admin", "owner", "admin"] as const;

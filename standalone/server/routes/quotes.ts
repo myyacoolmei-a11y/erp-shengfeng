@@ -2,12 +2,13 @@ import { Router, type IRouter } from "express";
 import { eq, and, inArray } from "drizzle-orm";
 import { db, quotesTable, customersTable, employeesTable, quoteItemsTable } from "@workspace/db";
 import { CreateQuoteBody, UpdateQuoteBody } from "@workspace/api-zod";
-import { requireRole } from "../lib/auth";
+import { requireRole, requireFeature } from "../lib/auth";
 import { syncQuoteDispatchBatch, syncQuoteDispatchStatus } from "../lib/quoteWorkflow";
 import { normalizeQuoteStatus } from "../lib/quoteStatus";
 import { resolveQuoteItemsForSave } from "../lib/productCatalog";
 
 const router: IRouter = Router();
+router.use(requireFeature("quotations"));
 
 const READ_ROLES = ["super_admin", "owner", "admin", "sales", "distributor"];
 const WRITE_ROLES = ["super_admin", "owner", "admin", "sales", "distributor"];

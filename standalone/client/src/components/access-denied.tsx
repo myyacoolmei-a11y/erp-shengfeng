@@ -14,8 +14,8 @@ export function AccessDenied() {
         <ShieldX className="h-8 w-8 text-destructive" />
       </div>
       <div className="space-y-1">
-        <h2 className="text-xl font-semibold">無權限存取</h2>
-        <p className="text-sm text-muted-foreground">您沒有權限查看此頁面</p>
+        <h2 className="text-xl font-semibold">你沒有此功能權限</h2>
+        <p className="text-sm text-muted-foreground">請聯絡管理員開通對應功能後再試</p>
       </div>
       <Button variant="outline" onClick={() => navigate(home)}>
         返回首頁

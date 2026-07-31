@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import { eq, ilike, or, and, desc, SQL } from "drizzle-orm";
 import { db, productsTable, productUsageTypesTable } from "@workspace/db";
 import { z } from "zod/v4";
-import { requireRole } from "../lib/auth";
+import { requireRole, requireFeature } from "../lib/auth";
 import {
   enrichProducts,
   setProductUsageTypes,
@@ -15,6 +15,7 @@ import {
 import { isProductUsageType, PRODUCT_USAGE_TYPES, type ProductUsageType } from "../../shared/productUsageTypes";
 
 const router: IRouter = Router();
+router.use(requireFeature("products"));
 
 const READ_ROLES = ["super_admin", "owner", "admin", "sales", "accountant", "distributor"];
 const WRITE_ROLES = ["super_admin", "owner", "admin"];

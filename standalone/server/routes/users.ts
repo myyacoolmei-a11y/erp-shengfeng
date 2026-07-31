@@ -6,11 +6,11 @@ import { db, usersTable } from "@workspace/db";
 import { requireRoleOrFeature, effectiveRoles } from "../lib/auth";
 import { toUserPublicDto } from "../lib/userPublicDto";
 import {
-  FEATURE_KEYS,
   IDENTITY_TYPES,
   DATA_PERMISSIONS,
   PERMISSION_TEMPLATES,
   inferRolesFromFeatures,
+  normalizeFeaturePermissions,
   type FeatureKey,
   type PermissionTemplateKey,
 } from "../../shared/userPermissions.ts";
@@ -30,7 +30,7 @@ const ALL_ROLES = [
 
 const USER_MANAGE_ACCESS = requireRoleOrFeature(
   ["super_admin", "owner"],
-  ["system_settings"],
+  ["users"],
 );
 
 const CreateUserBody = z.object({
@@ -45,7 +45,8 @@ const CreateUserBody = z.object({
   linkedEmployeeId: z.number().int().positive().nullable().optional(),
   receiveDispatchNotifications: z.boolean().optional(),
   roles: z.array(z.enum(ALL_ROLES)).min(1, "至少選擇一個角色").optional(),
-  featurePermissions: z.array(z.enum(FEATURE_KEYS)).min(1, "至少選擇一項功能權限"),
+  /** Accept legacy keys; normalized before save */
+  featurePermissions: z.array(z.string()).min(1, "至少選擇一項功能權限"),
   dataPermission: z.enum(DATA_PERMISSIONS),
   permissionTemplate: z.string().optional(),
 });
@@ -61,7 +62,7 @@ const UpdateUserBody = z.object({
   linkedEmployeeId: z.number().int().positive().nullable().optional(),
   receiveDispatchNotifications: z.boolean().optional(),
   roles: z.array(z.enum(ALL_ROLES)).min(1).optional(),
-  featurePermissions: z.array(z.enum(FEATURE_KEYS)).min(1).optional(),
+  featurePermissions: z.array(z.string()).min(1).optional(),
   dataPermission: z.enum(DATA_PERMISSIONS).optional(),
   isActive: z.boolean().optional(),
 });
@@ -76,12 +77,12 @@ function parseId(raw: unknown): number | null {
 }
 
 function resolveRolesFromBody(
-  body: { roles?: string[]; permissionTemplate?: string; featurePermissions: FeatureKey[] },
+  body: { roles?: string[]; permissionTemplate?: string; featurePermissions: string[] },
 ): string[] {
   if (body.roles?.length) return body.roles;
   const tpl = body.permissionTemplate as PermissionTemplateKey | undefined;
   if (tpl && PERMISSION_TEMPLATES[tpl]) return [...PERMISSION_TEMPLATES[tpl].roles];
-  return inferRolesFromFeatures(body.featurePermissions);
+  return inferRolesFromFeatures(normalizeFeaturePermissions(body.featurePermissions));
 }
 
 router.get("/users", USER_MANAGE_ACCESS, async (_req, res): Promise<void> => {
@@ -106,7 +107,12 @@ router.post("/users", USER_MANAGE_ACCESS, async (req, res): Promise<void> => {
     return;
   }
 
-  const { password, featurePermissions, dataPermission, permissionTemplate: _tpl, roles: _r, ...rest } = parsed.data;
+  const { password, featurePermissions: rawFeatures, dataPermission, permissionTemplate: _tpl, roles: _r, ...rest } = parsed.data;
+  const featurePermissions = normalizeFeaturePermissions(rawFeatures);
+  if (!featurePermissions.length) {
+    res.status(400).json({ error: "至少選擇一項有效功能權限" });
+    return;
+  }
   const primaryRole = roles[0];
   const email = rest.email === "" ? null : rest.email ?? null;
 
@@ -171,6 +177,16 @@ router.patch("/users/:id", USER_MANAGE_ACCESS, async (req, res): Promise<void> =
   const data: Record<string, unknown> = { ...parsed.data };
   if (data.email === "") data.email = null;
 
+  let normalizedFeatures: FeatureKey[] | undefined;
+  if (parsed.data.featurePermissions?.length) {
+    normalizedFeatures = normalizeFeaturePermissions(parsed.data.featurePermissions);
+    if (!normalizedFeatures.length) {
+      res.status(400).json({ error: "至少選擇一項有效功能權限" });
+      return;
+    }
+    data.featurePermissions = normalizedFeatures;
+  }
+
   if (targetIsSuperAdmin) {
     delete data.roles;
     delete data.isActive;
@@ -185,8 +201,8 @@ router.patch("/users/:id", USER_MANAGE_ACCESS, async (req, res): Promise<void> =
 
   if ((data.roles as string[] | undefined)?.length) {
     data.role = (data.roles as string[])[0];
-  } else if (parsed.data.featurePermissions?.length) {
-    const inferred = inferRolesFromFeatures(parsed.data.featurePermissions);
+  } else if (normalizedFeatures?.length) {
+    const inferred = inferRolesFromFeatures(normalizedFeatures);
     data.roles = inferred;
     data.role = inferred[0];
   }

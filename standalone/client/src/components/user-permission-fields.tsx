@@ -1,7 +1,5 @@
-import type { FeatureKey, DataPermission, IdentityType, PermissionTemplateKey } from "../../../shared/userPermissions.ts";
+import type { FeatureKey, DataPermission, IdentityType, PermissionTemplateKey, NavGroupId } from "../../../shared/userPermissions.ts";
 import {
-  FEATURE_KEYS,
-  FEATURE_LABELS,
   IDENTITY_TYPES,
   IDENTITY_TYPE_LABELS,
   DATA_PERMISSIONS,
@@ -9,6 +7,8 @@ import {
   PERMISSION_TEMPLATE_KEYS,
   PERMISSION_TEMPLATE_LABELS,
   PERMISSION_TEMPLATES,
+  NAV_GROUP_LABELS,
+  permissionEditorItems,
 } from "../../../shared/userPermissions.ts";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -63,22 +63,38 @@ export function FeaturePermissionCheckboxes({
 }) {
   function toggle(feature: FeatureKey, checked: boolean) {
     if (checked) onChange([...selected, feature]);
-    else onChange(selected.filter(f => f !== feature));
+    else onChange(selected.filter((f) => f !== feature));
   }
 
+  const items = permissionEditorItems();
+  const groups: NavGroupId[] = ["work_center", "company_internal", "ai_center"];
+
   return (
-    <div className="grid grid-cols-2 gap-2 border rounded-lg p-3 max-h-48 overflow-y-auto bg-muted/20">
-      {FEATURE_KEYS.map(key => (
-        <label key={key} className="flex items-center gap-2 cursor-pointer select-none text-sm">
-          <input
-            type="checkbox"
-            checked={selected.includes(key)}
-            onChange={e => toggle(key, e.target.checked)}
-            className="h-4 w-4 rounded border-input accent-primary"
-          />
-          {FEATURE_LABELS[key]}
-        </label>
-      ))}
+    <div className="space-y-3 border rounded-lg p-3 max-h-72 overflow-y-auto bg-muted/20">
+      {groups.map((group) => {
+        const groupItems = items.filter((i) => i.group === group);
+        if (!groupItems.length) return null;
+        return (
+          <div key={group}>
+            <p className="text-xs font-semibold text-muted-foreground mb-1.5">
+              {NAV_GROUP_LABELS[group]}
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {groupItems.map(({ key, label }) => (
+                <label key={key} className="flex items-center gap-2 cursor-pointer select-none text-sm">
+                  <input
+                    type="checkbox"
+                    checked={selected.includes(key)}
+                    onChange={(e) => toggle(key, e.target.checked)}
+                    className="h-4 w-4 rounded border-input accent-primary"
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

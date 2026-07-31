@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, and, lt } from "drizzle-orm";
 import { db, receivablesTable, customersTable } from "@workspace/db";
-import { requireRole } from "../lib/auth";
+import { requireRole, requireFeature } from "../lib/auth";
 import { z } from "zod/v4";
 import {
   recordReceivablePayment,
@@ -9,6 +9,7 @@ import {
 } from "../lib/receivables/receivablePaymentService.ts";
 
 const router: IRouter = Router();
+router.use(requireFeature("receivables"));
 
 const READ_ROLES = ["super_admin", "owner", "admin", "accountant"];
 const WRITE_ROLES = ["super_admin", "owner", "admin", "accountant"];

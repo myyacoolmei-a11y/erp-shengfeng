@@ -22,79 +22,55 @@ import {
   Heart,
   Clock,
   Sparkles,
+  type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { useAuth, effectiveRoles, userCanAccessNav, type UserRole, type AuthUser } from "@/contexts/auth-context";
+import {
+  useAuth,
+  effectiveRoles,
+  userCanAccessNav,
+  userHasFeature,
+  type UserRole,
+  type AuthUser,
+} from "@/contexts/auth-context";
 import { ROLE_LABELS } from "@/lib/role-labels";
 import { APP_BRAND } from "@/lib/appBrand";
 import { PwaInstallBanner } from "@/components/pwa/PwaInstallBanner";
 import { NotificationBell } from "@/components/NotificationBell";
-
-interface NavItem {
-  href: string;
-  label: string;
-  icon: React.ElementType;
-  roles: UserRole[];
-}
+import {
+  NAV_GROUP_LABELS,
+  sidebarItemsForGroup,
+  wholesaleSubItems,
+  type NavIconName,
+  type NavItemDef,
+} from "../../../shared/userPermissions.ts";
 
 const NAV_ITEM_BASE =
   "flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] font-medium transition-colors";
 const NAV_ITEM_ACTIVE = "bg-foreground text-background";
 const NAV_ITEM_INACTIVE = "text-muted-foreground hover:bg-muted/60 hover:text-foreground";
 
-/** 工作中心 */
-const WORK_CENTER_ITEMS: NavItem[] = [
-  { href: "/", label: "儀表板", icon: LayoutDashboard, roles: ["super_admin", "owner", "admin", "accountant"] },
-  { href: "/engineer-dashboard", label: "儀表板", icon: LayoutDashboard, roles: ["engineer", "technician"] },
-  { href: "/customers", label: "客戶管理", icon: Users, roles: ["super_admin", "owner", "admin", "sales", "accountant"] },
-  { href: "/quotes", label: "報價單", icon: FileText, roles: ["super_admin", "owner", "admin", "sales", "distributor"] },
-  { href: "/work-orders", label: "派工單", icon: Wrench, roles: ["super_admin", "owner", "admin", "engineer", "technician"] },
-  { href: "/repair-cases", label: "維修案件", icon: HardHat, roles: ["super_admin", "owner", "admin", "engineer", "technician", "sales"] },
-  { href: "/receivables", label: "收款／應收帳款", icon: CreditCard, roles: ["super_admin", "owner", "admin", "accountant"] },
-  { href: "/products", label: "商品管理", icon: Archive, roles: ["super_admin", "owner", "admin", "sales"] },
-  { href: "/inventory", label: "庫存管理", icon: Package, roles: ["super_admin", "owner", "admin"] },
-  { href: "/warranties", label: "保固保養", icon: ShieldCheck, roles: ["super_admin", "owner", "admin", "accountant", "engineer", "technician"] },
-];
-
-/** 公司內部 */
-const COMPANY_INTERNAL_ITEMS: NavItem[] = [
-  { href: "/employees", label: "員工管理", icon: Briefcase, roles: ["super_admin", "owner", "admin"] },
-  { href: "/users", label: "用戶管理", icon: UserCog, roles: ["super_admin", "owner"] },
-  { href: "/work-hours-stats", label: "工時統計", icon: Clock, roles: ["super_admin", "owner", "admin", "accountant"] },
-  { href: "/notification-settings", label: "通知中心", icon: Bell, roles: ["super_admin", "owner", "admin", "sales", "accountant", "distributor", "engineer", "technician"] },
-];
-
-/** AI 中心 */
-const AI_CENTER_ITEMS: NavItem[] = [
-  { href: "/ai-assistant", label: "AI 小秘書", icon: Sparkles, roles: ["super_admin", "owner", "admin", "sales", "accountant", "distributor", "engineer", "technician"] },
-  { href: "/partner-culture", label: "晟風夥伴文化", icon: Heart, roles: ["super_admin", "owner", "admin", "engineer", "technician"] },
-  { href: "/notification-settings", label: "通知中心", icon: Bell, roles: ["engineer", "technician"] },
-];
-
-const ADMIN_MANAGER_ROLES: UserRole[] = ["super_admin", "owner", "admin"];
-
-const WORK_CENTER_ORDER = [
-  "/",
-  "/engineer-dashboard",
-  "/customers",
-  "/quotes",
-  "/work-orders",
-  "/repair-cases",
-  "/receivables",
-  "/products",
-  "/inventory",
-  "/warranties",
-] as const;
-
-const WHOLESALE_ROLES: UserRole[] = ["super_admin", "owner", "admin", "sales", "accountant"];
-
-const WHOLESALE_SUB_ITEMS = [
-  { href: "/wholesale/customers", label: "批發客戶", icon: Building2 },
-  { href: "/wholesale/products", label: "批發商品", icon: Archive },
-  { href: "/wholesale/orders", label: "批發出貨單", icon: ReceiptText },
-  { href: "/wholesale/settlements", label: "月結 / 應收", icon: CreditCard },
-];
+const ICON_MAP: Record<NavIconName, LucideIcon> = {
+  LayoutDashboard,
+  Users,
+  FileText,
+  Wrench,
+  HardHat,
+  CreditCard,
+  Archive,
+  Package,
+  ShieldCheck,
+  ShoppingCart,
+  Building2,
+  ReceiptText,
+  Briefcase,
+  UserCog,
+  Clock,
+  Bell,
+  Sparkles,
+  Heart,
+};
 
 const ROLE_COLORS: Record<UserRole, string> = {
   super_admin: "bg-red-100 text-red-800 border-red-200",
@@ -107,28 +83,19 @@ const ROLE_COLORS: Record<UserRole, string> = {
   distributor: "bg-orange-100 text-orange-800 border-orange-200",
 };
 
-function filterVisibleNavItems(items: NavItem[], user: AuthUser, userRoles: UserRole[]) {
-  return items.filter((item) => {
-    const roleOk = item.roles.some((r) => userRoles.includes(r));
-    if (!roleOk) return false;
-    if (userRoles.includes("super_admin")) return true;
-    return userCanAccessNav(user, item.href);
-  });
+function pickDashboardItem(items: NavItemDef[], userRoles: UserRole[]): NavItemDef | null {
+  const dashboards = items.filter((i) => i.key === "dashboard");
+  if (!dashboards.length) return null;
+  const preferred = dashboards.find((d) => d.preferRoles?.some((r) => userRoles.includes(r as UserRole)));
+  return preferred ?? dashboards[0];
 }
 
-function isEngineerOnly(userRoles: UserRole[]): boolean {
-  const hasFieldRole = userRoles.some((r) => r === "engineer" || r === "technician");
-  const hasManagerRole = userRoles.some((r) => ADMIN_MANAGER_ROLES.includes(r));
-  return hasFieldRole && !hasManagerRole;
+function filterByPermission(items: NavItemDef[], user: AuthUser): NavItemDef[] {
+  return items.filter((item) => userCanAccessNav(user, item.path));
 }
 
-function NavIcon({
-  icon: Icon,
-  active,
-}: {
-  icon: React.ElementType;
-  active: boolean;
-}) {
+function NavIcon({ name, active }: { name: NavIconName; active: boolean }) {
+  const Icon = ICON_MAP[name];
   return (
     <Icon
       className={`h-4 w-4 shrink-0 ${active ? "text-background" : "text-muted-foreground/70"}`}
@@ -152,39 +119,33 @@ function NavContent() {
   const [wholesaleOpen, setWholesaleOpen] = useState(isWholesalePath);
 
   const userRoles = effectiveRoles(user);
-  const showWholesale = WHOLESALE_ROLES.some((r) => userRoles.includes(r));
-  const engineerOnly = isEngineerOnly(userRoles);
+  const showWholesale = !!(user && userHasFeature(user, "wholesale"));
 
-  const workCenterItems = user
-    ? filterVisibleNavItems(WORK_CENTER_ITEMS, user, userRoles)
-    : [];
-  const companyInternalItems = user && !engineerOnly
-    ? filterVisibleNavItems(COMPANY_INTERNAL_ITEMS, user, userRoles)
-    : [];
-  const aiCenterItems = user
-    ? filterVisibleNavItems(AI_CENTER_ITEMS, user, userRoles)
-    : [];
+  const workRaw = user ? filterByPermission(sidebarItemsForGroup("work_center"), user) : [];
+  const dash = user ? pickDashboardItem(workRaw, userRoles) : null;
+  const workCenterItems = workRaw.filter((i) => i.key !== "dashboard" || i === dash);
 
-  const workCenterByHref = new Map(workCenterItems.map((item) => [item.href, item]));
-  const orderedWorkCenterItems = WORK_CENTER_ORDER
-    .map((href) => workCenterByHref.get(href))
-    .filter((item): item is NavItem => !!item);
+  const companyInternalItems = user
+    ? filterByPermission(sidebarItemsForGroup("company_internal"), user)
+    : [];
+  const aiCenterItems = user ? filterByPermission(sidebarItemsForGroup("ai_center"), user) : [];
 
-  const workCenterBeforeWholesale = orderedWorkCenterItems.filter(
-    (item) => item.href !== "/inventory" && item.href !== "/warranties",
+  const workBeforeWholesale = workCenterItems.filter(
+    (i) => i.key !== "inventory" && i.key !== "warranty_maintenance" && i.key !== "wholesale",
   );
-  const workCenterAfterWholesale = orderedWorkCenterItems.filter(
-    (item) => item.href === "/inventory" || item.href === "/warranties",
+  const workAfterWholesale = workCenterItems.filter(
+    (i) => i.key === "inventory" || i.key === "warranty_maintenance",
   );
+  const wholesaleSubs = wholesaleSubItems();
 
-  function NavLink({ item }: { item: NavItem }) {
-    const isActive = location === item.href || (item.href !== "/" && location.startsWith(item.href));
+  function NavLink({ item }: { item: NavItemDef }) {
+    const isActive = location === item.path || (item.path !== "/" && location.startsWith(item.path));
     return (
       <Link
-        href={item.href}
+        href={item.path}
         className={`${NAV_ITEM_BASE} ${isActive ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE}`}
       >
-        <NavIcon icon={item.icon} active={isActive} />
+        <NavIcon name={item.icon} active={isActive} />
         <span className="truncate">{item.label}</span>
       </Link>
     );
@@ -207,10 +168,12 @@ function NavContent() {
 
       <div className="flex-1 px-4 mt-2 overflow-y-auto">
         <nav className="flex flex-col gap-0.5">
-          <NavSectionHeader title="工作中心" />
+          {(workBeforeWholesale.length > 0 || showWholesale || workAfterWholesale.length > 0) && (
+            <NavSectionHeader title={NAV_GROUP_LABELS.work_center} />
+          )}
 
-          {workCenterBeforeWholesale.map((item) => (
-            <NavLink key={`${item.href}-${item.label}`} item={item} />
+          {workBeforeWholesale.map((item) => (
+            <NavLink key={`${item.path}-${item.label}`} item={item} />
           ))}
 
           {showWholesale && (
@@ -223,7 +186,7 @@ function NavContent() {
                 }}
                 className={`${NAV_ITEM_BASE} w-full ${isWholesalePath ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE}`}
               >
-                <NavIcon icon={ShoppingCart} active={isWholesalePath} />
+                <NavIcon name="ShoppingCart" active={isWholesalePath} />
                 <span className="truncate">批發管理</span>
                 <ChevronDown
                   className={`ml-auto h-3.5 w-3.5 shrink-0 opacity-60 transition-transform duration-200 ${wholesaleOpen ? "" : "-rotate-90"}`}
@@ -231,15 +194,15 @@ function NavContent() {
               </button>
               {wholesaleOpen && (
                 <div className="ml-[18px] mt-0.5 flex flex-col gap-0.5 border-l border-border/40 pl-2.5">
-                  {WHOLESALE_SUB_ITEMS.map((sub) => {
-                    const isActive = location === sub.href || location.startsWith(sub.href);
+                  {wholesaleSubs.map((sub) => {
+                    const isActive = location === sub.path || location.startsWith(sub.path);
                     return (
                       <Link
-                        key={sub.href}
-                        href={sub.href}
+                        key={sub.path}
+                        href={sub.path}
                         className={`${NAV_ITEM_BASE} ${isActive ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE}`}
                       >
-                        <NavIcon icon={sub.icon} active={isActive} />
+                        <NavIcon name={sub.icon} active={isActive} />
                         <span className="truncate">{sub.label}</span>
                       </Link>
                     );
@@ -249,24 +212,24 @@ function NavContent() {
             </div>
           )}
 
-          {workCenterAfterWholesale.map((item) => (
-            <NavLink key={`${item.href}-${item.label}`} item={item} />
+          {workAfterWholesale.map((item) => (
+            <NavLink key={`${item.path}-${item.label}`} item={item} />
           ))}
 
           {companyInternalItems.length > 0 && (
             <>
-              <NavSectionHeader title="公司內部" />
+              <NavSectionHeader title={NAV_GROUP_LABELS.company_internal} />
               {companyInternalItems.map((item) => (
-                <NavLink key={`${item.href}-${item.label}`} item={item} />
+                <NavLink key={`${item.path}-${item.label}`} item={item} />
               ))}
             </>
           )}
 
           {aiCenterItems.length > 0 && (
             <>
-              <NavSectionHeader title="AI 中心" />
+              <NavSectionHeader title={NAV_GROUP_LABELS.ai_center} />
               {aiCenterItems.map((item) => (
-                <NavLink key={`${item.href}-${item.label}`} item={item} />
+                <NavLink key={`${item.path}-${item.label}`} item={item} />
               ))}
             </>
           )}
@@ -312,7 +275,7 @@ function NavContent() {
 }
 
 export function Layout({ children }: { children: React.ReactNode }) {
-  const [location, navigate] = useLocation();
+  const [, navigate] = useLocation();
   const { user } = useAuth();
   const userRoles = effectiveRoles(user);
 

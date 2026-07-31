@@ -2,9 +2,11 @@ import { Router, type IRouter } from "express";
 import { eq, ilike, or, desc } from "drizzle-orm";
 import { db, wholesaleCustomersTable } from "@workspace/db";
 import { z } from "zod/v4";
-import { requireRole } from "../lib/auth";
+import { requireRole, requireFeature } from "../lib/auth";
 
 const router: IRouter = Router();
+router.use(requireFeature("wholesale"));
+
 const ROLES = ["super_admin", "owner", "admin", "sales"] as const;
 const DELETE_ROLES = ["super_admin", "owner", "admin"] as const;
 
