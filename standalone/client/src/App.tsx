@@ -23,6 +23,7 @@ import Warranties from "@/pages/warranties";
 import Maintenance from "@/pages/maintenance";
 import Users from "@/pages/users";
 import EngineerDashboard from "@/pages/engineer-dashboard";
+import AdminWorkbench from "@/pages/admin-workbench";
 import Employees from "@/pages/employees";
 import Products from "@/pages/products";
 import WholesaleCustomers from "@/pages/wholesale-customers";
@@ -116,7 +117,12 @@ function isFieldEngineerUser(user: NonNullable<ReturnType<typeof useAuth>["user"
   );
 }
 
-/** Home `/`: engineers never mount boss Dashboard (no /dashboard/summary call). */
+/** Admin / owner daily workbench — not the stats dashboard. */
+function isAdminWorkbenchUser(user: NonNullable<ReturnType<typeof useAuth>["user"]>): boolean {
+  return hasRole(user, "super_admin", "owner", "admin");
+}
+
+/** Home `/`: engineers → engineer dashboard; admin/owner → admin workbench. */
 function HomeRoute() {
   const { user, isLoading } = useAuth();
   if (isLoading || !user) {
@@ -128,6 +134,9 @@ function HomeRoute() {
   }
   if (isFieldEngineerUser(user)) {
     return <Redirect to="/engineer-dashboard" />;
+  }
+  if (isAdminWorkbenchUser(user) || hasRole(user, "accountant")) {
+    return <AdminWorkbench />;
   }
   return (
     <Guard feature="dashboard">
@@ -192,6 +201,12 @@ function AppRoutes() {
           <Switch>
             <Route path="/">
               <HomeRoute />
+            </Route>
+            <Route path="/admin-workbench">
+              <HomeRoute />
+            </Route>
+            <Route path="/boss-dashboard">
+              <Guard feature="dashboard"><Dashboard /></Guard>
             </Route>
             <Route path="/customers">
               <Guard feature="customers"><Customers /></Guard>

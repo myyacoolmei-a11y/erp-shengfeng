@@ -1,8 +1,10 @@
-import { pgTable, text, serial, integer, timestamp, date, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, timestamp, date, boolean, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { customersTable } from "./customers";
 import { quotesTable } from "./quotes";
+import { usersTable } from "./users";
+import type { AdminBillingInfo, ArchiveChecklist } from "../../adminWorkflowConstants";
 
 export const workOrdersTable = pgTable("work_orders", {
   id: serial("id").primaryKey(),
@@ -38,6 +40,23 @@ export const workOrdersTable = pgTable("work_orders", {
   aiNotifySupervisorOnDelay: boolean("ai_notify_supervisor_on_delay").notNull().default(false),
   aiReminderRuleSource: text("ai_reminder_rule_source").default("company_default"),
   aiReminderCustomConfig: text("ai_reminder_custom_config"),
+  /** Admin daily workbench pipeline status */
+  adminWorkflowStatus: text("admin_workflow_status"),
+  adminBillingInfo: jsonb("admin_billing_info").$type<AdminBillingInfo | null>(),
+  adminNeedsSubsidy: boolean("admin_needs_subsidy").notNull().default(false),
+  adminSubsidyStatus: text("admin_subsidy_status").notNull().default("未申請補助"),
+  adminSubsidyAppliedAt: timestamp("admin_subsidy_applied_at", { withTimezone: true }),
+  adminSubsidyAppliedBy: integer("admin_subsidy_applied_by").references(() => usersTable.id, {
+    onDelete: "set null",
+  }),
+  adminSubsidyNote: text("admin_subsidy_note"),
+  adminArchiveChecklist: jsonb("admin_archive_checklist").$type<ArchiveChecklist | null>(),
+  adminConfirmedAt: timestamp("admin_confirmed_at", { withTimezone: true }),
+  adminConfirmedBy: integer("admin_confirmed_by").references(() => usersTable.id, { onDelete: "set null" }),
+  adminBilledAt: timestamp("admin_billed_at", { withTimezone: true }),
+  adminBilledBy: integer("admin_billed_by").references(() => usersTable.id, { onDelete: "set null" }),
+  adminArchivedAt: timestamp("admin_archived_at", { withTimezone: true }),
+  adminArchivedBy: integer("admin_archived_by").references(() => usersTable.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });

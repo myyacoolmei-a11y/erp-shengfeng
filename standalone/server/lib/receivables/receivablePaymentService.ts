@@ -105,6 +105,18 @@ export async function recordReceivablePayment(opts: {
     },
   });
 
+  if (current.workOrderId) {
+    const { syncAdminWorkflowFromReceivable } = await import(
+      "../workOrders/adminWorkbenchService.ts"
+    );
+    await syncAdminWorkflowFromReceivable(
+      current.workOrderId,
+      opts.user,
+      paymentStatus,
+      opts.notes,
+    );
+  }
+
   return { paymentStatus, receivedAmount: newReceived, remainingAmount: remainingAmount(total, newReceived) };
 }
 

@@ -31,6 +31,7 @@ import {
   type PauseInterval,
 } from "../../shared/fieldProgressConstants.ts";
 import { upsertAdminFieldCompleteTodo } from "../lib/workOrders/upsertAdminFieldTodo.ts";
+import { setPendingAdminReviewOnComplete } from "../lib/workOrders/adminWorkbenchService.ts";
 import { notifyFieldProgressEvent } from "../lib/notifications/fieldProgressNotifyService.ts";
 import { logger } from "../lib/logger.ts";
 
@@ -503,7 +504,7 @@ router.post(
         fieldStatus: "completed",
         completedBy: req.user!.id,
         completionChecklist: checklist,
-        workflowStatus: "pending_admin",
+        workflowStatus: "pending_admin_review",
         travelDurationMinutes: durations.travelDurationMinutes,
         workDurationMinutes: durations.workDurationMinutes,
         totalDurationMinutes: durations.totalDurationMinutes,
@@ -529,6 +530,8 @@ router.post(
       customerName: order.customerName,
       createdBy: req.user!.id,
     });
+
+    await setPendingAdminReviewOnComplete(workOrderId, req.user!);
 
     emitFieldProgressNotify(req, workOrderId, "complete", now);
     res.json(serializeFieldProgress(updated));

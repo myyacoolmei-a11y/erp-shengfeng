@@ -97,6 +97,15 @@ function pickDashboardItem(items: NavItemDef[], userRoles: UserRole[]): NavItemD
       dashboards.find((d) => d.preferRoles?.some((r) => r === "engineer" || r === "technician"));
     if (eng) return { ...eng, label: "今日工作" };
   }
+  const isAdminHome =
+    userRoles.includes("super_admin") ||
+    userRoles.includes("owner") ||
+    userRoles.includes("admin") ||
+    userRoles.includes("accountant");
+  if (isAdminHome) {
+    const home = dashboards.find((d) => d.path === "/") ?? dashboards[0];
+    return home ? { ...home, label: "今日工作台" } : null;
+  }
   const preferred = dashboards.find((d) => d.preferRoles?.some((r) => userRoles.includes(r as UserRole)));
   return preferred ?? dashboards[0];
 }

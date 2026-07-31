@@ -423,6 +423,17 @@ export function EngineerWorkOrderCard({ order, progress, onProgressUpdated, read
             />
           </div>
 
+          {fieldStatus === "completed" &&
+            (progress?.workflowStatus === "pending_admin_review" ||
+              progress?.workflowStatus === "pending_admin" ||
+              (progress?.workflowStatus &&
+                progress.workflowStatus !== "closed" &&
+                progress.workflowStatus !== "admin_done")) && (
+              <div className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900">
+                已交由行政待辦
+              </div>
+            )}
+
           <div className="flex gap-2 pt-2 border-t">
             <Button
               type="button"
