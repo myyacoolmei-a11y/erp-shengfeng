@@ -1,5 +1,8 @@
 import { customFetch } from "../../../shared/api-client/custom-fetch.ts";
-import type { ArchiveChecklist } from "../../../shared/adminWorkflowConstants.ts";
+import type {
+  SubsidyPipelineStatus,
+  SubsidyType,
+} from "../../../shared/adminWorkflowConstants.ts";
 
 export type AdminWorkbenchItem = {
   workOrderId: number;
@@ -10,12 +13,11 @@ export type AdminWorkbenchItem = {
   mobilePhone?: string | null;
   telephone?: string | null;
   engineerName?: string;
-  adminWorkflowStatus: string;
+  quoteId?: number | null;
   completedAt?: string | null;
   hasPhotos?: boolean;
   hasSignature?: boolean;
   hasMaterials?: boolean;
-  siteDone?: boolean;
   anomalyNote?: string | null;
   quoteOriginalAmount?: string;
   extraAmount?: string;
@@ -24,18 +26,26 @@ export type AdminWorkbenchItem = {
   invoiceNeeded?: boolean;
   billTo?: string | null;
   expectedPaymentDate?: string | null;
-  needsSubsidy?: boolean;
-  subsidyStatus?: string;
-  subsidyAppliedAt?: string | null;
-  subsidyNote?: string | null;
   receivableId?: number | null;
   totalAmount?: string;
   receivedAmount?: string;
   unpaidAmount?: string;
-  billedAt?: string | null;
   paymentStatus?: string | null;
   overdueDays?: number | null;
-  archiveChecklist?: ArchiveChecklist | null;
+  engineeringStatus?: string;
+  engineeringStatusLabel?: string;
+  receivableStatus?: string;
+  receivableStatusLabel?: string;
+  subsidyType?: SubsidyType;
+  subsidyTypeLabel?: string;
+  subsidyPipelineStatus?: SubsidyPipelineStatus | null;
+  subsidyStatusLabel?: string;
+  canClose?: boolean;
+  closeBlockers?: string[];
+  adminWorkflowStatus?: string | null;
+  adminWorkflowLabel?: string | null;
+  subsidyApplicationId?: number | null;
+  closeOverrideAt?: string | null;
 };
 
 export type AdminWorkbenchData = {
@@ -46,30 +56,27 @@ export type AdminWorkbenchData = {
     overdueCount: number;
     dueTodayCount: number;
   };
-  counts: {
-    overdue: number;
-    dueToday: number;
-    pendingAdminReview: number;
-    pendingBilling: number;
-    pendingSubsidy: number;
-    pendingArchive: number;
-    openTodos: number;
-  };
+  counts: Record<string, number>;
   sections: {
-    collectionOverdue: AdminWorkbenchItem[];
-    collectionToday: AdminWorkbenchItem[];
+    pendingConstructionConfirm: AdminWorkbenchItem[];
+    pendingCreateReceivable: AdminWorkbenchItem[];
+    noDueDate: AdminWorkbenchItem[];
     collectionSoon: AdminWorkbenchItem[];
+    collectionToday: AdminWorkbenchItem[];
+    collectionOverdue: AdminWorkbenchItem[];
     collectionPartial: AdminWorkbenchItem[];
-    pendingAdminReview: AdminWorkbenchItem[];
-    pendingBilling: AdminWorkbenchItem[];
-    pendingSubsidy: AdminWorkbenchItem[];
-    pendingArchive: AdminWorkbenchItem[];
+    subsidyLinkNotSent: AdminWorkbenchItem[];
+    subsidyAwaitingUpload: AdminWorkbenchItem[];
+    subsidyDocsIncomplete: AdminWorkbenchItem[];
+    subsidyDocsComplete: AdminWorkbenchItem[];
+    subsidyPendingApply: AdminWorkbenchItem[];
+    pendingClose: AdminWorkbenchItem[];
+    closed: AdminWorkbenchItem[];
   };
   todayStats: {
     confirmedToday: number;
-    billedToday: number;
+    receivableCreatedToday: number;
     paidToday: number;
-    archivedToday: number;
     closedToday: number;
     openTodos: number;
   };
@@ -97,6 +104,7 @@ export function markAdminBilled(
     billTo?: string;
     expectedPaymentDate?: string;
     needsSubsidy?: boolean;
+    subsidyType?: SubsidyType;
     note?: string;
   },
 ) {
@@ -107,10 +115,22 @@ export function markAdminBilled(
   });
 }
 
-export function toggleAdminSubsidy(workOrderId: number, applied: boolean, note?: string) {
-  return customFetch<{ ok: true }>(`/api/admin-workbench/${workOrderId}/subsidy`, {
+export function setAdminSubsidyType(workOrderId: number, subsidyType: SubsidyType, note?: string) {
+  return customFetch<{ ok: true }>(`/api/admin-workbench/${workOrderId}/subsidy-type`, {
     method: "POST",
-    body: JSON.stringify({ applied, note }),
+    body: JSON.stringify({ subsidyType, note }),
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+export function advanceAdminSubsidyPipeline(
+  workOrderId: number,
+  status: SubsidyPipelineStatus,
+  note?: string,
+) {
+  return customFetch(`/api/admin-workbench/${workOrderId}/subsidy-pipeline`, {
+    method: "POST",
+    body: JSON.stringify({ status, note }),
     headers: { "Content-Type": "application/json" },
   });
 }
@@ -134,14 +154,18 @@ export function markAdminPaid(workOrderId: number, note?: string) {
   });
 }
 
-export function completeAdminArchive(
-  workOrderId: number,
-  checklist: ArchiveChecklist,
-  note?: string,
-) {
-  return customFetch<{ ok: true }>(`/api/admin-workbench/${workOrderId}/complete-archive`, {
+export function approveAdminCloseOverride(workOrderId: number, note?: string) {
+  return customFetch<{ ok: true }>(`/api/admin-workbench/${workOrderId}/close-override`, {
     method: "POST",
-    body: JSON.stringify({ checklist, note }),
+    body: JSON.stringify({ note }),
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+export function completeAdminClose(workOrderId: number, note?: string) {
+  return customFetch<{ ok: true }>(`/api/admin-workbench/${workOrderId}/complete-close`, {
+    method: "POST",
+    body: JSON.stringify({ note }),
     headers: { "Content-Type": "application/json" },
   });
 }

@@ -24,6 +24,7 @@ import { ensureInventoryMigration } from "./lib/migrations/ensureInventoryMigrat
 import { ensureRepairCaseSubsidyMigration } from "./lib/migrations/ensureRepairCaseSubsidyMigration";
 import { ensureReceivableSubsidyMigration } from "./lib/migrations/ensureReceivableSubsidyMigration";
 import { ensureAdminWorkflowMigration } from "./lib/migrations/ensureAdminWorkflowMigration";
+import { ensureSubsidyTablesMigration } from "./lib/migrations/ensureSubsidyTablesMigration";
 import { startReminderScheduler } from "./lib/reminders/scheduler.ts";
 
 const rawPort = process.env["PORT"];
@@ -84,5 +85,6 @@ app.listen(port, async (err) => {
   await ensureRepairCaseSubsidyMigration();
   await ensureReceivableSubsidyMigration();
   await ensureAdminWorkflowMigration();
+  await ensureSubsidyTablesMigration();
   startReminderScheduler();
 });

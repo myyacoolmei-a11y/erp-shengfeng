@@ -4,7 +4,7 @@ import { z } from "zod/v4";
 import { customersTable } from "./customers";
 import { quotesTable } from "./quotes";
 import { usersTable } from "./users";
-import type { AdminBillingInfo, ArchiveChecklist } from "../../adminWorkflowConstants";
+import type { AdminBillingInfo } from "../../adminWorkflowConstants";
 
 export const workOrdersTable = pgTable("work_orders", {
   id: serial("id").primaryKey(),
@@ -50,11 +50,14 @@ export const workOrdersTable = pgTable("work_orders", {
     onDelete: "set null",
   }),
   adminSubsidyNote: text("admin_subsidy_note"),
-  adminArchiveChecklist: jsonb("admin_archive_checklist").$type<ArchiveChecklist | null>(),
+  /** Legacy archive checklist column kept in DB; admin close no longer uses warranty checks. */
+  adminArchiveChecklist: jsonb("admin_archive_checklist"),
   adminConfirmedAt: timestamp("admin_confirmed_at", { withTimezone: true }),
   adminConfirmedBy: integer("admin_confirmed_by").references(() => usersTable.id, { onDelete: "set null" }),
   adminBilledAt: timestamp("admin_billed_at", { withTimezone: true }),
   adminBilledBy: integer("admin_billed_by").references(() => usersTable.id, { onDelete: "set null" }),
+  adminClosedAt: timestamp("admin_closed_at", { withTimezone: true }),
+  adminClosedBy: integer("admin_closed_by").references(() => usersTable.id, { onDelete: "set null" }),
   adminArchivedAt: timestamp("admin_archived_at", { withTimezone: true }),
   adminArchivedBy: integer("admin_archived_by").references(() => usersTable.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

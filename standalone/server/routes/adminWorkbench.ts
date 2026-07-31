@@ -2,29 +2,32 @@ import { Router, type IRouter } from "express";
 import { z } from "zod/v4";
 import { requireRole } from "../lib/auth";
 import {
-  completeArchive,
+  advanceSubsidyPipeline,
+  approveCloseOverride,
+  completeClose,
   confirmAdminCompletion,
   getAdminWorkbench,
   markBilled,
   markFullyPaid,
-  toggleSubsidy,
+  setSubsidyType,
   updateBillingDraft,
   workbenchRecordPayment,
 } from "../lib/workOrders/adminWorkbenchService.ts";
-import { ARCHIVE_CHECKLIST_KEYS } from "../../shared/adminWorkflowConstants.ts";
+import { SUBSIDY_PIPELINE_STATUSES, SUBSIDY_TYPES } from "../../shared/adminWorkflowConstants.ts";
 
 const router: IRouter = Router();
 
 const ADMIN_ROLES = ["super_admin", "owner", "admin"] as const;
 const FINANCE_ROLES = ["super_admin", "owner", "admin", "accountant"] as const;
+const OWNER_ROLES = ["super_admin", "owner"] as const;
 
 const requireAdminOps = requireRole(...ADMIN_ROLES);
 const requireFinanceView = requireRole(...FINANCE_ROLES);
+const requireOwnerOps = requireRole(...OWNER_ROLES);
 
 router.get("/admin-workbench", requireFinanceView, async (_req, res): Promise<void> => {
   try {
-    const data = await getAdminWorkbench();
-    res.json(data);
+    res.json(await getAdminWorkbench());
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : "載入失敗" });
   }
@@ -43,7 +46,7 @@ router.post(
     try {
       const result = await confirmAdminCompletion(workOrderId, req.user!, note);
       if (!result.ok) {
-        res.status(400).json({ error: "資料不足，無法確認完工", missing: result.missing });
+        res.status(400).json({ error: "資料不足，無法確認施工資料", missing: result.missing });
         return;
       }
       res.json({ ok: true });
@@ -61,6 +64,7 @@ const BillingBody = z.object({
   billTo: z.string().optional().nullable(),
   expectedPaymentDate: z.string().optional().nullable(),
   needsSubsidy: z.boolean().optional(),
+  subsidyType: z.enum(SUBSIDY_TYPES).optional(),
   note: z.string().optional(),
 });
 
@@ -75,6 +79,7 @@ function toBilling(body: z.infer<typeof BillingBody>) {
     billTo: body.billTo ?? null,
     expectedPaymentDate: body.expectedPaymentDate ?? null,
     needsSubsidy: body.needsSubsidy,
+    subsidyType: body.subsidyType,
     note: body.note,
   };
 }
@@ -117,14 +122,76 @@ router.post(
       return;
     }
     try {
-      const result = await markBilled(workOrderId, req.user!, toBilling(parsed.data));
-      res.json(result);
+      res.json(await markBilled(workOrderId, req.user!, toBilling(parsed.data)));
     } catch (err) {
       res.status(400).json({ error: err instanceof Error ? err.message : "操作失敗" });
     }
   },
 );
 
+router.post(
+  "/admin-workbench/:workOrderId/subsidy-type",
+  requireAdminOps,
+  async (req, res): Promise<void> => {
+    const workOrderId = Number(req.params.workOrderId);
+    if (!Number.isFinite(workOrderId)) {
+      res.status(400).json({ error: "無效的派工單 ID" });
+      return;
+    }
+    const parsed = z
+      .object({
+        subsidyType: z.enum(SUBSIDY_TYPES),
+        note: z.string().optional(),
+      })
+      .safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.message });
+      return;
+    }
+    try {
+      await setSubsidyType(workOrderId, req.user!, parsed.data.subsidyType, parsed.data.note);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : "操作失敗" });
+    }
+  },
+);
+
+router.post(
+  "/admin-workbench/:workOrderId/subsidy-pipeline",
+  requireAdminOps,
+  async (req, res): Promise<void> => {
+    const workOrderId = Number(req.params.workOrderId);
+    if (!Number.isFinite(workOrderId)) {
+      res.status(400).json({ error: "無效的派工單 ID" });
+      return;
+    }
+    const parsed = z
+      .object({
+        status: z.enum(SUBSIDY_PIPELINE_STATUSES),
+        note: z.string().optional(),
+      })
+      .safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.message });
+      return;
+    }
+    try {
+      res.json(
+        await advanceSubsidyPipeline(
+          workOrderId,
+          req.user!,
+          parsed.data.status,
+          parsed.data.note,
+        ),
+      );
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : "操作失敗" });
+    }
+  },
+);
+
+/** Legacy toggle endpoint */
 router.post(
   "/admin-workbench/:workOrderId/subsidy",
   requireAdminOps,
@@ -137,7 +204,12 @@ router.post(
     const applied = !!req.body?.applied;
     const note = typeof req.body?.note === "string" ? req.body.note : undefined;
     try {
-      await toggleSubsidy(workOrderId, req.user!, applied, note);
+      await advanceSubsidyPipeline(
+        workOrderId,
+        req.user!,
+        applied ? "applied" : "link_not_sent",
+        note,
+      );
       res.json({ ok: true });
     } catch (err) {
       res.status(400).json({ error: err instanceof Error ? err.message : "操作失敗" });
@@ -161,20 +233,13 @@ router.post(
       res.status(400).json({ error: "無效的派工單 ID" });
       return;
     }
-    const roles = req.user?.roles?.length ? req.user.roles : [req.user?.role ?? ""];
-    const canPay = roles.some((r) => (FINANCE_ROLES as readonly string[]).includes(r));
-    if (!canPay) {
-      res.status(403).json({ error: "您沒有此功能權限" });
-      return;
-    }
     const parsed = PaymentBody.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: parsed.error.message });
       return;
     }
     try {
-      const result = await workbenchRecordPayment(workOrderId, req.user!, parsed.data);
-      res.json(result);
+      res.json(await workbenchRecordPayment(workOrderId, req.user!, parsed.data));
     } catch (err) {
       res.status(400).json({ error: err instanceof Error ? err.message : "操作失敗" });
     }
@@ -200,11 +265,49 @@ router.post(
   },
 );
 
-const ArchiveBody = z.object({
-  checklist: z.record(z.string(), z.boolean()),
-  note: z.string().optional(),
-});
+router.post(
+  "/admin-workbench/:workOrderId/close-override",
+  requireOwnerOps,
+  async (req, res): Promise<void> => {
+    const workOrderId = Number(req.params.workOrderId);
+    if (!Number.isFinite(workOrderId)) {
+      res.status(400).json({ error: "無效的派工單 ID" });
+      return;
+    }
+    const note = typeof req.body?.note === "string" ? req.body.note : undefined;
+    try {
+      await approveCloseOverride(workOrderId, req.user!, note);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : "操作失敗" });
+    }
+  },
+);
 
+router.post(
+  "/admin-workbench/:workOrderId/complete-close",
+  requireAdminOps,
+  async (req, res): Promise<void> => {
+    const workOrderId = Number(req.params.workOrderId);
+    if (!Number.isFinite(workOrderId)) {
+      res.status(400).json({ error: "無效的派工單 ID" });
+      return;
+    }
+    const note = typeof req.body?.note === "string" ? req.body.note : undefined;
+    try {
+      const result = await completeClose(workOrderId, req.user!, note);
+      if (!result.ok) {
+        res.status(400).json({ error: "尚未符合結案條件", missing: result.missing });
+        return;
+      }
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : "操作失敗" });
+    }
+  },
+);
+
+/** Legacy archive endpoint → close (no warranty checklist). */
 router.post(
   "/admin-workbench/:workOrderId/complete-archive",
   requireAdminOps,
@@ -214,18 +317,11 @@ router.post(
       res.status(400).json({ error: "無效的派工單 ID" });
       return;
     }
-    const parsed = ArchiveBody.safeParse(req.body);
-    if (!parsed.success) {
-      res.status(400).json({ error: parsed.error.message });
-      return;
-    }
-    const checklist = Object.fromEntries(
-      ARCHIVE_CHECKLIST_KEYS.map((k) => [k, !!parsed.data.checklist[k]]),
-    ) as Record<(typeof ARCHIVE_CHECKLIST_KEYS)[number], boolean>;
+    const note = typeof req.body?.note === "string" ? req.body.note : undefined;
     try {
-      const result = await completeArchive(workOrderId, req.user!, checklist, parsed.data.note);
+      const result = await completeClose(workOrderId, req.user!, note);
       if (!result.ok) {
-        res.status(400).json({ error: "歸檔檢查未完成", missing: result.missing });
+        res.status(400).json({ error: "尚未符合結案條件", missing: result.missing });
         return;
       }
       res.json({ ok: true });
