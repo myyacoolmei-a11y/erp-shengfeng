@@ -13,6 +13,10 @@ import type {
   SubsidyPipelineStatus,
   SubsidyType,
 } from "../../../shared/adminWorkflowConstants.ts";
+import {
+  runSubsidyAiDocumentCheck,
+  type SubsidyAiCheckResult,
+} from "./subsidyAiCheckService.ts";
 
 export type UploadedDocLike = {
   docType: string | null;
@@ -29,6 +33,8 @@ export type CompletenessResult = {
   aiTips: string[];
   needsManualReview: boolean;
   allRequiredPresent: boolean;
+  basicChecksPassed: boolean;
+  aiAvailable: boolean;
   suggestedPipeline: SubsidyPipelineStatus;
   displayStatus: ReturnType<typeof resolveSubsidyDisplayStatus>;
 };
@@ -39,7 +45,6 @@ function isAllowedDataUrl(fileUrl: string | null | undefined): boolean {
     const mime = fileUrl.slice(5, fileUrl.indexOf(";")).toLowerCase();
     return (ALLOWED_SUBSIDY_UPLOAD_MIME as readonly string[]).includes(mime);
   }
-  // http(s) urls accepted as present
   return /^https?:\/\//i.test(fileUrl);
 }
 
@@ -52,13 +57,18 @@ function fileLooksEmpty(fileUrl: string | null | undefined): boolean {
   return false;
 }
 
-/** Deterministic checks + lightweight heuristic "AI" tips (no external API required). */
-export function runSubsidyCompletenessCheck(input: {
+/** Deterministic completeness + format/size checks (no AI claims). */
+export function runDeterministicSubsidyCheck(input: {
   subsidyType: SubsidyType;
   assistedProgram?: AssistedProgram | null;
   docs: UploadedDocLike[];
-  prevMeta?: SubsidyMeta;
-}): CompletenessResult {
+}): {
+  missingDocs: SubsidyDocType[];
+  missingLabels: string[];
+  fileIssues: string[];
+  allRequiredPresent: boolean;
+  basicChecksPassed: boolean;
+} {
   const activeDocs = input.docs.filter(
     (d) => d.status !== "rejected" && (d.fileUrl || d.fileName),
   );
@@ -70,56 +80,102 @@ export function runSubsidyCompletenessCheck(input: {
   const missingLabels = missingDocs.map((t) => SUBSIDY_DOC_TYPE_LABELS[t] ?? t);
 
   const fileIssues: string[] = [];
-  const aiTips: string[] = [];
+  const seenNames = new Map<string, string>();
 
   for (const d of activeDocs) {
-    const label = d.docType || d.fileName || "文件";
+    const label =
+      (d.docType && SUBSIDY_DOC_TYPE_LABELS[d.docType as SubsidyDocType]) ||
+      d.docType ||
+      d.fileName ||
+      "文件";
     if (!d.fileUrl) {
       fileIssues.push(`${label}：缺少檔案內容`);
       continue;
     }
     if (fileLooksEmpty(d.fileUrl)) {
-      fileIssues.push(`${label}：檔案似乎為空`);
+      fileIssues.push(`${label}：檔案大小為 0 或無法讀取`);
     }
     if (!isAllowedDataUrl(d.fileUrl) && !/^https?:\/\//i.test(d.fileUrl)) {
       fileIssues.push(`${label}：檔案格式不支援`);
     }
-    // Heuristic readability tips (stand-in when external AI unavailable)
-    if (d.fileUrl.startsWith("data:image/") && fileLooksEmpty(d.fileUrl) === false) {
-      const b64 = d.fileUrl.split(",")[1] ?? "";
-      if (b64.length < 8000) {
-        aiTips.push(`${label}：檔案偏小，可能過於模糊或解析度不足，建議人工確認`);
-      }
-    }
-    if (d.fileUrl.startsWith("data:application/pdf")) {
-      const b64 = d.fileUrl.split(",")[1] ?? "";
-      if (b64.length < 500) {
-        aiTips.push(`${label}：PDF 內容異常偏短，建議人工確認`);
+    const nameKey = String(d.fileName ?? "").trim().toLowerCase();
+    if (nameKey) {
+      const prev = seenNames.get(nameKey);
+      if (prev && prev !== d.docType) {
+        fileIssues.push(`${label}：與「${prev}」檔名相同，疑似重複附件`);
+      } else {
+        seenNames.set(nameKey, String(d.docType ?? label));
       }
     }
   }
 
-  const allRequiredPresent = missingDocs.length === 0 && fileIssues.length === 0;
+  // Front/back pair: if either id side missing, already in missingDocs
+  const allRequiredPresent = missingDocs.length === 0;
+  const basicChecksPassed = allRequiredPresent && fileIssues.length === 0;
+
+  return {
+    missingDocs,
+    missingLabels,
+    fileIssues,
+    allRequiredPresent,
+    basicChecksPassed,
+  };
+}
+
+/**
+ * Full check: deterministic first, then AI interface.
+ * AI unavailable / fail → 等待人工確認 (never auto green / fake pass).
+ */
+export async function runSubsidyCompletenessCheck(input: {
+  subsidyType: SubsidyType;
+  assistedProgram?: AssistedProgram | null;
+  docs: UploadedDocLike[];
+  prevMeta?: SubsidyMeta;
+}): Promise<CompletenessResult> {
+  const det = runDeterministicSubsidyCheck(input);
+  let aiTips: string[] = [];
   let needsManualReview = false;
+  let aiAvailable = false;
+  let aiResult: SubsidyAiCheckResult | null = null;
 
-  if (allRequiredPresent && aiTips.length > 0) {
-    needsManualReview = true;
+  if (det.basicChecksPassed) {
+    if (input.prevMeta?.manualConfirmedAt) {
+      // Admin already confirmed — green path
+      needsManualReview = false;
+      aiTips = input.prevMeta.aiTips ?? [];
+      aiAvailable = true; // treat prior manual confirm as clearance
+    } else {
+      try {
+        aiResult = await runSubsidyAiDocumentCheck(
+          input.docs
+            .filter((d) => d.status !== "rejected" && d.fileUrl)
+            .map((d) => ({
+              docType: d.docType,
+              fileName: d.fileName,
+              fileUrl: d.fileUrl,
+            })),
+        );
+      } catch {
+        aiResult = {
+          available: false,
+          tips: ["AI 檢查失敗，請行政人工確認文件"],
+          needsManualReview: true,
+        };
+      }
+      aiAvailable = aiResult.available;
+      aiTips = aiResult.tips ?? [];
+      if (!aiResult.available) {
+        needsManualReview = true;
+      } else if (aiResult.needsManualReview || aiResult.passed === false) {
+        needsManualReview = true;
+      } else {
+        needsManualReview = false;
+      }
+    }
   }
-
-  // If previous manual confirm exists and docs still complete, clear review need
-  if (allRequiredPresent && input.prevMeta?.manualConfirmedAt && aiTips.length === 0) {
-    needsManualReview = false;
-  }
-  if (allRequiredPresent && input.prevMeta?.manualConfirmedAt && aiTips.length > 0) {
-    // admin already confirmed after AI tips — treat as complete
-    needsManualReview = false;
-  }
-
-  // External AI unavailable → never auto-mark complete when tips exist; already handled.
-  // If somehow check throws upstream, caller sets needsManualReview.
 
   let suggestedPipeline: SubsidyPipelineStatus;
-  if (!allRequiredPresent) {
+  if (!det.allRequiredPresent || det.fileIssues.length > 0) {
     suggestedPipeline = "docs_incomplete";
   } else if (needsManualReview) {
     suggestedPipeline = "docs_incomplete";
@@ -130,18 +186,20 @@ export function runSubsidyCompletenessCheck(input: {
   const displayStatus = resolveSubsidyDisplayStatus({
     subsidyType: input.subsidyType,
     pipeline: suggestedPipeline,
-    missingDocs,
+    missingDocs: det.missingDocs,
     needsManualReview,
     assistedProgram: input.assistedProgram,
   });
 
   return {
-    missingDocs,
-    missingLabels,
-    fileIssues,
+    missingDocs: det.missingDocs,
+    missingLabels: det.missingLabels,
+    fileIssues: det.fileIssues,
     aiTips,
     needsManualReview,
-    allRequiredPresent,
+    allRequiredPresent: det.allRequiredPresent,
+    basicChecksPassed: det.basicChecksPassed,
+    aiAvailable,
     suggestedPipeline,
     displayStatus,
   };
@@ -156,9 +214,8 @@ export function mergeMetaAfterCheck(
     ...prev,
     needsManualReview: check.needsManualReview,
     aiTips: check.aiTips,
-    aiCheckedAt: new Date().toISOString(),
+    aiCheckedAt: check.aiAvailable ? new Date().toISOString() : null,
     lastCheckAt: new Date().toISOString(),
-    // keep manualConfirmedAt if still valid
     manualConfirmedAt: check.needsManualReview ? null : prev.manualConfirmedAt,
     manualConfirmedBy: check.needsManualReview ? null : prev.manualConfirmedBy,
   };

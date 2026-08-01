@@ -40,7 +40,6 @@ import {
   markAdminBilled,
   markAdminPaid,
   recordAdminPayment,
-  regenerateAdminSubsidyToken,
   reopenAdminClosed,
   setAdminExpectedPaymentDate,
   setAdminSubsidyType,
@@ -233,17 +232,31 @@ function absoluteUploadUrl(item: AdminWorkbenchItem): string | null {
 
 function subsidyUploadShareText(item: AdminWorkbenchItem): string {
   const url = absoluteUploadUrl(item);
-  const caseNo = item.workOrderNumber ?? `#${item.workOrderId}`;
-  const lines = [
-    "【晟風工程】補助資料上傳",
-    `客戶：${item.customerName ?? "—"}`,
-    `案件：${caseNo}`,
-  ];
-  if (url) {
-    lines.push(`請點此上傳（無需登入）：`);
-    lines.push(url);
-  }
-  return lines.join("\n");
+  return [
+    "您好，我們是晟風工程。",
+    "",
+    "為協助您辦理補助，請點擊以下連結上傳所需資料：",
+    "",
+    url || "（尚未產生上傳網址）",
+    "",
+    "請依頁面提示完成上傳；若資料缺件，我們會再通知您，謝謝。",
+  ].join("\n");
+}
+
+function subsidyMissingShareText(item: AdminWorkbenchItem): string {
+  const url = absoluteUploadUrl(item);
+  const missing =
+    (item.missingDocLabels?.length ?? 0) > 0
+      ? item.missingDocLabels!.join("、")
+      : "必要文件";
+  return [
+    "您好，目前補助資料尚缺：",
+    "",
+    missing,
+    "",
+    "請點擊原上傳連結補上資料，謝謝。",
+    url ? `\n${url}` : "",
+  ].join("\n");
 }
 
 function SubsidyBadge({ item }: { item: AdminWorkbenchItem }) {
@@ -331,11 +344,14 @@ function SubsidyMetaLines({ item }: { item: AdminWorkbenchItem }) {
         <p className="text-orange-800">缺少：{item.missingDocLabels!.join("、")}</p>
       )}
       {(item.aiTips?.length ?? 0) > 0 && (
-        <ul className="text-yellow-800 list-disc pl-4">
-          {item.aiTips!.map((t) => (
-            <li key={t}>{t}</li>
-          ))}
-        </ul>
+        <div className="text-yellow-800">
+          <p className="font-medium">檢查提示：</p>
+          <ul className="list-disc pl-4">
+            {item.aiTips!.map((t) => (
+              <li key={t}>{t}</li>
+            ))}
+          </ul>
+        </div>
       )}
       {item.appliedAt && (
         <p className="text-emerald-900">
@@ -463,19 +479,6 @@ export default function AdminWorkbench() {
     onError: onErr,
   });
 
-  const subsidyRegenMut = useMutation({
-    mutationFn: (p: { id: number; force?: boolean }) =>
-      regenerateAdminSubsidyToken(p.id, !!p.force),
-    onSuccess: (data) => {
-      toast({
-        title: data.regenerated ? "已重新產生上傳網址" : "目前網址仍有效",
-        description: data.uploadUrl,
-      });
-      invalidate();
-    },
-    onError: onErr,
-  });
-
   const payMut = useMutation({
     mutationFn: (p: { id: number; amount: number; paymentDate: string }) =>
       recordAdminPayment(p.id, p),
@@ -581,17 +584,27 @@ export default function AdminWorkbench() {
     ];
     const docsCompleteCount =
       (c.subsidyDocsComplete ?? 0) + (c.subsidyPendingApply ?? 0);
-    const subsidyTodoCount =
+    // 待處理 = 待確認 + 待傳送 + 缺件 + 人工確認
+    const todoProcessItems = [
+      ...(s.subsidyPendingConfirmation ?? []),
+      ...(s.subsidyLinkNotSent ?? []),
+      ...(s.subsidyDocsIncomplete ?? []),
+      ...(s.subsidyAwaitingManualReview ?? []),
+    ];
+    const todoProcessCount =
       (c.subsidyPendingConfirmation ?? 0) +
       (c.subsidyLinkNotSent ?? 0) +
-      (c.subsidyAwaitingUpload ?? 0) +
       (c.subsidyDocsIncomplete ?? 0) +
-      (c.subsidyAwaitingManualReview ?? 0) +
-      docsCompleteCount;
-    const subsidyCount = subsidyTodoCount + (c.subsidyApplied ?? 0) + (c.subsidySettled ?? 0);
+      (c.subsidyAwaitingManualReview ?? 0);
+    const waitCustomerItems = s.subsidyAwaitingUpload ?? [];
+    const waitCustomerCount = c.subsidyAwaitingUpload ?? 0;
+    const doneItems = [...(s.subsidyApplied ?? []), ...(s.subsidySettled ?? [])];
+    const doneCount = (c.subsidyApplied ?? 0) + (c.subsidySettled ?? 0);
+    // Homepage open-todo: exclude 已完成 (applied / self / not_needed)
+    const subsidyTodoCount =
+      todoProcessCount + waitCustomerCount + docsCompleteCount;
     return {
       collectionCount,
-      subsidyCount,
       subsidyTodoCount,
       collectionSections: [
         { key: "noDue", title: "未設定收款日", accent: "normal" as const, items: noDueItems, count: noDueCount },
@@ -601,30 +614,32 @@ export default function AdminWorkbench() {
       ],
       subsidySections: [
         {
-          key: "subPending",
-          title: "待確認補助方式",
+          key: "subTodo",
+          title: "待處理",
           accent: "normal" as const,
-          items: s.subsidyPendingConfirmation ?? [],
-          count: c.subsidyPendingConfirmation ?? 0,
+          items: todoProcessItems,
+          count: todoProcessCount,
         },
-        { key: "subLink", title: "待傳送連結", accent: "normal" as const, items: s.subsidyLinkNotSent, count: c.subsidyLinkNotSent ?? 0 },
-        { key: "subWait", title: "等待客戶上傳", accent: "normal" as const, items: s.subsidyAwaitingUpload, count: c.subsidyAwaitingUpload ?? 0 },
-        { key: "subInc", title: "客戶資料待補件", accent: "orange" as const, items: s.subsidyDocsIncomplete, count: c.subsidyDocsIncomplete ?? 0 },
         {
-          key: "subManual",
-          title: "等待人工確認",
-          accent: "orange" as const,
-          items: s.subsidyAwaitingManualReview ?? [],
-          count: c.subsidyAwaitingManualReview ?? 0,
-        },
-        { key: "subOk", title: "補助資料已齊", accent: "normal" as const, items: docsCompleteItems, count: docsCompleteCount },
-        { key: "subDone", title: "補助申請已完成", accent: "normal" as const, items: s.subsidyApplied ?? [], count: c.subsidyApplied ?? 0 },
-        {
-          key: "subSettled",
-          title: "不需申請／客戶自行申請",
+          key: "subWait",
+          title: "等待客戶",
           accent: "normal" as const,
-          items: s.subsidySettled ?? [],
-          count: c.subsidySettled ?? 0,
+          items: waitCustomerItems,
+          count: waitCustomerCount,
+        },
+        {
+          key: "subOk",
+          title: "可申請",
+          accent: "normal" as const,
+          items: docsCompleteItems,
+          count: docsCompleteCount,
+        },
+        {
+          key: "subDone",
+          title: "已完成",
+          accent: "normal" as const,
+          items: doneItems,
+          count: doneCount,
         },
       ],
       homeSections: [
@@ -888,165 +903,63 @@ export default function AdminWorkbench() {
     if (secKey.startsWith("sub")) {
       const pipe = item.subsidyPipelineStatus ?? "link_not_sent";
       const display = item.subsidyDisplayStatus;
-      const paid = item.receivableStatus === "paid";
       const phone = item.mobilePhone || item.telephone || "—";
+      const pending =
+        item.subsidyType === "pending_confirmation" || !!item.virtualPendingConfirmation;
+      const settled =
+        item.subsidyType === "not_needed" || item.subsidyType === "customer_self_apply";
+      const doneApplied = pipe === "applied" || display === "applied";
 
-      if (secKey === "subPending" || item.subsidyType === "pending_confirmation") {
-        return (
-          <ItemShell key={`${secKey}-${item.workOrderId}`} item={item}>
-            <p className="text-xs text-muted-foreground">電話：{phone}</p>
-            <div className="flex flex-wrap items-center gap-2 text-xs">
-              <SubsidyHandlingTag item={item} onOpen={() => undefined} />
-              <span className="text-muted-foreground">收款狀態：</span>
-              <span>{item.receivableStatusLabel ?? item.paymentStatus ?? "—"}</span>
-            </div>
-            <p className="text-sm font-medium">補助方式：待確認</p>
-            <p className="text-xs text-muted-foreground">請選擇以下其中一種（收款流程不受影響）</p>
-            {canOperate && (
-              <div className="flex flex-col gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-10 justify-start"
-                  disabled={subsidyTypeMut.isPending}
-                  onClick={() =>
-                    subsidyTypeMut.mutate({ id: item.workOrderId, subsidyType: "not_needed" })
-                  }
-                >
-                  1. 不需要申請補助
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-10 justify-start"
-                  disabled={subsidyTypeMut.isPending}
-                  onClick={() =>
-                    subsidyTypeMut.mutate({ id: item.workOrderId, subsidyType: "customer_self_apply" })
-                  }
-                >
-                  2. 客戶自行申請
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-10 justify-start"
-                  disabled={subsidyTypeMut.isPending}
-                  onClick={() =>
-                    subsidyTypeMut.mutate({
-                      id: item.workOrderId,
-                      subsidyType: "company_assisted",
-                      assistedProgram: "new_unit",
-                    })
-                  }
-                >
-                  3. 公司協助申請－新機補助
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-10 justify-start"
-                  disabled={subsidyTypeMut.isPending}
-                  onClick={() =>
-                    subsidyTypeMut.mutate({
-                      id: item.workOrderId,
-                      subsidyType: "company_assisted",
-                      assistedProgram: "trade_in",
-                    })
-                  }
-                >
-                  4. 公司協助申請－舊換新補助
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-10 justify-start"
-                  disabled={subsidyTypeMut.isPending}
-                  onClick={() =>
-                    subsidyTypeMut.mutate({
-                      id: item.workOrderId,
-                      subsidyType: "company_assisted",
-                      assistedProgram: "new_unit_and_trade_in",
-                    })
-                  }
-                >
-                  5. 公司協助申請－新機＋舊換新
-                </Button>
-              </div>
-            )}
-          </ItemShell>
-        );
-      }
+      const pickType = (subsidyType: SubsidyType, assistedProgram?: AssistedProgram) => {
+        subsidyTypeMut.mutate({ id: item.workOrderId, subsidyType, assistedProgram });
+      };
 
-      if (secKey === "subSettled") {
-        return (
-          <ItemShell key={`${secKey}-${item.workOrderId}`} item={item}>
-            <p className="text-xs text-muted-foreground">電話：{phone}</p>
-            <div className="flex flex-wrap items-center gap-2 text-xs">
-              <SubsidyHandlingTag item={item} onOpen={() => undefined} />
-              <span className="text-muted-foreground">收款狀態：</span>
-              <span>{item.receivableStatusLabel ?? item.paymentStatus ?? "—"}</span>
-            </div>
-            <SubsidyBadge item={item} />
-            <p className="text-xs text-muted-foreground">保留紀錄供查詢；不產生上傳連結、不檢查文件。</p>
-          </ItemShell>
-        );
-      }
+      const typeChooserButtons = (
+        <div className="flex flex-col gap-2">
+          <Button size="sm" variant="outline" className="h-10 justify-start" disabled={subsidyTypeMut.isPending}
+            onClick={() => pickType("customer_self_apply")}>1. 客戶自行申請</Button>
+          <Button size="sm" variant="outline" className="h-10 justify-start" disabled={subsidyTypeMut.isPending}
+            onClick={() => pickType("company_assisted", "new_unit")}>2. 公司協助－新機補助</Button>
+          <Button size="sm" variant="outline" className="h-10 justify-start" disabled={subsidyTypeMut.isPending}
+            onClick={() => pickType("company_assisted", "trade_in")}>3. 公司協助－舊換新補助</Button>
+          <Button size="sm" variant="outline" className="h-10 justify-start" disabled={subsidyTypeMut.isPending}
+            onClick={() => pickType("company_assisted", "new_unit_and_trade_in")}>4. 公司協助－新機＋舊換新</Button>
+          <Button size="sm" variant="outline" className="h-10 justify-start" disabled={subsidyTypeMut.isPending}
+            onClick={() => pickType("not_needed")}>5. 不需申請</Button>
+        </div>
+      );
 
       return (
-        <ItemShell key={`${secKey}-${item.workOrderId}`} item={item}>
-          <p className="text-xs text-muted-foreground">電話：{phone}</p>
-          <div className="flex flex-wrap items-center gap-2 text-xs">
-            <SubsidyHandlingTag item={item} onOpen={() => openSubsidyForItem(item)} />
-            <span className="text-muted-foreground">收款狀態：</span>
-            <span>{item.receivableStatusLabel ?? item.paymentStatus ?? "—"}</span>
+        <ItemShell key={`${secKey}-${item.workOrderId}`} item={item} showViewCase={false}>
+          <div className="grid grid-cols-2 gap-1 text-xs">
+            <p><span className="text-muted-foreground">案件：</span>{item.workOrderNumber ?? `#${item.workOrderId}`}</p>
+            <p><span className="text-muted-foreground">客戶：</span>{item.customerName ?? "—"}</p>
+            <p className="col-span-2"><span className="text-muted-foreground">電話：</span>{phone}</p>
+            <p className="col-span-2">
+              <span className="text-muted-foreground">完工：</span>
+              {item.completedAt ? new Date(item.completedAt).toLocaleDateString("zh-TW") : "—"}
+            </p>
+            <p><span className="text-muted-foreground">收款：</span>{item.receivableStatusLabel ?? item.paymentStatus ?? "—"}</p>
+            <p><span className="text-muted-foreground">補助：</span>{item.subsidyTypeLabel ?? "待確認"}{item.assistedProgramLabel ? `－${item.assistedProgramLabel}` : ""}</p>
           </div>
           <SubsidyMetaLines item={item} />
-          {paid && pipe !== "applied" && (
-            <p className="text-xs text-green-700">已收款 — 請完成補助流程後再結案</p>
+
+          {pending && canOperate && (
+            <>
+              <p className="text-xs text-muted-foreground">請直接選擇補助方式（收款不受影響）</p>
+              {typeChooserButtons}
+            </>
           )}
-          {canOperate && (
+
+          {settled && (
+            <p className="text-xs text-muted-foreground">已處理；不產生上傳連結、不檢查文件。</p>
+          )}
+
+          {canOperate && item.subsidyType === "company_assisted" && !pending && (
             <div className="flex flex-wrap gap-2">
               <Button asChild size="sm" variant="outline" className="h-10 sm:h-9">
                 <Link href={caseHref(item.workOrderId)}>查看案件</Link>
               </Button>
-              <Button size="sm" variant="outline" className="h-10 sm:h-9" onClick={() => setDocsModal(item)}>
-                查看補助資料
-                {(item.uploadedDocCount ?? 0) > 0 ? `（${item.uploadedDocCount}）` : ""}
-              </Button>
-              {item.subsidyType === "company_assisted" && !item.assistedProgram && (
-                <>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-10 sm:h-9"
-                    disabled={subsidyTypeMut.isPending}
-                    onClick={() =>
-                      subsidyTypeMut.mutate({
-                        id: item.workOrderId,
-                        subsidyType: "company_assisted",
-                        assistedProgram: "new_unit",
-                      })
-                    }
-                  >
-                    補選：新機補助
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="h-10 sm:h-9"
-                    disabled={subsidyTypeMut.isPending}
-                    onClick={() =>
-                      subsidyTypeMut.mutate({
-                        id: item.workOrderId,
-                        subsidyType: "company_assisted",
-                        assistedProgram: "trade_in",
-                      })
-                    }
-                  >
-                    補選：舊換新補助
-                  </Button>
-                </>
-              )}
               {item.uploadUrl && (
                 <Button
                   size="sm"
@@ -1061,70 +974,59 @@ export default function AdminWorkbench() {
                     );
                   }}
                 >
-                  複製上傳網址
+                  複製網址
                 </Button>
               )}
               {item.uploadUrl && (
                 <Button
                   size="sm"
-                  variant="outline"
                   className="h-10 sm:h-9"
+                  disabled={subsidyPipeMut.isPending}
                   onClick={() => {
-                    const text = subsidyUploadShareText(item);
+                    const text =
+                      display === "docs_incomplete" && (item.missingDocLabels?.length ?? 0) > 0
+                        ? subsidyMissingShareText(item)
+                        : subsidyUploadShareText(item);
                     const win = openLineShareText(text);
                     if (!win) {
                       void navigator.clipboard.writeText(text).then(() =>
-                        toast({ title: "已複製分享內容", description: "請貼到 LINE 傳送給客戶" }),
+                        toast({ title: "已複製分享內容", description: "請貼到 LINE 傳送" }),
                       );
+                      return;
                     }
+                    toast({ title: "已開啟 LINE 分享", description: "請選擇聊天室後送出" });
                     if (pipe === "link_not_sent") {
                       subsidyPipeMut.mutate({ id: item.workOrderId, status: "awaiting_upload" });
                     }
                   }}
                 >
-                  LINE 傳送上傳網址
+                  {(item.missingDocLabels?.length ?? 0) > 0 ? "LINE 提醒補件" : "LINE 傳送"}
                 </Button>
               )}
-              {pipe === "link_not_sent" && (
-                <Button
-                  size="sm"
-                  className="h-10 sm:h-9"
-                  disabled={subsidyPipeMut.isPending}
-                  onClick={() => {
-                    subsidyPipeMut.mutate(
-                      { id: item.workOrderId, status: "awaiting_upload" },
-                      {
-                        onSuccess: () => {
-                          void navigator.clipboard.writeText(subsidyUploadShareText(item));
-                          toast({ title: "已標記等待客戶上傳", description: "上傳網址已複製，可貼到 LINE" });
-                        },
-                      },
-                    );
-                  }}
-                >
-                  標記已傳送網址
-                </Button>
-              )}
+              <Button size="sm" variant="outline" className="h-10 sm:h-9" onClick={() => setDocsModal(item)}>
+                查看客戶資料
+                {(item.uploadedDocCount ?? 0) > 0 ? `（${item.uploadedDocCount}）` : ""}
+              </Button>
               {display === "awaiting_manual_review" && (
                 <Button
                   size="sm"
                   className="h-10 sm:h-9 bg-yellow-600 hover:bg-yellow-700"
                   disabled={subsidyConfirmMut.isPending}
                   onClick={() => {
-                    if (!window.confirm("確認補助資料齊全可用？確認後將標為「補助資料完整」。")) return;
+                    if (!window.confirm("確認補助資料齊全可用？")) return;
                     subsidyConfirmMut.mutate(item.workOrderId);
                   }}
                 >
-                  人工確認資料齊全
+                  人工確認資料完整
                 </Button>
               )}
-              {(display === "docs_complete" || pipe === "pending_apply") && pipe !== "applied" && (
+              {(display === "docs_complete" || pipe === "pending_apply") && !doneApplied && (
                 <Button
                   size="sm"
                   className="h-10 sm:h-9 bg-green-700 hover:bg-green-800"
                   disabled={subsidyPipeMut.isPending}
                   onClick={() => {
-                    if (!window.confirm("確定此案件已完成補助申請？確認後將同步更新應收帳款頁。")) return;
+                    if (!window.confirm("確定此案件的補助申請已完成？")) return;
                     const remark = window.prompt("備註（選填）") ?? undefined;
                     subsidyPipeMut.mutate({
                       id: item.workOrderId,
@@ -1133,36 +1035,37 @@ export default function AdminWorkbench() {
                     });
                   }}
                 >
-                  補助申請已完成
+                  補助已完成
                 </Button>
               )}
-              {pipe === "applied" && (
+              {doneApplied && (
                 <Button
                   size="sm"
                   variant="outline"
                   className="h-10 sm:h-9 text-orange-700 border-orange-300"
                   disabled={subsidyUnmarkMut.isPending}
                   onClick={() => {
-                    if (!window.confirm("取消補助完成／重新開啟？附件與完成紀錄會保留在操作日誌。")) return;
+                    if (!window.confirm("取消補助完成／重新開啟？附件與紀錄不會刪除。")) return;
                     subsidyUnmarkMut.mutate(item.workOrderId);
                   }}
                 >
                   取消補助完成／重新開啟
                 </Button>
               )}
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-10 sm:h-9"
-                disabled={subsidyRegenMut.isPending}
-                onClick={() => {
-                  if (!window.confirm("僅在網址失效時重新產生。確定重新產生上傳網址？")) return;
-                  subsidyRegenMut.mutate({ id: item.workOrderId, force: true });
-                }}
-              >
-                重新產生網址
-              </Button>
             </div>
+          )}
+
+          {canOperate && item.subsidyType === "company_assisted" && !pending && !doneApplied && (
+            <details className="text-xs">
+              <summary className="cursor-pointer text-muted-foreground">修改補助方式</summary>
+              <div className="mt-2">{typeChooserButtons}</div>
+            </details>
+          )}
+
+          {(settled || doneApplied) && canOperate && (
+            <Button asChild size="sm" variant="outline" className="h-10 sm:h-9">
+              <Link href={caseHref(item.workOrderId)}>查看案件</Link>
+            </Button>
           )}
         </ItemShell>
       );
@@ -1402,7 +1305,7 @@ export default function AdminWorkbench() {
             ? `行政每日工作台 · ${data.today} · 未完成待辦 ${data.counts.openTodos ?? 0} 件`
             : panel === "collection"
               ? "依收款日分類處理；與補助流程並行"
-              : "與應收帳款共用同一補助狀態；施工完成即可開始"}
+              : "選方式 → LINE 傳送 → 等客戶上傳 → 確認 → 綠燈送件 → 補助完成"}
         </p>
       </div>
 
@@ -1444,7 +1347,7 @@ export default function AdminWorkbench() {
             title="📄 補助中心"
             count={hubs.subsidyTodoCount}
             onClick={() => goPanel("subsidy")}
-            hint="待確認／待傳送／補件等待辦"
+            hint="待處理／等待客戶／可申請"
           />
           {renderSections(hubs.homeSections.filter((s) => s.key === "close" || s.key === "closed"))}
           <Card>
@@ -1578,7 +1481,7 @@ export default function AdminWorkbench() {
       <Dialog open={!!docsModal} onOpenChange={(o) => { if (!o) setDocsModal(null); }}>
         <DialogContent className="max-w-md w-[calc(100vw-1.5rem)]">
           <DialogHeader>
-            <DialogTitle>客戶上傳／補助資料</DialogTitle>
+            <DialogTitle>查看客戶資料</DialogTitle>
           </DialogHeader>
           <DialogBody className="space-y-3">
             {docsModal && (
@@ -1606,11 +1509,17 @@ export default function AdminWorkbench() {
                         {d.fileName && (
                           <p className="text-xs text-muted-foreground">{d.fileName}</p>
                         )}
-                        {d.note && <p className="text-xs text-muted-foreground">{d.note}</p>}
                         {d.uploadedAt && (
                           <p className="text-xs text-muted-foreground">
                             {new Date(d.uploadedAt).toLocaleString("zh-TW")}
                           </p>
+                        )}
+                        {d.fileUrl?.startsWith("data:image/") && (
+                          <img
+                            src={d.fileUrl}
+                            alt={d.docTypeLabel || "預覽"}
+                            className="mt-1 max-h-32 rounded border object-contain"
+                          />
                         )}
                         {d.fileUrl && (
                           <a
@@ -1630,11 +1539,32 @@ export default function AdminWorkbench() {
                   <Button
                     className="w-full"
                     disabled={subsidyConfirmMut.isPending}
-                    onClick={() => subsidyConfirmMut.mutate(docsModal.workOrderId)}
+                    onClick={() => {
+                      if (!window.confirm("確認補助資料齊全可用？")) return;
+                      subsidyConfirmMut.mutate(docsModal.workOrderId);
+                    }}
                   >
-                    人工確認資料齊全
+                    人工確認資料完整
                   </Button>
                 )}
+                {canOperate &&
+                  (docsModal.missingDocLabels?.length ?? 0) > 0 &&
+                  docsModal.uploadUrl && (
+                    <Button
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => {
+                        const text = subsidyMissingShareText(docsModal);
+                        const win = openLineShareText(text);
+                        if (!win) {
+                          void navigator.clipboard.writeText(text);
+                          toast({ title: "已複製補件訊息" });
+                        }
+                      }}
+                    >
+                      LINE 提醒補件
+                    </Button>
+                  )}
               </>
             )}
           </DialogBody>
@@ -1651,7 +1581,7 @@ export default function AdminWorkbench() {
                   );
                 }}
               >
-                複製上傳網址
+                複製網址
               </Button>
             )}
           </DialogFooter>

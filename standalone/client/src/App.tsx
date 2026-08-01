@@ -24,6 +24,7 @@ import Maintenance from "@/pages/maintenance";
 import Users from "@/pages/users";
 import EngineerDashboard from "@/pages/engineer-dashboard";
 import AdminWorkbench from "@/pages/admin-workbench";
+import SubsidyUploadPage from "@/pages/subsidy-upload";
 import Employees from "@/pages/employees";
 import Products from "@/pages/products";
 import WholesaleCustomers from "@/pages/wholesale-customers";
@@ -213,9 +214,12 @@ function AppRoutes() {
     );
   }
 
+  const isPublicSubsidyUpload = location.startsWith("/subsidy-upload/");
+
   // Single auth redirect authority — do not also redirect from login.tsx / layout.
+  // Public customer upload page: no login required.
   if (!isAuthenticated) {
-    if (location !== "/login") {
+    if (!isPublicSubsidyUpload && location !== "/login") {
       return <Redirect to="/login" />;
     }
   } else if (user?.mustChangePassword) {
@@ -233,6 +237,7 @@ function AppRoutes() {
     <Switch>
       <Route path="/login" component={LoginPage} />
       <Route path="/change-password" component={ChangePasswordPage} />
+      <Route path="/subsidy-upload/:token" component={SubsidyUploadPage} />
       <Route>
         <Layout>
           <Switch>

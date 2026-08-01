@@ -18,6 +18,12 @@ export function requestOrigin(req: Pick<Request, "protocol" | "get">): string {
   return `${proto}://${host}`;
 }
 
+/** Customer-facing SPA path (token verified by public API). */
 export function subsidyPublicUploadPath(token: string): string {
+  return `/subsidy-upload/${encodeURIComponent(token)}`;
+}
+
+/** Backend public API base for status / upload (same token). */
+export function subsidyPublicUploadApiPath(token: string): string {
   return `/api/public/subsidy-upload/${encodeURIComponent(token)}`;
 }

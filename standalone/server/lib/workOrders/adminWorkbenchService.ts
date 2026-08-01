@@ -1515,27 +1515,12 @@ export async function recheckSubsidyDocuments(workOrderId: number, user: JwtPayl
   const { meta, freeNote } = parseSubsidyMeta(sub.note);
 
   const program = normalizeAssistedProgram(sub.assistedProgram);
-  let check;
-  try {
-    check = runSubsidyCompletenessCheck({
-      subsidyType: "company_assisted",
-      assistedProgram: program,
-      docs,
-      prevMeta: meta,
-    });
-  } catch {
-    check = runSubsidyCompletenessCheck({
-      subsidyType: "company_assisted",
-      assistedProgram: program,
-      docs,
-      prevMeta: { ...meta, needsManualReview: true, aiTips: ["自動檢查暫時不可用，請行政人工確認"] },
-    });
-    check.needsManualReview = true;
-    check.suggestedPipeline = "docs_incomplete";
-    if (check.missingDocs.length === 0) {
-      check.aiTips = ["自動檢查暫時不可用，請行政人工確認"];
-    }
-  }
+  const check = await runSubsidyCompletenessCheck({
+    subsidyType: "company_assisted",
+    assistedProgram: program,
+    docs,
+    prevMeta: meta,
+  });
 
   const note = mergeMetaAfterCheck(freeNote, meta, check);
   let next = check.suggestedPipeline;

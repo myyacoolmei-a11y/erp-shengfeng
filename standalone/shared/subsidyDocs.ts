@@ -105,7 +105,7 @@ export const SUBSIDY_DISPLAY_COLORS: Record<SubsidyDisplayStatus, string> = {
   customer_self_apply: "bg-slate-100 text-slate-700",
   not_applicable: "bg-gray-100 text-gray-600",
   no_record: "bg-gray-50 text-gray-500",
-  link_not_sent: "bg-blue-100 text-blue-700",
+  link_not_sent: "bg-gray-100 text-gray-600",
   awaiting_upload: "bg-blue-100 text-blue-700",
   docs_incomplete: "bg-orange-100 text-orange-800",
   awaiting_manual_review: "bg-yellow-100 text-yellow-800",
