@@ -9,6 +9,7 @@ import {
   confirmAdminCompletion,
   confirmSubsidyDocsManually,
   getAdminWorkbench,
+  getCaseDetail,
   markBilled,
   markFullyPaid,
   recheckSubsidyDocuments,
@@ -45,6 +46,23 @@ router.get("/admin-workbench", requireFinanceView, async (req, res): Promise<voi
     res.status(500).json({ error: err instanceof Error ? err.message : "載入失敗" });
   }
 });
+
+router.get(
+  "/admin-workbench/:workOrderId/case-detail",
+  requireFinanceView,
+  async (req, res): Promise<void> => {
+    const workOrderId = Number(req.params.workOrderId);
+    if (!Number.isFinite(workOrderId)) {
+      res.status(400).json({ error: "無效的派工單 ID" });
+      return;
+    }
+    try {
+      res.json(await getCaseDetail(workOrderId));
+    } catch (err) {
+      res.status(404).json({ error: err instanceof Error ? err.message : "載入失敗" });
+    }
+  },
+);
 
 router.post(
   "/admin-workbench/:workOrderId/confirm-completion",

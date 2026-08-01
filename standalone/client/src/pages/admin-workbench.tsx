@@ -6,17 +6,7 @@ import { useAuth, hasRole } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import {
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import type { SubsidyInvoiceKind } from "../../../shared/adminWorkflowConstants.ts";
 import { openLineShareText } from "@/components/pdf/pdf-service";
@@ -25,10 +15,8 @@ import {
   advanceAdminSubsidyPipeline,
   cancelAdminPaid,
   confirmAdminCompletion,
-  confirmAdminSubsidyDocs,
   fetchAdminWorkbench,
   markAdminPaid,
-  recordAdminPayment,
   reopenAdminClosed,
   setAdminSubsidyInvoiceKind,
   unmarkAdminSubsidyApplied,
@@ -139,34 +127,18 @@ function absoluteUploadUrl(item: AdminWorkbenchItem): string | null {
   return `${window.location.origin}${path.startsWith("/") ? "" : "/"}${path}`;
 }
 
-/** LINE 傳送補助資料連結（首次通知） */
-function subsidyUploadShareText(item: AdminWorkbenchItem): string {
-  const url = absoluteUploadUrl(item);
-  const lines = [
-    "您好，我們是晟風工程。",
-    "",
-    "為協助您辦理補助，請點擊以下連結上傳所需資料：",
-    "",
-    url || "（尚未產生上傳網址）",
-    "",
-  ];
-  if (item.invoiceKind === "triple") {
-    lines.push("因本案件需開立公司三聯式發票，請填寫公司名稱及統一編號。");
-    lines.push("");
-  }
-  lines.push("請依頁面提示完成上傳；若資料缺件，我們會再通知您，謝謝。");
-  return lines.join("\n");
-}
-
 /**
- * LINE「提醒補件」訊息模板。
- * 日後若要改文案，請改此函式即可。
- * - {missing_documents} ← item.missingDocLabels（依實際缺件動態產生）
- * - {upload_url} ← absoluteUploadUrl(item)
- * - 三聯式提醒僅在 invoiceKind === "triple" 時顯示
+ * LINE「通知客戶」訊息模板。日後要改文案改這裡即可。
+ *
+ * 依案件狀況自動切換兩種版本：
+ * - 尚未上傳任何資料 → 第一次補助資料上傳通知
+ * - 已上傳但仍有缺件 → 提醒補件，並列出實際缺少的資料
+ *
+ * 三聯式（invoiceKind === "triple"）才會加上公司名稱與統一編號提醒。
  */
-function subsidyLineReminderText(item: AdminWorkbenchItem): string {
+function subsidyLineNotifyText(item: AdminWorkbenchItem): string {
   const uploadUrl = absoluteUploadUrl(item) || "（尚未產生上傳網址）";
+  const firstTime = (item.uploadedDocCount ?? item.customerDocumentCount ?? 0) === 0;
   const missingDocuments =
     (item.missingDocLabels?.length ?? 0) > 0
       ? item.missingDocLabels!.map((label) => `• ${label}`).join("\n")
@@ -183,7 +155,7 @@ function subsidyLineReminderText(item: AdminWorkbenchItem): string {
     "",
     "請將以下資料補齊，方便我們協助您辦理政府冷氣補助。",
     "",
-    "📋 目前尚缺資料：",
+    firstTime ? "📋 需要準備的資料：" : "📋 目前尚缺資料：",
     "",
     missingDocuments,
     "",
@@ -191,7 +163,7 @@ function subsidyLineReminderText(item: AdminWorkbenchItem): string {
 
   if (item.invoiceKind === "triple") {
     lines.push(
-      "若本案件為公司三聯式發票，請一併填寫：",
+      "若需開立公司三聯式發票，請一併填寫：",
       "• 公司名稱",
       "• 統一編號",
       "",
@@ -232,41 +204,6 @@ function SubsidyBadge({ item }: { item: AdminWorkbenchItem }) {
     <Badge className="bg-green-100 text-green-800 border-0 font-normal">
       補助資料已齊，可進行申請
     </Badge>
-  );
-}
-
-function SubsidyMetaLines({ item }: { item: AdminWorkbenchItem }) {
-  return (
-    <div className="text-xs space-y-1">
-      <div className="flex flex-wrap items-center gap-2">
-        <SubsidyBadge item={item} />
-      </div>
-      <p>
-        已上傳 {item.uploadedDocCount ?? item.customerDocumentCount ?? 0} 份
-        {item.lastUploadAt
-          ? ` · 最後上傳 ${new Date(item.lastUploadAt).toLocaleString("zh-TW")}`
-          : ""}
-      </p>
-      {(item.missingDocLabels?.length ?? 0) > 0 && (
-        <p className="text-orange-800">缺少：{item.missingDocLabels!.join("、")}</p>
-      )}
-      {(item.aiTips?.length ?? 0) > 0 && (
-        <div className="text-yellow-800">
-          <p className="font-medium">檢查提示：</p>
-          <ul className="list-disc pl-4">
-            {item.aiTips!.map((t) => (
-              <li key={t}>{t}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-      {item.appliedAt && (
-        <p className="text-emerald-900">
-          完成時間：{new Date(item.appliedAt).toLocaleString("zh-TW")}
-          {item.appliedBy != null ? ` · 操作人 #${item.appliedBy}` : ""}
-        </p>
-      )}
-    </div>
   );
 }
 
@@ -345,26 +282,6 @@ export default function AdminWorkbench() {
     onError: onErr,
   });
 
-  const subsidyConfirmMut = useMutation({
-    mutationFn: (id: number) => confirmAdminSubsidyDocs(id),
-    onSuccess: () => {
-      toast({ title: "已人工確認補助資料齊全" });
-      invalidate();
-    },
-    onError: onErr,
-  });
-
-  const payMut = useMutation({
-    mutationFn: (p: { id: number; amount: number; paymentDate: string }) =>
-      recordAdminPayment(p.id, p),
-    onSuccess: () => {
-      toast({ title: "已登記收款" });
-      setPayModal(null);
-      invalidate();
-    },
-    onError: onErr,
-  });
-
   const markPaidMut = useMutation({
     mutationFn: (id: number) => markAdminPaid(id),
     onSuccess: () => {
@@ -394,9 +311,6 @@ export default function AdminWorkbench() {
     },
     onError: onErr,
   });
-
-  const [payModal, setPayModal] = useState<{ item: AdminWorkbenchItem; amount: string } | null>(null);
-  const [docsModal, setDocsModal] = useState<AdminWorkbenchItem | null>(null);
 
   if (!user || !canFinance) {
     return (
@@ -462,21 +376,25 @@ export default function AdminWorkbench() {
   }
 
   function renderOpenCard(item: AdminWorkbenchItem) {
-    const unpaid = parseFloat(String(item.unpaidAmount ?? "0")) || 0;
     const phone = item.mobilePhone || item.telephone;
     const subsidyDone = item.subsidyPipelineStatus === "applied";
     const shareReady = !!item.invoiceKind && !!item.uploadUrl;
     const missing = item.missingDocLabels ?? [];
+    const isPaid = item.receivableStatus === "paid";
 
-    function shareLine(text: string, okTitle: string) {
+    function notifyViaLine() {
+      const text = subsidyLineNotifyText(item);
       const win = openLineShareText(text);
       if (!win) {
         void navigator.clipboard.writeText(text).then(() =>
-          toast({ title: "已複製分享內容", description: "請貼到 LINE 傳送" }),
+          toast({ title: "已複製通知內容", description: "請貼到 LINE 傳送" }),
         );
         return;
       }
-      toast({ title: okTitle, description: "請選擇聊天室後送出" });
+      toast({ title: "已開啟 LINE 分享", description: "請選擇聊天室後送出" });
+      if (item.subsidyPipelineStatus === "link_not_sent") {
+        subsidyPipeMut.mutate({ id: item.workOrderId, status: "awaiting_upload" });
+      }
     }
 
     return (
@@ -484,7 +402,7 @@ export default function AdminWorkbench() {
         <AmountSummary item={item} />
         {item.receivableId == null && (
           <p className="text-xs text-amber-800">
-            尚未建立應收帳款（案件可能未綁定客戶），請至應收帳款頁確認後再登記收款
+            尚未建立應收帳款（案件可能未綁定客戶），請至應收帳款頁確認後再標記已收款
           </p>
         )}
 
@@ -498,7 +416,7 @@ export default function AdminWorkbench() {
         {!subsidyDone && item.invoiceKind && missing.length === 0 && (
           <p className="text-xs text-green-700">補助資料已齊，確認送件後請標記補助完成</p>
         )}
-        {item.receivableStatus === "paid" && !subsidyDone && (
+        {isPaid && !subsidyDone && (
           <p className="text-xs text-amber-800 font-medium">等待補助完成</p>
         )}
 
@@ -537,53 +455,19 @@ export default function AdminWorkbench() {
         </div>
 
         {/* 補助操作 — 選好發票類型後才出現 */}
-        {canOperate && shareReady && !subsidyDone && (
+        {canOperate && !subsidyDone && (
           <div className="flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-10 sm:h-9"
-              onClick={() => {
-                const url = absoluteUploadUrl(item);
-                if (!url) return;
-                void navigator.clipboard.writeText(url).then(
-                  () => toast({ title: "已複製上傳網址" }),
-                  () => toast({ title: "複製失敗", variant: "destructive" }),
-                );
-              }}
-            >
-              複製補助上傳網址
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-10 sm:h-9"
-              disabled={subsidyPipeMut.isPending}
-              onClick={() => {
-                shareLine(subsidyUploadShareText(item), "已開啟 LINE 分享");
-                if (item.subsidyPipelineStatus === "link_not_sent") {
-                  subsidyPipeMut.mutate({ id: item.workOrderId, status: "awaiting_upload" });
-                }
-              }}
-            >
-              LINE 傳送補助資料連結
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-10 sm:h-9"
-              onClick={() => shareLine(subsidyLineReminderText(item), "已開啟 LINE 分享")}
-            >
-              LINE 提醒補件
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-10 sm:h-9"
-              onClick={() => setDocsModal(item)}
-            >
-              查看客戶資料
-            </Button>
+            {shareReady && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-10 sm:h-9"
+                disabled={subsidyPipeMut.isPending}
+                onClick={notifyViaLine}
+              >
+                LINE 通知客戶
+              </Button>
+            )}
             <Button
               size="sm"
               className="h-10 sm:h-9 bg-green-700 hover:bg-green-800"
@@ -599,14 +483,6 @@ export default function AdminWorkbench() {
         )}
         {canOperate && subsidyDone && (
           <div className="flex flex-wrap gap-2">
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-10 sm:h-9"
-              onClick={() => setDocsModal(item)}
-            >
-              查看客戶資料
-            </Button>
             <Button
               size="sm"
               variant="outline"
@@ -632,27 +508,17 @@ export default function AdminWorkbench() {
               </a>
             </Button>
           )}
-          {canFinance && unpaid > 0 && (
+          {canOperate && !isPaid && (
             <Button
               size="sm"
               className="h-10 sm:h-9"
-              onClick={() => setPayModal({ item, amount: String(unpaid) })}
-            >
-              登記收款
-            </Button>
-          )}
-          {canOperate && unpaid > 0 && (
-            <Button
-              size="sm"
-              variant="secondary"
-              className="h-10 sm:h-9"
-              disabled={markPaidMut.isPending}
+              disabled={markPaidMut.isPending || item.receivableId == null}
               onClick={() => markPaidMut.mutate(item.workOrderId)}
             >
               標記已收款
             </Button>
           )}
-          {canOperate && item.receivableStatus === "paid" && (
+          {canOperate && isPaid && (
             <Button
               size="sm"
               variant="outline"
@@ -682,14 +548,6 @@ export default function AdminWorkbench() {
         <div className="flex flex-wrap gap-2">
           <Button asChild size="sm" variant="outline" className="h-10 sm:h-9">
             <Link href={caseHref(item.workOrderId)}>查看案件</Link>
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-10 sm:h-9"
-            onClick={() => setDocsModal(item)}
-          >
-            查看客戶資料
           </Button>
           {canOperate && (
             <Button
@@ -797,175 +655,6 @@ export default function AdminWorkbench() {
         </CardContent>
       </Card>
 
-      {/* 登記收款 Modal */}
-      <Dialog open={!!payModal} onOpenChange={(o) => { if (!o) setPayModal(null); }}>
-        <DialogContent className="max-w-sm w-[calc(100vw-1.5rem)]">
-          <DialogHeader>
-            <DialogTitle>登記收款</DialogTitle>
-          </DialogHeader>
-          <DialogBody className="space-y-3">
-            {payModal && (
-              <>
-                <AmountSummary item={payModal.item} />
-                <div className="space-y-1">
-                  <Label>本次收款金額</Label>
-                  <Input
-                    type="number"
-                    value={payModal.amount}
-                    onChange={(e) =>
-                      setPayModal((m) => (m ? { ...m, amount: e.target.value } : m))
-                    }
-                  />
-                  <p className="text-xs text-muted-foreground">
-                    不可超過未收金額 NT${money(payModal.item.unpaidAmount)}
-                  </p>
-                </div>
-              </>
-            )}
-          </DialogBody>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setPayModal(null)}>取消</Button>
-            <Button
-              disabled={payMut.isPending}
-              onClick={() => {
-                if (!payModal || !data) return;
-                const unpaid = parseFloat(String(payModal.item.unpaidAmount ?? "0")) || 0;
-                const amount = parseFloat(payModal.amount) || 0;
-                if (!(amount > 0)) {
-                  toast({ title: "請輸入收款金額", variant: "destructive" });
-                  return;
-                }
-                if (amount > unpaid) {
-                  toast({
-                    title: "超過未收金額",
-                    description: `最多可收 NT$${unpaid.toLocaleString("zh-TW")}`,
-                    variant: "destructive",
-                  });
-                  return;
-                }
-                payMut.mutate({
-                  id: payModal.item.workOrderId,
-                  amount,
-                  paymentDate: data.today,
-                });
-              }}
-            >
-              確認收款
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* 客戶上傳／補助資料 */}
-      <Dialog open={!!docsModal} onOpenChange={(o) => { if (!o) setDocsModal(null); }}>
-        <DialogContent className="max-w-md w-[calc(100vw-1.5rem)]">
-          <DialogHeader>
-            <DialogTitle>查看客戶資料</DialogTitle>
-          </DialogHeader>
-          <DialogBody className="space-y-3">
-            {docsModal && (
-              <>
-                <p className="text-xs text-muted-foreground">
-                  {docsModal.customerName} · {docsModal.workOrderNumber ?? `#${docsModal.workOrderId}`}
-                </p>
-                <SubsidyMetaLines item={docsModal} />
-                {docsModal.uploadUrl && (
-                  <p className="text-xs break-all text-muted-foreground">
-                    上傳網址：{absoluteUploadUrl(docsModal)}
-                  </p>
-                )}
-                {(docsModal.customerDocuments?.length ?? 0) === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-4">
-                    尚無客戶上傳紀錄
-                  </p>
-                ) : (
-                  <ul className="space-y-2 text-sm">
-                    {docsModal.customerDocuments!.map((d) => (
-                      <li key={d.id} className="rounded-md border p-2">
-                        <p className="font-medium">
-                          {d.docTypeLabel || d.fileName || d.docType || "文件"} · {d.status}
-                        </p>
-                        {d.fileName && (
-                          <p className="text-xs text-muted-foreground">{d.fileName}</p>
-                        )}
-                        {d.uploadedAt && (
-                          <p className="text-xs text-muted-foreground">
-                            {new Date(d.uploadedAt).toLocaleString("zh-TW")}
-                          </p>
-                        )}
-                        {d.fileUrl?.startsWith("data:image/") && (
-                          <img
-                            src={d.fileUrl}
-                            alt={d.docTypeLabel || "預覽"}
-                            className="mt-1 max-h-32 rounded border object-contain"
-                          />
-                        )}
-                        {d.fileUrl && (
-                          <a
-                            href={d.fileUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-xs text-primary underline"
-                          >
-                            預覽／下載
-                          </a>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                {docsModal.needsManualReview && canOperate && (
-                  <Button
-                    className="w-full"
-                    disabled={subsidyConfirmMut.isPending}
-                    onClick={() => {
-                      if (!window.confirm("確認補助資料齊全可用？")) return;
-                      subsidyConfirmMut.mutate(docsModal.workOrderId);
-                    }}
-                  >
-                    人工確認資料完整
-                  </Button>
-                )}
-                {canOperate &&
-                  (docsModal.missingDocLabels?.length ?? 0) > 0 &&
-                  docsModal.uploadUrl && (
-                    <Button
-                      variant="outline"
-                      className="w-full"
-                      onClick={() => {
-                        const text = subsidyLineReminderText(docsModal);
-                        const win = openLineShareText(text);
-                        if (!win) {
-                          void navigator.clipboard.writeText(text);
-                          toast({ title: "已複製補件訊息" });
-                        }
-                      }}
-                    >
-                      LINE 提醒補件
-                    </Button>
-                  )}
-              </>
-            )}
-          </DialogBody>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDocsModal(null)}>關閉</Button>
-            {docsModal?.uploadUrl && (
-              <Button
-                onClick={() => {
-                  const url = absoluteUploadUrl(docsModal);
-                  if (!url) return;
-                  void navigator.clipboard.writeText(url).then(
-                    () => toast({ title: "已複製上傳網址" }),
-                    () => toast({ title: "複製失敗", variant: "destructive" }),
-                  );
-                }}
-              >
-                複製網址
-              </Button>
-            )}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

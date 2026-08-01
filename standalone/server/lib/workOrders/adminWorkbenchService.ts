@@ -754,6 +754,115 @@ export async function getAdminWorkbench(user?: JwtPayload) {
   };
 }
 
+/**
+ * 案件頁（查看案件）用的補助與收款明細。
+ * 唯讀，不做任何狀態轉換；資料全部來自現有欄位。
+ */
+export async function getCaseDetail(workOrderId: number) {
+  const [wo] = await db
+    .select()
+    .from(workOrdersTable)
+    .where(eq(workOrdersTable.id, workOrderId))
+    .limit(1);
+  if (!wo) throw new Error("找不到派工單");
+
+  const [recv] = await db
+    .select()
+    .from(receivablesTable)
+    .where(eq(receivablesTable.workOrderId, workOrderId))
+    .limit(1);
+  const [sub] = await db
+    .select()
+    .from(subsidyApplicationsTable)
+    .where(eq(subsidyApplicationsTable.workOrderId, workOrderId))
+    .limit(1);
+  const docs = await db
+    .select()
+    .from(customerDocumentsTable)
+    .where(eq(customerDocumentsTable.workOrderId, workOrderId))
+    .orderBy(desc(customerDocumentsTable.createdAt));
+
+  const subsidyDocs = docs.filter(
+    (d) =>
+      d.status !== "rejected" &&
+      d.docType &&
+      d.docType !== "subsidy" &&
+      (d.subsidyApplicationId == null || d.subsidyApplicationId === sub?.id),
+  );
+
+  const invoiceKind = normalizeSubsidyInvoiceKind(sub?.invoiceKind ?? null);
+  const subsidyType: SubsidyType | null = sub
+    ? normalizeSubsidyType(sub.subsidyType) ?? "pending_confirmation"
+    : null;
+  const subsidyPipeline = (sub?.pipelineStatus ?? null) as SubsidyPipelineStatus | null;
+  const { meta: subsidyMeta } = parseSubsidyMeta(sub?.note);
+  const missingDocs = missingRequiredDocs(
+    invoiceKind,
+    subsidyDocs.map((d) => d.docType),
+  );
+  const displayStatus = resolveSubsidyDisplayStatus({
+    subsidyType,
+    pipeline: subsidyPipeline,
+    missingDocs,
+    needsManualReview: !!subsidyMeta.needsManualReview,
+  });
+
+  const total = recv ? num(recv.totalAmount) : 0;
+  const received = recv ? num(recv.receivedAmount) : 0;
+
+  return {
+    workOrderId: wo.id,
+    workOrderNumber: wo.workOrderNumber,
+    customerName: wo.customerName,
+    mobilePhone: wo.mobilePhone,
+    telephone: wo.telephone,
+    installAddress: wo.installAddress,
+    invoiceTitle: recv?.invoiceTitle ?? null,
+    taxId: recv?.taxId ?? null,
+    receivableId: recv?.id ?? null,
+    totalAmount: moneyStr(total),
+    receivedAmount: moneyStr(received),
+    unpaidAmount: moneyStr(Math.max(0, total - received)),
+    paymentStatus: recv?.paymentStatus ?? null,
+    invoiceKind,
+    invoiceKindLabel: invoiceKind ? SUBSIDY_INVOICE_KIND_LABELS[invoiceKind] : null,
+    subsidyPipelineStatus: subsidyPipeline,
+    subsidyStatusLabel: subsidyCombinedStatusLabel({
+      displayStatus,
+      pipeline: subsidyPipeline,
+    }),
+    subsidyCompleted: subsidyPipeline === "applied",
+    appliedAt: sub?.appliedAt?.toISOString() ?? null,
+    uploadUrl:
+      sub?.uploadLinkToken != null && sub.uploadLinkToken !== ""
+        ? subsidyPublicUploadPath(sub.uploadLinkToken)
+        : null,
+    missingDocLabels: missingDocs.map(
+      (t) => SUBSIDY_DOC_TYPE_LABELS[t as SubsidyDocType] ?? t,
+    ),
+    uploadedDocCount: subsidyDocs.length,
+    lastUploadAt:
+      subsidyDocs
+        .map((d) => d.uploadedAt ?? d.createdAt)
+        .filter((d): d is Date => !!d)
+        .sort((a, b) => b.getTime() - a.getTime())[0]
+        ?.toISOString() ?? null,
+    aiTips: subsidyMeta.aiTips ?? [],
+    customerDocuments: subsidyDocs.slice(0, 40).map((d) => ({
+      id: d.id,
+      docType: d.docType,
+      docTypeLabel:
+        d.docType && d.docType in SUBSIDY_DOC_TYPE_LABELS
+          ? SUBSIDY_DOC_TYPE_LABELS[d.docType as SubsidyDocType]
+          : d.docType,
+      fileName: d.fileName,
+      fileUrl: d.fileUrl,
+      status: d.status,
+      uploadedAt: d.uploadedAt?.toISOString() ?? null,
+    })),
+  };
+}
+
 function orClosedToday(startOfDay: Date, endOfDay: Date) {
   return sql`(${workOrdersTable.adminClosedAt} >= ${startOfDay} AND ${workOrdersTable.adminClosedAt} <= ${endOfDay})
     OR (${workOrdersTable.adminArchivedAt} >= ${startOfDay} AND ${workOrdersTable.adminArchivedAt} <= ${endOfDay})`;

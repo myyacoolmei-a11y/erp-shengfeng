@@ -94,8 +94,48 @@ export type AdminWorkbenchData = {
   };
 };
 
+export type AdminCaseDetail = {
+  workOrderId: number;
+  workOrderNumber?: string | null;
+  customerName?: string | null;
+  mobilePhone?: string | null;
+  telephone?: string | null;
+  installAddress?: string | null;
+  invoiceTitle?: string | null;
+  taxId?: string | null;
+  receivableId?: number | null;
+  totalAmount?: string;
+  receivedAmount?: string;
+  unpaidAmount?: string;
+  paymentStatus?: string | null;
+  invoiceKind?: SubsidyInvoiceKind | null;
+  invoiceKindLabel?: string | null;
+  subsidyPipelineStatus?: SubsidyPipelineStatus | null;
+  subsidyStatusLabel?: string;
+  subsidyCompleted?: boolean;
+  appliedAt?: string | null;
+  uploadUrl?: string | null;
+  missingDocLabels?: string[];
+  uploadedDocCount?: number;
+  lastUploadAt?: string | null;
+  aiTips?: string[];
+  customerDocuments?: Array<{
+    id: number;
+    docType: string;
+    docTypeLabel?: string | null;
+    fileName: string | null;
+    fileUrl: string | null;
+    status: string;
+    uploadedAt: string | null;
+  }>;
+};
+
 export function fetchAdminWorkbench() {
   return customFetch<AdminWorkbenchData>("/api/admin-workbench");
+}
+
+export function fetchAdminCaseDetail(workOrderId: number) {
+  return customFetch<AdminCaseDetail>(`/api/admin-workbench/${workOrderId}/case-detail`);
 }
 
 export function confirmAdminCompletion(workOrderId: number, note?: string) {

@@ -94,6 +94,7 @@ import {
 } from "@/lib/fieldProgressApi";
 import {
   advanceAdminSubsidyPipeline,
+  fetchAdminCaseDetail,
   unmarkAdminSubsidyApplied,
 } from "@/lib/adminWorkbenchApi";
 
@@ -315,26 +316,42 @@ function WorkOrderDetailSummary({ order }: { order: any }) {
   );
 }
 
-/** Simplified subsidy status on case page — 等待客戶上傳 / 補助完成 */
+function amountText(v?: string | null) {
+  const n = parseFloat(String(v ?? "0"));
+  return `NT$${(Number.isFinite(n) ? n : 0).toLocaleString("zh-TW")}`;
+}
+
+/**
+ * 案件頁的行政資訊：客戶／買受人、收款、補助狀態與客戶已上傳的補助文件。
+ * 取代原本行政工作台的「查看客戶資料」彈窗，統一由此檢視。
+ */
 function WorkOrderSubsidyPanel({ order }: { order: any }) {
   const { toast } = useToast();
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const canMark =
     hasRole(user, "super_admin", "owner", "admin") || userHasFeature(user, "receivables");
-  const needsSubsidy = !!order.adminNeedsSubsidy;
-  const done =
-    order.adminSubsidyStatus === "已申請補助" ||
-    !!order.adminSubsidyAppliedAt;
-  if (!needsSubsidy && !done) return null;
+  const canViewAdmin =
+    canMark || hasRole(user, "accountant");
+  const { data: detail } = useQuery({
+    queryKey: ["admin-case-detail", order.id],
+    queryFn: () => fetchAdminCaseDetail(order.id),
+    enabled: canViewAdmin && !!order.id,
+  });
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: getListWorkOrdersQueryKey() });
+    queryClient.invalidateQueries({ queryKey: ["/api/admin-workbench"] });
+    queryClient.invalidateQueries({ queryKey: ["admin-workbench"] });
+    queryClient.invalidateQueries({ queryKey: ["admin-case-detail", order.id] });
+    queryClient.invalidateQueries({ queryKey: getListReceivablesQueryKey() });
+  };
 
   const markMut = useMutation({
     mutationFn: () => advanceAdminSubsidyPipeline(order.id, "applied"),
     onSuccess: () => {
       toast({ title: "已標記補助完成", description: "若已收款，系統會自動結案" });
-      queryClient.invalidateQueries({ queryKey: getListWorkOrdersQueryKey() });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin-workbench"] });
-      queryClient.invalidateQueries({ queryKey: getListReceivablesQueryKey() });
+      invalidate();
     },
     onError: (err: any) => {
       toast({
@@ -349,9 +366,7 @@ function WorkOrderSubsidyPanel({ order }: { order: any }) {
     mutationFn: () => unmarkAdminSubsidyApplied(order.id),
     onSuccess: () => {
       toast({ title: "已取消補助完成" });
-      queryClient.invalidateQueries({ queryKey: getListWorkOrdersQueryKey() });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin-workbench"] });
-      queryClient.invalidateQueries({ queryKey: getListReceivablesQueryKey() });
+      invalidate();
     },
     onError: (err: any) => {
       toast({
@@ -362,17 +377,131 @@ function WorkOrderSubsidyPanel({ order }: { order: any }) {
     },
   });
 
+  const docs = detail?.customerDocuments ?? [];
+  const hasAdminInfo =
+    !!detail &&
+    (detail.receivableId != null ||
+      !!detail.invoiceKind ||
+      !!detail.subsidyCompleted ||
+      docs.length > 0);
+  if (!canViewAdmin || !hasAdminInfo) return null;
+
+  const subsidyDone = !!detail!.subsidyCompleted;
+  const missing = detail!.missingDocLabels ?? [];
+  const phone = [order.mobilePhone, order.telephone].filter(Boolean).join(" / ");
+
   return (
-    <div className="rounded-lg border bg-muted/20 p-3 space-y-2 text-sm">
-      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">補助狀態</p>
-      <p className="text-sm">
-        {done ? (
-          <span className="text-emerald-800 font-medium">補助已完成</span>
-        ) : (
-          <span className="text-blue-700 font-medium">等待客戶上傳</span>
-        )}
+    <div className="rounded-lg border bg-muted/20 p-3 space-y-3 text-sm">
+      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+        行政／補助資訊
       </p>
-      {canMark && !done && (
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-xs">
+        <p><span className="text-muted-foreground">客戶：</span>{order.customerName || "—"}</p>
+        {phone && <p><span className="text-muted-foreground">電話：</span>{phone}</p>}
+        {order.installAddress && (
+          <p className="sm:col-span-2">
+            <span className="text-muted-foreground">地址：</span>{order.installAddress}
+          </p>
+        )}
+        {detail?.invoiceKindLabel && (
+          <p><span className="text-muted-foreground">發票類型：</span>{detail.invoiceKindLabel}</p>
+        )}
+        {detail?.invoiceTitle && (
+          <p><span className="text-muted-foreground">公司名稱：</span>{detail.invoiceTitle}</p>
+        )}
+        {detail?.taxId && (
+          <p><span className="text-muted-foreground">統一編號：</span>{detail.taxId}</p>
+        )}
+      </div>
+
+      {detail && (
+        <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+          <p><span className="text-muted-foreground">應收：</span>{amountText(detail.totalAmount)}</p>
+          <p><span className="text-muted-foreground">已收：</span>{amountText(detail.receivedAmount)}</p>
+          <p><span className="text-muted-foreground">未收：</span>{amountText(detail.unpaidAmount)}</p>
+          <p><span className="text-muted-foreground">收款狀態：</span>{detail.paymentStatus || "—"}</p>
+        </div>
+      )}
+
+      <div className="text-xs space-y-1">
+        <p>
+          <span className="text-muted-foreground">補助狀態：</span>
+          {subsidyDone ? (
+            <span className="text-emerald-800 font-medium">補助已完成</span>
+          ) : (
+            <span className="text-blue-700 font-medium">
+              {detail?.subsidyStatusLabel || "等待客戶上傳"}
+            </span>
+          )}
+        </p>
+        {!subsidyDone && missing.length > 0 && (
+          <p className="text-orange-800">缺少：{missing.join("、")}</p>
+        )}
+        {(detail?.aiTips?.length ?? 0) > 0 && (
+          <div className="text-yellow-800">
+            <p className="font-medium">檢查提示：</p>
+            <ul className="list-disc pl-4">
+              {detail!.aiTips!.map(t => <li key={t}>{t}</li>)}
+            </ul>
+          </div>
+        )}
+        {detail?.appliedAt && (
+          <p className="text-emerald-900">
+            完成時間：{new Date(detail.appliedAt).toLocaleString("zh-TW")}
+          </p>
+        )}
+      </div>
+
+      {detail && (
+        <div className="space-y-1">
+          <p className="text-xs text-muted-foreground">
+            客戶已上傳補助文件（{docs.length} 份
+            {detail.lastUploadAt
+              ? ` · 最後上傳 ${new Date(detail.lastUploadAt).toLocaleString("zh-TW")}`
+              : ""}
+            ）
+          </p>
+          {docs.length === 0 ? (
+            <p className="text-xs text-muted-foreground">尚無客戶上傳紀錄</p>
+          ) : (
+            <ul className="space-y-2">
+              {docs.map(d => (
+                <li key={d.id} className="rounded-md border bg-background p-2 text-xs">
+                  <p className="font-medium">
+                    {d.docTypeLabel || d.fileName || d.docType || "文件"} · {d.status}
+                  </p>
+                  {d.fileName && <p className="text-muted-foreground">{d.fileName}</p>}
+                  {d.uploadedAt && (
+                    <p className="text-muted-foreground">
+                      {new Date(d.uploadedAt).toLocaleString("zh-TW")}
+                    </p>
+                  )}
+                  {d.fileUrl?.startsWith("data:image/") && (
+                    <img
+                      src={d.fileUrl}
+                      alt={d.docTypeLabel || "預覽"}
+                      className="mt-1 max-h-32 rounded border object-contain"
+                    />
+                  )}
+                  {d.fileUrl && (
+                    <a
+                      href={d.fileUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-primary underline"
+                    >
+                      預覽／下載
+                    </a>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {canMark && !subsidyDone && (
         <Button
           size="sm"
           className="h-10 sm:h-9 bg-green-700 hover:bg-green-800"
@@ -385,7 +514,7 @@ function WorkOrderSubsidyPanel({ order }: { order: any }) {
           標記補助完成
         </Button>
       )}
-      {canMark && done && (
+      {canMark && subsidyDone && (
         <Button
           size="sm"
           variant="outline"
