@@ -20,6 +20,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import type {
   AssistedProgram,
+  SubsidyInvoiceKind,
   SubsidyPipelineStatus,
   SubsidyType,
 } from "../../../shared/adminWorkflowConstants.ts";
@@ -41,6 +42,7 @@ import {
   recordAdminPayment,
   reopenAdminClosed,
   setAdminExpectedPaymentDate,
+  setAdminSubsidyInvoiceKind,
   setAdminSubsidyType,
   unmarkAdminSubsidyApplied,
   type AdminWorkbenchItem,
@@ -231,15 +233,20 @@ function absoluteUploadUrl(item: AdminWorkbenchItem): string | null {
 
 function subsidyUploadShareText(item: AdminWorkbenchItem): string {
   const url = absoluteUploadUrl(item);
-  return [
+  const lines = [
     "您好，我們是晟風工程。",
     "",
     "為協助您辦理補助，請點擊以下連結上傳所需資料：",
     "",
     url || "（尚未產生上傳網址）",
     "",
-    "請依頁面提示完成上傳；若資料缺件，我們會再通知您，謝謝。",
-  ].join("\n");
+  ];
+  if (item.invoiceKind === "triple") {
+    lines.push("因本案件需開立公司三聯式發票，請填寫公司名稱及統一編號。");
+    lines.push("");
+  }
+  lines.push("請依頁面提示完成上傳；若資料缺件，我們會再通知您，謝謝。");
+  return lines.join("\n");
 }
 
 function subsidyMissingShareText(item: AdminWorkbenchItem): string {
@@ -248,14 +255,19 @@ function subsidyMissingShareText(item: AdminWorkbenchItem): string {
     (item.missingDocLabels?.length ?? 0) > 0
       ? item.missingDocLabels!.join("、")
       : "必要文件";
-  return [
+  const lines = [
     "您好，目前補助資料尚缺：",
     "",
     missing,
     "",
-    "請點擊原上傳連結補上資料，謝謝。",
-    url ? `\n${url}` : "",
-  ].join("\n");
+  ];
+  if (item.invoiceKind === "triple") {
+    lines.push("因本案件需開立公司三聯式發票，請填寫公司名稱及統一編號。");
+    lines.push("");
+  }
+  lines.push("請點擊原上傳連結補上資料，謝謝。");
+  if (url) lines.push("", url);
+  return lines.join("\n");
 }
 
 function SubsidyBadge({ item }: { item: AdminWorkbenchItem }) {
@@ -469,6 +481,19 @@ export default function AdminWorkbench() {
     }) => setAdminSubsidyType(p.id, p.subsidyType, { assistedProgram: p.assistedProgram }),
     onSuccess: () => {
       toast({ title: "補助方式已更新" });
+      invalidate();
+    },
+    onError: onErr,
+  });
+
+  const invoiceKindMut = useMutation({
+    mutationFn: (p: { id: number; invoiceKind: SubsidyInvoiceKind }) =>
+      setAdminSubsidyInvoiceKind(p.id, p.invoiceKind),
+    onSuccess: (_d, vars) => {
+      toast({
+        title: "發票類型已更新",
+        description: vars.invoiceKind === "triple" ? "三聯式（公司）" : "二聯式（個人）",
+      });
       invalidate();
     },
     onError: onErr,
@@ -903,14 +928,11 @@ export default function AdminWorkbench() {
 
     if (secKey.startsWith("sub")) {
       const pipe = item.subsidyPipelineStatus ?? "link_not_sent";
-      const kind =
-        item.assistedProgramLabel
-          ? `公司協助－${item.assistedProgramLabel}`
-          : item.subsidyTypeLabel ?? "公司協助";
       const missing =
         (item.missingDocLabels?.length ?? 0) > 0
           ? item.missingDocLabels!.join("、")
           : "尚無缺件（可提醒客戶上傳）";
+      const shareReady = !!item.invoiceKind && !!item.uploadUrl;
 
       return (
         <div
@@ -926,10 +948,40 @@ export default function AdminWorkbench() {
             </div>
             <Badge className="bg-blue-100 text-blue-700 border-0 font-normal">等待客戶上傳</Badge>
           </div>
-          <p className="text-xs">
-            <span className="text-muted-foreground">補助種類：</span>
-            {kind}
-          </p>
+          <div className="space-y-1.5">
+            <p className="text-xs font-medium">發票類型</p>
+            {canOperate ? (
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant={item.invoiceKind === "dual" ? "default" : "outline"}
+                  className="h-10 sm:h-9"
+                  disabled={invoiceKindMut.isPending}
+                  onClick={() =>
+                    invoiceKindMut.mutate({ id: item.workOrderId, invoiceKind: "dual" })
+                  }
+                >
+                  二聯式（個人）
+                </Button>
+                <Button
+                  size="sm"
+                  variant={item.invoiceKind === "triple" ? "default" : "outline"}
+                  className="h-10 sm:h-9"
+                  disabled={invoiceKindMut.isPending}
+                  onClick={() =>
+                    invoiceKindMut.mutate({ id: item.workOrderId, invoiceKind: "triple" })
+                  }
+                >
+                  三聯式（公司）
+                </Button>
+              </div>
+            ) : (
+              <p className="text-xs">{item.invoiceKindLabel ?? "尚未選擇"}</p>
+            )}
+            {!item.invoiceKind && (
+              <p className="text-xs text-amber-800">請先選擇發票類型，再複製網址或 LINE 提醒</p>
+            )}
+          </div>
           <p className="text-xs">
             <span className="text-muted-foreground">缺少資料：</span>
             <span className={(item.missingDocLabels?.length ?? 0) > 0 ? "text-orange-800" : ""}>
@@ -941,50 +993,57 @@ export default function AdminWorkbench() {
               <Button asChild size="sm" variant="outline" className="h-10 sm:h-9">
                 <Link href={caseHref(item.workOrderId)}>查看案件</Link>
               </Button>
-              {item.uploadUrl && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-10 sm:h-9"
-                  onClick={() => {
-                    const url = absoluteUploadUrl(item);
-                    if (!url) return;
-                    void navigator.clipboard.writeText(url).then(
-                      () => toast({ title: "已複製上傳網址" }),
-                      () => toast({ title: "複製失敗", variant: "destructive" }),
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-10 sm:h-9"
+                disabled={!shareReady}
+                onClick={() => {
+                  const url = absoluteUploadUrl(item);
+                  if (!url) return;
+                  const text = subsidyUploadShareText(item);
+                  void navigator.clipboard.writeText(
+                    item.invoiceKind === "triple" ? text : url,
+                  ).then(
+                    () =>
+                      toast({
+                        title: "已複製",
+                        description:
+                          item.invoiceKind === "triple"
+                            ? "已複製含三聯式提醒的分享內容"
+                            : "已複製上傳網址",
+                      }),
+                    () => toast({ title: "複製失敗", variant: "destructive" }),
+                  );
+                }}
+              >
+                複製上傳網址
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-10 sm:h-9"
+                disabled={!shareReady || subsidyPipeMut.isPending}
+                onClick={() => {
+                  const text =
+                    (item.missingDocLabels?.length ?? 0) > 0
+                      ? subsidyMissingShareText(item)
+                      : subsidyUploadShareText(item);
+                  const win = openLineShareText(text);
+                  if (!win) {
+                    void navigator.clipboard.writeText(text).then(() =>
+                      toast({ title: "已複製分享內容", description: "請貼到 LINE 傳送" }),
                     );
-                  }}
-                >
-                  複製上傳網址
-                </Button>
-              )}
-              {item.uploadUrl && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-10 sm:h-9"
-                  disabled={subsidyPipeMut.isPending}
-                  onClick={() => {
-                    const text =
-                      (item.missingDocLabels?.length ?? 0) > 0
-                        ? subsidyMissingShareText(item)
-                        : subsidyUploadShareText(item);
-                    const win = openLineShareText(text);
-                    if (!win) {
-                      void navigator.clipboard.writeText(text).then(() =>
-                        toast({ title: "已複製分享內容", description: "請貼到 LINE 傳送" }),
-                      );
-                      return;
-                    }
-                    toast({ title: "已開啟 LINE 分享", description: "請選擇聊天室後送出" });
-                    if (pipe === "link_not_sent") {
-                      subsidyPipeMut.mutate({ id: item.workOrderId, status: "awaiting_upload" });
-                    }
-                  }}
-                >
-                  LINE 提醒補件
-                </Button>
-              )}
+                    return;
+                  }
+                  toast({ title: "已開啟 LINE 分享", description: "請選擇聊天室後送出" });
+                  if (pipe === "link_not_sent") {
+                    subsidyPipeMut.mutate({ id: item.workOrderId, status: "awaiting_upload" });
+                  }
+                }}
+              >
+                LINE 提醒補件
+              </Button>
               <Button
                 size="sm"
                 className="h-10 sm:h-9 bg-green-700 hover:bg-green-800"

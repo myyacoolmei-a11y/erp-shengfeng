@@ -26,6 +26,7 @@ import { ensureReceivableSubsidyMigration } from "./lib/migrations/ensureReceiva
 import { ensureAdminWorkflowMigration } from "./lib/migrations/ensureAdminWorkflowMigration";
 import { ensureSubsidyTablesMigration } from "./lib/migrations/ensureSubsidyTablesMigration";
 import { ensureSubsidyHandlingMigration } from "./lib/migrations/ensureSubsidyHandlingMigration";
+import { ensureSubsidyInvoiceKindMigration } from "./lib/migrations/ensureSubsidyInvoiceKindMigration";
 import { startReminderScheduler } from "./lib/reminders/scheduler.ts";
 
 const rawPort = process.env["PORT"];
@@ -88,5 +89,6 @@ app.listen(port, async (err) => {
   await ensureAdminWorkflowMigration();
   await ensureSubsidyTablesMigration();
   await ensureSubsidyHandlingMigration();
+  await ensureSubsidyInvoiceKindMigration();
   startReminderScheduler();
 });

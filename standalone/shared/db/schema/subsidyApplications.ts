@@ -4,6 +4,7 @@ import { customersTable } from "./customers";
 import { usersTable } from "./users";
 import type {
   AssistedProgram,
+  SubsidyInvoiceKind,
   SubsidyPipelineStatus,
   SubsidyType,
 } from "../../adminWorkflowConstants";
@@ -28,6 +29,11 @@ export const subsidyApplicationsTable = pgTable(
      * new_unit | trade_in | null (unset — do not auto-fill for legacy rows)
      */
     assistedProgram: text("assisted_program").$type<AssistedProgram | null>(),
+    /**
+     * Invoice kind for customer upload / LINE copy:
+     * dual = 二聯式（個人）| triple = 三聯式（公司）| null = unset
+     */
+    invoiceKind: text("invoice_kind").$type<SubsidyInvoiceKind | null>(),
     /** link_not_sent → … → applied (company_assisted flow) */
     pipelineStatus: text("pipeline_status")
       .$type<SubsidyPipelineStatus>()

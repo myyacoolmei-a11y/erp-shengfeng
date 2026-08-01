@@ -15,6 +15,7 @@ import {
   regenerateSubsidyUploadToken,
   reopenClosedCase,
   setReceivableExpectedPaymentDate,
+  setSubsidyInvoiceKind,
   setSubsidyType,
   unmarkSubsidyApplied,
   updateBillingDraft,
@@ -22,6 +23,7 @@ import {
 } from "../lib/workOrders/adminWorkbenchService.ts";
 import {
   ASSISTED_PROGRAMS,
+  SUBSIDY_INVOICE_KINDS,
   SUBSIDY_PIPELINE_STATUSES,
   SUBSIDY_TYPES,
 } from "../../shared/adminWorkflowConstants.ts";
@@ -188,6 +190,30 @@ router.post(
         parsed.data.assistedProgram,
       );
       res.json({ ok: true });
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : "操作失敗" });
+    }
+  },
+);
+
+router.post(
+  "/admin-workbench/:workOrderId/subsidy-invoice-kind",
+  requireAdminOps,
+  async (req, res): Promise<void> => {
+    const workOrderId = Number(req.params.workOrderId);
+    if (!Number.isFinite(workOrderId)) {
+      res.status(400).json({ error: "無效的派工單 ID" });
+      return;
+    }
+    const parsed = z
+      .object({ invoiceKind: z.enum(SUBSIDY_INVOICE_KINDS) })
+      .safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: parsed.error.message });
+      return;
+    }
+    try {
+      res.json(await setSubsidyInvoiceKind(workOrderId, req.user!, parsed.data.invoiceKind));
     } catch (err) {
       res.status(400).json({ error: err instanceof Error ? err.message : "操作失敗" });
     }

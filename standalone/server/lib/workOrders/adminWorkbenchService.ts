@@ -22,14 +22,18 @@ import {
   type AdminWorkflowStatus,
   type AssistedProgram,
   type ReceivableCardStatus,
+  type SubsidyInvoiceKind,
   type SubsidyPipelineStatus,
   type SubsidyType,
   ADMIN_WORKFLOW_LABELS,
   ASSISTED_PROGRAM_LABELS,
+  SUBSIDY_INVOICE_KIND_LABELS,
+  SUBSIDY_INVOICE_KIND_TO_RECEIVABLE_TYPE,
   SUBSIDY_TYPE_LABELS,
   engineeringStatusLabel,
   normalizeAdminWorkflowStatus,
   normalizeAssistedProgram,
+  normalizeSubsidyInvoiceKind,
   normalizeSubsidyType,
   receivableStatusLabel,
 } from "../../../shared/adminWorkflowConstants.ts";
@@ -529,6 +533,7 @@ export async function getAdminWorkbench() {
       ? normalizeSubsidyType(sub.subsidyType) ?? "pending_confirmation"
       : null;
     const assistedProgram = normalizeAssistedProgram(sub?.assistedProgram ?? null);
+    const invoiceKind = normalizeSubsidyInvoiceKind(sub?.invoiceKind ?? null);
     const subsidyPipeline = (sub?.pipelineStatus ?? null) as SubsidyPipelineStatus | null;
 
     /**
@@ -638,6 +643,10 @@ export async function getAdminWorkbench() {
       paymentStatus: recv?.paymentStatus ?? null,
       overdueDays: overdueDays != null && overdueDays > 0 ? overdueDays : overdueDays === 0 ? 0 : null,
       subsidyApplicationId: sub?.id ?? null,
+      invoiceKind,
+      invoiceKindLabel: invoiceKind ? SUBSIDY_INVOICE_KIND_LABELS[invoiceKind] : null,
+      invoiceTitle: recv?.invoiceTitle ?? null,
+      taxId: recv?.taxId ?? null,
       subsidyNote: subsidyFreeNote || r.wo.adminSubsidyNote,
       uploadLinkSentAt: sub?.uploadLinkSentAt?.toISOString() ?? null,
       uploadLinkToken: sub?.uploadLinkToken ?? null,
@@ -1206,6 +1215,50 @@ export async function setSubsidyType(
     reason: note,
     metadata: { subsidyType, assistedProgram: assistedProgram ?? null },
   });
+}
+
+/** Admin sets 二聯式／三聯式 for subsidy upload + LINE copy. Syncs receivables.invoice_type. */
+export async function setSubsidyInvoiceKind(
+  workOrderId: number,
+  user: JwtPayload,
+  invoiceKind: SubsidyInvoiceKind,
+) {
+  const kind = normalizeSubsidyInvoiceKind(invoiceKind);
+  if (!kind) throw new Error("請選擇二聯式或三聯式");
+
+  const [sub] = await db
+    .select()
+    .from(subsidyApplicationsTable)
+    .where(eq(subsidyApplicationsTable.workOrderId, workOrderId))
+    .limit(1);
+  if (!sub || sub.subsidyType !== "company_assisted") {
+    throw new Error("請先選擇公司協助補助後再設定發票類型");
+  }
+  if (sub.pipelineStatus === "applied") {
+    throw new Error("補助已完成，無法變更發票類型");
+  }
+
+  const now = new Date();
+  await db
+    .update(subsidyApplicationsTable)
+    .set({ invoiceKind: kind, updatedAt: now })
+    .where(eq(subsidyApplicationsTable.id, sub.id));
+
+  const receivableType = SUBSIDY_INVOICE_KIND_TO_RECEIVABLE_TYPE[kind];
+  await db
+    .update(receivablesTable)
+    .set({ invoiceType: receivableType, updatedAt: now })
+    .where(eq(receivablesTable.workOrderId, workOrderId));
+
+  await writeAuditLog({
+    action: "admin_workflow.subsidy_invoice_kind",
+    entityType: "work_order",
+    entityId: workOrderId,
+    user,
+    metadata: { invoiceKind: kind, receivableInvoiceType: receivableType },
+  });
+
+  return { invoiceKind: kind };
 }
 
 const PIPELINE_ORDER: SubsidyPipelineStatus[] = [

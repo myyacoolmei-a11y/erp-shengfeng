@@ -14,16 +14,17 @@ import {
   SUBSIDY_TYPE_LABELS,
 } from "./adminWorkflowConstants.ts";
 
-/** Common required docs for 新機補助 (no utility bill / scrap form). */
+/**
+ * Common required docs for 新機補助.
+ * 發票／保固書已依發票類型流程改為不向客戶收取（二聯／三聯皆隱藏）。
+ */
 export const NEW_UNIT_REQUIRED_DOC_TYPES = [
   "id_front",
   "id_back",
-  "invoice",
-  "warranty",
   "bank_book",
 ] as const;
 
-/** 舊換新 = 新機共通 + 電費單 + 廢四機回收聯單 */
+/** 舊換新 = 新機共通 + 電費單 + 廢四機回收聯單（不含發票／保固書） */
 export const TRADE_IN_REQUIRED_DOC_TYPES = [
   ...NEW_UNIT_REQUIRED_DOC_TYPES,
   "utility_bill",

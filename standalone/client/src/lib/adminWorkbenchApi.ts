@@ -1,6 +1,7 @@
 import { customFetch } from "../../../shared/api-client/custom-fetch.ts";
 import type {
   AssistedProgram,
+  SubsidyInvoiceKind,
   SubsidyPipelineStatus,
   SubsidyType,
 } from "../../../shared/adminWorkflowConstants.ts";
@@ -42,6 +43,10 @@ export type AdminWorkbenchItem = {
   subsidyTypeLabel?: string;
   assistedProgram?: AssistedProgram | null;
   assistedProgramLabel?: string | null;
+  invoiceKind?: SubsidyInvoiceKind | null;
+  invoiceKindLabel?: string | null;
+  invoiceTitle?: string | null;
+  taxId?: string | null;
   subsidyPipelineStatus?: SubsidyPipelineStatus | null;
   subsidyStatusLabel?: string;
   canClose?: boolean;
@@ -173,6 +178,20 @@ export function setAdminSubsidyType(
     }),
     headers: { "Content-Type": "application/json" },
   });
+}
+
+export function setAdminSubsidyInvoiceKind(
+  workOrderId: number,
+  invoiceKind: SubsidyInvoiceKind,
+) {
+  return customFetch<{ invoiceKind: SubsidyInvoiceKind }>(
+    `/api/admin-workbench/${workOrderId}/subsidy-invoice-kind`,
+    {
+      method: "POST",
+      body: JSON.stringify({ invoiceKind }),
+      headers: { "Content-Type": "application/json" },
+    },
+  );
 }
 
 export function advanceAdminSubsidyPipeline(

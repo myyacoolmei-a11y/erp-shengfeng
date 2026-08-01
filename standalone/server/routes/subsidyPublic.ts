@@ -5,6 +5,7 @@ import {
   subsidyApplicationsTable,
   customerDocumentsTable,
   workOrdersTable,
+  receivablesTable,
 } from "@workspace/db";
 import {
   ALL_SUBSIDY_DOC_TYPES,
@@ -16,7 +17,11 @@ import {
   requiredDocTypesForAssistedProgram,
   type SubsidyDocType,
 } from "../../shared/subsidyDocs.ts";
-import { normalizeAssistedProgram } from "../../shared/adminWorkflowConstants.ts";
+import {
+  normalizeAssistedProgram,
+  normalizeSubsidyInvoiceKind,
+  SUBSIDY_INVOICE_KIND_LABELS,
+} from "../../shared/adminWorkflowConstants.ts";
 import {
   mergeMetaAfterCheck,
   runSubsidyCompletenessCheck,
@@ -56,7 +61,17 @@ async function loadByToken(token: string) {
     .select()
     .from(customerDocumentsTable)
     .where(eq(customerDocumentsTable.subsidyApplicationId, sub.id));
-  return { expired: false as const, sub, wo, docs };
+  const [recv] = await db
+    .select({
+      id: receivablesTable.id,
+      invoiceTitle: receivablesTable.invoiceTitle,
+      taxId: receivablesTable.taxId,
+      invoiceType: receivablesTable.invoiceType,
+    })
+    .from(receivablesTable)
+    .where(eq(receivablesTable.workOrderId, sub.workOrderId))
+    .limit(1);
+  return { expired: false as const, sub, wo, docs, recv: recv ?? null };
 }
 
 async function recomputeAndSave(subId: number, workOrderId: number) {
@@ -143,9 +158,10 @@ router.get("/public/subsidy-upload/:token/status", async (req, res): Promise<voi
       res.status(410).json({ success: false, message: "連結已過期" });
       return;
     }
-    const { sub, wo, docs } = loaded;
+    const { sub, wo, docs, recv } = loaded;
     const { meta } = parseSubsidyMeta(sub.note);
     const program = normalizeAssistedProgram(sub.assistedProgram);
+    const invoiceKind = normalizeSubsidyInvoiceKind(sub.invoiceKind);
     const required = requiredDocTypesForAssistedProgram(program);
     const activeDocs = docs.filter((d) => d.status !== "rejected");
     const missing = missingRequiredDocs(
@@ -154,27 +170,26 @@ router.get("/public/subsidy-upload/:token/status", async (req, res): Promise<voi
       program,
     );
     const byType = new Map(activeDocs.map((d) => [d.docType, d]));
-    const programLabel =
-      program === "trade_in"
-        ? "舊換新補助"
-        : program === "new_unit_and_trade_in"
-          ? "新機＋舊換新補助"
-          : program === "new_unit"
-            ? "新機補助"
-            : "公司協助補助";
+    const companyName = (recv?.invoiceTitle ?? "").trim();
+    const taxId = (recv?.taxId ?? "").trim();
+    const buyerComplete =
+      invoiceKind !== "triple" || (companyName.length > 0 && taxId.length > 0);
     res.json({
       success: true,
       brandName: "晟風工程",
       caseNo: wo.workOrderNumber,
       customerName: wo.customerName,
-      programLabel,
       pipelineStatus: sub.pipelineStatus,
       assistedProgram: program,
+      invoiceKind,
+      invoiceKindLabel: invoiceKind ? SUBSIDY_INVOICE_KIND_LABELS[invoiceKind] : null,
+      requiresBuyerInfo: invoiceKind === "triple",
+      companyName,
+      taxId,
       requiredDocs: required.map((t) => {
         const d = byType.get(t);
         const fileUrl = d?.fileUrl ?? null;
         const isImage = !!fileUrl && fileUrl.startsWith("data:image/");
-        // Avoid huge payloads: only return preview for smaller images
         const previewUrl =
           isImage && fileUrl && fileUrl.length < 400_000 ? fileUrl : null;
         return {
@@ -198,10 +213,62 @@ router.get("/public/subsidy-upload/:token/status", async (req, res): Promise<voi
       })),
       aiTips: meta.aiTips ?? [],
       needsManualReview: !!meta.needsManualReview,
-      canSubmitComplete: missing.length === 0,
+      canSubmitComplete: missing.length === 0 && buyerComplete,
     });
   } catch (err: any) {
     res.status(500).json({ success: false, message: err?.message || "載入失敗" });
+  }
+});
+
+/** Save 三聯式 company name + tax ID → receivables.invoice_title / tax_id */
+router.post("/public/subsidy-upload/:token/buyer", async (req, res): Promise<void> => {
+  try {
+    const token = String(Array.isArray(req.params.token) ? req.params.token[0] : req.params.token || "");
+    const loaded = await loadByToken(token);
+    if (!loaded) {
+      res.status(404).json({ success: false, message: "連結無效" });
+      return;
+    }
+    if (loaded.expired) {
+      res.status(410).json({ success: false, message: "連結已過期" });
+      return;
+    }
+    if (loaded.sub.pipelineStatus === "applied") {
+      res.status(400).json({ success: false, message: "補助已完成，無法再修改" });
+      return;
+    }
+    const invoiceKind = normalizeSubsidyInvoiceKind(loaded.sub.invoiceKind);
+    if (invoiceKind !== "triple") {
+      res.status(400).json({ success: false, message: "此案件非三聯式，無需填寫公司資料" });
+      return;
+    }
+    const companyName = String(req.body?.companyName ?? "").trim().slice(0, 200);
+    const taxId = String(req.body?.taxId ?? "").trim().replace(/\s+/g, "").slice(0, 20);
+    if (!companyName) {
+      res.status(400).json({ success: false, message: "請填寫公司名稱" });
+      return;
+    }
+    if (!/^\d{8}$/.test(taxId)) {
+      res.status(400).json({ success: false, message: "統一編號須為 8 位數字" });
+      return;
+    }
+    if (!loaded.recv) {
+      res.status(400).json({ success: false, message: "尚無應收帳款，請聯絡晟風工程" });
+      return;
+    }
+    const now = new Date();
+    await db
+      .update(receivablesTable)
+      .set({
+        invoiceTitle: companyName,
+        taxId,
+        invoiceType: "三聯式發票",
+        updatedAt: now,
+      })
+      .where(eq(receivablesTable.id, loaded.recv.id));
+    res.json({ success: true, companyName, taxId });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: err?.message || "儲存失敗" });
   }
 });
 
@@ -227,18 +294,24 @@ router.post("/public/subsidy-upload/:token", async (req, res): Promise<void> => 
     const fileName = String(req.body?.fileName ?? "upload").slice(0, 200);
     const dataUrl = String(req.body?.dataUrl ?? "");
 
+    if (docType === "invoice" || docType === "warranty") {
+      res.status(400).json({ success: false, message: "此案件不需上傳發票或保固書" });
+      return;
+    }
     const program = normalizeAssistedProgram(loaded.sub.assistedProgram);
     const allowedForCase = requiredDocTypesForAssistedProgram(program);
     const allowed =
       allowedForCase.length > 0
         ? allowedForCase
-        : (ALL_SUBSIDY_DOC_TYPES as readonly string[]);
+        : (ALL_SUBSIDY_DOC_TYPES as readonly string[]).filter(
+            (t) => t !== "invoice" && t !== "warranty",
+          );
     if (!(allowed as readonly string[]).includes(docType)) {
       res.status(400).json({
         success: false,
         message: program
           ? "此補助方案不需要此文件類型"
-          : "行政尚未選定新機／舊換新方案，暫無法上傳",
+          : "行政尚未選定補助方案，暫無法上傳",
       });
       return;
     }

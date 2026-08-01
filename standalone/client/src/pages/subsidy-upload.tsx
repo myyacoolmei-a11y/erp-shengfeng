@@ -18,8 +18,12 @@ type StatusPayload = {
   brandName?: string;
   caseNo?: string | null;
   customerName?: string | null;
-  programLabel?: string;
   pipelineStatus?: string;
+  invoiceKind?: "dual" | "triple" | null;
+  invoiceKindLabel?: string | null;
+  requiresBuyerInfo?: boolean;
+  companyName?: string;
+  taxId?: string;
   requiredDocs?: RequiredDoc[];
   missingLabels?: string[];
   aiTips?: string[];
@@ -69,10 +73,19 @@ export default function SubsidyUploadPage() {
   const token = params?.token ? decodeURIComponent(params.token) : "";
   const [uploadByType, setUploadByType] = useState<Record<string, UploadState>>({});
   const [submitted, setSubmitted] = useState(false);
+  const [companyName, setCompanyName] = useState("");
+  const [taxId, setTaxId] = useState("");
+  const [buyerMsg, setBuyerMsg] = useState<{ text: string; error?: boolean } | null>(null);
+  const [buyerSaving, setBuyerSaving] = useState(false);
 
   const query = useQuery({
     queryKey: ["public-subsidy-upload", token],
-    queryFn: () => fetchStatus(token),
+    queryFn: async () => {
+      const data = await fetchStatus(token);
+      setCompanyName(data.companyName ?? "");
+      setTaxId(data.taxId ?? "");
+      return data;
+    },
     enabled: !!token,
     retry: false,
     refetchOnWindowFocus: false,
@@ -126,6 +139,35 @@ export default function SubsidyUploadPage() {
     }
   };
 
+  const saveBuyer = async () => {
+    if (!token || locked) return;
+    setBuyerSaving(true);
+    setBuyerMsg(null);
+    try {
+      const res = await fetch(
+        `/api/public/subsidy-upload/${encodeURIComponent(token)}/buyer`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ companyName, taxId }),
+        },
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || "儲存失敗");
+      }
+      setBuyerMsg({ text: "公司資料已儲存" });
+      await query.refetch();
+    } catch (e) {
+      setBuyerMsg({
+        text: e instanceof Error ? e.message : "儲存失敗",
+        error: true,
+      });
+    } finally {
+      setBuyerSaving(false);
+    }
+  };
+
   if (!token) {
     return (
       <Shell>
@@ -167,12 +209,44 @@ export default function SubsidyUploadPage() {
           {data.customerName || "客戶"} 您好
           <br />
           案件 {data.caseNo || "—"}
-          {data.programLabel ? `｜${data.programLabel}` : ""}
+          {data.invoiceKindLabel ? `｜${data.invoiceKindLabel}` : ""}
         </p>
         <p className="hint">
           請依下列項目拍照或選擇檔案上傳。無需登入；此連結僅供本案件使用。
+          {data.invoiceKind === "triple"
+            ? " 因本案件需開立公司三聯式發票，請填寫公司名稱及統一編號。"
+            : ""}
         </p>
       </header>
+
+      {data.requiresBuyerInfo && !locked && (
+        <section className="card">
+          <strong>三聯式發票資料（必填）</strong>
+          <label className="field">
+            <span>公司名稱</span>
+            <input
+              value={companyName}
+              onChange={(e) => setCompanyName(e.target.value)}
+              placeholder="請輸入公司名稱"
+              disabled={locked}
+            />
+          </label>
+          <label className="field">
+            <span>統一編號</span>
+            <input
+              value={taxId}
+              onChange={(e) => setTaxId(e.target.value.replace(/[^\d]/g, "").slice(0, 8))}
+              placeholder="8 位數字"
+              inputMode="numeric"
+              disabled={locked}
+            />
+          </label>
+          <button type="button" className="file-btn" disabled={buyerSaving} onClick={() => void saveBuyer()}>
+            {buyerSaving ? "儲存中…" : "儲存公司資料"}
+          </button>
+          {buyerMsg && <p className={buyerMsg.error ? "msg err" : "msg"}>{buyerMsg.text}</p>}
+        </section>
+      )}
 
       {locked ? (
         <p className="ok-box">此案件補助已完成，無法再上傳。</p>
@@ -285,9 +359,13 @@ const css = `
 .row{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px}
 .badge{font-size:.75rem;padding:2px 8px;border-radius:999px;font-weight:600}
 .badge.ok{background:#dcfce7;color:#166534}.badge.miss{background:#ffedd5;color:#9a3412}
-.file-btn{display:block;margin-top:8px;background:#0f3d2e;color:#fff;text-align:center;border-radius:10px;padding:12px 14px;font-size:.9rem;font-weight:600;cursor:pointer}
+.field{display:block;margin-top:10px;font-size:.8rem;color:#444}
+.field span{display:block;margin-bottom:4px}
+.field input{width:100%;box-sizing:border-box;border:1px solid #cfd8d3;border-radius:8px;padding:10px;font-size:.95rem}
+.file-btn{display:block;margin-top:8px;background:#0f3d2e;color:#fff;text-align:center;border-radius:10px;padding:12px 14px;font-size:.9rem;font-weight:600;cursor:pointer;border:0;width:100%}
 .file-btn input{display:none}
 .file-btn:active{opacity:.9}
+.file-btn:disabled{opacity:.4}
 .thumb{display:block;width:100%;max-height:180px;object-fit:contain;border-radius:8px;background:#f4f6f5;margin-bottom:8px}
 .file-name{font-size:.8rem;color:#555;margin:0 0 8px;word-break:break-all}
 .msg{font-size:.8rem;margin:8px 0 0;color:#166534}.msg.err{color:#9a3412}

@@ -67,6 +67,31 @@ export const ASSISTED_PROGRAM_LABELS: Record<AssistedProgram, string> = {
   new_unit_and_trade_in: "新機＋舊換新補助",
 };
 
+/** Subsidy-center invoice kind — independent of receivables.invoice_type free text. */
+export const SUBSIDY_INVOICE_KINDS = ["dual", "triple"] as const;
+export type SubsidyInvoiceKind = (typeof SUBSIDY_INVOICE_KINDS)[number];
+
+export const SUBSIDY_INVOICE_KIND_LABELS: Record<SubsidyInvoiceKind, string> = {
+  dual: "二聯式（個人）",
+  triple: "三聯式（公司）",
+};
+
+/** Map subsidy invoice kind → receivables.invoice_type Chinese label. */
+export const SUBSIDY_INVOICE_KIND_TO_RECEIVABLE_TYPE: Record<SubsidyInvoiceKind, string> = {
+  dual: "二聯式發票",
+  triple: "三聯式發票",
+};
+
+export function normalizeSubsidyInvoiceKind(
+  value: string | null | undefined,
+): SubsidyInvoiceKind | null {
+  if (!value) return null;
+  if ((SUBSIDY_INVOICE_KINDS as readonly string[]).includes(value)) {
+    return value as SubsidyInvoiceKind;
+  }
+  return null;
+}
+
 export function normalizeSubsidyType(value: string | null | undefined): SubsidyType | null {
   if (!value) return null;
   if ((SUBSIDY_TYPES as readonly string[]).includes(value)) return value as SubsidyType;
