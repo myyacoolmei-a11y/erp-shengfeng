@@ -163,7 +163,13 @@ router.get("/public/subsidy-upload/:token", async (req, res): Promise<void> => {
           aiTips: meta.aiTips ?? [],
           pipeline: sub.pipelineStatus,
           programLabel:
-            program === "trade_in" ? "舊換新補助" : program === "new_unit" ? "新機補助" : "公司協助補助",
+            program === "trade_in"
+              ? "舊換新補助"
+              : program === "new_unit_and_trade_in"
+                ? "新機＋舊換新補助"
+                : program === "new_unit"
+                  ? "新機補助"
+                  : "公司協助補助",
         }),
       );
   } catch (err: any) {

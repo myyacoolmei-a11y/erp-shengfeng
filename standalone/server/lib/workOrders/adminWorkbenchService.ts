@@ -122,11 +122,159 @@ async function transitionAdminStatus(opts: {
 }
 
 /**
- * After construction complete → admin handoff:
- * - ensure receivable exists (idempotent; never duplicate)
- * - ensure subsidy_applications at pending_confirmation (idempotent)
- *   WITHOUT resetting existing type / pipeline / token / attachments / program
- * - NEVER auto-choose not_needed / company_assisted / assisted_program
+ * Idempotent receivable ensure after construction complete.
+ * Never duplicates by work_order_id. Skips only when customerId is missing
+ * (cannot insert AR without customer FK).
+ */
+async function ensureReceivable(
+  wo: typeof workOrdersTable.$inferSelect,
+  user: JwtPayload,
+): Promise<{ receivableId: number | null; created: boolean }> {
+  if (!wo.customerId) {
+    return { receivableId: null, created: false };
+  }
+
+  const [existingRecv] = await db
+    .select()
+    .from(receivablesTable)
+    .where(eq(receivablesTable.workOrderId, wo.id))
+    .limit(1);
+
+  if (existingRecv) {
+    return { receivableId: existingRecv.id, created: false };
+  }
+
+  const [quote] = wo.quoteId
+    ? await db.select().from(quotesTable).where(eq(quotesTable.id, wo.quoteId)).limit(1)
+    : [null];
+  const billing = (wo.adminBillingInfo ?? {}) as AdminBillingInfo;
+  const quoteAmount = num(quote?.finalAmount ?? quote?.amount);
+  const billedAmount = num(billing.finalAmount);
+  const total = billedAmount > 0 ? billedAmount : quoteAmount;
+
+  try {
+    const [created] = await db
+      .insert(receivablesTable)
+      .values({
+        customerId: wo.customerId,
+        workOrderId: wo.id,
+        workOrderNumber: wo.workOrderNumber,
+        projectName: wo.title,
+        projectType: wo.projectType,
+        completionDate: wo.completedDate ?? taipeiDateString(new Date()),
+        totalAmount: moneyStr(Math.max(0, total)),
+        receivedAmount: "0",
+        paymentStatus: "未收款",
+        expectedPaymentDate: billing.expectedPaymentDate ?? null,
+        invoiceTitle: billing.billTo ?? wo.customerName,
+        subsidyStatus: "未申請補助",
+        notes: "施工完成自動建立應收（與補助流程並行）",
+      })
+      .returning();
+
+    await writeAuditLog({
+      action: "admin_workflow.auto_receivable_on_complete",
+      entityType: "work_order",
+      entityId: wo.id,
+      user,
+      metadata: { receivableId: created.id, totalAmount: created.totalAmount },
+    });
+
+    return { receivableId: created.id, created: true };
+  } catch (err) {
+    // Race: another request created the same work_order receivable
+    const [again] = await db
+      .select()
+      .from(receivablesTable)
+      .where(eq(receivablesTable.workOrderId, wo.id))
+      .limit(1);
+    if (again) return { receivableId: again.id, created: false };
+    throw err;
+  }
+}
+
+/**
+ * Idempotent subsidy-center ensure after construction complete.
+ *
+ * ALWAYS creates a row when missing — NEVER gated by needsSubsidy /
+ * company_assisted / adminNeedsSubsidy / pipeline / subsidyType.
+ *
+ * Handling method defaults to subsidy_type = pending_confirmation.
+ * (pipeline_status stays at link_not_sent placeholder until admin chooses
+ * company_assisted; it is NOT used as the "待確認" flag.)
+ *
+ * If row already exists: reuse as-is — never reset type / pipeline / token /
+ * attachments / assisted_program.
+ */
+export async function ensureSubsidyApplication(
+  workOrderId: number,
+  customerId: number | null,
+  user?: JwtPayload,
+): Promise<{
+  subsidy: typeof subsidyApplicationsTable.$inferSelect;
+  created: boolean;
+}> {
+  const [existing] = await db
+    .select()
+    .from(subsidyApplicationsTable)
+    .where(eq(subsidyApplicationsTable.workOrderId, workOrderId))
+    .limit(1);
+
+  if (existing) {
+    if (customerId != null && existing.customerId == null) {
+      const [updated] = await db
+        .update(subsidyApplicationsTable)
+        .set({ customerId, updatedAt: new Date() })
+        .where(eq(subsidyApplicationsTable.id, existing.id))
+        .returning();
+      return { subsidy: updated, created: false };
+    }
+    return { subsidy: existing, created: false };
+  }
+
+  try {
+    const [created] = await db
+      .insert(subsidyApplicationsTable)
+      .values({
+        workOrderId,
+        customerId,
+        subsidyType: "pending_confirmation",
+        assistedProgram: null,
+        // Placeholder until company_assisted is chosen; display uses subsidy_type.
+        pipelineStatus: "link_not_sent",
+        uploadLinkToken: null,
+      })
+      .returning();
+
+    if (user) {
+      await writeAuditLog({
+        action: "admin_workflow.auto_subsidy_pending_confirmation",
+        entityType: "work_order",
+        entityId: workOrderId,
+        user,
+        metadata: {
+          subsidyApplicationId: created.id,
+          subsidyType: "pending_confirmation",
+        },
+      });
+    }
+
+    return { subsidy: created, created: true };
+  } catch (err) {
+    const [again] = await db
+      .select()
+      .from(subsidyApplicationsTable)
+      .where(eq(subsidyApplicationsTable.workOrderId, workOrderId))
+      .limit(1);
+    if (again) return { subsidy: again, created: false };
+    throw err;
+  }
+}
+
+/**
+ * After construction complete → admin handoff.
+ * ALWAYS: ensureReceivable() then ensureSubsidyApplication().
+ * No subsidy-condition gating. Idempotent on both.
  */
 export async function syncAdminHandoffAfterConstructionComplete(
   workOrderId: number,
@@ -142,104 +290,15 @@ export async function syncAdminHandoffAfterConstructionComplete(
     return { receivableId: null, receivableCreated: false, subsidyEnsured: false, subsidyCreated: false };
   }
 
-  let receivableId: number | null = null;
-  let receivableCreated = false;
+  const recv = await ensureReceivable(wo, user);
+  const sub = await ensureSubsidyApplication(workOrderId, wo.customerId, user);
 
-  if (wo.customerId) {
-    const [existingRecv] = await db
-      .select()
-      .from(receivablesTable)
-      .where(eq(receivablesTable.workOrderId, workOrderId))
-      .limit(1);
-
-    if (existingRecv) {
-      receivableId = existingRecv.id;
-    } else {
-      const [quote] = wo.quoteId
-        ? await db.select().from(quotesTable).where(eq(quotesTable.id, wo.quoteId)).limit(1)
-        : [null];
-      const billing = (wo.adminBillingInfo ?? {}) as AdminBillingInfo;
-      const quoteAmount = num(quote?.finalAmount ?? quote?.amount);
-      const billedAmount = num(billing.finalAmount);
-      const total = billedAmount > 0 ? billedAmount : quoteAmount;
-
-      const [created] = await db
-        .insert(receivablesTable)
-        .values({
-          customerId: wo.customerId,
-          workOrderId: wo.id,
-          workOrderNumber: wo.workOrderNumber,
-          projectName: wo.title,
-          projectType: wo.projectType,
-          completionDate: wo.completedDate ?? taipeiDateString(new Date()),
-          totalAmount: moneyStr(Math.max(0, total)),
-          receivedAmount: "0",
-          paymentStatus: "未收款",
-          expectedPaymentDate: billing.expectedPaymentDate ?? null,
-          invoiceTitle: billing.billTo ?? wo.customerName,
-          subsidyStatus: "未申請補助",
-          notes: "施工完成自動建立應收（與補助流程並行）",
-        })
-        .returning();
-      receivableId = created.id;
-      receivableCreated = true;
-
-      await writeAuditLog({
-        action: "admin_workflow.auto_receivable_on_complete",
-        entityType: "work_order",
-        entityId: workOrderId,
-        user,
-        metadata: { receivableId: created.id, totalAmount: created.totalAmount },
-      });
-    }
-  }
-
-  const [existingSub] = await db
-    .select()
-    .from(subsidyApplicationsTable)
-    .where(eq(subsidyApplicationsTable.workOrderId, workOrderId))
-    .limit(1);
-
-  let subsidyEnsured = false;
-  let subsidyCreated = false;
-
-  if (existingSub) {
-    // Preserve everything — do not reset type/pipeline/token/program/attachments
-    subsidyEnsured = true;
-    if (existingSub.customerId == null && wo.customerId != null) {
-      await db
-        .update(subsidyApplicationsTable)
-        .set({ customerId: wo.customerId, updatedAt: new Date() })
-        .where(eq(subsidyApplicationsTable.id, existingSub.id));
-    }
-  } else {
-    const [created] = await db
-      .insert(subsidyApplicationsTable)
-      .values({
-        workOrderId,
-        customerId: wo.customerId,
-        subsidyType: "pending_confirmation",
-        assistedProgram: null,
-        pipelineStatus: "link_not_sent",
-        uploadLinkToken: null,
-      })
-      .returning();
-    subsidyEnsured = true;
-    subsidyCreated = true;
-
-    await writeAuditLog({
-      action: "admin_workflow.auto_subsidy_pending_confirmation",
-      entityType: "work_order",
-      entityId: workOrderId,
-      user,
-      metadata: {
-        subsidyApplicationId: created.id,
-        subsidyType: "pending_confirmation",
-      },
-    });
-  }
-
-  return { receivableId, receivableCreated, subsidyEnsured, subsidyCreated };
+  return {
+    receivableId: recv.receivableId,
+    receivableCreated: recv.created,
+    subsidyEnsured: true,
+    subsidyCreated: sub.created,
+  };
 }
 
 export async function setPendingAdminReviewOnComplete(

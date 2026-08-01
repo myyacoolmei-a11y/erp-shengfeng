@@ -58,12 +58,13 @@ export const SUBSIDY_TYPE_LABELS: Record<SubsidyType, string> = {
 };
 
 /** Company-assisted program — only when subsidy_type = company_assisted. Nullable. */
-export const ASSISTED_PROGRAMS = ["new_unit", "trade_in"] as const;
+export const ASSISTED_PROGRAMS = ["new_unit", "trade_in", "new_unit_and_trade_in"] as const;
 export type AssistedProgram = (typeof ASSISTED_PROGRAMS)[number];
 
 export const ASSISTED_PROGRAM_LABELS: Record<AssistedProgram, string> = {
   new_unit: "新機補助",
   trade_in: "舊換新補助",
+  new_unit_and_trade_in: "新機＋舊換新補助",
 };
 
 export function normalizeSubsidyType(value: string | null | undefined): SubsidyType | null {

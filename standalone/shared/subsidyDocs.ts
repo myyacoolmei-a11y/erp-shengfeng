@@ -30,6 +30,9 @@ export const TRADE_IN_REQUIRED_DOC_TYPES = [
   "scrap_recycle_form",
 ] as const;
 
+/** 新機＋舊換新：文件需求與舊換新相同（共通＋電費單＋回收聯單） */
+export const NEW_UNIT_AND_TRADE_IN_REQUIRED_DOC_TYPES = TRADE_IN_REQUIRED_DOC_TYPES;
+
 /** All uploadable subsidy doc types (union). */
 export const ALL_SUBSIDY_DOC_TYPES = [
   "id_front",
@@ -147,7 +150,9 @@ export function serializeSubsidyMeta(freeNote: string, meta: SubsidyMeta): strin
 export function requiredDocTypesForAssistedProgram(
   program: AssistedProgram | null | undefined,
 ): SubsidyDocType[] {
-  if (program === "trade_in") return [...TRADE_IN_REQUIRED_DOC_TYPES];
+  if (program === "trade_in" || program === "new_unit_and_trade_in") {
+    return [...TRADE_IN_REQUIRED_DOC_TYPES];
+  }
   if (program === "new_unit") return [...NEW_UNIT_REQUIRED_DOC_TYPES];
   // company_assisted without program yet — no checklist until admin selects
   return [];

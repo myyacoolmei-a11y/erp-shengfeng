@@ -30,7 +30,7 @@ export async function ensureSubsidyHandlingMigration(): Promise<boolean> {
     `);
     await pool.query(`
       COMMENT ON COLUMN subsidy_applications.assisted_program IS
-        'new_unit|trade_in|null — only when subsidy_type=company_assisted; never auto-filled';
+        'new_unit|trade_in|new_unit_and_trade_in|null — only when subsidy_type=company_assisted; never auto-filled';
     `);
 
     const after = await pool.query(`SELECT COUNT(*)::int AS n FROM subsidy_applications`);
