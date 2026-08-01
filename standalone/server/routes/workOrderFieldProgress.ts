@@ -31,7 +31,7 @@ import {
   type PauseInterval,
 } from "../../shared/fieldProgressConstants.ts";
 import { upsertAdminFieldCompleteTodo } from "../lib/workOrders/upsertAdminFieldTodo.ts";
-import { setPendingAdminReviewOnComplete } from "../lib/workOrders/adminWorkbenchService.ts";
+import { handoffToAdminWorkbench } from "../lib/workOrders/adminWorkbenchService.ts";
 import { notifyFieldProgressEvent } from "../lib/notifications/fieldProgressNotifyService.ts";
 import { logger } from "../lib/logger.ts";
 
@@ -524,14 +524,18 @@ router.post(
       })
       .where(eq(workOrdersTable.id, workOrderId));
 
-    await upsertAdminFieldCompleteTodo({
-      workOrderId,
-      workOrderNumber: order.workOrderNumber,
-      customerName: order.customerName,
-      createdBy: req.user!.id,
-    });
-
-    await setPendingAdminReviewOnComplete(workOrderId, req.user!);
+    // 交接失敗不可讓整個完工請求失敗；行政端另有「交由行政處理」可補送
+    try {
+      await upsertAdminFieldCompleteTodo({
+        workOrderId,
+        workOrderNumber: order.workOrderNumber,
+        customerName: order.customerName,
+        createdBy: req.user!.id,
+      });
+      await handoffToAdminWorkbench(workOrderId, req.user!, "工程師施工完成");
+    } catch (err) {
+      logger.error({ err, workOrderId }, "admin handoff failed after field progress complete");
+    }
 
     emitFieldProgressNotify(req, workOrderId, "complete", now);
     res.json(serializeFieldProgress(updated));

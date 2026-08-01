@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { and, desc, eq, inArray, isNotNull, ne, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, ne, or, sql } from "drizzle-orm";
 import {
   db,
   workOrdersTable,
@@ -52,6 +52,7 @@ import {
   runSubsidyCompletenessCheck,
 } from "../subsidy/subsidyCheckService.ts";
 import { subsidyPublicUploadPath } from "../subsidy/subsidyPublicHtml.ts";
+import { upsertAdminFieldCompleteTodo } from "./upsertAdminFieldTodo.ts";
 
 function num(v: unknown): number {
   const n = parseFloat(String(v ?? "0"));
@@ -297,37 +298,55 @@ export async function syncAdminHandoffAfterConstructionComplete(
   };
 }
 
-export async function setPendingAdminReviewOnComplete(
+/**
+ * 施工完成 → 交由行政處理。
+ *
+ * 冪等：已經在行政流程中的案件（admin_workflow_status 非空）只補齊應收與補助
+ * 關聯，不會重建待辦，也不會把狀態往回推。
+ *
+ * 只寫行政欄位，完全不動 status／completedDate／field progress 的完工與工時。
+ */
+export async function handoffToAdminWorkbench(
   workOrderId: number,
   user: JwtPayload,
-): Promise<void> {
+  note?: string,
+): Promise<{ ok: boolean; alreadyHandedOff: boolean }> {
   const [wo] = await db
-    .select({
-      id: workOrdersTable.id,
-      adminWorkflowStatus: workOrdersTable.adminWorkflowStatus,
-    })
+    .select()
     .from(workOrdersTable)
     .where(eq(workOrdersTable.id, workOrderId))
     .limit(1);
-  if (!wo) return;
+  if (!wo) return { ok: false, alreadyHandedOff: false };
 
-  // Idempotent: if already in admin flow past review, do not bounce back to pending_admin_review
   const current = normalizeAdminWorkflowStatus(wo.adminWorkflowStatus);
-  if (
-    !current ||
-    current === "pending_admin_review"
-  ) {
+  const alreadyHandedOff = current != null;
+
+  if (!alreadyHandedOff) {
+    // 完工即視為施工資料已確認，案件直接落在「未收款／待結案」
     await transitionAdminStatus({
       workOrderId,
       from: wo.adminWorkflowStatus,
-      to: "pending_admin_review",
+      to: "pending_billing",
       user,
-      note: "工程師施工完成，進入待確認施工資料",
+      note: note ?? "施工完成，交由行政處理",
+      extraUpdate: {
+        adminConfirmedAt: wo.adminConfirmedAt ?? new Date(),
+        adminConfirmedBy: wo.adminConfirmedBy ?? user.id,
+      },
+    });
+
+    await upsertAdminFieldCompleteTodo({
+      workOrderId,
+      workOrderNumber: wo.workOrderNumber,
+      customerName: wo.customerName,
+      createdBy: user.id,
     });
   }
 
-  // Receivable + subsidy todos in parallel (no payment prerequisite)
+  // 應收與補助申請單一律確保存在（既有的不會被覆寫）
   await syncAdminHandoffAfterConstructionComplete(workOrderId, user);
+
+  return { ok: true, alreadyHandedOff };
 }
 
 /**
@@ -441,11 +460,41 @@ async function sweepAutoClose(user: JwtPayload): Promise<number> {
   return closed;
 }
 
+/**
+ * 補掃舊案件：完工即視為施工資料已確認，把卡在 pending_admin_review 的案件
+ * 直接推進「未收款／待結案」。「待確認施工資料」這道手續已取消。
+ */
+async function sweepPendingAdminReview(user: JwtPayload): Promise<number> {
+  const candidates = await db
+    .select({ id: workOrdersTable.id, status: workOrdersTable.adminWorkflowStatus })
+    .from(workOrdersTable)
+    .where(
+      or(
+        eq(workOrdersTable.adminWorkflowStatus, "pending_admin_review"),
+        eq(workOrdersTable.adminWorkflowStatus, "pending_admin"),
+      ),
+    );
+
+  const now = new Date();
+  for (const c of candidates) {
+    await transitionAdminStatus({
+      workOrderId: c.id,
+      from: c.status,
+      to: "pending_billing",
+      user,
+      note: "完工即視為施工資料已確認",
+      extraUpdate: { adminConfirmedAt: now, adminConfirmedBy: user.id },
+    });
+  }
+  return candidates.length;
+}
+
 export async function getAdminWorkbench(user?: JwtPayload) {
   const today = taipeiDateString(new Date());
 
   if (user) {
     try {
+      await sweepPendingAdminReview(user);
       await sweepAutoClose(user);
     } catch {
       // 補掃失敗不影響列表載入

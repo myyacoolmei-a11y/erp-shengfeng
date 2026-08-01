@@ -10,6 +10,7 @@ import {
   confirmSubsidyDocsManually,
   getAdminWorkbench,
   getCaseDetail,
+  handoffToAdminWorkbench,
   markBilled,
   markFullyPaid,
   recheckSubsidyDocuments,
@@ -60,6 +61,30 @@ router.get(
       res.json(await getCaseDetail(workOrderId));
     } catch (err) {
       res.status(404).json({ error: err instanceof Error ? err.message : "載入失敗" });
+    }
+  },
+);
+
+/** 補送：把已完工卻沒進行政流程的案件補建行政待辦，不動任何施工資料 */
+router.post(
+  "/admin-workbench/:workOrderId/handoff",
+  requireAdminOps,
+  async (req, res): Promise<void> => {
+    const workOrderId = Number(req.params.workOrderId);
+    if (!Number.isFinite(workOrderId)) {
+      res.status(400).json({ error: "無效的派工單 ID" });
+      return;
+    }
+    const note = typeof req.body?.note === "string" ? req.body.note : undefined;
+    try {
+      const result = await handoffToAdminWorkbench(workOrderId, req.user!, note ?? "行政補送");
+      if (!result.ok) {
+        res.status(404).json({ error: "找不到派工單" });
+        return;
+      }
+      res.json(result);
+    } catch (err) {
+      res.status(400).json({ error: err instanceof Error ? err.message : "操作失敗" });
     }
   },
 );

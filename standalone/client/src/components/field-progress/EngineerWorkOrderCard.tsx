@@ -57,6 +57,8 @@ import {
   taipeiToday,
 } from "@/lib/fieldProgressApi";
 import { fetchWorkOrderReopenInfo } from "@/lib/notificationsApi";
+import { handoffCaseToAdmin } from "@/lib/adminWorkbenchApi";
+import { useAuth, hasRole } from "@/contexts/auth-context";
 
 export interface WorkOrderCardData {
   id: number;
@@ -71,6 +73,7 @@ export interface WorkOrderCardData {
   description?: string | null;
   notes?: string | null;
   status?: string | null;
+  adminWorkflowStatus?: string | null;
 }
 
 type BtnVisual = "done" | "active" | "pending" | "paused" | "overdue";
@@ -118,6 +121,7 @@ interface Props {
 
 export function EngineerWorkOrderCard({ order, progress, onProgressUpdated, readOnly }: Props) {
   const { toast } = useToast();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const today = taipeiToday();
   const overdue = daysOverdue(order.scheduledDate, today);
@@ -151,6 +155,7 @@ export function EngineerWorkOrderCard({ order, progress, onProgressUpdated, read
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["field-progress", "mine"] });
     queryClient.invalidateQueries({ queryKey: ["work-orders"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/work-orders"] });
     onProgressUpdated?.();
   };
 
@@ -243,6 +248,19 @@ export function EngineerWorkOrderCard({ order, progress, onProgressUpdated, read
     onError: errToast,
   });
 
+  const handoffMut = useMutation({
+    mutationFn: () => handoffCaseToAdmin(order.id, "工程師工作台補送"),
+    onSuccess: (res) => {
+      toast({
+        title: res.alreadyHandedOff ? "此案件已交由行政處理" : "已交由行政處理",
+        description: res.alreadyHandedOff ? undefined : "案件已進入行政「未收款／待結案」",
+      });
+      queryClient.invalidateQueries({ queryKey: ["admin-workbench"] });
+      invalidate();
+    },
+    onError: errToast,
+  });
+
   const busy =
     departMut.isPending ||
     arriveMut.isPending ||
@@ -255,6 +273,11 @@ export function EngineerWorkOrderCard({ order, progress, onProgressUpdated, read
   const canPause = fieldStatus === "in_progress" && !readOnly;
   const canResume = fieldStatus === "paused" && !readOnly;
   const canComplete = fieldStatus === "in_progress" && !readOnly;
+
+  const isCompletedCase =
+    fieldStatus === "completed" || order.status === "已完成" || order.status === "已結案";
+  const handedOffToAdmin = !!order.adminWorkflowStatus;
+  const canHandoff = hasRole(user, "super_admin", "owner", "admin");
 
   const departVisual: BtnVisual =
     fieldStatus !== "pending"
@@ -371,6 +394,29 @@ export function EngineerWorkOrderCard({ order, progress, onProgressUpdated, read
         </div>
       )}
 
+      {isCompletedCase && (
+        handedOffToAdmin ? (
+          <div className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900">
+            已交行政處理
+          </div>
+        ) : canHandoff ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="w-full border-sky-400 text-sky-800"
+            disabled={handoffMut.isPending}
+            onClick={() => handoffMut.mutate()}
+          >
+            {handoffMut.isPending ? "處理中…" : "交由行政處理"}
+          </Button>
+        ) : (
+          <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            尚未交由行政處理，請通知行政補送
+          </div>
+        )
+      )}
+
       {!readOnly && fieldStatus !== "completed" && (
         <div className="space-y-2 pt-1">
           <p className="text-xs font-semibold text-muted-foreground">施工流程</p>
@@ -412,7 +458,7 @@ export function EngineerWorkOrderCard({ order, progress, onProgressUpdated, read
             )}
             <FlowButton
               icon={Flag}
-              label={fieldStatus === "completed" ? "已完成" : "施工完成"}
+              label="施工完成"
               visual={completeVisual}
               loading={completeMut.isPending}
               disabled={!canComplete || busy}
@@ -422,17 +468,6 @@ export function EngineerWorkOrderCard({ order, progress, onProgressUpdated, read
               }}
             />
           </div>
-
-          {fieldStatus === "completed" &&
-            (progress?.workflowStatus === "pending_admin_review" ||
-              progress?.workflowStatus === "pending_admin" ||
-              (progress?.workflowStatus &&
-                progress.workflowStatus !== "closed" &&
-                progress.workflowStatus !== "admin_done")) && (
-              <div className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900">
-                已交由行政待辦
-              </div>
-            )}
 
           <div className="flex gap-2 pt-2 border-t">
             <Button

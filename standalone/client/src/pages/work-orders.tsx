@@ -95,6 +95,7 @@ import {
 import {
   advanceAdminSubsidyPipeline,
   fetchAdminCaseDetail,
+  handoffCaseToAdmin,
   unmarkAdminSubsidyApplied,
 } from "@/lib/adminWorkbenchApi";
 
@@ -896,6 +897,25 @@ export default function WorkOrders() {
     },
   });
 
+  const handoffMut = useMutation({
+    mutationFn: (workOrderId: number) => handoffCaseToAdmin(workOrderId, "派工單頁補送"),
+    onSuccess: (res) => {
+      toast({
+        title: res.alreadyHandedOff ? "此案件已交由行政處理" : "已交由行政處理",
+        description: res.alreadyHandedOff ? undefined : "案件已進入行政「未收款／待結案」",
+      });
+      queryClient.invalidateQueries({ queryKey: getListWorkOrdersQueryKey() });
+      queryClient.invalidateQueries({ queryKey: ["admin-workbench"] });
+    },
+    onError: (err: any) => {
+      toast({
+        title: "補送失敗",
+        description: err?.message || "請稍後再試",
+        variant: "destructive",
+      });
+    },
+  });
+
   function openCreate() {
     setForm(makeEmpty());
     setShowCreate(true);
@@ -1236,6 +1256,23 @@ export default function WorkOrders() {
                         >
                           查看施工
                         </Button>
+                      )}
+                      {isAdmin && WO_COMPLETED.has(statusLabel) && (
+                        (o as any).adminWorkflowStatus ? (
+                          <span className="text-xs px-2 py-1 rounded font-medium bg-sky-50 text-sky-800 border border-sky-200">
+                            已交行政處理
+                          </span>
+                        ) : (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-11 sm:h-9 w-auto px-3 shrink-0 border-sky-400 text-sky-800"
+                            disabled={handoffMut.isPending}
+                            onClick={() => handoffMut.mutate(o.id)}
+                          >
+                            交由行政處理
+                          </Button>
+                        )
                       )}
                       {canWrite && (statusLabel === "已完成" || o.status === "已完成") && (
                         hasAr ? (

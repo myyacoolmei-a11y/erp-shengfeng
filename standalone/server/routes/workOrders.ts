@@ -25,6 +25,7 @@ import {
 } from "../lib/workOrders/workOrderAssignment.ts";
 import { assertWorkOrderDataAccess } from "../lib/dataPermissionAccess.ts";
 import { resetWorkOrderFieldProgressOnReopen } from "../lib/workOrders/resetWorkOrderFieldProgressOnReopen.ts";
+import { handoffToAdminWorkbench } from "../lib/workOrders/adminWorkbenchService.ts";
 import { logger } from "../lib/logger.ts";
 import {
   emitWorkOrderCreatedNotifications,
@@ -91,6 +92,7 @@ const WO_SELECT = {
   aiNotifySupervisorOnDelay: workOrdersTable.aiNotifySupervisorOnDelay,
   aiReminderRuleSource: workOrdersTable.aiReminderRuleSource,
   aiReminderCustomConfig: workOrdersTable.aiReminderCustomConfig,
+  adminWorkflowStatus: workOrdersTable.adminWorkflowStatus,
   createdAt: workOrdersTable.createdAt,
   updatedAt: workOrdersTable.updatedAt,
 };
@@ -540,6 +542,20 @@ router.patch("/work-orders/:id", async (req, res): Promise<void> => {
 
   if (order.quoteId) {
     await syncQuoteDispatchStatus(order.quoteId);
+  }
+
+  // 由派工單頁直接改成「已完成」的案件，同樣要交由行政處理
+  if (
+    req.user &&
+    order.status === "已完成" &&
+    existing.status !== "已完成" &&
+    !order.adminWorkflowStatus
+  ) {
+    try {
+      await handoffToAdminWorkbench(id, req.user, "派工單狀態改為已完成");
+    } catch (err) {
+      logger.error({ err, workOrderId: id }, "admin handoff failed after work order status change");
+    }
   }
 
   void emitWorkOrderUpdatedNotifications(existing, order, {

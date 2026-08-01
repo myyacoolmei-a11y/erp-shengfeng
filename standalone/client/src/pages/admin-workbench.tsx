@@ -14,7 +14,6 @@ import { getListReceivablesQueryKey } from "@workspace/api-client-react";
 import {
   advanceAdminSubsidyPipeline,
   cancelAdminPaid,
-  confirmAdminCompletion,
   fetchAdminWorkbench,
   markAdminPaid,
   reopenAdminClosed,
@@ -234,15 +233,6 @@ export default function AdminWorkbench() {
     });
   };
 
-  const confirmMut = useMutation({
-    mutationFn: (id: number) => confirmAdminCompletion(id),
-    onSuccess: () => {
-      toast({ title: "已確認施工資料" });
-      invalidate();
-    },
-    onError: onErr,
-  });
-
   const subsidyPipeMut = useMutation({
     mutationFn: (p: { id: number; status: "awaiting_upload" | "applied"; note?: string }) =>
       advanceAdminSubsidyPipeline(p.id, p.status, p.note),
@@ -344,34 +334,6 @@ export default function AdminWorkbench() {
           </Button>
         </CardContent>
       </Card>
-    );
-  }
-
-  function renderConfirmCard(item: AdminWorkbenchItem) {
-    return (
-      <ItemShell key={`confirm-${item.workOrderId}`} item={item}>
-        <div className="flex flex-wrap gap-3 text-xs">
-          <span className={item.hasPhotos ? "text-green-700" : "text-destructive"}>
-            {item.hasPhotos ? "✓" : "✗"} 完工照片
-          </span>
-          <span className={item.hasSignature ? "text-green-700" : "text-destructive"}>
-            {item.hasSignature ? "✓" : "✗"} 客戶簽名
-          </span>
-          <span className={item.hasMaterials ? "text-green-700" : "text-destructive"}>
-            {item.hasMaterials ? "✓" : "✗"} 材料紀錄
-          </span>
-        </div>
-        {canOperate && (
-          <Button
-            size="sm"
-            className="h-10 sm:h-9"
-            disabled={confirmMut.isPending}
-            onClick={() => confirmMut.mutate(item.workOrderId)}
-          >
-            確認施工資料
-          </Button>
-        )}
-      </ItemShell>
     );
   }
 
@@ -598,17 +560,6 @@ export default function AdminWorkbench() {
           行政每日工作台 · {data.today} · 未完成待辦 {c.openTodos ?? 0} 件
         </p>
       </div>
-
-      <Section
-        title="📋 待確認施工資料"
-        count={c.pendingConstructionConfirm ?? 0}
-      >
-        {(s.pendingConstructionConfirm ?? []).length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-6">目前無待辦</p>
-        ) : (
-          s.pendingConstructionConfirm.map(renderConfirmCard)
-        )}
-      </Section>
 
       <Section title="💰 未收款／待結案" count={c.pendingClose ?? 0}>
         {(s.pendingClose ?? []).length === 0 ? (

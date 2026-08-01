@@ -138,6 +138,18 @@ export function fetchAdminCaseDetail(workOrderId: number) {
   return customFetch<AdminCaseDetail>(`/api/admin-workbench/${workOrderId}/case-detail`);
 }
 
+/** 補送已完工卻沒進行政流程的案件；不會修改任何施工資料 */
+export function handoffCaseToAdmin(workOrderId: number, note?: string) {
+  return customFetch<{ ok: boolean; alreadyHandedOff: boolean }>(
+    `/api/admin-workbench/${workOrderId}/handoff`,
+    {
+      method: "POST",
+      body: JSON.stringify({ note }),
+      headers: { "Content-Type": "application/json" },
+    },
+  );
+}
+
 export function confirmAdminCompletion(workOrderId: number, note?: string) {
   return customFetch<{ ok: true }>(`/api/admin-workbench/${workOrderId}/confirm-completion`, {
     method: "POST",
