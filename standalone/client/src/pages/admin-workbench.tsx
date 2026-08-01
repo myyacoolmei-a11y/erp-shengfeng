@@ -182,7 +182,10 @@ function subsidyLineNotifyText(item: AdminWorkbenchItem): string {
   return lines.join("\n");
 }
 
-/** 補助狀態 — 只看 pipeline_status */
+/**
+ * 補助狀態 — 只有「補助已完成」看 pipeline_status，
+ * 其餘依實際上傳份數與缺件清單判斷。
+ */
 function SubsidyBadge({ item }: { item: AdminWorkbenchItem }) {
   if (item.subsidyPipelineStatus === "applied") {
     return (
@@ -194,9 +197,19 @@ function SubsidyBadge({ item }: { item: AdminWorkbenchItem }) {
       <Badge className="bg-gray-100 text-gray-600 border-0 font-normal">待選發票類型</Badge>
     );
   }
-  if ((item.missingDocLabels?.length ?? 0) > 0) {
+  if ((item.uploadedDocCount ?? item.customerDocumentCount ?? 0) <= 0) {
     return (
-      <Badge className="bg-blue-100 text-blue-700 border-0 font-normal">等待客戶上傳</Badge>
+      <Badge className="bg-blue-100 text-blue-700 border-0 font-normal">
+        等待客戶上傳補助資料
+      </Badge>
+    );
+  }
+  if (
+    (item.missingDocLabels?.length ?? 0) > 0 ||
+    (item.missingBuyerLabels?.length ?? 0) > 0
+  ) {
+    return (
+      <Badge className="bg-orange-100 text-orange-800 border-0 font-normal">客戶資料待補件</Badge>
     );
   }
   return (
@@ -341,8 +354,10 @@ export default function AdminWorkbench() {
     const phone = item.mobilePhone || item.telephone;
     const subsidyDone = item.subsidyPipelineStatus === "applied";
     const shareReady = !!item.invoiceKind && !!item.uploadUrl;
-    const missing = item.missingDocLabels ?? [];
+    const missing = [...(item.missingDocLabels ?? []), ...(item.missingBuyerLabels ?? [])];
+    const uploadedCount = item.uploadedDocCount ?? item.customerDocumentCount ?? 0;
     const isPaid = item.receivableStatus === "paid";
+    const canMarkSubsidy = item.canMarkApplied !== false;
 
     function notifyViaLine() {
       const text = subsidyLineNotifyText(item);
@@ -373,9 +388,11 @@ export default function AdminWorkbench() {
           <SubsidyBadge item={item} />
         </div>
         {!subsidyDone && missing.length > 0 && (
-          <p className="text-xs text-orange-800">缺少補助資料：{missing.join("、")}</p>
+          <p className="text-xs text-orange-800">
+            尚缺：{missing.join("、")}（可按「查看案件」逐項檢視客戶補助資料）
+          </p>
         )}
-        {!subsidyDone && item.invoiceKind && missing.length === 0 && (
+        {!subsidyDone && item.invoiceKind && uploadedCount > 0 && missing.length === 0 && (
           <p className="text-xs text-green-700">補助資料已齊，確認送件後請標記補助完成</p>
         )}
         {isPaid && !subsidyDone && (
@@ -433,7 +450,12 @@ export default function AdminWorkbench() {
             <Button
               size="sm"
               className="h-10 sm:h-9 bg-green-700 hover:bg-green-800"
-              disabled={subsidyPipeMut.isPending}
+              disabled={subsidyPipeMut.isPending || !canMarkSubsidy}
+              title={
+                canMarkSubsidy
+                  ? undefined
+                  : "補助資料尚未齊全，請按「查看案件」檢視或人工確認資料完整"
+              }
               onClick={() => {
                 if (!window.confirm("確定此案件的補助申請已完成？已收款的話會自動結案。")) return;
                 subsidyPipeMut.mutate({ id: item.workOrderId, status: "applied" });

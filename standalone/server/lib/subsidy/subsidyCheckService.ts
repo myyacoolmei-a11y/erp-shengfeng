@@ -185,10 +185,13 @@ export async function runSubsidyCompletenessCheck(input: {
     suggestedPipeline = "docs_complete";
   }
 
+  const activeDocs = input.docs.filter((d) => d.status !== "rejected" && d.docType !== "subsidy");
   const displayStatus = resolveSubsidyDisplayStatus({
     subsidyType: input.subsidyType,
     pipeline: suggestedPipeline,
+    invoiceKind: input.invoiceKind,
     missingDocs: det.missingDocs,
+    uploadedDocCount: activeDocs.length,
     needsManualReview,
   });
 

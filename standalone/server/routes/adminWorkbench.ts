@@ -37,6 +37,8 @@ const FINANCE_ROLES = ["super_admin", "owner", "admin", "accountant"] as const;
 const OWNER_ROLES = ["super_admin", "owner"] as const;
 
 const requireAdminOps = requireRole(...ADMIN_ROLES);
+/** 補送行政待辦不會修改任何施工資料，工程師也可操作 */
+const requireHandoff = requireRole(...ADMIN_ROLES, "engineer", "technician");
 const requireFinanceView = requireRole(...FINANCE_ROLES);
 const requireOwnerOps = requireRole(...OWNER_ROLES);
 
@@ -68,7 +70,7 @@ router.get(
 /** 補送：把已完工卻沒進行政流程的案件補建行政待辦，不動任何施工資料 */
 router.post(
   "/admin-workbench/:workOrderId/handoff",
-  requireAdminOps,
+  requireHandoff,
   async (req, res): Promise<void> => {
     const workOrderId = Number(req.params.workOrderId);
     if (!Number.isFinite(workOrderId)) {

@@ -75,6 +75,7 @@ export type SubsidyDisplayStatus =
   | "not_needed"
   | "customer_self_apply"
   | "not_applicable"
+  | "awaiting_invoice_kind"
   | "link_not_sent"
   | "awaiting_upload"
   | "docs_incomplete"
@@ -89,8 +90,9 @@ export const SUBSIDY_DISPLAY_LABELS: Record<SubsidyDisplayStatus, string> = {
   customer_self_apply: "客戶自行申請",
   not_applicable: "不適用補助",
   no_record: "尚無補助紀錄",
+  awaiting_invoice_kind: "待選發票類型",
   link_not_sent: "待傳送補助資料連結",
-  awaiting_upload: "等待客戶上傳",
+  awaiting_upload: "等待客戶上傳補助資料",
   docs_incomplete: "客戶資料待補件",
   awaiting_manual_review: "等待人工確認",
   docs_complete: "補助資料已齊，可進行申請",
@@ -104,6 +106,7 @@ export const SUBSIDY_DISPLAY_COLORS: Record<SubsidyDisplayStatus, string> = {
   customer_self_apply: "bg-slate-100 text-slate-700",
   not_applicable: "bg-gray-100 text-gray-600",
   no_record: "bg-gray-50 text-gray-500",
+  awaiting_invoice_kind: "bg-gray-100 text-gray-600",
   link_not_sent: "bg-gray-100 text-gray-600",
   awaiting_upload: "bg-blue-100 text-blue-700",
   docs_incomplete: "bg-orange-100 text-orange-800",
@@ -168,29 +171,36 @@ export function missingRequiredDocs(
   return required.filter((t) => !have.has(t));
 }
 
+/**
+ * 補助顯示狀態。
+ *
+ * 除了「補助已完成」是由 pipeline_status = applied 決定之外，其餘一律依實際
+ * 上傳份數與缺件清單計算，不再讓舊的 pipeline_status（docs_complete /
+ * pending_apply 等）直接決定「資料已齊」。
+ */
 export function resolveSubsidyDisplayStatus(input: {
   subsidyType: SubsidyType | null | undefined;
   pipeline: SubsidyPipelineStatus | null | undefined;
+  invoiceKind: SubsidyInvoiceKind | null | undefined;
   missingDocs: string[];
+  uploadedDocCount: number;
   needsManualReview?: boolean;
 }): SubsidyDisplayStatus {
+  if (input.pipeline === "applied") return "applied";
+
   if (!input.subsidyType) return "no_record";
   // legacy 舊案件保留原顯示；新案件一律走補助流程
   if (input.subsidyType === "not_needed") return "not_needed";
   if (input.subsidyType === "customer_self_apply") return "customer_self_apply";
   if (input.subsidyType === "none") return "not_applicable";
 
-  // pipeline drives status（行政只選發票類型，不再選補助種類）
-  if (input.pipeline === "applied") return "applied";
-  if (input.pipeline === "link_not_sent" || !input.pipeline) return "link_not_sent";
-  if (input.pipeline === "awaiting_upload") return "awaiting_upload";
-  if (input.pipeline === "docs_complete" || input.pipeline === "pending_apply") {
-    return "docs_complete";
-  }
-  if (input.needsManualReview && input.missingDocs.length === 0) {
-    return "awaiting_manual_review";
-  }
-  return "docs_incomplete";
+  // 還沒選發票類型就不知道要收哪些資料，也還沒有上傳網址
+  if (!input.invoiceKind) return "awaiting_invoice_kind";
+
+  if (input.uploadedDocCount <= 0) return "awaiting_upload";
+  if (input.missingDocs.length > 0) return "docs_incomplete";
+  if (input.needsManualReview) return "awaiting_manual_review";
+  return "docs_complete";
 }
 
 /** Combined label for receivables / cards — pipeline only, no 補助種類. */

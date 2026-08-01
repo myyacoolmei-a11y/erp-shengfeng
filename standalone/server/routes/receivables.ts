@@ -74,7 +74,9 @@ function enrichReceivableSubsidy(
   const displayStatus: SubsidyDisplayStatus = resolveSubsidyDisplayStatus({
     subsidyType,
     pipeline,
+    invoiceKind,
     missingDocs,
+    uploadedDocCount: activeDocs.length,
     needsManualReview: !!meta.needsManualReview,
   });
   const subsidyDisplayLabel = subsidyCombinedStatusLabel({

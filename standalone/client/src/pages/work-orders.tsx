@@ -94,6 +94,7 @@ import {
 } from "@/lib/fieldProgressApi";
 import {
   advanceAdminSubsidyPipeline,
+  confirmAdminSubsidyDocs,
   fetchAdminCaseDetail,
   handoffCaseToAdmin,
   unmarkAdminSubsidyApplied,
@@ -363,6 +364,21 @@ function WorkOrderSubsidyPanel({ order }: { order: any }) {
     },
   });
 
+  const manualConfirmMut = useMutation({
+    mutationFn: () => confirmAdminSubsidyDocs(order.id, "案件頁人工確認資料完整"),
+    onSuccess: () => {
+      toast({ title: "已人工確認資料完整", description: "現在可以標記補助完成" });
+      invalidate();
+    },
+    onError: (err: any) => {
+      toast({
+        title: "確認失敗",
+        description: err?.message || "請稍後再試",
+        variant: "destructive",
+      });
+    },
+  });
+
   const unmarkMut = useMutation({
     mutationFn: () => unmarkAdminSubsidyApplied(order.id),
     onSuccess: () => {
@@ -388,7 +404,11 @@ function WorkOrderSubsidyPanel({ order }: { order: any }) {
   if (!canViewAdmin || !hasAdminInfo) return null;
 
   const subsidyDone = !!detail!.subsidyCompleted;
-  const missing = detail!.missingDocLabels ?? [];
+  const requiredDocs = detail!.requiredDocs ?? [];
+  const buyerFields = detail!.buyerFields ?? [];
+  const missingLabels = detail!.missingLabels ?? [];
+  const requiredTypes = new Set(requiredDocs.map(d => d.docType));
+  const extraDocs = docs.filter(d => !requiredTypes.has(d.docType));
   const phone = [order.mobilePhone, order.telephone].filter(Boolean).join(" / ");
 
   return (
@@ -408,11 +428,8 @@ function WorkOrderSubsidyPanel({ order }: { order: any }) {
         {detail?.invoiceKindLabel && (
           <p><span className="text-muted-foreground">發票類型：</span>{detail.invoiceKindLabel}</p>
         )}
-        {detail?.invoiceTitle && (
-          <p><span className="text-muted-foreground">公司名稱：</span>{detail.invoiceTitle}</p>
-        )}
-        {detail?.taxId && (
-          <p><span className="text-muted-foreground">統一編號：</span>{detail.taxId}</p>
+        {detail?.invoiceKind !== "triple" && detail?.invoiceTitle && (
+          <p><span className="text-muted-foreground">抬頭：</span>{detail.invoiceTitle}</p>
         )}
       </div>
 
@@ -436,9 +453,6 @@ function WorkOrderSubsidyPanel({ order }: { order: any }) {
             </span>
           )}
         </p>
-        {!subsidyDone && missing.length > 0 && (
-          <p className="text-orange-800">缺少：{missing.join("、")}</p>
-        )}
         {(detail?.aiTips?.length ?? 0) > 0 && (
           <div className="text-yellow-800">
             <p className="font-medium">檢查提示：</p>
@@ -454,37 +468,90 @@ function WorkOrderSubsidyPanel({ order }: { order: any }) {
         )}
       </div>
 
-      {detail && (
-        <div className="space-y-1">
-          <p className="text-xs text-muted-foreground">
-            客戶已上傳補助文件（{docs.length} 份
-            {detail.lastUploadAt
-              ? ` · 最後上傳 ${new Date(detail.lastUploadAt).toLocaleString("zh-TW")}`
-              : ""}
-            ）
+      <div className="space-y-2">
+        <p className="text-xs font-semibold">
+          客戶補助資料
+          {detail!.lastUploadAt
+            ? ` · 最後上傳 ${new Date(detail!.lastUploadAt).toLocaleString("zh-TW")}`
+            : ""}
+        </p>
+
+        {!detail!.invoiceKind ? (
+          <p className="text-xs text-amber-800">
+            請先於行政工作台選擇發票類型，系統才會列出客戶需要上傳的資料
           </p>
-          {docs.length === 0 ? (
-            <p className="text-xs text-muted-foreground">尚無客戶上傳紀錄</p>
-          ) : (
-            <ul className="space-y-2">
-              {docs.map(d => (
-                <li key={d.id} className="rounded-md border bg-background p-2 text-xs">
-                  <p className="font-medium">
-                    {d.docTypeLabel || d.fileName || d.docType || "文件"} · {d.status}
-                  </p>
-                  {d.fileName && <p className="text-muted-foreground">{d.fileName}</p>}
-                  {d.uploadedAt && (
-                    <p className="text-muted-foreground">
-                      {new Date(d.uploadedAt).toLocaleString("zh-TW")}
-                    </p>
-                  )}
-                  {d.fileUrl?.startsWith("data:image/") && (
-                    <img
-                      src={d.fileUrl}
-                      alt={d.docTypeLabel || "預覽"}
-                      className="mt-1 max-h-32 rounded border object-contain"
-                    />
-                  )}
+        ) : (
+          <ul className="space-y-1.5">
+            {requiredDocs.map(d => (
+              <li
+                key={d.docType}
+                className="flex flex-wrap items-center gap-2 rounded-md border bg-background px-2 py-1.5 text-xs"
+              >
+                <span className="font-medium">{d.label}</span>
+                {d.uploaded ? (
+                  <span className="text-green-700">已上傳</span>
+                ) : (
+                  <span className="text-destructive">未上傳</span>
+                )}
+                {d.uploadedAt && (
+                  <span className="text-muted-foreground">
+                    {new Date(d.uploadedAt).toLocaleString("zh-TW")}
+                  </span>
+                )}
+                {d.fileUrl && (
+                  <span className="ml-auto flex gap-2">
+                    <a
+                      href={d.fileUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-primary underline"
+                    >
+                      查看
+                    </a>
+                    <a
+                      href={d.fileUrl}
+                      download={d.fileName || `${d.label}`}
+                      className="text-primary underline"
+                    >
+                      下載
+                    </a>
+                  </span>
+                )}
+              </li>
+            ))}
+            {buyerFields.map(f => (
+              <li
+                key={f.key}
+                className="flex flex-wrap items-center gap-2 rounded-md border bg-background px-2 py-1.5 text-xs"
+              >
+                <span className="font-medium">{f.label}</span>
+                {f.filled ? (
+                  <span className="text-green-700">已填寫 · {f.value}</span>
+                ) : (
+                  <span className="text-destructive">未填寫</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {!subsidyDone && missingLabels.length > 0 && (
+          <div className="rounded-md border border-orange-300 bg-orange-50 px-2 py-1.5 text-xs text-orange-900">
+            <p className="font-medium">尚缺：</p>
+            <ul className="list-disc pl-4">
+              {missingLabels.map(label => <li key={label}>{label}</li>)}
+            </ul>
+          </div>
+        )}
+
+        {extraDocs.length > 0 && (
+          <div className="text-xs space-y-1">
+            <p className="text-muted-foreground">其他上傳檔案</p>
+            <ul className="space-y-1">
+              {extraDocs.map(d => (
+                <li key={d.id} className="flex flex-wrap items-center gap-2">
+                  <span>{d.docTypeLabel || d.docType}</span>
+                  {d.fileName && <span className="text-muted-foreground">{d.fileName}</span>}
                   {d.fileUrl && (
                     <a
                       href={d.fileUrl}
@@ -492,28 +559,54 @@ function WorkOrderSubsidyPanel({ order }: { order: any }) {
                       rel="noreferrer"
                       className="text-primary underline"
                     >
-                      預覽／下載
+                      查看
                     </a>
                   )}
                 </li>
               ))}
             </ul>
-          )}
-        </div>
-      )}
+          </div>
+        )}
+      </div>
 
       {canMark && !subsidyDone && (
-        <Button
-          size="sm"
-          className="h-10 sm:h-9 bg-green-700 hover:bg-green-800"
-          disabled={markMut.isPending}
-          onClick={() => {
-            if (!window.confirm("確定此案件的補助申請已完成？已收款的話會自動結案。")) return;
-            markMut.mutate();
-          }}
-        >
-          標記補助完成
-        </Button>
+        <div className="space-y-2">
+          <Button
+            size="sm"
+            className="h-10 sm:h-9 bg-green-700 hover:bg-green-800"
+            disabled={markMut.isPending || !detail!.canMarkApplied}
+            onClick={() => {
+              if (!window.confirm("確定此案件的補助申請已完成？已收款的話會自動結案。")) return;
+              markMut.mutate();
+            }}
+          >
+            標記補助完成
+          </Button>
+          {!detail!.canMarkApplied && (
+            <p className="text-xs text-muted-foreground">
+              補助資料尚未齊全，補齊後才能標記補助完成；若資料已另外取得，可先按「人工確認資料完整」
+            </p>
+          )}
+          {!detail!.canMarkApplied && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-10 sm:h-9"
+              disabled={manualConfirmMut.isPending}
+              onClick={() => {
+                if (!window.confirm("確認此案件的補助資料已齊全可用？系統上仍顯示缺件。")) return;
+                manualConfirmMut.mutate();
+              }}
+            >
+              人工確認資料完整
+            </Button>
+          )}
+          {detail!.manualConfirmedAt && (
+            <p className="text-xs text-muted-foreground">
+              已人工確認資料完整（{new Date(detail!.manualConfirmedAt).toLocaleString("zh-TW")}）
+            </p>
+          )}
+        </div>
       )}
       {canMark && subsidyDone && (
         <Button

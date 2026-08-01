@@ -56,6 +56,8 @@ export type AdminWorkbenchItem = {
   appliedBy?: number | null;
   missingDocs?: string[];
   missingDocLabels?: string[];
+  missingBuyerLabels?: string[];
+  manualConfirmedAt?: string | null;
   uploadedDocCount?: number;
   lastUploadAt?: string | null;
   needsManualReview?: boolean;
@@ -116,6 +118,28 @@ export type AdminCaseDetail = {
   appliedAt?: string | null;
   uploadUrl?: string | null;
   missingDocLabels?: string[];
+  /** 必備文件逐項狀態（依發票類型） */
+  requiredDocs?: Array<{
+    docType: string;
+    label: string;
+    uploaded: boolean;
+    id: number | null;
+    fileName: string | null;
+    fileUrl: string | null;
+    uploadedAt: string | null;
+  }>;
+  /** 三聯式才有：公司名稱、統一編號 */
+  buyerFields?: Array<{
+    key: "invoiceTitle" | "taxId";
+    label: string;
+    value: string | null;
+    filled: boolean;
+  }>;
+  /** 文件與買受人資料合併後的尚缺清單 */
+  missingLabels?: string[];
+  docsComplete?: boolean;
+  manualConfirmedAt?: string | null;
+  canMarkApplied?: boolean;
   uploadedDocCount?: number;
   lastUploadAt?: string | null;
   aiTips?: string[];

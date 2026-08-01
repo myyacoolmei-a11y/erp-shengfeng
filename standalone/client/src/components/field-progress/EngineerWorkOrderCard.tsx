@@ -277,7 +277,14 @@ export function EngineerWorkOrderCard({ order, progress, onProgressUpdated, read
   const isCompletedCase =
     fieldStatus === "completed" || order.status === "已完成" || order.status === "已結案";
   const handedOffToAdmin = !!order.adminWorkflowStatus;
-  const canHandoff = hasRole(user, "super_admin", "owner", "admin");
+  const canHandoff = hasRole(
+    user,
+    "super_admin",
+    "owner",
+    "admin",
+    "engineer",
+    "technician",
+  );
 
   const departVisual: BtnVisual =
     fieldStatus !== "pending"

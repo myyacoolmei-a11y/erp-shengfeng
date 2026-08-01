@@ -41,6 +41,7 @@ import {
   missingRequiredDocs,
   parseSubsidyMeta,
   pipelineToReceivableSubsidyStatus,
+  requiredDocTypesForInvoiceKind,
   resolveSubsidyDisplayStatus,
   serializeSubsidyMeta,
   subsidyCombinedStatusLabel,
@@ -632,13 +633,27 @@ export async function getAdminWorkbench(user?: JwtPayload) {
     const displayStatus: SubsidyDisplayStatus = resolveSubsidyDisplayStatus({
       subsidyType,
       pipeline: subsidyPipeline,
+      invoiceKind,
       missingDocs,
+      uploadedDocCount: subsidyDocs.length,
       needsManualReview: !!subsidyMeta.needsManualReview,
     });
     const subsidyStatusLabel = subsidyCombinedStatusLabel({
       displayStatus,
       pipeline: subsidyPipeline,
     });
+    // 三聯式另需公司名稱與統編；統編僅公開上傳頁會寫入，作為客戶填過的判斷依據
+    const taxIdFilled = /^\d{8}$/.test(String(recv?.taxId ?? "").trim());
+    const missingBuyerLabels =
+      invoiceKind === "triple"
+        ? [
+            ...(recv?.invoiceTitle?.trim() &&
+            (taxIdFilled || recv?.invoiceType === "三聯式發票")
+              ? []
+              : ["公司名稱"]),
+            ...(taxIdFilled ? [] : ["統一編號"]),
+          ]
+        : [];
     const lastUploadAt =
       subsidyDocs
         .map((d) => d.uploadedAt?.getTime() ?? d.createdAt?.getTime() ?? 0)
@@ -697,7 +712,12 @@ export async function getAdminWorkbench(user?: JwtPayload) {
       subsidyDisplayStatus: displayStatus,
       subsidyStatusLabel,
       subsidyCompleted: subsidyPipeline === "applied",
-      canMarkApplied: subsidyPipeline !== "applied",
+      missingBuyerLabels,
+      canMarkApplied:
+        subsidyPipeline !== "applied" &&
+        ((displayStatus === "docs_complete" && missingBuyerLabels.length === 0) ||
+          !!subsidyMeta.manualConfirmedAt),
+      manualConfirmedAt: subsidyMeta.manualConfirmedAt ?? null,
       canCloseReady: !subsidyBlocksClose(subsidyType, subsidyPipeline),
       customerDocuments: subsidyDocs.slice(0, 40).map((d) => ({
         id: d.id,
@@ -852,12 +872,69 @@ export async function getCaseDetail(workOrderId: number) {
   const displayStatus = resolveSubsidyDisplayStatus({
     subsidyType,
     pipeline: subsidyPipeline,
+    invoiceKind,
     missingDocs,
+    uploadedDocCount: subsidyDocs.length,
     needsManualReview: !!subsidyMeta.needsManualReview,
   });
 
   const total = recv ? num(recv.totalAmount) : 0;
   const received = recv ? num(recv.receivedAmount) : 0;
+
+  // 必備文件逐項檢查（依發票類型），每項附上可預覽／下載的檔案
+  const uploadedByType = new Map<string, (typeof subsidyDocs)[number]>();
+  for (const d of subsidyDocs) {
+    if (!d.fileUrl || !d.docType) continue;
+    if (!uploadedByType.has(d.docType)) uploadedByType.set(d.docType, d);
+  }
+  const requiredDocs = requiredDocTypesForInvoiceKind(invoiceKind).map((t) => {
+    const doc = uploadedByType.get(t) ?? null;
+    return {
+      docType: t,
+      label: SUBSIDY_DOC_TYPE_LABELS[t] ?? t,
+      uploaded: !!doc,
+      id: doc?.id ?? null,
+      fileName: doc?.fileName ?? null,
+      fileUrl: doc?.fileUrl ?? null,
+      uploadedAt: doc?.uploadedAt?.toISOString() ?? null,
+    };
+  });
+
+  // 三聯式才需要公司名稱與統編。invoiceTitle 建立應收時會預設帶客戶姓名，
+  // 因此以統編（僅公開上傳頁會寫入）作為客戶確實填過的判斷依據。
+  const taxIdFilled = /^\d{8}$/.test(String(recv?.taxId ?? "").trim());
+  const buyerFields =
+    invoiceKind === "triple"
+      ? [
+          {
+            key: "invoiceTitle" as const,
+            label: "公司名稱",
+            value: recv?.invoiceTitle ?? null,
+            filled:
+              !!recv?.invoiceTitle?.trim() &&
+              (taxIdFilled || recv?.invoiceType === "三聯式發票"),
+          },
+          {
+            key: "taxId" as const,
+            label: "統一編號",
+            value: recv?.taxId ?? null,
+            filled: taxIdFilled,
+          },
+        ]
+      : [];
+
+  const missingLabels = [
+    ...requiredDocs.filter((d) => !d.uploaded).map((d) => d.label),
+    ...buyerFields.filter((f) => !f.filled).map((f) => f.label),
+  ];
+  const manualConfirmedAt = subsidyMeta.manualConfirmedAt ?? null;
+  const docsComplete = !!invoiceKind && missingLabels.length === 0;
+  const subsidyCompleted = subsidyPipeline === "applied";
+  // 三聯式缺公司資料時不可顯示為「已齊」
+  const effectiveDisplayStatus =
+    displayStatus === "docs_complete" && missingLabels.length > 0
+      ? "docs_incomplete"
+      : displayStatus;
 
   return {
     workOrderId: wo.id,
@@ -877,10 +954,10 @@ export async function getCaseDetail(workOrderId: number) {
     invoiceKindLabel: invoiceKind ? SUBSIDY_INVOICE_KIND_LABELS[invoiceKind] : null,
     subsidyPipelineStatus: subsidyPipeline,
     subsidyStatusLabel: subsidyCombinedStatusLabel({
-      displayStatus,
+      displayStatus: effectiveDisplayStatus,
       pipeline: subsidyPipeline,
     }),
-    subsidyCompleted: subsidyPipeline === "applied",
+    subsidyCompleted,
     appliedAt: sub?.appliedAt?.toISOString() ?? null,
     uploadUrl:
       sub?.uploadLinkToken != null && sub.uploadLinkToken !== ""
@@ -889,6 +966,12 @@ export async function getCaseDetail(workOrderId: number) {
     missingDocLabels: missingDocs.map(
       (t) => SUBSIDY_DOC_TYPE_LABELS[t as SubsidyDocType] ?? t,
     ),
+    requiredDocs,
+    buyerFields,
+    missingLabels,
+    docsComplete,
+    manualConfirmedAt,
+    canMarkApplied: !subsidyCompleted && (docsComplete || !!manualConfirmedAt),
     uploadedDocCount: subsidyDocs.length,
     lastUploadAt:
       subsidyDocs
@@ -1358,7 +1441,51 @@ export async function advanceSubsidyPipeline(
     patch.appliedBy = user.id;
   }
 
-  // MVP: admin may mark 補助完成 at any company_assisted stage (no docs-complete gate)
+  // 補助完成需資料齊全（三聯式含公司名稱與統編），除非行政已人工確認資料完整
+  if (toStatus === "applied") {
+    const { meta } = parseSubsidyMeta(sub.note);
+    if (!meta.manualConfirmedAt) {
+      const invoiceKind = normalizeSubsidyInvoiceKind(sub.invoiceKind);
+      if (!invoiceKind) throw new Error("請先選擇發票類型（二聯／三聯）");
+      const docs = await db
+        .select()
+        .from(customerDocumentsTable)
+        .where(eq(customerDocumentsTable.workOrderId, workOrderId));
+      const missingLabels = missingRequiredDocs(
+        invoiceKind,
+        docs
+          .filter(
+            (d) =>
+              d.status !== "rejected" &&
+              d.fileUrl &&
+              (d.subsidyApplicationId == null || d.subsidyApplicationId === sub.id),
+          )
+          .map((d) => d.docType),
+      ).map((t) => SUBSIDY_DOC_TYPE_LABELS[t] ?? t);
+
+      if (invoiceKind === "triple") {
+        const [recv] = await db
+          .select()
+          .from(receivablesTable)
+          .where(eq(receivablesTable.workOrderId, workOrderId))
+          .limit(1);
+        const taxIdFilled = /^\d{8}$/.test(String(recv?.taxId ?? "").trim());
+        if (
+          !recv?.invoiceTitle?.trim() ||
+          !(taxIdFilled || recv?.invoiceType === "三聯式發票")
+        ) {
+          missingLabels.push("公司名稱");
+        }
+        if (!taxIdFilled) missingLabels.push("統一編號");
+      }
+
+      if (missingLabels.length > 0) {
+        throw new Error(
+          `補助資料尚缺：${missingLabels.join("、")}。請補齊，或於案件頁按「人工確認資料完整」`,
+        );
+      }
+    }
+  }
 
   await db
     .update(subsidyApplicationsTable)
@@ -1495,15 +1622,11 @@ export async function confirmSubsidyDocsManually(
     .select()
     .from(customerDocumentsTable)
     .where(eq(customerDocumentsTable.subsidyApplicationId, sub.id));
+  // 系統上缺件但行政已另外取得資料（LINE／紙本）時，用這裡放行後續的「標記補助完成」
   const missing = missingRequiredDocs(
     normalizeSubsidyInvoiceKind(sub.invoiceKind),
     docs.filter((d) => d.status !== "rejected" && d.fileUrl).map((d) => d.docType),
   );
-  if (missing.length > 0) {
-    throw new Error(
-      `仍缺少必要文件：${missing.map((t) => SUBSIDY_DOC_TYPE_LABELS[t]).join("、")}`,
-    );
-  }
 
   const { meta, freeNote } = parseSubsidyMeta(sub.note);
   const now = new Date();
@@ -1534,7 +1657,11 @@ export async function confirmSubsidyDocsManually(
     entityId: workOrderId,
     user,
     reason: note,
-    metadata: { subsidyApplicationId: sub.id, toStatus: "docs_complete" },
+    metadata: {
+      subsidyApplicationId: sub.id,
+      toStatus: "docs_complete",
+      missingAtConfirm: missing.map((t) => SUBSIDY_DOC_TYPE_LABELS[t] ?? t),
+    },
   });
 
   return { pipelineStatus: "docs_complete" as const };
