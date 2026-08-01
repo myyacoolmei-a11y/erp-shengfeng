@@ -7,7 +7,7 @@ import {
   useListEmployees, useListQuotes,
   getListWorkOrdersQueryKey, getListProgressQueryKey, getListReceivablesQueryKey,
 } from "@workspace/api-client-react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { invalidateStatistics } from "@/lib/invalidateStatistics";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -92,6 +92,10 @@ import {
   addDaysTaipei,
   type FieldProgressRecord,
 } from "@/lib/fieldProgressApi";
+import {
+  advanceAdminSubsidyPipeline,
+  unmarkAdminSubsidyApplied,
+} from "@/lib/adminWorkbenchApi";
 
 const ADMIN_FILTER_TABS = ["待派工", "待施工", "施工中", "異常／暫停", "施工完成", "歷史紀錄"] as const;
 type AdminFilterTab = (typeof ADMIN_FILTER_TABS)[number];
@@ -306,6 +310,94 @@ function WorkOrderDetailSummary({ order }: { order: any }) {
           <span className="text-muted-foreground">備註：</span>
           <p className="mt-0.5 whitespace-pre-wrap">{notes}</p>
         </div>
+      )}
+    </div>
+  );
+}
+
+/** Simplified subsidy status on case page — 等待客戶上傳 / 補助完成 */
+function WorkOrderSubsidyPanel({ order }: { order: any }) {
+  const { toast } = useToast();
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
+  const canMark =
+    hasRole(user, "super_admin", "owner", "admin") || userHasFeature(user, "receivables");
+  const needsSubsidy = !!order.adminNeedsSubsidy;
+  const done =
+    order.adminSubsidyStatus === "已申請補助" ||
+    !!order.adminSubsidyAppliedAt;
+  if (!needsSubsidy && !done) return null;
+
+  const markMut = useMutation({
+    mutationFn: () => advanceAdminSubsidyPipeline(order.id, "applied"),
+    onSuccess: () => {
+      toast({ title: "已標記補助完成", description: "案件已從補助中心移除" });
+      queryClient.invalidateQueries({ queryKey: getListWorkOrdersQueryKey() });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin-workbench"] });
+      queryClient.invalidateQueries({ queryKey: getListReceivablesQueryKey() });
+    },
+    onError: (err: any) => {
+      toast({
+        title: "標記失敗",
+        description: err?.message || "請稍後再試",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const unmarkMut = useMutation({
+    mutationFn: () => unmarkAdminSubsidyApplied(order.id),
+    onSuccess: () => {
+      toast({ title: "已取消補助完成" });
+      queryClient.invalidateQueries({ queryKey: getListWorkOrdersQueryKey() });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin-workbench"] });
+      queryClient.invalidateQueries({ queryKey: getListReceivablesQueryKey() });
+    },
+    onError: (err: any) => {
+      toast({
+        title: "取消失敗",
+        description: err?.message || "請稍後再試",
+        variant: "destructive",
+      });
+    },
+  });
+
+  return (
+    <div className="rounded-lg border bg-muted/20 p-3 space-y-2 text-sm">
+      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">補助狀態</p>
+      <p className="text-sm">
+        {done ? (
+          <span className="text-emerald-800 font-medium">補助完成</span>
+        ) : (
+          <span className="text-blue-700 font-medium">等待客戶上傳</span>
+        )}
+      </p>
+      {canMark && !done && (
+        <Button
+          size="sm"
+          className="h-10 sm:h-9 bg-green-700 hover:bg-green-800"
+          disabled={markMut.isPending}
+          onClick={() => {
+            if (!window.confirm("確定此案件的補助申請已完成？完成後將從補助中心移除。")) return;
+            markMut.mutate();
+          }}
+        >
+          標記補助完成
+        </Button>
+      )}
+      {canMark && done && (
+        <Button
+          size="sm"
+          variant="outline"
+          className="h-10 sm:h-9 text-orange-700 border-orange-300"
+          disabled={unmarkMut.isPending}
+          onClick={() => {
+            if (!window.confirm("取消補助完成／重新開啟？附件不會刪除。")) return;
+            unmarkMut.mutate();
+          }}
+        >
+          取消補助完成
+        </Button>
       )}
     </div>
   );
@@ -1095,6 +1187,7 @@ export default function WorkOrders() {
                   {expandedId === o.id && (
                     <div className="space-y-3 border-t pt-3">
                       <WorkOrderDetailSummary order={o} />
+                      <WorkOrderSubsidyPanel order={o} />
                       <FieldProgressDetailSection workOrderId={o.id} />
                       <ProgressPanel workOrderId={o.id} customerId={o.customerId ?? 0} workOrderTitle={o.workOrderNumber || o.title} />
                     </div>

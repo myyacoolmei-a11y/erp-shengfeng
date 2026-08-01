@@ -1267,15 +1267,7 @@ export async function advanceSubsidyPipeline(
     patch.appliedBy = user.id;
   }
 
-  // Guard: only allow mark applied when docs are complete / pending_apply
-  if (toStatus === "applied") {
-    const allowedFrom: SubsidyPipelineStatus[] = ["docs_complete", "pending_apply", "applied"];
-    if (!allowedFrom.includes(sub.pipelineStatus as SubsidyPipelineStatus)) {
-      throw new Error(
-        "補助資料尚未齊全，無法標記補助申請已完成。請先確認缺件或人工確認資料。",
-      );
-    }
-  }
+  // MVP: admin may mark 補助完成 at any company_assisted stage (no docs-complete gate)
 
   await db
     .update(subsidyApplicationsTable)

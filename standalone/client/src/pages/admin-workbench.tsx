@@ -260,6 +260,17 @@ function subsidyMissingShareText(item: AdminWorkbenchItem): string {
 }
 
 function SubsidyBadge({ item }: { item: AdminWorkbenchItem }) {
+  // Simplified: company_assisted open → 等待客戶上傳；applied → 補助完成
+  if (item.subsidyType === "company_assisted") {
+    if (item.subsidyPipelineStatus === "applied") {
+      return (
+        <Badge className="bg-emerald-200 text-emerald-900 border-0 font-normal">補助完成</Badge>
+      );
+    }
+    return (
+      <Badge className="bg-blue-100 text-blue-700 border-0 font-normal">等待客戶上傳</Badge>
+    );
+  }
   const status = (item.subsidyDisplayStatus ?? "no_record") as SubsidyDisplayStatus;
   const color = SUBSIDY_DISPLAY_COLORS[status] ?? "bg-gray-100 text-gray-600";
   return (
@@ -578,31 +589,21 @@ export default function AdminWorkbench() {
       (c.collectionOverdue ?? 0) +
       (c.collectionToday ?? 0) +
       (c.collectionSoon ?? 0);
-    const docsCompleteItems = [
-      ...(s.subsidyDocsComplete ?? []),
-      ...(s.subsidyPendingApply ?? []),
-    ];
-    const docsCompleteCount =
-      (c.subsidyDocsComplete ?? 0) + (c.subsidyPendingApply ?? 0);
-    // 待處理 = 待確認 + 待傳送 + 缺件 + 人工確認
-    const todoProcessItems = [
-      ...(s.subsidyPendingConfirmation ?? []),
+    // 補助中心：僅「公司協助且尚未標記完成」＝需客戶提供資料
+    const waitingSubsidyItems = [
       ...(s.subsidyLinkNotSent ?? []),
+      ...(s.subsidyAwaitingUpload ?? []),
       ...(s.subsidyDocsIncomplete ?? []),
       ...(s.subsidyAwaitingManualReview ?? []),
-    ];
-    const todoProcessCount =
-      (c.subsidyPendingConfirmation ?? 0) +
-      (c.subsidyLinkNotSent ?? 0) +
-      (c.subsidyDocsIncomplete ?? 0) +
-      (c.subsidyAwaitingManualReview ?? 0);
-    const waitCustomerItems = s.subsidyAwaitingUpload ?? [];
-    const waitCustomerCount = c.subsidyAwaitingUpload ?? 0;
-    const doneItems = [...(s.subsidyApplied ?? []), ...(s.subsidySettled ?? [])];
-    const doneCount = (c.subsidyApplied ?? 0) + (c.subsidySettled ?? 0);
-    // Homepage open-todo: exclude 已完成 (applied / self / not_needed)
-    const subsidyTodoCount =
-      todoProcessCount + waitCustomerCount + docsCompleteCount;
+      ...(s.subsidyDocsComplete ?? []),
+      ...(s.subsidyPendingApply ?? []),
+    ].filter(
+      (it, idx, arr) =>
+        it.subsidyType === "company_assisted" &&
+        it.subsidyPipelineStatus !== "applied" &&
+        arr.findIndex((x) => x.workOrderId === it.workOrderId) === idx,
+    );
+    const subsidyTodoCount = waitingSubsidyItems.length;
     return {
       collectionCount,
       subsidyTodoCount,
@@ -614,32 +615,11 @@ export default function AdminWorkbench() {
       ],
       subsidySections: [
         {
-          key: "subTodo",
-          title: "待處理",
-          accent: "normal" as const,
-          items: todoProcessItems,
-          count: todoProcessCount,
-        },
-        {
           key: "subWait",
-          title: "等待客戶",
+          title: "等待客戶上傳",
           accent: "normal" as const,
-          items: waitCustomerItems,
-          count: waitCustomerCount,
-        },
-        {
-          key: "subOk",
-          title: "可申請",
-          accent: "normal" as const,
-          items: docsCompleteItems,
-          count: docsCompleteCount,
-        },
-        {
-          key: "subDone",
-          title: "已完成",
-          accent: "normal" as const,
-          items: doneItems,
-          count: doneCount,
+          items: waitingSubsidyItems,
+          count: subsidyTodoCount,
         },
       ],
       homeSections: [
@@ -829,10 +809,38 @@ export default function AdminWorkbench() {
                 />
               </div>
               <p className="text-xs text-muted-foreground col-span-2">
-                補助方式請至「補助中心」確認（與收款並行，互不影響）。
+                若需客戶上傳補助資料，請在下方選擇「公司協助」方案（與收款並行）。
               </p>
             </div>
           )}
+          {canOperate &&
+            (item.subsidyType === "pending_confirmation" || item.virtualPendingConfirmation) && (
+              <div className="space-y-2">
+                <p className="text-xs font-medium">選擇補助方式</p>
+                <div className="flex flex-col gap-2">
+                  <Button size="sm" variant="outline" className="h-10 justify-start" disabled={subsidyTypeMut.isPending}
+                    onClick={() => subsidyTypeMut.mutate({ id: item.workOrderId, subsidyType: "customer_self_apply" })}>
+                    客戶自行申請
+                  </Button>
+                  <Button size="sm" variant="outline" className="h-10 justify-start" disabled={subsidyTypeMut.isPending}
+                    onClick={() => subsidyTypeMut.mutate({ id: item.workOrderId, subsidyType: "company_assisted", assistedProgram: "new_unit" })}>
+                    公司協助－新機補助
+                  </Button>
+                  <Button size="sm" variant="outline" className="h-10 justify-start" disabled={subsidyTypeMut.isPending}
+                    onClick={() => subsidyTypeMut.mutate({ id: item.workOrderId, subsidyType: "company_assisted", assistedProgram: "trade_in" })}>
+                    公司協助－舊換新補助
+                  </Button>
+                  <Button size="sm" variant="outline" className="h-10 justify-start" disabled={subsidyTypeMut.isPending}
+                    onClick={() => subsidyTypeMut.mutate({ id: item.workOrderId, subsidyType: "company_assisted", assistedProgram: "new_unit_and_trade_in" })}>
+                    公司協助－新機＋舊換新
+                  </Button>
+                  <Button size="sm" variant="outline" className="h-10 justify-start" disabled={subsidyTypeMut.isPending}
+                    onClick={() => subsidyTypeMut.mutate({ id: item.workOrderId, subsidyType: "not_needed" })}>
+                    不需申請
+                  </Button>
+                </div>
+              </div>
+            )}
           {canOperate && (
             <Button
               size="sm"
@@ -902,60 +910,40 @@ export default function AdminWorkbench() {
 
     if (secKey.startsWith("sub")) {
       const pipe = item.subsidyPipelineStatus ?? "link_not_sent";
-      const display = item.subsidyDisplayStatus;
-      const phone = item.mobilePhone || item.telephone || "—";
-      const pending =
-        item.subsidyType === "pending_confirmation" || !!item.virtualPendingConfirmation;
-      const settled =
-        item.subsidyType === "not_needed" || item.subsidyType === "customer_self_apply";
-      const doneApplied = pipe === "applied" || display === "applied";
-
-      const pickType = (subsidyType: SubsidyType, assistedProgram?: AssistedProgram) => {
-        subsidyTypeMut.mutate({ id: item.workOrderId, subsidyType, assistedProgram });
-      };
-
-      const typeChooserButtons = (
-        <div className="flex flex-col gap-2">
-          <Button size="sm" variant="outline" className="h-10 justify-start" disabled={subsidyTypeMut.isPending}
-            onClick={() => pickType("customer_self_apply")}>1. 客戶自行申請</Button>
-          <Button size="sm" variant="outline" className="h-10 justify-start" disabled={subsidyTypeMut.isPending}
-            onClick={() => pickType("company_assisted", "new_unit")}>2. 公司協助－新機補助</Button>
-          <Button size="sm" variant="outline" className="h-10 justify-start" disabled={subsidyTypeMut.isPending}
-            onClick={() => pickType("company_assisted", "trade_in")}>3. 公司協助－舊換新補助</Button>
-          <Button size="sm" variant="outline" className="h-10 justify-start" disabled={subsidyTypeMut.isPending}
-            onClick={() => pickType("company_assisted", "new_unit_and_trade_in")}>4. 公司協助－新機＋舊換新</Button>
-          <Button size="sm" variant="outline" className="h-10 justify-start" disabled={subsidyTypeMut.isPending}
-            onClick={() => pickType("not_needed")}>5. 不需申請</Button>
-        </div>
-      );
+      const kind =
+        item.assistedProgramLabel
+          ? `公司協助－${item.assistedProgramLabel}`
+          : item.subsidyTypeLabel ?? "公司協助";
+      const missing =
+        (item.missingDocLabels?.length ?? 0) > 0
+          ? item.missingDocLabels!.join("、")
+          : "尚無缺件（可提醒客戶上傳）";
 
       return (
-        <ItemShell key={`${secKey}-${item.workOrderId}`} item={item} showViewCase={false}>
-          <div className="grid grid-cols-2 gap-1 text-xs">
-            <p><span className="text-muted-foreground">案件：</span>{item.workOrderNumber ?? `#${item.workOrderId}`}</p>
-            <p><span className="text-muted-foreground">客戶：</span>{item.customerName ?? "—"}</p>
-            <p className="col-span-2"><span className="text-muted-foreground">電話：</span>{phone}</p>
-            <p className="col-span-2">
-              <span className="text-muted-foreground">完工：</span>
-              {item.completedAt ? new Date(item.completedAt).toLocaleDateString("zh-TW") : "—"}
-            </p>
-            <p><span className="text-muted-foreground">收款：</span>{item.receivableStatusLabel ?? item.paymentStatus ?? "—"}</p>
-            <p><span className="text-muted-foreground">補助：</span>{item.subsidyTypeLabel ?? "待確認"}{item.assistedProgramLabel ? `－${item.assistedProgramLabel}` : ""}</p>
+        <div
+          key={`${secKey}-${item.workOrderId}`}
+          className="rounded-lg border p-3 space-y-2 text-sm"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <p className="font-medium">{item.customerName ?? "未命名客戶"}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {item.workOrderNumber ?? `#${item.workOrderId}`}
+              </p>
+            </div>
+            <Badge className="bg-blue-100 text-blue-700 border-0 font-normal">等待客戶上傳</Badge>
           </div>
-          <SubsidyMetaLines item={item} />
-
-          {pending && canOperate && (
-            <>
-              <p className="text-xs text-muted-foreground">請直接選擇補助方式（收款不受影響）</p>
-              {typeChooserButtons}
-            </>
-          )}
-
-          {settled && (
-            <p className="text-xs text-muted-foreground">已處理；不產生上傳連結、不檢查文件。</p>
-          )}
-
-          {canOperate && item.subsidyType === "company_assisted" && !pending && (
+          <p className="text-xs">
+            <span className="text-muted-foreground">補助種類：</span>
+            {kind}
+          </p>
+          <p className="text-xs">
+            <span className="text-muted-foreground">缺少資料：</span>
+            <span className={(item.missingDocLabels?.length ?? 0) > 0 ? "text-orange-800" : ""}>
+              {missing}
+            </span>
+          </p>
+          {canOperate && (
             <div className="flex flex-wrap gap-2">
               <Button asChild size="sm" variant="outline" className="h-10 sm:h-9">
                 <Link href={caseHref(item.workOrderId)}>查看案件</Link>
@@ -974,7 +962,7 @@ export default function AdminWorkbench() {
                     );
                   }}
                 >
-                  複製網址
+                  複製上傳網址
                 </Button>
               )}
               {item.uploadUrl && (
@@ -984,7 +972,7 @@ export default function AdminWorkbench() {
                   disabled={subsidyPipeMut.isPending}
                   onClick={() => {
                     const text =
-                      display === "docs_incomplete" && (item.missingDocLabels?.length ?? 0) > 0
+                      (item.missingDocLabels?.length ?? 0) > 0
                         ? subsidyMissingShareText(item)
                         : subsidyUploadShareText(item);
                     const win = openLineShareText(text);
@@ -1000,74 +988,12 @@ export default function AdminWorkbench() {
                     }
                   }}
                 >
-                  {(item.missingDocLabels?.length ?? 0) > 0 ? "LINE 提醒補件" : "LINE 傳送"}
-                </Button>
-              )}
-              <Button size="sm" variant="outline" className="h-10 sm:h-9" onClick={() => setDocsModal(item)}>
-                查看客戶資料
-                {(item.uploadedDocCount ?? 0) > 0 ? `（${item.uploadedDocCount}）` : ""}
-              </Button>
-              {display === "awaiting_manual_review" && (
-                <Button
-                  size="sm"
-                  className="h-10 sm:h-9 bg-yellow-600 hover:bg-yellow-700"
-                  disabled={subsidyConfirmMut.isPending}
-                  onClick={() => {
-                    if (!window.confirm("確認補助資料齊全可用？")) return;
-                    subsidyConfirmMut.mutate(item.workOrderId);
-                  }}
-                >
-                  人工確認資料完整
-                </Button>
-              )}
-              {(display === "docs_complete" || pipe === "pending_apply") && !doneApplied && (
-                <Button
-                  size="sm"
-                  className="h-10 sm:h-9 bg-green-700 hover:bg-green-800"
-                  disabled={subsidyPipeMut.isPending}
-                  onClick={() => {
-                    if (!window.confirm("確定此案件的補助申請已完成？")) return;
-                    const remark = window.prompt("備註（選填）") ?? undefined;
-                    subsidyPipeMut.mutate({
-                      id: item.workOrderId,
-                      status: "applied",
-                      note: remark?.trim() || undefined,
-                    });
-                  }}
-                >
-                  補助已完成
-                </Button>
-              )}
-              {doneApplied && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-10 sm:h-9 text-orange-700 border-orange-300"
-                  disabled={subsidyUnmarkMut.isPending}
-                  onClick={() => {
-                    if (!window.confirm("取消補助完成／重新開啟？附件與紀錄不會刪除。")) return;
-                    subsidyUnmarkMut.mutate(item.workOrderId);
-                  }}
-                >
-                  取消補助完成／重新開啟
+                  LINE 提醒補件
                 </Button>
               )}
             </div>
           )}
-
-          {canOperate && item.subsidyType === "company_assisted" && !pending && !doneApplied && (
-            <details className="text-xs">
-              <summary className="cursor-pointer text-muted-foreground">修改補助方式</summary>
-              <div className="mt-2">{typeChooserButtons}</div>
-            </details>
-          )}
-
-          {(settled || doneApplied) && canOperate && (
-            <Button asChild size="sm" variant="outline" className="h-10 sm:h-9">
-              <Link href={caseHref(item.workOrderId)}>查看案件</Link>
-            </Button>
-          )}
-        </ItemShell>
+        </div>
       );
     }
 
@@ -1206,46 +1132,38 @@ export default function AdminWorkbench() {
           <p className="text-xs text-orange-800">缺少：{item.missingDocLabels!.join("、")}</p>
         )}
         <CollectionActions item={item} />
-        {(item.subsidyType === "company_assisted" || item.subsidyType === "pending_confirmation") && (
-          <div className="flex flex-wrap gap-2">
-            <Button size="sm" variant="outline" className="h-10 sm:h-9" onClick={() => {
-              if (item.subsidyType === "pending_confirmation") goPanel("subsidy");
-              else openSubsidyForItem(item);
-            }}>
-              {item.subsidyType === "pending_confirmation" ? "確認補助方式" : "查看補助資料"}
-            </Button>
-            {item.uploadUrl && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-10 sm:h-9"
-                onClick={() => {
-                  const url = absoluteUploadUrl(item);
-                  if (!url) return;
-                  void navigator.clipboard.writeText(url).then(() => toast({ title: "已複製上傳網址" }));
-                }}
-              >
-                複製上傳網址
-              </Button>
-            )}
-            {item.uploadUrl && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-10 sm:h-9"
-                onClick={() => {
-                  const text = subsidyUploadShareText(item);
-                  const win = openLineShareText(text);
-                  if (!win) void navigator.clipboard.writeText(text);
-                }}
-              >
-                LINE 分享
-              </Button>
-            )}
-            <Button size="sm" variant="ghost" className="h-10 sm:h-9" onClick={() => goPanel("subsidy")}>
-              開啟補助中心
-            </Button>
-          </div>
+        {canOperate &&
+          (item.subsidyType === "pending_confirmation" || item.virtualPendingConfirmation) && (
+            <div className="space-y-2 border-t pt-2">
+              <p className="text-xs font-medium">選擇補助方式</p>
+              <div className="flex flex-col gap-2">
+                <Button size="sm" variant="outline" className="h-10 justify-start" disabled={subsidyTypeMut.isPending}
+                  onClick={() => subsidyTypeMut.mutate({ id: item.workOrderId, subsidyType: "customer_self_apply" })}>
+                  客戶自行申請
+                </Button>
+                <Button size="sm" variant="outline" className="h-10 justify-start" disabled={subsidyTypeMut.isPending}
+                  onClick={() => subsidyTypeMut.mutate({ id: item.workOrderId, subsidyType: "company_assisted", assistedProgram: "new_unit" })}>
+                  公司協助－新機補助
+                </Button>
+                <Button size="sm" variant="outline" className="h-10 justify-start" disabled={subsidyTypeMut.isPending}
+                  onClick={() => subsidyTypeMut.mutate({ id: item.workOrderId, subsidyType: "company_assisted", assistedProgram: "trade_in" })}>
+                  公司協助－舊換新補助
+                </Button>
+                <Button size="sm" variant="outline" className="h-10 justify-start" disabled={subsidyTypeMut.isPending}
+                  onClick={() => subsidyTypeMut.mutate({ id: item.workOrderId, subsidyType: "company_assisted", assistedProgram: "new_unit_and_trade_in" })}>
+                  公司協助－新機＋舊換新
+                </Button>
+                <Button size="sm" variant="outline" className="h-10 justify-start" disabled={subsidyTypeMut.isPending}
+                  onClick={() => subsidyTypeMut.mutate({ id: item.workOrderId, subsidyType: "not_needed" })}>
+                  不需申請
+                </Button>
+              </div>
+            </div>
+          )}
+        {item.subsidyType === "company_assisted" && item.subsidyPipelineStatus !== "applied" && (
+          <Button size="sm" variant="ghost" className="h-10 sm:h-9" onClick={() => goPanel("subsidy")}>
+            開啟補助中心
+          </Button>
         )}
       </ItemShell>
     );
@@ -1305,7 +1223,7 @@ export default function AdminWorkbench() {
             ? `行政每日工作台 · ${data.today} · 未完成待辦 ${data.counts.openTodos ?? 0} 件`
             : panel === "collection"
               ? "依收款日分類處理；與補助流程並行"
-              : "選方式 → LINE 傳送 → 等客戶上傳 → 確認 → 綠燈送件 → 補助完成"}
+              : "僅列出需客戶上傳補助資料的案件；完成後請至案件頁標記補助完成"}
         </p>
       </div>
 
@@ -1347,7 +1265,7 @@ export default function AdminWorkbench() {
             title="📄 補助中心"
             count={hubs.subsidyTodoCount}
             onClick={() => goPanel("subsidy")}
-            hint="待處理／等待客戶／可申請"
+            hint="等待客戶上傳補助資料"
           />
           {renderSections(hubs.homeSections.filter((s) => s.key === "close" || s.key === "closed"))}
           <Card>
