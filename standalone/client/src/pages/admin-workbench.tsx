@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useLocation, useSearch } from "wouter";
-import { AlertCircle, CheckCircle2, ChevronLeft, ClipboardList, Phone } from "lucide-react";
+import { Link } from "wouter";
+import { AlertCircle, CheckCircle2, Phone } from "lucide-react";
 import { useAuth, hasRole } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,16 +18,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import type {
-  AssistedProgram,
-  SubsidyInvoiceKind,
-  SubsidyPipelineStatus,
-  SubsidyType,
-} from "../../../shared/adminWorkflowConstants.ts";
-import {
-  SUBSIDY_DISPLAY_COLORS,
-  type SubsidyDisplayStatus,
-} from "../../../shared/subsidyDocs.ts";
+import type { SubsidyInvoiceKind } from "../../../shared/adminWorkflowConstants.ts";
 import { openLineShareText } from "@/components/pdf/pdf-service";
 import { getListReceivablesQueryKey } from "@workspace/api-client-react";
 import {
@@ -36,13 +27,10 @@ import {
   confirmAdminCompletion,
   confirmAdminSubsidyDocs,
   fetchAdminWorkbench,
-  markAdminBilled,
   markAdminPaid,
   recordAdminPayment,
   reopenAdminClosed,
-  setAdminExpectedPaymentDate,
   setAdminSubsidyInvoiceKind,
-  setAdminSubsidyType,
   unmarkAdminSubsidyApplied,
   type AdminWorkbenchItem,
 } from "@/lib/adminWorkbenchApi";
@@ -56,68 +44,10 @@ function caseHref(workOrderId: number) {
   return `/work-orders?highlight=${workOrderId}`;
 }
 
-function StatusRow({ item }: { item: AdminWorkbenchItem }) {
-  return (
-    <div className="space-y-1 text-xs">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-muted-foreground">收款狀態：</span>
-        <span>{item.receivableStatusLabel ?? item.paymentStatus ?? "—"}</span>
-        <span className="text-muted-foreground">｜</span>
-        <span className="text-muted-foreground">補助狀態：</span>
-        <SubsidyBadge item={item} />
-      </div>
-      <p>
-        <span className="text-muted-foreground">可結案：</span>
-        <span className={item.canClose ? "text-green-700" : "text-amber-700"}>
-          {item.canClose ? "是" : "否"}
-        </span>
-      </p>
-    </div>
-  );
-}
-
-type WorkbenchPanel = "home" | "collection" | "subsidy";
-
-function HubCard({
-  title,
-  count,
-  accent,
-  onClick,
-  hint,
-}: {
-  title: string;
-  count: number;
-  accent?: "red" | "orange" | "normal";
-  onClick: () => void;
-  hint?: string;
-}) {
-  const border =
-    accent === "red"
-      ? "border-red-300"
-      : accent === "orange"
-        ? "border-orange-300"
-        : "border-border";
-  return (
-    <button type="button" onClick={onClick} className="w-full text-left rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-      <Card className={`${border} hover:bg-muted/30 transition-colors`}>
-        <CardHeader className="pb-2 flex-row items-center justify-between space-y-0">
-          <CardTitle className="text-base">{title}</CardTitle>
-          <Badge variant={count > 0 ? "default" : "secondary"}>{count}</Badge>
-        </CardHeader>
-        {hint ? (
-          <CardContent className="pt-0">
-            <p className="text-xs text-muted-foreground">{hint}</p>
-          </CardContent>
-        ) : null}
-      </Card>
-    </button>
-  );
-}
-
 function Section({
   title,
   count,
-  accent,
+  accent = "normal",
   children,
   collapsible = false,
   defaultOpen = true,
@@ -135,28 +65,20 @@ function Section({
       ? "border-red-300"
       : accent === "orange"
         ? "border-orange-300"
-        : "border-border";
+        : "";
   return (
     <Card className={border}>
-      <CardHeader className="pb-2 flex-row items-center justify-between space-y-0">
-        <CardTitle className="text-base flex items-center gap-2">
-          <ClipboardList className="h-4 w-4" />
-          {title}
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base flex items-center justify-between gap-2">
+          <button
+            type="button"
+            className="text-left flex-1"
+            onClick={() => collapsible && setOpen((v) => !v)}
+          >
+            {title}
+          </button>
+          <Badge variant="secondary">{count}</Badge>
         </CardTitle>
-        <div className="flex items-center gap-2">
-          <Badge variant={count > 0 ? "default" : "secondary"}>{count}</Badge>
-          {collapsible && (
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className="h-8 px-2 text-xs"
-              onClick={() => setOpen((v) => !v)}
-            >
-              {open ? "收合" : "展開"}
-            </Button>
-          )}
-        </div>
       </CardHeader>
       {(!collapsible || open) && (
         <CardContent className="space-y-3">{children}</CardContent>
@@ -165,29 +87,17 @@ function Section({
   );
 }
 
-function ReceivableSummary({ item }: { item: AdminWorkbenchItem }) {
+/** 金額摘要 — 不顯示收款日 */
+function AmountSummary({ item }: { item: AdminWorkbenchItem }) {
   return (
     <div className="grid grid-cols-2 gap-1 text-xs">
-      <p>
-        <span className="text-muted-foreground">客戶：</span>
-        {item.customerName ?? "—"}
-      </p>
-      <p>
-        <span className="text-muted-foreground">案件：</span>
-        {item.workOrderNumber ?? `#${item.workOrderId}`}
-      </p>
       <p>應收金額：NT${money(item.totalAmount)}</p>
       <p>已收金額：NT${money(item.receivedAmount)}</p>
       <p>未收金額：NT${money(item.unpaidAmount)}</p>
       <p>
-        收款日：
-        {item.expectedPaymentDate ? item.expectedPaymentDate : (
-          <span className="text-amber-700 font-medium">未設定</span>
-        )}
+        <span className="text-muted-foreground">收款狀態：</span>
+        {item.receivableStatusLabel ?? item.paymentStatus ?? "—"}
       </p>
-      {item.overdueDays != null && item.overdueDays > 0 && (
-        <p className="text-red-700 col-span-2">逾期 {item.overdueDays} 天</p>
-      )}
     </div>
   );
 }
@@ -217,7 +127,6 @@ function ItemShell({
           </Button>
         )}
       </div>
-      <StatusRow item={item} />
       {children}
     </div>
   );
@@ -230,7 +139,7 @@ function absoluteUploadUrl(item: AdminWorkbenchItem): string | null {
   return `${window.location.origin}${path.startsWith("/") ? "" : "/"}${path}`;
 }
 
-/** 複製上傳網址時用的短訊息（三聯式才附提醒） */
+/** LINE 傳送補助資料連結（首次通知） */
 function subsidyUploadShareText(item: AdminWorkbenchItem): string {
   const url = absoluteUploadUrl(item);
   const lines = [
@@ -302,77 +211,27 @@ function subsidyLineReminderText(item: AdminWorkbenchItem): string {
   return lines.join("\n");
 }
 
+/** 補助狀態 — 只看 pipeline_status */
 function SubsidyBadge({ item }: { item: AdminWorkbenchItem }) {
-  // Simplified: company_assisted open → 等待客戶上傳；applied → 補助完成
-  if (item.subsidyType === "company_assisted") {
-    if (item.subsidyPipelineStatus === "applied") {
-      return (
-        <Badge className="bg-emerald-200 text-emerald-900 border-0 font-normal">補助已完成</Badge>
-      );
-    }
+  if (item.subsidyPipelineStatus === "applied") {
+    return (
+      <Badge className="bg-emerald-200 text-emerald-900 border-0 font-normal">補助已完成</Badge>
+    );
+  }
+  if (!item.invoiceKind) {
+    return (
+      <Badge className="bg-gray-100 text-gray-600 border-0 font-normal">待選發票類型</Badge>
+    );
+  }
+  if ((item.missingDocLabels?.length ?? 0) > 0) {
     return (
       <Badge className="bg-blue-100 text-blue-700 border-0 font-normal">等待客戶上傳</Badge>
     );
   }
-  const status = (item.subsidyDisplayStatus ?? "no_record") as SubsidyDisplayStatus;
-  const color = SUBSIDY_DISPLAY_COLORS[status] ?? "bg-gray-100 text-gray-600";
   return (
-    <Badge className={`${color} border-0 font-normal`}>
-      {item.subsidyStatusLabel ?? item.subsidyTypeLabel ?? "—"}
+    <Badge className="bg-green-100 text-green-800 border-0 font-normal">
+      補助資料已齊，可進行申請
     </Badge>
-  );
-}
-
-/** Handling-method tag — no binary 需補助／免補助. */
-function SubsidyHandlingTag({
-  item,
-  onOpen,
-}: {
-  item: AdminWorkbenchItem;
-  onOpen: () => void;
-}) {
-  const t = item.subsidyType;
-  if (t === "pending_confirmation") {
-    return (
-      <button
-        type="button"
-        className="inline-flex items-center rounded-full border border-gray-300 bg-gray-100 px-2 py-0.5 text-xs text-gray-700 hover:bg-gray-200"
-        onClick={onOpen}
-      >
-        補助方式：待確認
-      </button>
-    );
-  }
-  if (t === "not_needed") {
-    return (
-      <span className="inline-flex items-center rounded-full border border-gray-200 bg-gray-50 px-2 py-0.5 text-xs text-gray-600">
-        不需申請
-      </span>
-    );
-  }
-  if (t === "customer_self_apply") {
-    return (
-      <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-xs text-slate-700">
-        客戶自行申請
-      </span>
-    );
-  }
-  if (t === "company_assisted") {
-    const prog = item.assistedProgramLabel ?? "公司協助";
-    return (
-      <button
-        type="button"
-        className="inline-flex items-center rounded-full border border-blue-300 bg-blue-50 px-2 py-0.5 text-xs text-blue-800 hover:bg-blue-100"
-        onClick={onOpen}
-      >
-        公司協助－{prog}
-      </button>
-    );
-  }
-  return (
-    <span className="inline-flex items-center rounded-full border border-gray-100 bg-gray-50 px-2 py-0.5 text-xs text-gray-500">
-      尚無補助紀錄
-    </span>
   );
 }
 
@@ -381,12 +240,6 @@ function SubsidyMetaLines({ item }: { item: AdminWorkbenchItem }) {
     <div className="text-xs space-y-1">
       <div className="flex flex-wrap items-center gap-2">
         <SubsidyBadge item={item} />
-        {item.subsidyDisplayStatus === "docs_complete" && (
-          <span className="text-green-700">可進行補助申請</span>
-        )}
-        {item.canCloseReady && item.subsidyType === "company_assisted" && item.subsidyPipelineStatus === "applied" && (
-          <span className="text-emerald-800 font-medium">可結案</span>
-        )}
       </div>
       <p>
         已上傳 {item.uploadedDocCount ?? item.customerDocumentCount ?? 0} 份
@@ -417,29 +270,10 @@ function SubsidyMetaLines({ item }: { item: AdminWorkbenchItem }) {
   );
 }
 
-type BillDraft = {
-  extra: string;
-  discount: string;
-  due: string;
-  billTo: string;
-  /** Explicit final amount — required when no quote */
-  finalAmount: string;
-};
-
 export default function AdminWorkbench() {
   const { user } = useAuth();
   const { toast } = useToast();
   const qc = useQueryClient();
-  const [path, navigate] = useLocation();
-  const search = useSearch();
-  const panelParam = new URLSearchParams(search).get("panel");
-  const panel: WorkbenchPanel =
-    panelParam === "collection" || panelParam === "subsidy" ? panelParam : "home";
-  const basePath = path.startsWith("/admin-workbench") ? "/admin-workbench" : "/";
-  const goPanel = (p: WorkbenchPanel) => {
-    if (p === "home") navigate(basePath);
-    else navigate(`${basePath}?panel=${p}`);
-  };
 
   const canOperate = hasRole(user, "super_admin", "owner", "admin");
   const canFinance = canOperate || hasRole(user, "accountant");
@@ -472,47 +306,15 @@ export default function AdminWorkbench() {
     onError: onErr,
   });
 
-  const billMut = useMutation({
-    mutationFn: (p: { id: number; body: Parameters<typeof markAdminBilled>[1] }) =>
-      markAdminBilled(p.id, p.body),
-    onSuccess: () => {
-      toast({ title: "已建立應收帳款" });
-      invalidate();
-    },
-    onError: onErr,
-  });
-
-  const dueMut = useMutation({
-    mutationFn: (p: { id: number; date: string }) => setAdminExpectedPaymentDate(p.id, p.date),
-    onSuccess: () => {
-      toast({ title: "已設定預計收款日" });
-      setDueModal(null);
-      invalidate();
-    },
-    onError: onErr,
-  });
-
   const subsidyPipeMut = useMutation({
-    mutationFn: (p: { id: number; status: SubsidyPipelineStatus; note?: string }) =>
+    mutationFn: (p: { id: number; status: "awaiting_upload" | "applied"; note?: string }) =>
       advanceAdminSubsidyPipeline(p.id, p.status, p.note),
     onSuccess: (_data, vars) => {
       toast({
         title: vars.status === "applied" ? "已標記補助完成" : "補助狀態已更新",
-        description: vars.status === "applied" ? "案件已從補助中心移除" : undefined,
+        description:
+          vars.status === "applied" ? "若已收款，系統會自動結案" : undefined,
       });
-      invalidate();
-    },
-    onError: onErr,
-  });
-
-  const subsidyTypeMut = useMutation({
-    mutationFn: (p: {
-      id: number;
-      subsidyType: SubsidyType;
-      assistedProgram?: AssistedProgram | null;
-    }) => setAdminSubsidyType(p.id, p.subsidyType, { assistedProgram: p.assistedProgram }),
-    onSuccess: () => {
-      toast({ title: "補助方式已更新" });
       invalidate();
     },
     onError: onErr,
@@ -523,8 +325,11 @@ export default function AdminWorkbench() {
       setAdminSubsidyInvoiceKind(p.id, p.invoiceKind),
     onSuccess: (_d, vars) => {
       toast({
-        title: "發票類型已更新",
-        description: vars.invoiceKind === "triple" ? "三聯式（公司）" : "二聯式（個人）",
+        title: "發票類型已設定",
+        description:
+          vars.invoiceKind === "triple"
+            ? "三聯式（公司）· 已產生補助上傳網址"
+            : "二聯式（個人）· 已產生補助上傳網址",
       });
       invalidate();
     },
@@ -574,7 +379,7 @@ export default function AdminWorkbench() {
     onSuccess: () => {
       toast({
         title: "已取消已收款",
-        description: "若案件已結案會一併解除，並回到未收款分類",
+        description: "若案件已結案會一併解除，並回到未收款",
       });
       invalidate();
     },
@@ -584,96 +389,14 @@ export default function AdminWorkbench() {
   const reopenMut = useMutation({
     mutationFn: (id: number) => reopenAdminClosed(id, "取消結案／重新開啟"),
     onSuccess: () => {
-      toast({ title: "已取消結案", description: "收款與補助資料均保留，案件回到待結案" });
+      toast({ title: "已取消結案", description: "收款與補助資料均保留" });
       invalidate();
     },
     onError: onErr,
   });
 
-  const [billDraft, setBillDraft] = useState<Record<number, BillDraft>>({});
-  const [dueModal, setDueModal] = useState<{ item: AdminWorkbenchItem; date: string } | null>(null);
   const [payModal, setPayModal] = useState<{ item: AdminWorkbenchItem; amount: string } | null>(null);
   const [docsModal, setDocsModal] = useState<AdminWorkbenchItem | null>(null);
-
-  function draftFor(item: AdminWorkbenchItem): BillDraft {
-    const quote = parseFloat(String(item.quoteOriginalAmount ?? "0")) || 0;
-    const extra = parseFloat(String(item.extraAmount ?? "0")) || 0;
-    const discount = parseFloat(String(item.discountAmount ?? "0")) || 0;
-    const computed = Math.max(0, quote + extra - discount);
-    return (
-      billDraft[item.workOrderId] ?? {
-        extra: item.extraAmount ?? "0",
-        discount: item.discountAmount ?? "0",
-        due: "",
-        billTo: item.billTo ?? item.customerName ?? "",
-        finalAmount: String(computed > 0 ? computed : ""),
-      }
-    );
-  }
-
-  function finalPreview(d: BillDraft, item: AdminWorkbenchItem): number {
-    const quote = parseFloat(String(item.quoteOriginalAmount ?? "0")) || 0;
-    const extra = parseFloat(d.extra) || 0;
-    const discount = parseFloat(d.discount) || 0;
-    const computed = Math.max(0, quote + extra - discount);
-    const typed = parseFloat(d.finalAmount);
-    if (Number.isFinite(typed) && typed > 0) return typed;
-    return computed;
-  }
-
-  const hubs = useMemo(() => {
-    if (!data) return null;
-    const s = data.sections;
-    const c = data.counts;
-    // 未設定收款日：含尚未建檔／草稿應收（首頁不另開「待建立」分類）
-    const noDueItems = [...(s.pendingCreateReceivable ?? []), ...(s.noDueDate ?? [])];
-    const noDueCount = (c.pendingCreateReceivable ?? 0) + (c.noDueDate ?? 0);
-    const collectionCount =
-      noDueCount +
-      (c.collectionOverdue ?? 0) +
-      (c.collectionToday ?? 0) +
-      (c.collectionSoon ?? 0);
-    // 補助中心：僅「公司協助且尚未標記完成」＝需客戶提供資料
-    const waitingSubsidyItems = [
-      ...(s.subsidyLinkNotSent ?? []),
-      ...(s.subsidyAwaitingUpload ?? []),
-      ...(s.subsidyDocsIncomplete ?? []),
-      ...(s.subsidyAwaitingManualReview ?? []),
-      ...(s.subsidyDocsComplete ?? []),
-      ...(s.subsidyPendingApply ?? []),
-    ].filter(
-      (it, idx, arr) =>
-        it.subsidyType === "company_assisted" &&
-        it.subsidyPipelineStatus !== "applied" &&
-        arr.findIndex((x) => x.workOrderId === it.workOrderId) === idx,
-    );
-    const subsidyTodoCount = waitingSubsidyItems.length;
-    return {
-      collectionCount,
-      subsidyTodoCount,
-      collectionSections: [
-        { key: "noDue", title: "未設定收款日", accent: "normal" as const, items: noDueItems, count: noDueCount },
-        { key: "today", title: "今日到期", accent: "orange" as const, items: s.collectionToday, count: c.collectionToday ?? 0 },
-        { key: "soon", title: "即將到期", accent: "normal" as const, items: s.collectionSoon, count: c.collectionSoon ?? 0 },
-        { key: "overdue", title: "已逾期", accent: "red" as const, items: s.collectionOverdue, count: c.collectionOverdue ?? 0 },
-      ],
-      subsidySections: [
-        {
-          key: "subWait",
-          title: "等待客戶上傳",
-          accent: "normal" as const,
-          items: waitingSubsidyItems,
-          count: subsidyTodoCount,
-        },
-      ],
-      homeSections: [
-        { key: "confirm", title: "📋 待確認施工資料", accent: "normal" as const, items: s.pendingConstructionConfirm, count: c.pendingConstructionConfirm ?? 0 },
-        { key: "partial", title: "💳 部分收款", accent: "normal" as const, items: s.collectionPartial, count: c.collectionPartial ?? 0 },
-        { key: "close", title: "✅ 已收款／待結案", accent: "normal" as const, items: s.pendingClose, count: c.pendingClose ?? 0 },
-        { key: "closed", title: "📦 已結案", accent: "normal" as const, items: s.closed, count: c.closed ?? 0 },
-      ],
-    };
-  }, [data]);
 
   if (!user || !canFinance) {
     return (
@@ -710,717 +433,369 @@ export default function AdminWorkbench() {
     );
   }
 
-  function CollectionActions({ item }: { item: AdminWorkbenchItem }) {
-    const unpaid = parseFloat(String(item.unpaidAmount ?? "0")) || 0;
-    const phone = item.mobilePhone || item.telephone;
+  function renderConfirmCard(item: AdminWorkbenchItem) {
     return (
-      <div className="flex flex-col sm:flex-row flex-wrap gap-2">
-        {phone && (
-          <Button asChild size="sm" variant="outline" className="h-10 sm:h-9">
-            <a href={`tel:${phone}`}>
-              <Phone className="h-3.5 w-3.5 mr-1" />
-              聯絡客戶
-            </a>
-          </Button>
-        )}
-        {canFinance && unpaid > 0 && (
+      <ItemShell key={`confirm-${item.workOrderId}`} item={item}>
+        <div className="flex flex-wrap gap-3 text-xs">
+          <span className={item.hasPhotos ? "text-green-700" : "text-destructive"}>
+            {item.hasPhotos ? "✓" : "✗"} 完工照片
+          </span>
+          <span className={item.hasSignature ? "text-green-700" : "text-destructive"}>
+            {item.hasSignature ? "✓" : "✗"} 客戶簽名
+          </span>
+          <span className={item.hasMaterials ? "text-green-700" : "text-destructive"}>
+            {item.hasMaterials ? "✓" : "✗"} 材料紀錄
+          </span>
+        </div>
+        {canOperate && (
           <Button
             size="sm"
             className="h-10 sm:h-9"
-            onClick={() =>
-              setPayModal({
-                item,
-                amount: String(unpaid),
-              })
-            }
+            disabled={confirmMut.isPending}
+            onClick={() => confirmMut.mutate(item.workOrderId)}
           >
-            登記收款
-          </Button>
-        )}
-        <Button asChild size="sm" variant="outline" className="h-10 sm:h-9">
-          <Link href={caseHref(item.workOrderId)}>查看案件</Link>
-        </Button>
-        {canOperate && unpaid > 0 && (
-          <Button
-            size="sm"
-            variant="secondary"
-            className="h-10 sm:h-9"
-            disabled={markPaidMut.isPending}
-            onClick={() => markPaidMut.mutate(item.workOrderId)}
-          >
-            標記已收款
-          </Button>
-        )}
-      </div>
-    );
-  }
-
-  function openSubsidyForItem(item: AdminWorkbenchItem) {
-    setDocsModal(item);
-  }
-
-  function renderCreateArCard(item: AdminWorkbenchItem) {
-      const draft = draftFor(item);
-      const preview = finalPreview(draft, item);
-      return (
-        <ItemShell key={`createAr-${item.workOrderId}`} item={item} showViewCase>
-          <div className="flex flex-wrap items-center gap-2">
-            <SubsidyHandlingTag
-              item={item}
-              onOpen={() => {
-                if (item.subsidyType === "pending_confirmation") goPanel("subsidy");
-                else if (item.subsidyType === "company_assisted") openSubsidyForItem(item);
-                else goPanel("subsidy");
-              }}
-            />
-          </div>
-          <div className="rounded-md bg-muted/40 p-2 text-xs space-y-1">
-            <p>原報價／成交金額：NT${money(item.quoteOriginalAmount)}</p>
-            <p className="font-medium text-foreground">
-              最終應收金額：NT${preview.toLocaleString("zh-TW")}
-            </p>
-          </div>
-          {canOperate && (
-            <div className="grid sm:grid-cols-2 gap-2">
-              <div>
-                <Label className="text-xs">追加</Label>
-                <Input
-                  value={draft.extra}
-                  onChange={(e) => {
-                    const extra = e.target.value;
-                    const quote = parseFloat(String(item.quoteOriginalAmount ?? "0")) || 0;
-                    const discount = parseFloat(draft.discount) || 0;
-                    const nextFinal = Math.max(0, quote + (parseFloat(extra) || 0) - discount);
-                    setBillDraft((s) => ({
-                      ...s,
-                      [item.workOrderId]: { ...draft, extra, finalAmount: String(nextFinal || "") },
-                    }));
-                  }}
-                />
-              </div>
-              <div>
-                <Label className="text-xs">折讓</Label>
-                <Input
-                  value={draft.discount}
-                  onChange={(e) => {
-                    const discount = e.target.value;
-                    const quote = parseFloat(String(item.quoteOriginalAmount ?? "0")) || 0;
-                    const extra = parseFloat(draft.extra) || 0;
-                    const nextFinal = Math.max(0, quote + extra - (parseFloat(discount) || 0));
-                    setBillDraft((s) => ({
-                      ...s,
-                      [item.workOrderId]: { ...draft, discount, finalAmount: String(nextFinal || "") },
-                    }));
-                  }}
-                />
-              </div>
-              <div>
-                <Label className="text-xs">最終應收金額 <span className="text-destructive">*</span></Label>
-                <Input
-                  type="number"
-                  value={draft.finalAmount}
-                  onChange={(e) =>
-                    setBillDraft((s) => ({
-                      ...s,
-                      [item.workOrderId]: { ...draft, finalAmount: e.target.value },
-                    }))
-                  }
-                />
-              </div>
-              <div>
-                <Label className="text-xs">預計收款日（選填）</Label>
-                <Input
-                  type="date"
-                  value={draft.due}
-                  onChange={(e) =>
-                    setBillDraft((s) => ({
-                      ...s,
-                      [item.workOrderId]: { ...draft, due: e.target.value },
-                    }))
-                  }
-                />
-              </div>
-              <div className="sm:col-span-2">
-                <Label className="text-xs">請款對象</Label>
-                <Input
-                  value={draft.billTo}
-                  onChange={(e) =>
-                    setBillDraft((s) => ({
-                      ...s,
-                      [item.workOrderId]: { ...draft, billTo: e.target.value },
-                    }))
-                  }
-                />
-              </div>
-              <p className="text-xs text-muted-foreground col-span-2">
-                若需客戶上傳補助資料，請在下方選擇「公司協助」方案（與收款並行）。
-              </p>
-            </div>
-          )}
-          {canOperate &&
-            (item.subsidyType === "pending_confirmation" || item.virtualPendingConfirmation) && (
-              <div className="space-y-2">
-                <p className="text-xs font-medium">選擇補助方式</p>
-                <div className="flex flex-col gap-2">
-                  <Button size="sm" variant="outline" className="h-10 justify-start" disabled={subsidyTypeMut.isPending}
-                    onClick={() => subsidyTypeMut.mutate({ id: item.workOrderId, subsidyType: "customer_self_apply" })}>
-                    客戶自行申請
-                  </Button>
-                  <Button size="sm" variant="outline" className="h-10 justify-start" disabled={subsidyTypeMut.isPending}
-                    onClick={() => subsidyTypeMut.mutate({ id: item.workOrderId, subsidyType: "company_assisted", assistedProgram: "new_unit" })}>
-                    公司協助－新機補助
-                  </Button>
-                  <Button size="sm" variant="outline" className="h-10 justify-start" disabled={subsidyTypeMut.isPending}
-                    onClick={() => subsidyTypeMut.mutate({ id: item.workOrderId, subsidyType: "company_assisted", assistedProgram: "trade_in" })}>
-                    公司協助－舊換新補助
-                  </Button>
-                  <Button size="sm" variant="outline" className="h-10 justify-start" disabled={subsidyTypeMut.isPending}
-                    onClick={() => subsidyTypeMut.mutate({ id: item.workOrderId, subsidyType: "company_assisted", assistedProgram: "new_unit_and_trade_in" })}>
-                    公司協助－新機＋舊換新
-                  </Button>
-                  <Button size="sm" variant="outline" className="h-10 justify-start" disabled={subsidyTypeMut.isPending}
-                    onClick={() => subsidyTypeMut.mutate({ id: item.workOrderId, subsidyType: "not_needed" })}>
-                    不需申請
-                  </Button>
-                </div>
-              </div>
-            )}
-          {canOperate && (
-            <Button
-              size="sm"
-              className="h-10 sm:h-9"
-              disabled={billMut.isPending || !(preview > 0)}
-              onClick={() => {
-                if (!(preview > 0)) {
-                  toast({ title: "請確認最終應收金額", description: "金額必須大於 0", variant: "destructive" });
-                  return;
-                }
-                billMut.mutate({
-                  id: item.workOrderId,
-                  body: {
-                    extraAmount: draft.extra || "0",
-                    discountAmount: draft.discount || "0",
-                    finalAmount: String(preview),
-                    billTo: draft.billTo,
-                    expectedPaymentDate: draft.due || null,
-                  },
-                });
-              }}
-            >
-              建立應收帳款（NT${preview.toLocaleString("zh-TW")}）
-            </Button>
-          )}
-        </ItemShell>
-      );
-  }
-
-  function renderItem(secKey: string, item: AdminWorkbenchItem) {
-    if (secKey === "confirm") {
-      return (
-        <ItemShell key={item.workOrderId} item={item}>
-          <div className="flex flex-wrap gap-3 text-xs">
-            <span className={item.hasPhotos ? "text-green-700" : "text-destructive"}>
-              {item.hasPhotos ? "✓" : "✗"} 完工照片
-            </span>
-            <span className={item.hasSignature ? "text-green-700" : "text-destructive"}>
-              {item.hasSignature ? "✓" : "✗"} 客戶簽名
-            </span>
-            <span className={item.hasMaterials ? "text-green-700" : "text-destructive"}>
-              {item.hasMaterials ? "✓" : "✗"} 材料紀錄
-            </span>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <SubsidyHandlingTag item={item} onOpen={() => openSubsidyForItem(item)} />
-            <SubsidyBadge item={item} />
-          </div>
-          {canOperate && (
-            <Button
-              size="sm"
-              className="h-10 sm:h-9"
-              disabled={confirmMut.isPending}
-              onClick={() => confirmMut.mutate(item.workOrderId)}
-            >
-              確認施工資料
-            </Button>
-          )}
-        </ItemShell>
-      );
-    }
-
-    // 未設定收款日內可能含尚未有 receivableId 的草稿建檔案
-    if (secKey === "noDue" && item.receivableId == null) {
-      return renderCreateArCard(item);
-    }
-
-    if (secKey.startsWith("sub")) {
-      const pipe = item.subsidyPipelineStatus ?? "link_not_sent";
-      const missing =
-        (item.missingDocLabels?.length ?? 0) > 0
-          ? item.missingDocLabels!.join("、")
-          : "尚無缺件（可提醒客戶上傳）";
-      const shareReady = !!item.invoiceKind && !!item.uploadUrl;
-
-      return (
-        <div
-          key={`${secKey}-${item.workOrderId}`}
-          className="rounded-lg border p-3 space-y-2 text-sm"
-        >
-          <div className="flex flex-wrap items-start justify-between gap-2">
-            <div>
-              <p className="font-medium">{item.customerName ?? "未命名客戶"}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {item.workOrderNumber ?? `#${item.workOrderId}`}
-              </p>
-            </div>
-            <Badge className="bg-blue-100 text-blue-700 border-0 font-normal">等待客戶上傳</Badge>
-          </div>
-          <div className="space-y-1.5">
-            <p className="text-xs font-medium">發票類型</p>
-            {canOperate ? (
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  size="sm"
-                  variant={item.invoiceKind === "dual" ? "default" : "outline"}
-                  className="h-10 sm:h-9"
-                  disabled={invoiceKindMut.isPending}
-                  onClick={() =>
-                    invoiceKindMut.mutate({ id: item.workOrderId, invoiceKind: "dual" })
-                  }
-                >
-                  二聯式（個人）
-                </Button>
-                <Button
-                  size="sm"
-                  variant={item.invoiceKind === "triple" ? "default" : "outline"}
-                  className="h-10 sm:h-9"
-                  disabled={invoiceKindMut.isPending}
-                  onClick={() =>
-                    invoiceKindMut.mutate({ id: item.workOrderId, invoiceKind: "triple" })
-                  }
-                >
-                  三聯式（公司）
-                </Button>
-              </div>
-            ) : (
-              <p className="text-xs">{item.invoiceKindLabel ?? "尚未選擇"}</p>
-            )}
-            {!item.invoiceKind && (
-              <p className="text-xs text-amber-800">請先選擇發票類型，再複製網址或 LINE 提醒</p>
-            )}
-          </div>
-          <p className="text-xs">
-            <span className="text-muted-foreground">缺少資料：</span>
-            <span className={(item.missingDocLabels?.length ?? 0) > 0 ? "text-orange-800" : ""}>
-              {missing}
-            </span>
-          </p>
-          {canOperate && (
-            <div className="flex flex-wrap gap-2">
-              <Button asChild size="sm" variant="outline" className="h-10 sm:h-9">
-                <Link href={caseHref(item.workOrderId)}>查看案件</Link>
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-10 sm:h-9"
-                disabled={!shareReady}
-                onClick={() => {
-                  const url = absoluteUploadUrl(item);
-                  if (!url) return;
-                  const text = subsidyUploadShareText(item);
-                  void navigator.clipboard.writeText(
-                    item.invoiceKind === "triple" ? text : url,
-                  ).then(
-                    () =>
-                      toast({
-                        title: "已複製",
-                        description:
-                          item.invoiceKind === "triple"
-                            ? "已複製含三聯式提醒的分享內容"
-                            : "已複製上傳網址",
-                      }),
-                    () => toast({ title: "複製失敗", variant: "destructive" }),
-                  );
-                }}
-              >
-                複製上傳網址
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-10 sm:h-9"
-                disabled={!shareReady || subsidyPipeMut.isPending}
-                onClick={() => {
-                  const text = subsidyLineReminderText(item);
-                  const win = openLineShareText(text);
-                  if (!win) {
-                    void navigator.clipboard.writeText(text).then(() =>
-                      toast({ title: "已複製分享內容", description: "請貼到 LINE 傳送" }),
-                    );
-                    return;
-                  }
-                  toast({ title: "已開啟 LINE 分享", description: "請選擇聊天室後送出" });
-                  if (pipe === "link_not_sent") {
-                    subsidyPipeMut.mutate({ id: item.workOrderId, status: "awaiting_upload" });
-                  }
-                }}
-              >
-                LINE 提醒補件
-              </Button>
-              <Button
-                size="sm"
-                className="h-10 sm:h-9 bg-green-700 hover:bg-green-800"
-                disabled={subsidyPipeMut.isPending}
-                onClick={() => {
-                  if (!window.confirm("確定此案件的補助申請已完成？完成後將從補助中心移除。")) return;
-                  subsidyPipeMut.mutate({ id: item.workOrderId, status: "applied" });
-                }}
-              >
-                標記補助完成
-              </Button>
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    if (secKey === "close") {
-      const waitingSubsidy =
-        item.subsidyType === "company_assisted" &&
-        item.subsidyPipelineStatus !== "applied";
-      return (
-        <ItemShell key={`close-${item.workOrderId}`} item={item}>
-          <ReceivableSummary item={item} />
-          <div className="flex flex-wrap items-center gap-2">
-            <SubsidyHandlingTag item={item} onOpen={() => openSubsidyForItem(item)} />
-            <SubsidyBadge item={item} />
-          </div>
-          {waitingSubsidy ? (
-            <p className="text-xs text-amber-800 font-medium">等待補助完成</p>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              {item.canClose
-                ? "條件齊全，系統將自動結案"
-                : item.closeBlockers?.length
-                  ? item.closeBlockers.join("、")
-                  : "已收款／待結案"}
-            </p>
-          )}
-          <div className="flex flex-wrap gap-2">
-            {canOperate && waitingSubsidy && (
-              <Button size="sm" className="h-10 sm:h-9" disabled>
-                等待補助完成
-              </Button>
-            )}
-            {canOperate && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-10 sm:h-9 text-orange-700 border-orange-300"
-                disabled={cancelPaidMut.isPending}
-                onClick={() => {
-                  if (!window.confirm("確定取消已收款？將恢復為未收款，不會刪除派工單／報價單／施工資料。")) return;
-                  cancelPaidMut.mutate(item.workOrderId);
-                }}
-              >
-                取消已收款
-              </Button>
-            )}
-          </div>
-        </ItemShell>
-      );
-    }
-
-    if (secKey === "closed") {
-      return (
-        <ItemShell key={`closed-${item.workOrderId}`} item={item} showViewCase={false}>
-          <ReceivableSummary item={item} />
-          <div className="flex flex-wrap items-center gap-2 text-xs">
-            <span className="text-muted-foreground">收款狀態：</span>
-            <span>{item.paymentStatus ?? item.receivableStatusLabel ?? "—"}</span>
-            <span className="text-muted-foreground">｜補助狀態：</span>
-            <SubsidyBadge item={item} />
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button asChild size="sm" variant="outline" className="h-10 sm:h-9">
-              <Link href={caseHref(item.workOrderId)}>查看案件</Link>
-            </Button>
-            {item.subsidyType === "company_assisted" && (
-              <Button size="sm" variant="outline" className="h-10 sm:h-9" onClick={() => setDocsModal(item)}>
-                查看補助資料
-              </Button>
-            )}
-            {canOperate && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-10 sm:h-9 text-orange-700 border-orange-300"
-                disabled={cancelPaidMut.isPending}
-                onClick={() => {
-                  if (
-                    !window.confirm(
-                      "確定取消已收款？將自動解除結案並恢復為未收款，不會刪除派工單／報價單／施工資料。",
-                    )
-                  )
-                    return;
-                  cancelPaidMut.mutate(item.workOrderId);
-                }}
-              >
-                取消已收款
-              </Button>
-            )}
-            {canOperate && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-10 sm:h-9 text-orange-700 border-orange-300"
-                disabled={reopenMut.isPending}
-                onClick={() => {
-                  if (!window.confirm("確定取消結案／重新開啟？收款紀錄與補助資料將保留。")) return;
-                  reopenMut.mutate(item.workOrderId);
-                }}
-              >
-                取消結案／重新開啟
-              </Button>
-            )}
-          </div>
-        </ItemShell>
-      );
-    }
-
-    // collection / partial
-    const phone = item.mobilePhone || item.telephone || "—";
-    return (
-      <ItemShell key={`${secKey}-${item.workOrderId}`} item={item} showViewCase={false}>
-        <ReceivableSummary item={item} />
-        <p className="text-xs text-muted-foreground">電話：{phone}</p>
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          <SubsidyHandlingTag
-            item={item}
-            onOpen={() => {
-              if (item.subsidyType === "company_assisted") openSubsidyForItem(item);
-              else goPanel("subsidy");
-            }}
-          />
-          <span className="text-muted-foreground">收款狀態：</span>
-          <span>{item.receivableStatusLabel ?? item.paymentStatus ?? "—"}</span>
-          <span className="text-muted-foreground">｜補助狀態：</span>
-          <SubsidyBadge item={item} />
-        </div>
-        {(item.aiTips?.length ?? 0) > 0 && (
-          <ul className="text-xs text-yellow-800 list-disc pl-4">
-            {item.aiTips!.slice(0, 3).map((t) => (
-              <li key={t}>{t}</li>
-            ))}
-          </ul>
-        )}
-        {(item.missingDocLabels?.length ?? 0) > 0 && (
-          <p className="text-xs text-orange-800">缺少：{item.missingDocLabels!.join("、")}</p>
-        )}
-        <CollectionActions item={item} />
-        {canOperate &&
-          (item.subsidyType === "pending_confirmation" || item.virtualPendingConfirmation) && (
-            <div className="space-y-2 border-t pt-2">
-              <p className="text-xs font-medium">選擇補助方式</p>
-              <div className="flex flex-col gap-2">
-                <Button size="sm" variant="outline" className="h-10 justify-start" disabled={subsidyTypeMut.isPending}
-                  onClick={() => subsidyTypeMut.mutate({ id: item.workOrderId, subsidyType: "customer_self_apply" })}>
-                  客戶自行申請
-                </Button>
-                <Button size="sm" variant="outline" className="h-10 justify-start" disabled={subsidyTypeMut.isPending}
-                  onClick={() => subsidyTypeMut.mutate({ id: item.workOrderId, subsidyType: "company_assisted", assistedProgram: "new_unit" })}>
-                  公司協助－新機補助
-                </Button>
-                <Button size="sm" variant="outline" className="h-10 justify-start" disabled={subsidyTypeMut.isPending}
-                  onClick={() => subsidyTypeMut.mutate({ id: item.workOrderId, subsidyType: "company_assisted", assistedProgram: "trade_in" })}>
-                  公司協助－舊換新補助
-                </Button>
-                <Button size="sm" variant="outline" className="h-10 justify-start" disabled={subsidyTypeMut.isPending}
-                  onClick={() => subsidyTypeMut.mutate({ id: item.workOrderId, subsidyType: "company_assisted", assistedProgram: "new_unit_and_trade_in" })}>
-                  公司協助－新機＋舊換新
-                </Button>
-                <Button size="sm" variant="outline" className="h-10 justify-start" disabled={subsidyTypeMut.isPending}
-                  onClick={() => subsidyTypeMut.mutate({ id: item.workOrderId, subsidyType: "not_needed" })}>
-                  不需申請
-                </Button>
-              </div>
-            </div>
-          )}
-        {item.subsidyType === "company_assisted" && item.subsidyPipelineStatus !== "applied" && (
-          <Button size="sm" variant="ghost" className="h-10 sm:h-9" onClick={() => goPanel("subsidy")}>
-            開啟補助中心
+            確認施工資料
           </Button>
         )}
       </ItemShell>
     );
   }
 
-  function renderSections(
-    sections: Array<{
-      key: string;
-      title: string;
-      accent: "red" | "orange" | "normal";
-      items: AdminWorkbenchItem[];
-      count: number;
-    }>,
-  ) {
-    return sections.map((sec) => (
-      <Section
-        key={sec.key}
-        title={sec.title}
-        count={sec.count}
-        accent={sec.accent}
-        collapsible={sec.key === "closed"}
-        defaultOpen={sec.key === "closed" ? sec.count > 0 : true}
-      >
-        {sec.items.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-6">
-            {sec.key === "closed" ? "尚無已結案案件" : "目前無待辦"}
+  function renderOpenCard(item: AdminWorkbenchItem) {
+    const unpaid = parseFloat(String(item.unpaidAmount ?? "0")) || 0;
+    const phone = item.mobilePhone || item.telephone;
+    const subsidyDone = item.subsidyPipelineStatus === "applied";
+    const shareReady = !!item.invoiceKind && !!item.uploadUrl;
+    const missing = item.missingDocLabels ?? [];
+
+    function shareLine(text: string, okTitle: string) {
+      const win = openLineShareText(text);
+      if (!win) {
+        void navigator.clipboard.writeText(text).then(() =>
+          toast({ title: "已複製分享內容", description: "請貼到 LINE 傳送" }),
+        );
+        return;
+      }
+      toast({ title: okTitle, description: "請選擇聊天室後送出" });
+    }
+
+    return (
+      <ItemShell key={`open-${item.workOrderId}`} item={item}>
+        <AmountSummary item={item} />
+        {item.receivableId == null && (
+          <p className="text-xs text-amber-800">
+            尚未建立應收帳款（案件可能未綁定客戶），請至應收帳款頁確認後再登記收款
           </p>
-        ) : (
-          sec.items.map((item) => renderItem(sec.key, item))
         )}
-      </Section>
-    ));
+
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="text-muted-foreground">補助狀態：</span>
+          <SubsidyBadge item={item} />
+        </div>
+        {!subsidyDone && missing.length > 0 && (
+          <p className="text-xs text-orange-800">缺少補助資料：{missing.join("、")}</p>
+        )}
+        {!subsidyDone && item.invoiceKind && missing.length === 0 && (
+          <p className="text-xs text-green-700">補助資料已齊，確認送件後請標記補助完成</p>
+        )}
+        {item.receivableStatus === "paid" && !subsidyDone && (
+          <p className="text-xs text-amber-800 font-medium">等待補助完成</p>
+        )}
+
+        {/* 發票類型 */}
+        <div className="space-y-1">
+          <p className="text-xs font-medium">發票類型</p>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant={item.invoiceKind === "dual" ? "default" : "outline"}
+              className="h-10 sm:h-9"
+              disabled={!canOperate || invoiceKindMut.isPending || subsidyDone}
+              onClick={() =>
+                invoiceKindMut.mutate({ id: item.workOrderId, invoiceKind: "dual" })
+              }
+            >
+              二聯式（個人）
+            </Button>
+            <Button
+              size="sm"
+              variant={item.invoiceKind === "triple" ? "default" : "outline"}
+              className="h-10 sm:h-9"
+              disabled={!canOperate || invoiceKindMut.isPending || subsidyDone}
+              onClick={() =>
+                invoiceKindMut.mutate({ id: item.workOrderId, invoiceKind: "triple" })
+              }
+            >
+              三聯式（公司）
+            </Button>
+          </div>
+          {!item.invoiceKind && (
+            <p className="text-xs text-amber-800">
+              請先選擇發票類型，系統會依類型決定客戶需上傳的資料並產生上傳網址
+            </p>
+          )}
+        </div>
+
+        {/* 補助操作 — 選好發票類型後才出現 */}
+        {canOperate && shareReady && !subsidyDone && (
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-10 sm:h-9"
+              onClick={() => {
+                const url = absoluteUploadUrl(item);
+                if (!url) return;
+                void navigator.clipboard.writeText(url).then(
+                  () => toast({ title: "已複製上傳網址" }),
+                  () => toast({ title: "複製失敗", variant: "destructive" }),
+                );
+              }}
+            >
+              複製補助上傳網址
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-10 sm:h-9"
+              disabled={subsidyPipeMut.isPending}
+              onClick={() => {
+                shareLine(subsidyUploadShareText(item), "已開啟 LINE 分享");
+                if (item.subsidyPipelineStatus === "link_not_sent") {
+                  subsidyPipeMut.mutate({ id: item.workOrderId, status: "awaiting_upload" });
+                }
+              }}
+            >
+              LINE 傳送補助資料連結
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-10 sm:h-9"
+              onClick={() => shareLine(subsidyLineReminderText(item), "已開啟 LINE 分享")}
+            >
+              LINE 提醒補件
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-10 sm:h-9"
+              onClick={() => setDocsModal(item)}
+            >
+              查看客戶資料
+            </Button>
+            <Button
+              size="sm"
+              className="h-10 sm:h-9 bg-green-700 hover:bg-green-800"
+              disabled={subsidyPipeMut.isPending}
+              onClick={() => {
+                if (!window.confirm("確定此案件的補助申請已完成？已收款的話會自動結案。")) return;
+                subsidyPipeMut.mutate({ id: item.workOrderId, status: "applied" });
+              }}
+            >
+              標記補助完成
+            </Button>
+          </div>
+        )}
+        {canOperate && subsidyDone && (
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-10 sm:h-9"
+              onClick={() => setDocsModal(item)}
+            >
+              查看客戶資料
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-10 sm:h-9 text-orange-700 border-orange-300"
+              disabled={subsidyUnmarkMut.isPending}
+              onClick={() => {
+                if (!window.confirm("取消補助完成？附件不會刪除。")) return;
+                subsidyUnmarkMut.mutate(item.workOrderId);
+              }}
+            >
+              取消補助完成
+            </Button>
+          </div>
+        )}
+
+        {/* 收款操作 */}
+        <div className="flex flex-wrap gap-2">
+          {phone && (
+            <Button asChild size="sm" variant="outline" className="h-10 sm:h-9">
+              <a href={`tel:${phone}`}>
+                <Phone className="h-3.5 w-3.5 mr-1" />
+                聯絡客戶
+              </a>
+            </Button>
+          )}
+          {canFinance && unpaid > 0 && (
+            <Button
+              size="sm"
+              className="h-10 sm:h-9"
+              onClick={() => setPayModal({ item, amount: String(unpaid) })}
+            >
+              登記收款
+            </Button>
+          )}
+          {canOperate && unpaid > 0 && (
+            <Button
+              size="sm"
+              variant="secondary"
+              className="h-10 sm:h-9"
+              disabled={markPaidMut.isPending}
+              onClick={() => markPaidMut.mutate(item.workOrderId)}
+            >
+              標記已收款
+            </Button>
+          )}
+          {canOperate && item.receivableStatus === "paid" && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-10 sm:h-9 text-orange-700 border-orange-300"
+              disabled={cancelPaidMut.isPending}
+              onClick={() => {
+                if (!window.confirm("確定取消已收款？將恢復為未收款，不會刪除派工單／報價單／施工資料。")) return;
+                cancelPaidMut.mutate(item.workOrderId);
+              }}
+            >
+              取消已收款
+            </Button>
+          )}
+        </div>
+      </ItemShell>
+    );
   }
 
-  if (!hubs) return null;
+  function renderClosedCard(item: AdminWorkbenchItem) {
+    return (
+      <ItemShell key={`closed-${item.workOrderId}`} item={item} showViewCase={false}>
+        <AmountSummary item={item} />
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="text-muted-foreground">補助狀態：</span>
+          <SubsidyBadge item={item} />
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild size="sm" variant="outline" className="h-10 sm:h-9">
+            <Link href={caseHref(item.workOrderId)}>查看案件</Link>
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-10 sm:h-9"
+            onClick={() => setDocsModal(item)}
+          >
+            查看客戶資料
+          </Button>
+          {canOperate && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-10 sm:h-9 text-orange-700 border-orange-300"
+              disabled={cancelPaidMut.isPending}
+              onClick={() => {
+                if (
+                  !window.confirm(
+                    "確定取消已收款？將自動解除結案並恢復為未收款，不會刪除派工單／報價單／施工資料。",
+                  )
+                )
+                  return;
+                cancelPaidMut.mutate(item.workOrderId);
+              }}
+            >
+              取消已收款
+            </Button>
+          )}
+          {canOperate && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-10 sm:h-9 text-orange-700 border-orange-300"
+              disabled={reopenMut.isPending}
+              onClick={() => {
+                if (!window.confirm("確定取消結案／重新開啟？收款紀錄與補助資料將保留。")) return;
+                reopenMut.mutate(item.workOrderId);
+              }}
+            >
+              取消結案／重新開啟
+            </Button>
+          )}
+        </div>
+      </ItemShell>
+    );
+  }
+
+  const s = data.sections;
+  const c = data.counts;
 
   return (
     <div className="space-y-5 max-w-3xl mx-auto pb-12">
       <div>
-        {panel !== "home" ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="mb-2 -ml-2 h-8 px-2"
-            onClick={() => goPanel("home")}
-          >
-            <ChevronLeft className="h-4 w-4 mr-1" />
-            返回行政首頁
-          </Button>
-        ) : null}
-        <h1 className="text-xl font-bold tracking-tight">
-          {panel === "collection" ? "💰 待收款" : panel === "subsidy" ? "📄 補助中心" : "今日必做事項"}
-        </h1>
+        <h1 className="text-xl font-bold tracking-tight">今日必做事項</h1>
         <p className="text-sm text-muted-foreground mt-1">
-          {panel === "home"
-            ? `行政每日工作台 · ${data.today} · 未完成待辦 ${data.counts.openTodos ?? 0} 件`
-            : panel === "collection"
-              ? "依收款日分類處理；與補助流程並行"
-              : "僅列出需客戶上傳補助資料的案件；完成後請至案件頁標記補助完成"}
+          行政每日工作台 · {data.today} · 未完成待辦 {c.openTodos ?? 0} 件
         </p>
       </div>
 
-      {panel === "home" && (data.alerts.hasOverdue || data.alerts.hasDueToday) && (
-        <div className="space-y-2">
-          {data.alerts.hasOverdue && (
-            <button
-              type="button"
-              className="w-full text-left rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800"
-              onClick={() => goPanel("collection")}
-            >
-              有 {data.alerts.overdueCount} 件逾期收款，點此進入待收款
-            </button>
-          )}
-          {data.alerts.hasDueToday && (
-            <button
-              type="button"
-              className="w-full text-left rounded-md border border-orange-300 bg-orange-50 px-3 py-2 text-sm text-orange-900"
-              onClick={() => goPanel("collection")}
-            >
-              今日有 {data.alerts.dueTodayCount} 件到期收款，點此進入待收款
-            </button>
-          )}
-        </div>
-      )}
+      <Section
+        title="📋 待確認施工資料"
+        count={c.pendingConstructionConfirm ?? 0}
+      >
+        {(s.pendingConstructionConfirm ?? []).length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-6">目前無待辦</p>
+        ) : (
+          s.pendingConstructionConfirm.map(renderConfirmCard)
+        )}
+      </Section>
 
-      {panel === "home" && (
-        <>
-          {renderSections(hubs.homeSections.filter((s) => s.key === "confirm"))}
-          <HubCard
-            title="💰 待收款"
-            count={hubs.collectionCount}
-            accent={data.alerts.hasOverdue ? "red" : data.alerts.hasDueToday ? "orange" : "normal"}
-            onClick={() => goPanel("collection")}
-            hint="未設定收款日／今日到期／即將到期／已逾期"
-          />
-          {renderSections(hubs.homeSections.filter((s) => s.key === "partial"))}
-          <HubCard
-            title="📄 補助中心"
-            count={hubs.subsidyTodoCount}
-            onClick={() => goPanel("subsidy")}
-            hint="等待客戶上傳補助資料"
-          />
-          {renderSections(hubs.homeSections.filter((s) => s.key === "close" || s.key === "closed"))}
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-green-600" />
-                今日完成
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-center">
-                {[
-                  ["確認施工", data.todayStats.confirmedToday],
-                  ["建立應收", data.todayStats.receivableCreatedToday],
-                  ["已收款", data.todayStats.paidToday],
-                  ["已結案", data.todayStats.closedToday],
-                  ["尚未完成待辦", data.todayStats.openTodos],
-                ].map(([label, value]) => (
-                  <div key={String(label)} className="rounded-md border p-2">
-                    <p className="text-xs text-muted-foreground">{label}</p>
-                    <p className="text-lg font-semibold">{value}</p>
-                  </div>
-                ))}
+      <Section title="💰 未收款／待結案" count={c.pendingClose ?? 0}>
+        {(s.pendingClose ?? []).length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-6">目前無待辦</p>
+        ) : (
+          s.pendingClose.map(renderOpenCard)
+        )}
+      </Section>
+
+      <Section
+        title="📦 已結案"
+        count={c.closed ?? 0}
+        collapsible
+        defaultOpen={(c.closed ?? 0) > 0}
+      >
+        {(s.closed ?? []).length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-6">尚無已結案案件</p>
+        ) : (
+          s.closed.map(renderClosedCard)
+        )}
+      </Section>
+
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <CheckCircle2 className="h-4 w-4 text-green-600" />
+            今日完成
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-center">
+            {[
+              ["確認施工", data.todayStats.confirmedToday],
+              ["已收款", data.todayStats.paidToday],
+              ["已結案", data.todayStats.closedToday],
+              ["尚未完成待辦", data.todayStats.openTodos],
+            ].map(([label, value]) => (
+              <div key={String(label)} className="rounded-md border p-2">
+                <p className="text-xs text-muted-foreground">{label}</p>
+                <p className="text-lg font-semibold">{value}</p>
               </div>
-            </CardContent>
-          </Card>
-        </>
-      )}
-
-      {panel === "collection" && renderSections(hubs.collectionSections)}
-      {panel === "subsidy" && renderSections(hubs.subsidySections)}
-
-      {/* 設定預計收款日 — 簡單 Modal */}
-      <Dialog open={!!dueModal} onOpenChange={(o) => { if (!o) setDueModal(null); }}>
-        <DialogContent className="max-w-sm w-[calc(100vw-1.5rem)]">
-          <DialogHeader>
-            <DialogTitle>設定預計收款日</DialogTitle>
-          </DialogHeader>
-          <DialogBody className="space-y-3">
-            {dueModal && (
-              <p className="text-xs text-muted-foreground">
-                {dueModal.item.customerName} · {dueModal.item.workOrderNumber ?? `#${dueModal.item.workOrderId}`}
-              </p>
-            )}
-            <div className="space-y-1">
-              <Label>預計收款日</Label>
-              <Input
-                type="date"
-                value={dueModal?.date ?? ""}
-                onChange={(e) =>
-                  setDueModal((m) => (m ? { ...m, date: e.target.value } : m))
-                }
-              />
-            </div>
-          </DialogBody>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDueModal(null)}>取消</Button>
-            <Button
-              disabled={dueMut.isPending || !dueModal?.date}
-              onClick={() => {
-                if (!dueModal?.date) return;
-                dueMut.mutate({ id: dueModal.item.workOrderId, date: dueModal.date });
-              }}
-            >
-              儲存
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* 登記收款 Modal */}
       <Dialog open={!!payModal} onOpenChange={(o) => { if (!o) setPayModal(null); }}>
@@ -1431,7 +806,7 @@ export default function AdminWorkbench() {
           <DialogBody className="space-y-3">
             {payModal && (
               <>
-                <ReceivableSummary item={payModal.item} />
+                <AmountSummary item={payModal.item} />
                 <div className="space-y-1">
                   <Label>本次收款金額</Label>
                   <Input

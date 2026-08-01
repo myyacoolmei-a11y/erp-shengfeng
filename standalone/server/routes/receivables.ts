@@ -29,6 +29,7 @@ import type {
   SubsidyPipelineStatus,
   SubsidyType,
 } from "../../shared/adminWorkflowConstants.ts";
+import { normalizeSubsidyInvoiceKind } from "../../shared/adminWorkflowConstants.ts";
 import {
   advanceSubsidyPipeline,
   unmarkSubsidyApplied,
@@ -63,11 +64,11 @@ function enrichReceivableSubsidy(
   const subsidyType = (sub?.subsidyType ?? null) as SubsidyType | null;
   const assistedProgram = (sub?.assistedProgram ?? null) as AssistedProgram | null;
   const pipeline = (sub?.pipelineStatus ?? null) as SubsidyPipelineStatus | null;
+  const invoiceKind = normalizeSubsidyInvoiceKind(sub?.invoiceKind ?? null);
   const activeDocs = docs.filter((d) => d.status !== "rejected" && d.docType !== "subsidy");
   const missingDocs = missingRequiredDocs(
-    subsidyType,
+    invoiceKind,
     activeDocs.map((d) => d.docType),
-    assistedProgram,
   );
   const { meta } = parseSubsidyMeta(sub?.note);
   const displayStatus: SubsidyDisplayStatus = resolveSubsidyDisplayStatus({
@@ -75,11 +76,8 @@ function enrichReceivableSubsidy(
     pipeline,
     missingDocs,
     needsManualReview: !!meta.needsManualReview,
-    assistedProgram,
   });
   const subsidyDisplayLabel = subsidyCombinedStatusLabel({
-    subsidyType,
-    assistedProgram,
     displayStatus,
     pipeline,
   });

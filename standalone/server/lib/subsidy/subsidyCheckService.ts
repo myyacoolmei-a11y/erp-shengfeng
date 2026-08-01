@@ -9,7 +9,7 @@ import {
   type SubsidyMeta,
 } from "../../../shared/subsidyDocs.ts";
 import type {
-  AssistedProgram,
+  SubsidyInvoiceKind,
   SubsidyPipelineStatus,
   SubsidyType,
 } from "../../../shared/adminWorkflowConstants.ts";
@@ -60,7 +60,7 @@ function fileLooksEmpty(fileUrl: string | null | undefined): boolean {
 /** Deterministic completeness + format/size checks (no AI claims). */
 export function runDeterministicSubsidyCheck(input: {
   subsidyType: SubsidyType;
-  assistedProgram?: AssistedProgram | null;
+  invoiceKind: SubsidyInvoiceKind | null;
   docs: UploadedDocLike[];
 }): {
   missingDocs: SubsidyDocType[];
@@ -73,9 +73,8 @@ export function runDeterministicSubsidyCheck(input: {
     (d) => d.status !== "rejected" && (d.fileUrl || d.fileName),
   );
   const missingDocs = missingRequiredDocs(
-    input.subsidyType,
+    input.invoiceKind,
     activeDocs.map((d) => d.docType),
-    input.assistedProgram,
   );
   const missingLabels = missingDocs.map((t) => SUBSIDY_DOC_TYPE_LABELS[t] ?? t);
 
@@ -128,7 +127,7 @@ export function runDeterministicSubsidyCheck(input: {
  */
 export async function runSubsidyCompletenessCheck(input: {
   subsidyType: SubsidyType;
-  assistedProgram?: AssistedProgram | null;
+  invoiceKind: SubsidyInvoiceKind | null;
   docs: UploadedDocLike[];
   prevMeta?: SubsidyMeta;
 }): Promise<CompletenessResult> {
@@ -175,7 +174,10 @@ export async function runSubsidyCompletenessCheck(input: {
   }
 
   let suggestedPipeline: SubsidyPipelineStatus;
-  if (!det.allRequiredPresent || det.fileIssues.length > 0) {
+  if (!input.invoiceKind) {
+    // 尚未選發票類型 → 還不知道要收哪些資料，維持等待上傳
+    suggestedPipeline = "awaiting_upload";
+  } else if (!det.allRequiredPresent || det.fileIssues.length > 0) {
     suggestedPipeline = "docs_incomplete";
   } else if (needsManualReview) {
     suggestedPipeline = "docs_incomplete";
@@ -188,7 +190,6 @@ export async function runSubsidyCompletenessCheck(input: {
     pipeline: suggestedPipeline,
     missingDocs: det.missingDocs,
     needsManualReview,
-    assistedProgram: input.assistedProgram,
   });
 
   return {

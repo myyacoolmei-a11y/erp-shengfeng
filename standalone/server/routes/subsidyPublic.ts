@@ -8,17 +8,15 @@ import {
   receivablesTable,
 } from "@workspace/db";
 import {
-  ALL_SUBSIDY_DOC_TYPES,
   ALLOWED_SUBSIDY_UPLOAD_MIME,
   SUBSIDY_DOC_TYPE_LABELS,
   SUBSIDY_UPLOAD_TOKEN_TTL_DAYS,
   missingRequiredDocs,
   parseSubsidyMeta,
-  requiredDocTypesForAssistedProgram,
+  requiredDocTypesForInvoiceKind,
   type SubsidyDocType,
 } from "../../shared/subsidyDocs.ts";
 import {
-  normalizeAssistedProgram,
   normalizeSubsidyInvoiceKind,
   SUBSIDY_INVOICE_KIND_LABELS,
 } from "../../shared/adminWorkflowConstants.ts";
@@ -88,10 +86,9 @@ async function recomputeAndSave(subId: number, workOrderId: number) {
     .where(eq(customerDocumentsTable.subsidyApplicationId, subId));
 
   const { meta, freeNote } = parseSubsidyMeta(sub.note);
-  const program = normalizeAssistedProgram(sub.assistedProgram);
   const check = await runSubsidyCompletenessCheck({
     subsidyType: "company_assisted",
-    assistedProgram: program,
+    invoiceKind: normalizeSubsidyInvoiceKind(sub.invoiceKind),
     docs,
     prevMeta: meta,
   });
@@ -160,14 +157,12 @@ router.get("/public/subsidy-upload/:token/status", async (req, res): Promise<voi
     }
     const { sub, wo, docs, recv } = loaded;
     const { meta } = parseSubsidyMeta(sub.note);
-    const program = normalizeAssistedProgram(sub.assistedProgram);
     const invoiceKind = normalizeSubsidyInvoiceKind(sub.invoiceKind);
-    const required = requiredDocTypesForAssistedProgram(program);
+    const required = requiredDocTypesForInvoiceKind(invoiceKind);
     const activeDocs = docs.filter((d) => d.status !== "rejected");
     const missing = missingRequiredDocs(
-      "company_assisted",
+      invoiceKind,
       activeDocs.map((d) => d.docType),
-      program,
     );
     const byType = new Map(activeDocs.map((d) => [d.docType, d]));
     const companyName = (recv?.invoiceTitle ?? "").trim();
@@ -180,7 +175,6 @@ router.get("/public/subsidy-upload/:token/status", async (req, res): Promise<voi
       caseNo: wo.workOrderNumber,
       customerName: wo.customerName,
       pipelineStatus: sub.pipelineStatus,
-      assistedProgram: program,
       invoiceKind,
       invoiceKindLabel: invoiceKind ? SUBSIDY_INVOICE_KIND_LABELS[invoiceKind] : null,
       requiresBuyerInfo: invoiceKind === "triple",
@@ -298,21 +292,17 @@ router.post("/public/subsidy-upload/:token", async (req, res): Promise<void> => 
       res.status(400).json({ success: false, message: "此案件不需上傳發票或保固書" });
       return;
     }
-    const program = normalizeAssistedProgram(loaded.sub.assistedProgram);
-    const allowedForCase = requiredDocTypesForAssistedProgram(program);
-    const allowed =
-      allowedForCase.length > 0
-        ? allowedForCase
-        : (ALL_SUBSIDY_DOC_TYPES as readonly string[]).filter(
-            (t) => t !== "invoice" && t !== "warranty",
-          );
-    if (!(allowed as readonly string[]).includes(docType)) {
+    const invoiceKind = normalizeSubsidyInvoiceKind(loaded.sub.invoiceKind);
+    const allowed = requiredDocTypesForInvoiceKind(invoiceKind);
+    if (allowed.length === 0) {
       res.status(400).json({
         success: false,
-        message: program
-          ? "此補助方案不需要此文件類型"
-          : "行政尚未選定補助方案，暫無法上傳",
+        message: "行政尚未選定發票類型，暫無法上傳",
       });
+      return;
+    }
+    if (!(allowed as readonly string[]).includes(docType)) {
+      res.status(400).json({ success: false, message: "此案件不需要此文件類型" });
       return;
     }
     if (!dataUrl.startsWith("data:") || !dataUrl.includes(",")) {

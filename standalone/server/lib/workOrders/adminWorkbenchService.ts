@@ -26,10 +26,8 @@ import {
   type SubsidyPipelineStatus,
   type SubsidyType,
   ADMIN_WORKFLOW_LABELS,
-  ASSISTED_PROGRAM_LABELS,
   SUBSIDY_INVOICE_KIND_LABELS,
   SUBSIDY_INVOICE_KIND_TO_RECEIVABLE_TYPE,
-  SUBSIDY_TYPE_LABELS,
   engineeringStatusLabel,
   normalizeAdminWorkflowStatus,
   normalizeAssistedProgram,
@@ -62,12 +60,6 @@ function num(v: unknown): number {
 
 function moneyStr(n: number): string {
   return n.toFixed(2);
-}
-
-function daysBetween(from: string, to: string): number {
-  const a = new Date(`${from}T00:00:00+08:00`).getTime();
-  const b = new Date(`${to}T00:00:00+08:00`).getTime();
-  return Math.round((b - a) / 86400000);
 }
 
 function engineerDisplay(assignedTo: string | null, technicians: string | null): string {
@@ -338,6 +330,26 @@ export async function setPendingAdminReviewOnComplete(
   await syncAdminHandoffAfterConstructionComplete(workOrderId, user);
 }
 
+/**
+ * 補助是否擋住結案 — 只看 pipeline_status。
+ * 每個案件預設都走補助流程；僅舊案件明確標為不需申請／客戶自行申請時視為無補助。
+ */
+function subsidyBlocksClose(
+  subsidyType: SubsidyType | null,
+  pipeline: SubsidyPipelineStatus | null,
+): boolean {
+  if (pipeline === "applied") return false;
+  if (!subsidyType) return false;
+  if (
+    subsidyType === "not_needed" ||
+    subsidyType === "customer_self_apply" ||
+    subsidyType === "none"
+  ) {
+    return false;
+  }
+  return true;
+}
+
 function canCloseCase(input: {
   engineeringConfirmed: boolean;
   hasReceivable: boolean;
@@ -349,8 +361,7 @@ function canCloseCase(input: {
   if (!input.engineeringConfirmed) blockers.push("工程資料尚未確認");
   if (!input.hasReceivable) blockers.push("尚未建立應收帳款");
   if (!input.isPaid) blockers.push("尚未收款完成");
-  // 公司協助：必須 pipeline_status = applied（補助已完成）；不提供「核准先結案」
-  if (input.subsidyType === "company_assisted" && input.subsidyPipeline !== "applied") {
+  if (subsidyBlocksClose(input.subsidyType, input.subsidyPipeline)) {
     blockers.push("等待補助完成");
   }
   return { canClose: blockers.length === 0, blockers };
@@ -360,7 +371,6 @@ function buildCardStatuses(opts: {
   engineeringConfirmed: boolean;
   recv: typeof receivablesTable.$inferSelect | null;
   subsidyType: SubsidyType | null;
-  assistedProgram: AssistedProgram | null;
   subsidyPipeline: SubsidyPipelineStatus | null;
   adminStatus: AdminWorkflowStatus | null;
 }) {
@@ -368,6 +378,7 @@ function buildCardStatuses(opts: {
     ? "confirmed"
     : "pending_confirm";
 
+  // 收款狀態只看 payment_status／金額，不再看收款日
   let recvStatus: ReceivableCardStatus = "not_created";
   if (opts.recv) {
     const total = num(opts.recv.totalAmount);
@@ -376,8 +387,6 @@ function buildCardStatuses(opts: {
       recvStatus = "paid";
     } else if (opts.recv.paymentStatus === "部分收款" || received > 0) {
       recvStatus = "partial";
-    } else if (!opts.recv.expectedPaymentDate) {
-      recvStatus = "no_due_date";
     } else {
       recvStatus = "unpaid";
     }
@@ -391,24 +400,12 @@ function buildCardStatuses(opts: {
     subsidyPipeline: opts.subsidyPipeline,
   });
 
-  const typeLabel =
-    opts.subsidyType == null
-      ? "尚無補助紀錄"
-      : opts.subsidyType === "company_assisted" && opts.assistedProgram
-        ? `公司協助－${ASSISTED_PROGRAM_LABELS[opts.assistedProgram]}`
-        : SUBSIDY_TYPE_LABELS[opts.subsidyType];
-
   return {
     engineeringStatus: eng,
     engineeringStatusLabel: engineeringStatusLabel(eng),
     receivableStatus: recvStatus,
     receivableStatusLabel: receivableStatusLabel(recvStatus),
     subsidyType: opts.subsidyType,
-    subsidyTypeLabel: typeLabel,
-    assistedProgram: opts.assistedProgram,
-    assistedProgramLabel: opts.assistedProgram
-      ? ASSISTED_PROGRAM_LABELS[opts.assistedProgram]
-      : null,
     subsidyPipelineStatus: opts.subsidyPipeline,
     canClose: closeCheck.canClose,
     closeBlockers: closeCheck.blockers,
@@ -417,8 +414,43 @@ function buildCardStatuses(opts: {
   };
 }
 
-export async function getAdminWorkbench() {
+/**
+ * 自動結案補掃：把條件已齊卻仍卡在待結案的案件即時寫入 closed。
+ * 事件觸發（收款／標記補助完成）之外的保險，載入工作台時執行。
+ */
+async function sweepAutoClose(user: JwtPayload): Promise<number> {
+  // 只掃「已收款且尚未結案」的案件，其餘一定不符合結案條件
+  const candidates = await db
+    .select({ id: workOrdersTable.id })
+    .from(workOrdersTable)
+    .innerJoin(receivablesTable, eq(receivablesTable.workOrderId, workOrdersTable.id))
+    .where(
+      and(
+        eq(receivablesTable.paymentStatus, "已收款"),
+        isNotNull(workOrdersTable.adminWorkflowStatus),
+        ne(workOrdersTable.adminWorkflowStatus, "closed"),
+        ne(workOrdersTable.adminWorkflowStatus, "pending_admin_review"),
+        isNotNull(workOrdersTable.adminConfirmedAt),
+      ),
+    );
+
+  let closed = 0;
+  for (const c of candidates) {
+    if (await tryAutoCloseIfReady(c.id, user, "條件齊全，自動結案")) closed += 1;
+  }
+  return closed;
+}
+
+export async function getAdminWorkbench(user?: JwtPayload) {
   const today = taipeiDateString(new Date());
+
+  if (user) {
+    try {
+      await sweepAutoClose(user);
+    } catch {
+      // 補掃失敗不影響列表載入
+    }
+  }
 
   const rows = await db
     .select({
@@ -492,23 +524,9 @@ export async function getAdminWorkbench() {
     docsByWo.set(d.workOrderId, arr);
   }
 
+  // 簡化後只有三區：待確認施工資料／未收款・待結案／已結案
   const sections = {
     pendingConstructionConfirm: [] as unknown[],
-    pendingCreateReceivable: [] as unknown[],
-    noDueDate: [] as unknown[],
-    collectionSoon: [] as unknown[],
-    collectionToday: [] as unknown[],
-    collectionOverdue: [] as unknown[],
-    collectionPartial: [] as unknown[],
-    subsidyPendingConfirmation: [] as unknown[],
-    subsidyLinkNotSent: [] as unknown[],
-    subsidyAwaitingUpload: [] as unknown[],
-    subsidyDocsIncomplete: [] as unknown[],
-    subsidyAwaitingManualReview: [] as unknown[],
-    subsidyDocsComplete: [] as unknown[],
-    subsidyPendingApply: [] as unknown[],
-    subsidyApplied: [] as unknown[],
-    subsidySettled: [] as unknown[],
     pendingClose: [] as unknown[],
     closed: [] as unknown[],
   };
@@ -529,31 +547,11 @@ export async function getAdminWorkbench() {
 
     const recv = recvByWo.get(r.wo.id) ?? null;
     const sub = subByWo.get(r.wo.id) ?? null;
-    const rawSubsidyType: SubsidyType | null = sub
+    const subsidyType: SubsidyType | null = sub
       ? normalizeSubsidyType(sub.subsidyType) ?? "pending_confirmation"
       : null;
-    const assistedProgram = normalizeAssistedProgram(sub?.assistedProgram ?? null);
     const invoiceKind = normalizeSubsidyInvoiceKind(sub?.invoiceKind ?? null);
     const subsidyPipeline = (sub?.pipelineStatus ?? null) as SubsidyPipelineStatus | null;
-
-    /**
-     * Display-only virtual todo: completed / in admin AR flow, has receivable (or
-     * billed), but no subsidy_applications row yet. Does NOT insert DB rows —
-     * admin choosing a method uses existing subsidy-type API.
-     */
-    const virtualPendingConfirmation =
-      !sub &&
-      status !== "closed" &&
-      (!!recv ||
-        status === "pending_billing" ||
-        status === "billed" ||
-        status === "partially_paid" ||
-        status === "paid" ||
-        status === "pending_close");
-
-    const subsidyType: SubsidyType | null = virtualPendingConfirmation
-      ? "pending_confirmation"
-      : rawSubsidyType;
 
     const engConfirmed = !!r.wo.adminConfirmedAt;
 
@@ -561,7 +559,6 @@ export async function getAdminWorkbench() {
       engineeringConfirmed: engConfirmed,
       recv,
       subsidyType,
-      assistedProgram,
       subsidyPipeline,
       adminStatus: status,
     });
@@ -569,8 +566,6 @@ export async function getAdminWorkbench() {
     const total = recv ? num(recv.totalAmount) : finalAmount;
     const received = recv ? num(recv.receivedAmount) : 0;
     const unpaid = Math.max(0, total - received);
-    const due = billing.expectedPaymentDate ?? recv?.expectedPaymentDate ?? null;
-    const overdueDays = due ? daysBetween(due, today) : null;
 
     const allDocs = docsByWo.get(r.wo.id) ?? [];
     const subsidyDocs = allDocs.filter(
@@ -582,27 +577,19 @@ export async function getAdminWorkbench() {
     );
     const { meta: subsidyMeta, freeNote: subsidyFreeNote } = parseSubsidyMeta(sub?.note);
     const missingDocs = missingRequiredDocs(
-      subsidyType,
+      invoiceKind,
       subsidyDocs.map((d) => d.docType),
-      assistedProgram,
     );
-    const displayStatus: SubsidyDisplayStatus = virtualPendingConfirmation
-      ? "pending_confirmation"
-      : resolveSubsidyDisplayStatus({
-          subsidyType,
-          pipeline: subsidyPipeline,
-          missingDocs,
-          needsManualReview: !!subsidyMeta.needsManualReview,
-          assistedProgram,
-        });
-    const subsidyStatusLabel = virtualPendingConfirmation
-      ? "待確認補助方式"
-      : subsidyCombinedStatusLabel({
-          subsidyType,
-          assistedProgram,
-          displayStatus,
-          pipeline: subsidyPipeline,
-        });
+    const displayStatus: SubsidyDisplayStatus = resolveSubsidyDisplayStatus({
+      subsidyType,
+      pipeline: subsidyPipeline,
+      missingDocs,
+      needsManualReview: !!subsidyMeta.needsManualReview,
+    });
+    const subsidyStatusLabel = subsidyCombinedStatusLabel({
+      displayStatus,
+      pipeline: subsidyPipeline,
+    });
     const lastUploadAt =
       subsidyDocs
         .map((d) => d.uploadedAt?.getTime() ?? d.createdAt?.getTime() ?? 0)
@@ -634,14 +621,12 @@ export async function getAdminWorkbench() {
       finalAmount: moneyStr(finalAmount),
       invoiceNeeded: billing.invoiceNeeded ?? false,
       billTo: billing.billTo ?? r.wo.customerName,
-      expectedPaymentDate: due,
       receivableId: recv?.id ?? null,
       totalAmount: moneyStr(total),
       receivedAmount: moneyStr(received),
       unpaidAmount: moneyStr(unpaid),
       billedAt: r.wo.adminBilledAt?.toISOString() ?? null,
       paymentStatus: recv?.paymentStatus ?? null,
-      overdueDays: overdueDays != null && overdueDays > 0 ? overdueDays : overdueDays === 0 ? 0 : null,
       subsidyApplicationId: sub?.id ?? null,
       invoiceKind,
       invoiceKindLabel: invoiceKind ? SUBSIDY_INVOICE_KIND_LABELS[invoiceKind] : null,
@@ -662,11 +647,9 @@ export async function getAdminWorkbench() {
       aiTips: subsidyMeta.aiTips ?? [],
       subsidyDisplayStatus: displayStatus,
       subsidyStatusLabel,
-      virtualPendingConfirmation,
-      needsSubsidy: subsidyType === "company_assisted",
-      canMarkApplied: displayStatus === "docs_complete" || displayStatus === "applied",
-      canCloseReady:
-        subsidyType !== "company_assisted" || subsidyPipeline === "applied",
+      subsidyCompleted: subsidyPipeline === "applied",
+      canMarkApplied: subsidyPipeline !== "applied",
+      canCloseReady: !subsidyBlocksClose(subsidyType, subsidyPipeline),
       customerDocuments: subsidyDocs.slice(0, 40).map((d) => ({
         id: d.id,
         docType: d.docType,
@@ -690,138 +673,29 @@ export async function getAdminWorkbench() {
       continue;
     }
 
-    // 1. Construction confirm
+    // 1. 待確認施工資料
     if (status === "pending_admin_review" || !engConfirmed) {
       sections.pendingConstructionConfirm.push(base);
+      continue;
     }
 
-    // 2–7 Receivable / collection — parallel with construction confirm & subsidy
-    // (do not wait for engConfirmed or payment before showing in 待收款)
-    if (!recv) {
-      if (
-        engConfirmed ||
-        status === "pending_admin_review" ||
-        status === "pending_billing" ||
-        status === "billed"
-      ) {
-        sections.pendingCreateReceivable.push(base);
-      }
-    } else if (card.receivableStatus !== "paid") {
-      if (card.receivableStatus === "no_due_date") {
-        sections.noDueDate.push(base);
-      }
-      if (card.receivableStatus === "partial") {
-        sections.collectionPartial.push(base);
-      }
-      if (due) {
-        const d = daysBetween(today, due);
-        if (d < 0) sections.collectionOverdue.push(base);
-        else if (d === 0) sections.collectionToday.push(base);
-        else if (d <= 7) sections.collectionSoon.push(base);
-      }
-    }
-
-    // Subsidy center buckets (includes virtual pending: no SA row yet)
-    if (subsidyType === "pending_confirmation" || virtualPendingConfirmation) {
-      sections.subsidyPendingConfirmation.push(base);
-    } else if (subsidyType === "not_needed" || subsidyType === "customer_self_apply") {
-      sections.subsidySettled.push(base);
-    } else if (subsidyType === "company_assisted") {
-      if (subsidyPipeline === "applied" || displayStatus === "applied") {
-        sections.subsidyApplied.push(base);
-      } else {
-        switch (displayStatus) {
-          case "link_not_sent":
-            sections.subsidyLinkNotSent.push(base);
-            break;
-          case "awaiting_upload":
-            sections.subsidyAwaitingUpload.push(base);
-            break;
-          case "docs_incomplete":
-            sections.subsidyDocsIncomplete.push(base);
-            break;
-          case "awaiting_manual_review":
-            sections.subsidyAwaitingManualReview.push(base);
-            break;
-          case "docs_complete":
-            if (subsidyPipeline === "pending_apply") {
-              sections.subsidyPendingApply.push(base);
-            } else {
-              sections.subsidyDocsComplete.push(base);
-            }
-            break;
-          default:
-            sections.subsidyLinkNotSent.push(base);
-            break;
-        }
-      }
-    }
-
-    // 13. Pending close — all paid cases (incl. waiting for subsidy complete)
-    const isPaid = card.receivableStatus === "paid" || status === "pending_close" || status === "paid";
-    if (isPaid) {
-      sections.pendingClose.push(base);
-    }
+    // 2. 未收款／待結案 — 確認施工後的所有未結案案件（含未收款、部分收款、等待補助）
+    sections.pendingClose.push(base);
   }
-
-  // Dedupe pendingClose by workOrderId
-  const closeSeen = new Set<number>();
-  sections.pendingClose = sections.pendingClose.filter((item) => {
-    const id = (item as { workOrderId: number }).workOrderId;
-    if (closeSeen.has(id)) return false;
-    closeSeen.add(id);
-    return true;
-  });
 
   const startOfDay = new Date(`${today}T00:00:00+08:00`);
   const endOfDay = new Date(`${today}T23:59:59.999+08:00`);
 
   const counts = {
     pendingConstructionConfirm: sections.pendingConstructionConfirm.length,
-    pendingCreateReceivable: sections.pendingCreateReceivable.length,
-    noDueDate: sections.noDueDate.length,
-    collectionSoon: sections.collectionSoon.length,
-    collectionToday: sections.collectionToday.length,
-    collectionOverdue: sections.collectionOverdue.length,
-    collectionPartial: sections.collectionPartial.length,
-    subsidyPendingConfirmation: sections.subsidyPendingConfirmation.length,
-    subsidyLinkNotSent: sections.subsidyLinkNotSent.length,
-    subsidyAwaitingUpload: sections.subsidyAwaitingUpload.length,
-    subsidyDocsIncomplete: sections.subsidyDocsIncomplete.length,
-    subsidyAwaitingManualReview: sections.subsidyAwaitingManualReview.length,
-    subsidyDocsComplete: sections.subsidyDocsComplete.length,
-    subsidyPendingApply: sections.subsidyPendingApply.length,
-    subsidyApplied: sections.subsidyApplied.length,
-    subsidySettled: sections.subsidySettled.length,
     pendingClose: sections.pendingClose.length,
     closed: sections.closed.length,
   };
 
-  const openTodos =
-    counts.pendingConstructionConfirm +
-    counts.pendingCreateReceivable +
-    counts.noDueDate +
-    counts.collectionSoon +
-    counts.collectionToday +
-    counts.collectionOverdue +
-    counts.collectionPartial +
-    counts.subsidyPendingConfirmation +
-    counts.subsidyLinkNotSent +
-    counts.subsidyAwaitingUpload +
-    counts.subsidyDocsIncomplete +
-    counts.subsidyAwaitingManualReview +
-    counts.subsidyDocsComplete +
-    counts.subsidyPendingApply +
-    counts.pendingClose;
+  const openTodos = counts.pendingConstructionConfirm + counts.pendingClose;
 
   return {
     today,
-    alerts: {
-      hasOverdue: counts.collectionOverdue > 0,
-      hasDueToday: counts.collectionToday > 0,
-      overdueCount: counts.collectionOverdue,
-      dueTodayCount: counts.collectionToday,
-    },
     counts: { ...counts, openTodos },
     sections,
     todayStats: {
@@ -1217,7 +1091,10 @@ export async function setSubsidyType(
   });
 }
 
-/** Admin sets 二聯式／三聯式 for subsidy upload + LINE copy. Syncs receivables.invoice_type. */
+/**
+ * Admin sets 二聯式／三聯式. This is the only handling choice in the new flow —
+ * it also starts the subsidy pipeline (row + upload token) when not started yet.
+ */
 export async function setSubsidyInvoiceKind(
   workOrderId: number,
   user: JwtPayload,
@@ -1226,14 +1103,18 @@ export async function setSubsidyInvoiceKind(
   const kind = normalizeSubsidyInvoiceKind(invoiceKind);
   if (!kind) throw new Error("請選擇二聯式或三聯式");
 
-  const [sub] = await db
-    .select()
-    .from(subsidyApplicationsTable)
-    .where(eq(subsidyApplicationsTable.workOrderId, workOrderId))
+  const [wo] = await db
+    .select({ customerId: workOrdersTable.customerId })
+    .from(workOrdersTable)
+    .where(eq(workOrdersTable.id, workOrderId))
     .limit(1);
-  if (!sub || sub.subsidyType !== "company_assisted") {
-    throw new Error("請先選擇公司協助補助後再設定發票類型");
-  }
+  if (!wo) throw new Error("找不到派工單");
+
+  const { subsidy: sub } = await ensureSubsidyApplication(
+    workOrderId,
+    wo.customerId ?? null,
+    user,
+  );
   if (sub.pipelineStatus === "applied") {
     throw new Error("補助已完成，無法變更發票類型");
   }
@@ -1241,7 +1122,13 @@ export async function setSubsidyInvoiceKind(
   const now = new Date();
   await db
     .update(subsidyApplicationsTable)
-    .set({ invoiceKind: kind, updatedAt: now })
+    .set({
+      invoiceKind: kind,
+      subsidyType: "company_assisted",
+      uploadLinkToken: sub.uploadLinkToken || randomBytes(16).toString("hex"),
+      pipelineStatus: sub.pipelineStatus ?? "link_not_sent",
+      updatedAt: now,
+    })
     .where(eq(subsidyApplicationsTable.id, sub.id));
 
   const receivableType = SUBSIDY_INVOICE_KIND_TO_RECEIVABLE_TYPE[kind];
@@ -1249,6 +1136,12 @@ export async function setSubsidyInvoiceKind(
     .update(receivablesTable)
     .set({ invoiceType: receivableType, updatedAt: now })
     .where(eq(receivablesTable.workOrderId, workOrderId));
+
+  // 案件頁補助面板沿用此舊旗標判斷是否顯示
+  await db
+    .update(workOrdersTable)
+    .set({ adminNeedsSubsidy: true, updatedAt: now })
+    .where(eq(workOrdersTable.id, workOrderId));
 
   await writeAuditLog({
     action: "admin_workflow.subsidy_invoice_kind",
@@ -1444,11 +1337,9 @@ export async function confirmSubsidyDocsManually(
     .select()
     .from(customerDocumentsTable)
     .where(eq(customerDocumentsTable.subsidyApplicationId, sub.id));
-  const program = normalizeAssistedProgram(sub.assistedProgram);
   const missing = missingRequiredDocs(
-    "company_assisted",
+    normalizeSubsidyInvoiceKind(sub.invoiceKind),
     docs.filter((d) => d.status !== "rejected" && d.fileUrl).map((d) => d.docType),
-    program,
   );
   if (missing.length > 0) {
     throw new Error(
@@ -1502,8 +1393,8 @@ export async function regenerateSubsidyUploadToken(
     .from(subsidyApplicationsTable)
     .where(eq(subsidyApplicationsTable.workOrderId, workOrderId))
     .limit(1);
-  if (!sub || sub.subsidyType !== "company_assisted") {
-    throw new Error("請先在補助中心選擇公司協助申請（新機或舊換新）");
+  if (!sub) {
+    throw new Error("尚無補助紀錄");
   }
 
   const { SUBSIDY_UPLOAD_TOKEN_TTL_DAYS } = await import("../../../shared/subsidyDocs.ts");
@@ -1557,10 +1448,9 @@ export async function recheckSubsidyDocuments(workOrderId: number, user: JwtPayl
     .where(eq(customerDocumentsTable.subsidyApplicationId, sub.id));
   const { meta, freeNote } = parseSubsidyMeta(sub.note);
 
-  const program = normalizeAssistedProgram(sub.assistedProgram);
   const check = await runSubsidyCompletenessCheck({
     subsidyType: "company_assisted",
-    assistedProgram: program,
+    invoiceKind: normalizeSubsidyInvoiceKind(sub.invoiceKind),
     docs,
     prevMeta: meta,
   });
@@ -1684,9 +1574,7 @@ export async function tryAutoCloseIfReady(
     .where(eq(subsidyApplicationsTable.workOrderId, workOrderId))
     .limit(1);
 
-  const subsidyType: SubsidyType | null =
-    normalizeSubsidyType(sub?.subsidyType) ??
-    (wo.adminNeedsSubsidy ? "company_assisted" : null);
+  const subsidyType = normalizeSubsidyType(sub?.subsidyType) ?? null;
   const total = recv ? num(recv.totalAmount) : 0;
   const received = recv ? num(recv.receivedAmount) : 0;
   const isPaid =
@@ -1926,9 +1814,7 @@ export async function completeClose(
     .where(eq(subsidyApplicationsTable.workOrderId, workOrderId))
     .limit(1);
 
-  const subsidyType: SubsidyType | null =
-    normalizeSubsidyType(sub?.subsidyType) ??
-    (wo.adminNeedsSubsidy ? "company_assisted" : null);
+  const subsidyType = normalizeSubsidyType(sub?.subsidyType) ?? null;
   const total = recv ? num(recv.totalAmount) : 0;
   const received = recv ? num(recv.receivedAmount) : 0;
   const isPaid =

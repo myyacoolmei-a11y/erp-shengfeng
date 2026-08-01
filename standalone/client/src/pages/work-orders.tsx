@@ -331,7 +331,7 @@ function WorkOrderSubsidyPanel({ order }: { order: any }) {
   const markMut = useMutation({
     mutationFn: () => advanceAdminSubsidyPipeline(order.id, "applied"),
     onSuccess: () => {
-      toast({ title: "已標記補助完成", description: "案件已從補助中心移除" });
+      toast({ title: "已標記補助完成", description: "若已收款，系統會自動結案" });
       queryClient.invalidateQueries({ queryKey: getListWorkOrdersQueryKey() });
       queryClient.invalidateQueries({ queryKey: ["/api/admin-workbench"] });
       queryClient.invalidateQueries({ queryKey: getListReceivablesQueryKey() });
@@ -378,7 +378,7 @@ function WorkOrderSubsidyPanel({ order }: { order: any }) {
           className="h-10 sm:h-9 bg-green-700 hover:bg-green-800"
           disabled={markMut.isPending}
           onClick={() => {
-            if (!window.confirm("確定此案件的補助申請已完成？完成後將從補助中心移除。")) return;
+            if (!window.confirm("確定此案件的補助申請已完成？已收款的話會自動結案。")) return;
             markMut.mutate();
           }}
         >

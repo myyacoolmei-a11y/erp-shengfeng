@@ -38,9 +38,9 @@ const requireAdminOps = requireRole(...ADMIN_ROLES);
 const requireFinanceView = requireRole(...FINANCE_ROLES);
 const requireOwnerOps = requireRole(...OWNER_ROLES);
 
-router.get("/admin-workbench", requireFinanceView, async (_req, res): Promise<void> => {
+router.get("/admin-workbench", requireFinanceView, async (req, res): Promise<void> => {
   try {
-    res.json(await getAdminWorkbench());
+    res.json(await getAdminWorkbench(req.user));
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : "載入失敗" });
   }

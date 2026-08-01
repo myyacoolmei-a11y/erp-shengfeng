@@ -4,35 +4,33 @@
  */
 
 import type {
-  AssistedProgram,
+  SubsidyInvoiceKind,
   SubsidyPipelineStatus,
   SubsidyType,
 } from "./adminWorkflowConstants.ts";
 import {
-  ASSISTED_PROGRAM_LABELS,
   SUBSIDY_PIPELINE_LABELS,
   SUBSIDY_TYPE_LABELS,
 } from "./adminWorkflowConstants.ts";
 
 /**
- * Common required docs for 新機補助.
- * 發票／保固書已依發票類型流程改為不向客戶收取（二聯／三聯皆隱藏）。
+ * 客戶需上傳的補助資料由「發票類型」決定，行政不再選補助種類。
+ * 發票／保固書一律不向客戶收取（二聯／三聯皆隱藏）。
  */
-export const NEW_UNIT_REQUIRED_DOC_TYPES = [
+export const BASE_REQUIRED_DOC_TYPES = [
   "id_front",
   "id_back",
   "bank_book",
 ] as const;
 
-/** 舊換新 = 新機共通 + 電費單 + 廢四機回收聯單（不含發票／保固書） */
-export const TRADE_IN_REQUIRED_DOC_TYPES = [
-  ...NEW_UNIT_REQUIRED_DOC_TYPES,
-  "utility_bill",
-  "scrap_recycle_form",
-] as const;
+/** 三聯式（公司）：身分證正反面 + 存摺封面 */
+export const TRIPLE_REQUIRED_DOC_TYPES = BASE_REQUIRED_DOC_TYPES;
 
-/** 新機＋舊換新：文件需求與舊換新相同（共通＋電費單＋回收聯單） */
-export const NEW_UNIT_AND_TRADE_IN_REQUIRED_DOC_TYPES = TRADE_IN_REQUIRED_DOC_TYPES;
+/** 二聯式（個人）：三聯式清單 + 電費單 */
+export const DUAL_REQUIRED_DOC_TYPES = [
+  ...BASE_REQUIRED_DOC_TYPES,
+  "utility_bill",
+] as const;
 
 /** All uploadable subsidy doc types (union). */
 export const ALL_SUBSIDY_DOC_TYPES = [
@@ -148,31 +146,20 @@ export function serializeSubsidyMeta(freeNote: string, meta: SubsidyMeta): strin
   return base ? `${base}\n${payload}` : payload;
 }
 
-export function requiredDocTypesForAssistedProgram(
-  program: AssistedProgram | null | undefined,
+/** 必備文件只看發票類型；尚未選擇時不計缺件。 */
+export function requiredDocTypesForInvoiceKind(
+  invoiceKind: SubsidyInvoiceKind | null | undefined,
 ): SubsidyDocType[] {
-  if (program === "trade_in" || program === "new_unit_and_trade_in") {
-    return [...TRADE_IN_REQUIRED_DOC_TYPES];
-  }
-  if (program === "new_unit") return [...NEW_UNIT_REQUIRED_DOC_TYPES];
-  // company_assisted without program yet — no checklist until admin selects
+  if (invoiceKind === "triple") return [...TRIPLE_REQUIRED_DOC_TYPES];
+  if (invoiceKind === "dual") return [...DUAL_REQUIRED_DOC_TYPES];
   return [];
 }
 
-export function requiredDocTypesForSubsidy(
-  subsidyType: SubsidyType | null | undefined,
-  assistedProgram?: AssistedProgram | null,
-): SubsidyDocType[] {
-  if (subsidyType !== "company_assisted") return [];
-  return requiredDocTypesForAssistedProgram(assistedProgram);
-}
-
 export function missingRequiredDocs(
-  subsidyType: SubsidyType | null | undefined,
+  invoiceKind: SubsidyInvoiceKind | null | undefined,
   uploadedDocTypes: Array<string | null | undefined>,
-  assistedProgram?: AssistedProgram | null,
 ): SubsidyDocType[] {
-  const required = requiredDocTypesForSubsidy(subsidyType, assistedProgram);
+  const required = requiredDocTypesForInvoiceKind(invoiceKind);
   const have = new Set(
     uploadedDocTypes
       .map((t) => String(t ?? "").trim())
@@ -186,15 +173,14 @@ export function resolveSubsidyDisplayStatus(input: {
   pipeline: SubsidyPipelineStatus | null | undefined;
   missingDocs: string[];
   needsManualReview?: boolean;
-  assistedProgram?: AssistedProgram | null;
 }): SubsidyDisplayStatus {
   if (!input.subsidyType) return "no_record";
-  if (input.subsidyType === "pending_confirmation") return "pending_confirmation";
+  // legacy 舊案件保留原顯示；新案件一律走補助流程
   if (input.subsidyType === "not_needed") return "not_needed";
   if (input.subsidyType === "customer_self_apply") return "customer_self_apply";
   if (input.subsidyType === "none") return "not_applicable";
 
-  // company_assisted — pipeline drives status
+  // pipeline drives status（行政只選發票類型，不再選補助種類）
   if (input.pipeline === "applied") return "applied";
   if (input.pipeline === "link_not_sent" || !input.pipeline) return "link_not_sent";
   if (input.pipeline === "awaiting_upload") return "awaiting_upload";
@@ -207,39 +193,12 @@ export function resolveSubsidyDisplayStatus(input: {
   return "docs_incomplete";
 }
 
-/** Combined label for receivables / cards: handling + program + pipeline. */
+/** Combined label for receivables / cards — pipeline only, no 補助種類. */
 export function subsidyCombinedStatusLabel(input: {
-  subsidyType: SubsidyType | null | undefined;
-  assistedProgram?: AssistedProgram | null;
   displayStatus: SubsidyDisplayStatus;
   pipeline?: SubsidyPipelineStatus | null;
 }): string {
-  const { subsidyType, assistedProgram, displayStatus, pipeline } = input;
-  if (subsidyType === "company_assisted") {
-    const prog =
-      assistedProgram != null ? ASSISTED_PROGRAM_LABELS[assistedProgram] : null;
-    if (displayStatus === "applied") {
-      return "補助已完成";
-    }
-    if (displayStatus === "docs_complete") {
-      return prog
-        ? `公司協助－${prog}｜補助資料已齊`
-        : "補助資料已齊，可進行申請";
-    }
-    if (displayStatus === "link_not_sent") {
-      return prog ? `公司協助－${prog}｜待傳送連結` : "待傳送補助資料連結";
-    }
-    if (displayStatus === "awaiting_upload") {
-      return prog ? `公司協助－${prog}｜等待客戶上傳` : "等待客戶上傳";
-    }
-    if (displayStatus === "docs_incomplete") {
-      return prog ? `公司協助－${prog}｜待補件` : "客戶資料待補件";
-    }
-    if (displayStatus === "awaiting_manual_review") {
-      return prog ? `公司協助－${prog}｜等待人工確認` : "等待人工確認";
-    }
-    return prog ? `公司協助－${prog}` : SUBSIDY_TYPE_LABELS.company_assisted;
-  }
+  const { displayStatus, pipeline } = input;
   if (displayStatus === "docs_complete" && pipeline === "pending_apply") {
     return "補助資料已齊，可進行申請";
   }

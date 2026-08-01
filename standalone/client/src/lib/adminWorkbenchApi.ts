@@ -1,6 +1,5 @@
 import { customFetch } from "../../../shared/api-client/custom-fetch.ts";
 import type {
-  AssistedProgram,
   SubsidyInvoiceKind,
   SubsidyPipelineStatus,
   SubsidyType,
@@ -28,21 +27,16 @@ export type AdminWorkbenchItem = {
   finalAmount?: string;
   invoiceNeeded?: boolean;
   billTo?: string | null;
-  expectedPaymentDate?: string | null;
   receivableId?: number | null;
   totalAmount?: string;
   receivedAmount?: string;
   unpaidAmount?: string;
   paymentStatus?: string | null;
-  overdueDays?: number | null;
   engineeringStatus?: string;
   engineeringStatusLabel?: string;
   receivableStatus?: string;
   receivableStatusLabel?: string;
   subsidyType?: SubsidyType | null;
-  subsidyTypeLabel?: string;
-  assistedProgram?: AssistedProgram | null;
-  assistedProgramLabel?: string | null;
   invoiceKind?: SubsidyInvoiceKind | null;
   invoiceKindLabel?: string | null;
   invoiceTitle?: string | null;
@@ -67,9 +61,7 @@ export type AdminWorkbenchItem = {
   needsManualReview?: boolean;
   aiTips?: string[];
   subsidyDisplayStatus?: SubsidyDisplayStatus;
-  /** Display-only: completed + receivable but no subsidy_applications row */
-  virtualPendingConfirmation?: boolean;
-  needsSubsidy?: boolean;
+  subsidyCompleted?: boolean;
   canMarkApplied?: boolean;
   canCloseReady?: boolean;
   customerDocumentCount?: number;
@@ -87,30 +79,9 @@ export type AdminWorkbenchItem = {
 
 export type AdminWorkbenchData = {
   today: string;
-  alerts: {
-    hasOverdue: boolean;
-    hasDueToday: boolean;
-    overdueCount: number;
-    dueTodayCount: number;
-  };
   counts: Record<string, number>;
   sections: {
     pendingConstructionConfirm: AdminWorkbenchItem[];
-    pendingCreateReceivable: AdminWorkbenchItem[];
-    noDueDate: AdminWorkbenchItem[];
-    collectionSoon: AdminWorkbenchItem[];
-    collectionToday: AdminWorkbenchItem[];
-    collectionOverdue: AdminWorkbenchItem[];
-    collectionPartial: AdminWorkbenchItem[];
-    subsidyPendingConfirmation: AdminWorkbenchItem[];
-    subsidyLinkNotSent: AdminWorkbenchItem[];
-    subsidyAwaitingUpload: AdminWorkbenchItem[];
-    subsidyDocsIncomplete: AdminWorkbenchItem[];
-    subsidyAwaitingManualReview: AdminWorkbenchItem[];
-    subsidyDocsComplete: AdminWorkbenchItem[];
-    subsidyPendingApply: AdminWorkbenchItem[];
-    subsidyApplied: AdminWorkbenchItem[];
-    subsidySettled: AdminWorkbenchItem[];
     pendingClose: AdminWorkbenchItem[];
     closed: AdminWorkbenchItem[];
   };
@@ -131,51 +102,6 @@ export function confirmAdminCompletion(workOrderId: number, note?: string) {
   return customFetch<{ ok: true }>(`/api/admin-workbench/${workOrderId}/confirm-completion`, {
     method: "POST",
     body: JSON.stringify({ note }),
-    headers: { "Content-Type": "application/json" },
-  });
-}
-
-export function markAdminBilled(
-  workOrderId: number,
-  body: {
-    extraAmount?: string;
-    discountAmount?: string;
-    finalAmount?: string;
-    invoiceNeeded?: boolean;
-    billTo?: string;
-    expectedPaymentDate?: string | null;
-    needsSubsidy?: boolean;
-    subsidyType?: SubsidyType;
-    note?: string;
-  },
-) {
-  return customFetch<{ receivableId: number }>(`/api/admin-workbench/${workOrderId}/mark-billed`, {
-    method: "POST",
-    body: JSON.stringify(body),
-    headers: { "Content-Type": "application/json" },
-  });
-}
-
-export function setAdminExpectedPaymentDate(workOrderId: number, expectedPaymentDate: string) {
-  return customFetch<{ ok: true }>(`/api/admin-workbench/${workOrderId}/expected-payment-date`, {
-    method: "POST",
-    body: JSON.stringify({ expectedPaymentDate }),
-    headers: { "Content-Type": "application/json" },
-  });
-}
-
-export function setAdminSubsidyType(
-  workOrderId: number,
-  subsidyType: SubsidyType,
-  opts?: { assistedProgram?: AssistedProgram | null; note?: string },
-) {
-  return customFetch<{ ok: true }>(`/api/admin-workbench/${workOrderId}/subsidy-type`, {
-    method: "POST",
-    body: JSON.stringify({
-      subsidyType,
-      assistedProgram: opts?.assistedProgram,
-      note: opts?.note,
-    }),
     headers: { "Content-Type": "application/json" },
   });
 }
@@ -256,22 +182,6 @@ export function cancelAdminPaid(workOrderId: number, reason?: string) {
   return customFetch<{ paymentStatus: string }>(`/api/admin-workbench/${workOrderId}/cancel-paid`, {
     method: "POST",
     body: JSON.stringify({ reason }),
-    headers: { "Content-Type": "application/json" },
-  });
-}
-
-export function approveAdminCloseOverride(workOrderId: number, note?: string) {
-  return customFetch<{ ok: true }>(`/api/admin-workbench/${workOrderId}/close-override`, {
-    method: "POST",
-    body: JSON.stringify({ note }),
-    headers: { "Content-Type": "application/json" },
-  });
-}
-
-export function completeAdminClose(workOrderId: number, note?: string) {
-  return customFetch<{ ok: true }>(`/api/admin-workbench/${workOrderId}/complete-close`, {
-    method: "POST",
-    body: JSON.stringify({ note }),
     headers: { "Content-Type": "application/json" },
   });
 }
