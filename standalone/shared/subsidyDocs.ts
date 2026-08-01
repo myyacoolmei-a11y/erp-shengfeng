@@ -61,6 +61,28 @@ export const SUBSIDY_DOC_TYPE_LABELS: Record<SubsidyDocType, string> = {
   scrap_recycle_form: "廢四機回收聯單",
 };
 
+/**
+ * 行政檢視／ZIP 下載時的附件分類與排序（含目前系統尚未收集的類型，僅顯示「尚未上傳」）。
+ * ZIP 內檔名前綴即為此處的順序。
+ */
+export const SUBSIDY_FILE_CATEGORIES = [
+  { docType: "id_front", label: "身分證正面", collected: true },
+  { docType: "id_back", label: "身分證反面", collected: true },
+  { docType: "utility_bill", label: "電費單", collected: true },
+  { docType: "bank_book", label: "存摺封面", collected: true },
+  { docType: "invoice", label: "發票", collected: true },
+  { docType: "warranty", label: "保固書", collected: true },
+  { docType: "nameplate", label: "冷氣銘牌", collected: false },
+  { docType: "install_photo", label: "施工照片", collected: false },
+  { docType: "scrap_recycle_form", label: "廢四機回收聯單", collected: true },
+] as const;
+
+export const SUBSIDY_OTHER_FILE_CATEGORY = {
+  docType: "other",
+  label: "其他附件",
+  collected: true,
+} as const;
+
 export const ALLOWED_SUBSIDY_UPLOAD_MIME = [
   "image/jpeg",
   "image/png",

@@ -34,6 +34,7 @@ import aiWorkReminderSettingsRouter from "./aiWorkReminderSettings";
 import pushRouter from "./push";
 import inventoryRouter from "./inventory";
 import adminWorkbenchRouter from "./adminWorkbench";
+import subsidyCaseFilesRouter, { subsidyCaseFilesTokenRouter } from "./subsidyCaseFiles";
 
 import { authenticate } from "../lib/auth";
 
@@ -45,6 +46,9 @@ router.use(quoteSharePublicRouter);
 router.use(subsidyPublicRouter);
 router.use(authRouter);
 router.use(jobsRouter);
+// 短效簽章的附件／ZIP 連結（<img>、<a download> 無法帶 header）；
+// 未帶 token 時會往下走一般登入驗證。
+router.use(subsidyCaseFilesTokenRouter);
 
 router.use(authenticate);
 
@@ -81,6 +85,7 @@ router.use(notificationsRouter);
 router.use(pushRouter);
 router.use(workOrderFieldProgressRouter);
 router.use(adminWorkbenchRouter);
+router.use(subsidyCaseFilesRouter);
 router.use(inventoryRouter);
 
 export default router;

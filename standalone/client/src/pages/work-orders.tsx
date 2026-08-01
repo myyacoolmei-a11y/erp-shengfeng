@@ -99,6 +99,8 @@ import {
   handoffCaseToAdmin,
   unmarkAdminSubsidyApplied,
 } from "@/lib/adminWorkbenchApi";
+import { SubsidyFilesDialog } from "@/components/subsidy/SubsidyFilesDialog";
+import { downloadSubsidyCaseZip } from "@/lib/subsidyFilesApi";
 
 const ADMIN_FILTER_TABS = ["待派工", "待施工", "施工中", "異常／暫停", "施工完成", "歷史紀錄"] as const;
 type AdminFilterTab = (typeof ADMIN_FILTER_TABS)[number];
@@ -364,6 +366,26 @@ function WorkOrderSubsidyPanel({ order }: { order: any }) {
     },
   });
 
+  const [filesOpen, setFilesOpen] = useState(false);
+  const [zipping, setZipping] = useState(false);
+
+  async function downloadZip() {
+    setZipping(true);
+    try {
+      const fileName = `${order.customerName || "客戶"}_${order.workOrderNumber || order.id}_補助資料.zip`;
+      await downloadSubsidyCaseZip(order.id, fileName);
+      toast({ title: "已開始下載", description: fileName });
+    } catch (err: any) {
+      toast({
+        title: "ZIP 下載失敗",
+        description: err?.message || "請稍後再試",
+        variant: "destructive",
+      });
+    } finally {
+      setZipping(false);
+    }
+  }
+
   const manualConfirmMut = useMutation({
     mutationFn: () => confirmAdminSubsidyDocs(order.id, "案件頁人工確認資料完整"),
     onSuccess: () => {
@@ -469,12 +491,32 @@ function WorkOrderSubsidyPanel({ order }: { order: any }) {
       </div>
 
       <div className="space-y-2">
-        <p className="text-xs font-semibold">
-          客戶補助資料
-          {detail!.lastUploadAt
-            ? ` · 最後上傳 ${new Date(detail!.lastUploadAt).toLocaleString("zh-TW")}`
-            : ""}
-        </p>
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-xs font-semibold">
+            客戶補助資料
+            {detail!.lastUploadAt
+              ? ` · 最後上傳 ${new Date(detail!.lastUploadAt).toLocaleString("zh-TW")}`
+              : ""}
+          </p>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 text-xs"
+            disabled={(detail!.uploadedDocCount ?? 0) === 0}
+            onClick={() => setFilesOpen(true)}
+          >
+            查看補助資料
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-8 text-xs"
+            disabled={(detail!.uploadedDocCount ?? 0) === 0 || zipping}
+            onClick={() => void downloadZip()}
+          >
+            {zipping ? "ZIP整理中..." : "ZIP下載全部"}
+          </Button>
+        </div>
 
         {!detail!.invoiceKind ? (
           <p className="text-xs text-amber-800">
@@ -621,6 +663,14 @@ function WorkOrderSubsidyPanel({ order }: { order: any }) {
         >
           取消補助完成
         </Button>
+      )}
+
+      {filesOpen && (
+        <SubsidyFilesDialog
+          workOrderId={order.id}
+          open
+          onOpenChange={setFilesOpen}
+        />
       )}
     </div>
   );

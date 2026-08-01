@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { AlertCircle, CheckCircle2, Phone } from "lucide-react";
+import { AlertCircle, CheckCircle2, FolderOpen, Loader2, Package, Phone } from "lucide-react";
 import { useAuth, hasRole } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,6 +21,8 @@ import {
   unmarkAdminSubsidyApplied,
   type AdminWorkbenchItem,
 } from "@/lib/adminWorkbenchApi";
+import { SubsidyFilesDialog } from "@/components/subsidy/SubsidyFilesDialog";
+import { downloadSubsidyCaseZip } from "@/lib/subsidyFilesApi";
 
 function money(v?: string | null) {
   const n = parseFloat(String(v ?? "0"));
@@ -233,6 +235,26 @@ export default function AdminWorkbench() {
     enabled: !!user && canFinance,
   });
 
+  const [filesModal, setFilesModal] = useState<number | null>(null);
+  const [zipBusyId, setZipBusyId] = useState<number | null>(null);
+
+  async function downloadZip(item: AdminWorkbenchItem) {
+    setZipBusyId(item.workOrderId);
+    try {
+      const fileName = `${item.customerName || "客戶"}_${item.workOrderNumber || item.workOrderId}_補助資料.zip`;
+      await downloadSubsidyCaseZip(item.workOrderId, fileName);
+      toast({ title: "已開始下載", description: fileName });
+    } catch (err) {
+      toast({
+        title: "ZIP 下載失敗",
+        description: err instanceof Error ? err.message : "請稍後再試",
+        variant: "destructive",
+      });
+    } finally {
+      setZipBusyId(null);
+    }
+  }
+
   const invalidate = () => {
     void qc.invalidateQueries({ queryKey: ["admin-workbench"] });
     void qc.invalidateQueries({ queryKey: getListReceivablesQueryKey() });
@@ -433,6 +455,42 @@ export default function AdminWorkbench() {
           )}
         </div>
 
+        {/* 補助附件：查看與整包下載 */}
+        <div className="flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-10 sm:h-9"
+            disabled={uploadedCount === 0}
+            onClick={() => setFilesModal(item.workOrderId)}
+          >
+            <FolderOpen className="h-3.5 w-3.5 mr-1" />
+            查看補助資料
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-10 sm:h-9"
+            disabled={uploadedCount === 0 || zipBusyId === item.workOrderId}
+            onClick={() => void downloadZip(item)}
+          >
+            {zipBusyId === item.workOrderId ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                ZIP整理中...
+              </>
+            ) : (
+              <>
+                <Package className="h-3.5 w-3.5 mr-1" />
+                ZIP下載全部
+              </>
+            )}
+          </Button>
+          {uploadedCount === 0 && (
+            <span className="self-center text-xs text-muted-foreground">尚無補助資料</span>
+          )}
+        </div>
+
         {/* 補助操作 — 選好發票類型後才出現 */}
         {canOperate && !subsidyDone && (
           <div className="flex flex-wrap gap-2">
@@ -533,6 +591,38 @@ export default function AdminWorkbench() {
           <Button asChild size="sm" variant="outline" className="h-10 sm:h-9">
             <Link href={caseHref(item.workOrderId)}>查看案件</Link>
           </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-10 sm:h-9"
+            disabled={(item.uploadedDocCount ?? item.customerDocumentCount ?? 0) === 0}
+            onClick={() => setFilesModal(item.workOrderId)}
+          >
+            <FolderOpen className="h-3.5 w-3.5 mr-1" />
+            查看補助資料
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-10 sm:h-9"
+            disabled={
+              (item.uploadedDocCount ?? item.customerDocumentCount ?? 0) === 0 ||
+              zipBusyId === item.workOrderId
+            }
+            onClick={() => void downloadZip(item)}
+          >
+            {zipBusyId === item.workOrderId ? (
+              <>
+                <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                ZIP整理中...
+              </>
+            ) : (
+              <>
+                <Package className="h-3.5 w-3.5 mr-1" />
+                ZIP下載全部
+              </>
+            )}
+          </Button>
           {canOperate && (
             <Button
               size="sm"
@@ -628,6 +718,13 @@ export default function AdminWorkbench() {
         </CardContent>
       </Card>
 
+      {filesModal != null && (
+        <SubsidyFilesDialog
+          workOrderId={filesModal}
+          open
+          onOpenChange={open => !open && setFilesModal(null)}
+        />
+      )}
     </div>
   );
 }
