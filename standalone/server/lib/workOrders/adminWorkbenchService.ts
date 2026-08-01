@@ -1330,6 +1330,11 @@ export async function advanceSubsidyPipeline(
   // sync legacy receivable / work-order Chinese fields from pipeline (single source)
   await syncLegacySubsidyFlags(workOrderId, toStatus, user, now);
 
+  // 補助完成後：若已收款則自動結案
+  if (toStatus === "applied") {
+    await tryAutoCloseIfReady(workOrderId, user, note ?? "補助已完成，自動結案");
+  }
+
   return { pipelineStatus: toStatus, order: PIPELINE_ORDER };
 }
 
@@ -1407,6 +1412,12 @@ export async function unmarkSubsidyApplied(
       previousAppliedBy: sub.appliedBy ?? null,
     },
   });
+
+  // 取消補助完成後：若已自動結案則解除，回到待結案（已收款仍保留）
+  const [wo] = await db.select().from(workOrdersTable).where(eq(workOrdersTable.id, workOrderId)).limit(1);
+  if (normalizeAdminWorkflowStatus(wo?.adminWorkflowStatus) === "closed") {
+    await reopenClosedCase(workOrderId, user, note ?? "取消補助完成，自動解除結案");
+  }
 
   return { pipelineStatus: "docs_complete" as const };
 }
@@ -1647,6 +1658,66 @@ export async function markFullyPaid(workOrderId: number, user: JwtPayload, note?
   await syncAdminWorkflowFromReceivable(workOrderId, user, "已收款", note);
 }
 
+/**
+ * Auto-close when ready:
+ * - paid + (not company_assisted OR pipeline applied)
+ * Uses same canCloseCase rules (eng confirmed / receivable / paid / subsidy).
+ */
+export async function tryAutoCloseIfReady(
+  workOrderId: number,
+  user: JwtPayload,
+  note?: string,
+): Promise<boolean> {
+  const [wo] = await db.select().from(workOrdersTable).where(eq(workOrdersTable.id, workOrderId)).limit(1);
+  if (!wo) return false;
+  const cur = normalizeAdminWorkflowStatus(wo.adminWorkflowStatus);
+  if (!cur || cur === "closed" || cur === "pending_admin_review") return cur === "closed";
+
+  const [recv] = await db
+    .select()
+    .from(receivablesTable)
+    .where(eq(receivablesTable.workOrderId, workOrderId))
+    .limit(1);
+  const [sub] = await db
+    .select()
+    .from(subsidyApplicationsTable)
+    .where(eq(subsidyApplicationsTable.workOrderId, workOrderId))
+    .limit(1);
+
+  const subsidyType: SubsidyType | null =
+    normalizeSubsidyType(sub?.subsidyType) ??
+    (wo.adminNeedsSubsidy ? "company_assisted" : null);
+  const total = recv ? num(recv.totalAmount) : 0;
+  const received = recv ? num(recv.receivedAmount) : 0;
+  const isPaid =
+    !!recv &&
+    (recv.paymentStatus === "已收款" || (total > 0 && received >= total - 0.001));
+
+  const check = canCloseCase({
+    engineeringConfirmed: !!wo.adminConfirmedAt,
+    hasReceivable: !!recv,
+    isPaid,
+    subsidyType,
+    subsidyPipeline: (sub?.pipelineStatus as SubsidyPipelineStatus) ?? null,
+  });
+  if (!check.canClose) return false;
+
+  const now = new Date();
+  await transitionAdminStatus({
+    workOrderId,
+    from: wo.adminWorkflowStatus,
+    to: "closed",
+    user,
+    note: note ?? "條件齊全，自動結案",
+    extraUpdate: {
+      adminClosedAt: now,
+      adminClosedBy: user.id,
+      status: "已結案",
+    },
+  });
+  return true;
+}
+
 export async function syncAdminWorkflowFromReceivable(
   workOrderId: number,
   user: JwtPayload,
@@ -1655,17 +1726,39 @@ export async function syncAdminWorkflowFromReceivable(
 ): Promise<void> {
   const [wo] = await db.select().from(workOrdersTable).where(eq(workOrdersTable.id, workOrderId)).limit(1);
   if (!wo) return;
-  const cur = normalizeAdminWorkflowStatus(wo.adminWorkflowStatus);
-  if (!cur || cur === "closed" || cur === "pending_admin_review") return;
+  let cur = normalizeAdminWorkflowStatus(wo.adminWorkflowStatus);
+  if (!cur || cur === "pending_admin_review") return;
+
+  // 已結案後若收款被取消／變部分收款：先解除結案再往下同步
+  if (cur === "closed") {
+    if (paymentStatus === "已收款") return;
+    await reopenClosedCase(workOrderId, user, note ?? "收款狀態變更，自動解除結案");
+    const [wo2] = await db.select().from(workOrdersTable).where(eq(workOrdersTable.id, workOrderId)).limit(1);
+    cur = normalizeAdminWorkflowStatus(wo2?.adminWorkflowStatus);
+    if (!cur || cur === "closed") return;
+  }
 
   if (paymentStatus === "已收款") {
+    const autoClosed = await tryAutoCloseIfReady(
+      workOrderId,
+      user,
+      note ?? "已收款，自動結案",
+    );
+    if (autoClosed) return;
+
+    // 公司協助補助未完成等：進入待結案，等待補助完成
     if (cur !== "pending_close" && cur !== "paid") {
+      const [fresh] = await db
+        .select({ adminWorkflowStatus: workOrdersTable.adminWorkflowStatus })
+        .from(workOrdersTable)
+        .where(eq(workOrdersTable.id, workOrderId))
+        .limit(1);
       await transitionAdminStatus({
         workOrderId,
-        from: wo.adminWorkflowStatus,
+        from: fresh?.adminWorkflowStatus ?? wo.adminWorkflowStatus,
         to: "pending_close",
         user,
-        note: note ?? "已收款，進入待結案",
+        note: note ?? "已收款，等待補助完成後自動結案",
       });
     }
     return;
@@ -1689,9 +1782,14 @@ export async function syncAdminWorkflowFromReceivable(
     paymentStatus === "未收款" &&
     (cur === "pending_close" || cur === "paid" || cur === "partially_paid")
   ) {
+    const [fresh] = await db
+      .select({ adminWorkflowStatus: workOrdersTable.adminWorkflowStatus })
+      .from(workOrdersTable)
+      .where(eq(workOrdersTable.id, workOrderId))
+      .limit(1);
     await transitionAdminStatus({
       workOrderId,
-      from: wo.adminWorkflowStatus,
+      from: fresh?.adminWorkflowStatus ?? cur,
       to: "billed",
       user,
       note: note ?? "取消已收款，恢復待收款",
@@ -1708,8 +1806,9 @@ export async function cancelFullyPaid(
   const [wo] = await db.select().from(workOrdersTable).where(eq(workOrdersTable.id, workOrderId)).limit(1);
   if (!wo) throw new Error("找不到派工單");
   const cur = normalizeAdminWorkflowStatus(wo.adminWorkflowStatus);
+  // 已結案：先自動解除結案，再取消已收款
   if (cur === "closed") {
-    throw new Error("已結案案件請先「取消結案／重新開啟」後再取消已收款");
+    await reopenClosedCase(workOrderId, user, reason ?? "取消已收款前自動解除結案");
   }
 
   const [recv] = await db

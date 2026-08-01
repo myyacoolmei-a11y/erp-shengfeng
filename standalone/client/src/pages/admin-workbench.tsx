@@ -33,7 +33,6 @@ import { getListReceivablesQueryKey } from "@workspace/api-client-react";
 import {
   advanceAdminSubsidyPipeline,
   cancelAdminPaid,
-  completeAdminClose,
   confirmAdminCompletion,
   confirmAdminSubsidyDocs,
   fetchAdminWorkbench,
@@ -231,6 +230,7 @@ function absoluteUploadUrl(item: AdminWorkbenchItem): string | null {
   return `${window.location.origin}${path.startsWith("/") ? "" : "/"}${path}`;
 }
 
+/** 複製上傳網址時用的短訊息（三聯式才附提醒） */
 function subsidyUploadShareText(item: AdminWorkbenchItem): string {
   const url = absoluteUploadUrl(item);
   const lines = [
@@ -249,24 +249,56 @@ function subsidyUploadShareText(item: AdminWorkbenchItem): string {
   return lines.join("\n");
 }
 
-function subsidyMissingShareText(item: AdminWorkbenchItem): string {
-  const url = absoluteUploadUrl(item);
-  const missing =
+/**
+ * LINE「提醒補件」訊息模板。
+ * 日後若要改文案，請改此函式即可。
+ * - {missing_documents} ← item.missingDocLabels（依實際缺件動態產生）
+ * - {upload_url} ← absoluteUploadUrl(item)
+ * - 三聯式提醒僅在 invoiceKind === "triple" 時顯示
+ */
+function subsidyLineReminderText(item: AdminWorkbenchItem): string {
+  const uploadUrl = absoluteUploadUrl(item) || "（尚未產生上傳網址）";
+  const missingDocuments =
     (item.missingDocLabels?.length ?? 0) > 0
-      ? item.missingDocLabels!.join("、")
-      : "必要文件";
+      ? item.missingDocLabels!.map((label) => `• ${label}`).join("\n")
+      : "• （目前系統未標示缺件，請依上傳頁提示確認）";
+
   const lines = [
-    "您好，目前補助資料尚缺：",
+    "您好 😊",
     "",
-    missing,
+    "我是【晟風工程小秘書】。",
+    "",
+    "感謝您選擇晟風工程，您的冷氣安裝案件已順利完工！🎉",
+    "",
+    "接下來需要麻煩您協助我們完成最後一個步驟。",
+    "",
+    "請將以下資料補齊，方便我們協助您辦理政府冷氣補助。",
+    "",
+    "📋 目前尚缺資料：",
+    "",
+    missingDocuments,
     "",
   ];
+
   if (item.invoiceKind === "triple") {
-    lines.push("因本案件需開立公司三聯式發票，請填寫公司名稱及統一編號。");
-    lines.push("");
+    lines.push(
+      "若本案件為公司三聯式發票，請一併填寫：",
+      "• 公司名稱",
+      "• 統一編號",
+      "",
+    );
   }
-  lines.push("請點擊原上傳連結補上資料，謝謝。");
-  if (url) lines.push("", url);
+
+  lines.push(
+    "🔗 請點擊下方連結完成資料填寫與上傳：",
+    "",
+    uploadUrl,
+    "",
+    "如有任何問題，歡迎隨時與我們聯繫，我們將竭誠為您服務。",
+    "",
+    "感謝您的支持與配合，祝您順心愉快！😊",
+  );
+
   return lines.join("\n");
 }
 
@@ -540,16 +572,10 @@ export default function AdminWorkbench() {
   const cancelPaidMut = useMutation({
     mutationFn: (id: number) => cancelAdminPaid(id, "取消已收款"),
     onSuccess: () => {
-      toast({ title: "已取消已收款", description: "案件已回到未收款分類" });
-      invalidate();
-    },
-    onError: onErr,
-  });
-
-  const closeMut = useMutation({
-    mutationFn: (id: number) => completeAdminClose(id),
-    onSuccess: () => {
-      toast({ title: "案件已結案" });
+      toast({
+        title: "已取消已收款",
+        description: "若案件已結案會一併解除，並回到未收款分類",
+      });
       invalidate();
     },
     onError: onErr,
@@ -558,7 +584,7 @@ export default function AdminWorkbench() {
   const reopenMut = useMutation({
     mutationFn: (id: number) => reopenAdminClosed(id, "取消結案／重新開啟"),
     onSuccess: () => {
-      toast({ title: "已取消結案", description: "收款與補助資料均保留" });
+      toast({ title: "已取消結案", description: "收款與補助資料均保留，案件回到待結案" });
       invalidate();
     },
     onError: onErr,
@@ -1025,10 +1051,7 @@ export default function AdminWorkbench() {
                 className="h-10 sm:h-9"
                 disabled={!shareReady || subsidyPipeMut.isPending}
                 onClick={() => {
-                  const text =
-                    (item.missingDocLabels?.length ?? 0) > 0
-                      ? subsidyMissingShareText(item)
-                      : subsidyUploadShareText(item);
+                  const text = subsidyLineReminderText(item);
                   const win = openLineShareText(text);
                   if (!win) {
                     void navigator.clipboard.writeText(text).then(() =>
@@ -1075,21 +1098,15 @@ export default function AdminWorkbench() {
           {waitingSubsidy ? (
             <p className="text-xs text-amber-800 font-medium">等待補助完成</p>
           ) : (
-            <p className="text-xs text-green-700 font-medium">
-              {item.canClose ? "可結案" : "已收款／待結案"}
+            <p className="text-xs text-muted-foreground">
+              {item.canClose
+                ? "條件齊全，系統將自動結案"
+                : item.closeBlockers?.length
+                  ? item.closeBlockers.join("、")
+                  : "已收款／待結案"}
             </p>
           )}
           <div className="flex flex-wrap gap-2">
-            {canOperate && item.canClose && !waitingSubsidy && (
-              <Button
-                size="sm"
-                className="h-10 sm:h-9"
-                disabled={closeMut.isPending}
-                onClick={() => closeMut.mutate(item.workOrderId)}
-              >
-                結案
-              </Button>
-            )}
             {canOperate && waitingSubsidy && (
               <Button size="sm" className="h-10 sm:h-9" disabled>
                 等待補助完成
@@ -1131,6 +1148,25 @@ export default function AdminWorkbench() {
             {item.subsidyType === "company_assisted" && (
               <Button size="sm" variant="outline" className="h-10 sm:h-9" onClick={() => setDocsModal(item)}>
                 查看補助資料
+              </Button>
+            )}
+            {canOperate && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-10 sm:h-9 text-orange-700 border-orange-300"
+                disabled={cancelPaidMut.isPending}
+                onClick={() => {
+                  if (
+                    !window.confirm(
+                      "確定取消已收款？將自動解除結案並恢復為未收款，不會刪除派工單／報價單／施工資料。",
+                    )
+                  )
+                    return;
+                  cancelPaidMut.mutate(item.workOrderId);
+                }}
+              >
+                取消已收款
               </Button>
             )}
             {canOperate && (
@@ -1522,7 +1558,7 @@ export default function AdminWorkbench() {
                       variant="outline"
                       className="w-full"
                       onClick={() => {
-                        const text = subsidyMissingShareText(docsModal);
+                        const text = subsidyLineReminderText(docsModal);
                         const win = openLineShareText(text);
                         if (!win) {
                           void navigator.clipboard.writeText(text);
