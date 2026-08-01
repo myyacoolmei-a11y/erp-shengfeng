@@ -307,7 +307,7 @@ export default function Receivables() {
         setEditItem(null);
         if (variables.data.subsidyStatus !== undefined) {
           toast({
-            title: variables.data.subsidyStatus === "已申請補助" ? "已申請補助" : "未申請補助",
+            title: variables.data.subsidyStatus === "已申請補助" ? "補助已完成" : "未申請補助",
           });
         } else {
           toast({ title: "已更新" });

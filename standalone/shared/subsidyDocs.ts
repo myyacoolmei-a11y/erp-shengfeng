@@ -95,7 +95,7 @@ export const SUBSIDY_DISPLAY_LABELS: Record<SubsidyDisplayStatus, string> = {
   docs_incomplete: "客戶資料待補件",
   awaiting_manual_review: "等待人工確認",
   docs_complete: "補助資料已齊，可進行申請",
-  applied: "補助申請已完成",
+  applied: "補助已完成",
 };
 
 /** Tailwind badge classes — reuse existing palette tokens. */
@@ -218,7 +218,7 @@ export function subsidyCombinedStatusLabel(input: {
     const prog =
       assistedProgram != null ? ASSISTED_PROGRAM_LABELS[assistedProgram] : null;
     if (displayStatus === "applied") {
-      return prog ? `公司協助－${prog}｜補助已完成` : "補助已完成";
+      return "補助已完成";
     }
     if (displayStatus === "docs_complete") {
       return prog

@@ -31,7 +31,6 @@ import { openLineShareText } from "@/components/pdf/pdf-service";
 import { getListReceivablesQueryKey } from "@workspace/api-client-react";
 import {
   advanceAdminSubsidyPipeline,
-  approveAdminCloseOverride,
   cancelAdminPaid,
   completeAdminClose,
   confirmAdminCompletion,
@@ -264,7 +263,7 @@ function SubsidyBadge({ item }: { item: AdminWorkbenchItem }) {
   if (item.subsidyType === "company_assisted") {
     if (item.subsidyPipelineStatus === "applied") {
       return (
-        <Badge className="bg-emerald-200 text-emerald-900 border-0 font-normal">補助完成</Badge>
+        <Badge className="bg-emerald-200 text-emerald-900 border-0 font-normal">補助已完成</Badge>
       );
     }
     return (
@@ -400,7 +399,6 @@ export default function AdminWorkbench() {
 
   const canOperate = hasRole(user, "super_admin", "owner", "admin");
   const canFinance = canOperate || hasRole(user, "accountant");
-  const canOverride = hasRole(user, "super_admin", "owner");
 
   const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["admin-workbench"],
@@ -411,6 +409,7 @@ export default function AdminWorkbench() {
   const invalidate = () => {
     void qc.invalidateQueries({ queryKey: ["admin-workbench"] });
     void qc.invalidateQueries({ queryKey: getListReceivablesQueryKey() });
+    void qc.invalidateQueries({ queryKey: ["/api/work-orders"] });
   };
   const onErr = (err: unknown) => {
     toast({
@@ -452,8 +451,11 @@ export default function AdminWorkbench() {
   const subsidyPipeMut = useMutation({
     mutationFn: (p: { id: number; status: SubsidyPipelineStatus; note?: string }) =>
       advanceAdminSubsidyPipeline(p.id, p.status, p.note),
-    onSuccess: () => {
-      toast({ title: "補助狀態已更新" });
+    onSuccess: (_data, vars) => {
+      toast({
+        title: vars.status === "applied" ? "已標記補助完成" : "補助狀態已更新",
+        description: vars.status === "applied" ? "案件已從補助中心移除" : undefined,
+      });
       invalidate();
     },
     onError: onErr,
@@ -532,15 +534,6 @@ export default function AdminWorkbench() {
     mutationFn: (id: number) => reopenAdminClosed(id, "取消結案／重新開啟"),
     onSuccess: () => {
       toast({ title: "已取消結案", description: "收款與補助資料均保留" });
-      invalidate();
-    },
-    onError: onErr,
-  });
-
-  const overrideMut = useMutation({
-    mutationFn: (id: number) => approveAdminCloseOverride(id, "核准補助未完成先結案"),
-    onSuccess: () => {
-      toast({ title: "已核准先結案" });
       invalidate();
     },
     onError: onErr,
@@ -968,6 +961,7 @@ export default function AdminWorkbench() {
               {item.uploadUrl && (
                 <Button
                   size="sm"
+                  variant="outline"
                   className="h-10 sm:h-9"
                   disabled={subsidyPipeMut.isPending}
                   onClick={() => {
@@ -991,6 +985,17 @@ export default function AdminWorkbench() {
                   LINE 提醒補件
                 </Button>
               )}
+              <Button
+                size="sm"
+                className="h-10 sm:h-9 bg-green-700 hover:bg-green-800"
+                disabled={subsidyPipeMut.isPending}
+                onClick={() => {
+                  if (!window.confirm("確定此案件的補助申請已完成？完成後將從補助中心移除。")) return;
+                  subsidyPipeMut.mutate({ id: item.workOrderId, status: "applied" });
+                }}
+              >
+                標記補助完成
+              </Button>
             </div>
           )}
         </div>
@@ -998,6 +1003,9 @@ export default function AdminWorkbench() {
     }
 
     if (secKey === "close") {
+      const waitingSubsidy =
+        item.subsidyType === "company_assisted" &&
+        item.subsidyPipelineStatus !== "applied";
       return (
         <ItemShell key={`close-${item.workOrderId}`} item={item}>
           <ReceivableSummary item={item} />
@@ -1005,44 +1013,27 @@ export default function AdminWorkbench() {
             <SubsidyHandlingTag item={item} onOpen={() => openSubsidyForItem(item)} />
             <SubsidyBadge item={item} />
           </div>
-          <p className="text-xs text-green-700 font-medium">
-            {item.canCloseReady ? "可結案" : "已收款／待結案"}
-          </p>
-          {item.subsidyType === "company_assisted" &&
-            item.subsidyPipelineStatus !== "applied" &&
-            !item.closeOverrideAt && (
-              <p className="text-xs text-amber-800">需完成補助申請後才可結案（或由負責人核准先結案）</p>
-            )}
-          {!item.canClose && item.closeBlockers && item.closeBlockers.length > 0 && (
-            <ul className="text-xs text-amber-800 list-disc pl-4">
-              {item.closeBlockers.map((b) => (
-                <li key={b}>{b}</li>
-              ))}
-            </ul>
+          {waitingSubsidy ? (
+            <p className="text-xs text-amber-800 font-medium">等待補助完成</p>
+          ) : (
+            <p className="text-xs text-green-700 font-medium">
+              {item.canClose ? "可結案" : "已收款／待結案"}
+            </p>
           )}
           <div className="flex flex-wrap gap-2">
-            {canOverride &&
-              item.subsidyType === "company_assisted" &&
-              !item.closeOverrideAt &&
-              item.subsidyPipelineStatus !== "applied" && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="h-10 sm:h-9"
-                  disabled={overrideMut.isPending}
-                  onClick={() => overrideMut.mutate(item.workOrderId)}
-                >
-                  核准先結案
-                </Button>
-              )}
-            {canOperate && (
+            {canOperate && item.canClose && !waitingSubsidy && (
               <Button
                 size="sm"
                 className="h-10 sm:h-9"
-                disabled={closeMut.isPending || !item.canClose}
+                disabled={closeMut.isPending}
                 onClick={() => closeMut.mutate(item.workOrderId)}
               >
                 結案
+              </Button>
+            )}
+            {canOperate && waitingSubsidy && (
+              <Button size="sm" className="h-10 sm:h-9" disabled>
+                等待補助完成
               </Button>
             )}
             {canOperate && (

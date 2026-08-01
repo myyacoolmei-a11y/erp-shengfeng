@@ -99,7 +99,7 @@ export const SUBSIDY_PIPELINE_LABELS: Record<SubsidyPipelineStatus, string> = {
   docs_incomplete: "客戶資料待補件",
   docs_complete: "補助資料已齊",
   pending_apply: "待申請補助",
-  applied: "已申請補助",
+  applied: "補助已完成",
 };
 
 export type AdminBillingInfo = {

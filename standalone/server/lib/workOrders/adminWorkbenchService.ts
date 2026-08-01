@@ -338,19 +338,16 @@ function canCloseCase(input: {
   engineeringConfirmed: boolean;
   hasReceivable: boolean;
   isPaid: boolean;
-  subsidyType: SubsidyType;
+  subsidyType: SubsidyType | null;
   subsidyPipeline: SubsidyPipelineStatus | null;
-  hasCloseOverride: boolean;
 }): { canClose: boolean; blockers: string[] } {
   const blockers: string[] = [];
   if (!input.engineeringConfirmed) blockers.push("工程資料尚未確認");
   if (!input.hasReceivable) blockers.push("尚未建立應收帳款");
   if (!input.isPaid) blockers.push("尚未收款完成");
-  if (input.subsidyType === "company_assisted") {
-    const applied = input.subsidyPipeline === "applied";
-    if (!applied && !input.hasCloseOverride) {
-      blockers.push("公司協助補助尚未申請完成（需 owner／super_admin 核准方可先結案）");
-    }
+  // 公司協助：必須 pipeline_status = applied（補助已完成）；不提供「核准先結案」
+  if (input.subsidyType === "company_assisted" && input.subsidyPipeline !== "applied") {
+    blockers.push("等待補助完成");
   }
   return { canClose: blockers.length === 0, blockers };
 }
@@ -361,7 +358,6 @@ function buildCardStatuses(opts: {
   subsidyType: SubsidyType | null;
   assistedProgram: AssistedProgram | null;
   subsidyPipeline: SubsidyPipelineStatus | null;
-  hasCloseOverride: boolean;
   adminStatus: AdminWorkflowStatus | null;
 }) {
   const eng: "pending_confirm" | "confirmed" = opts.engineeringConfirmed
@@ -387,9 +383,8 @@ function buildCardStatuses(opts: {
     engineeringConfirmed: opts.engineeringConfirmed,
     hasReceivable: !!opts.recv,
     isPaid: recvStatus === "paid",
-    subsidyType: opts.subsidyType ?? "pending_confirmation",
+    subsidyType: opts.subsidyType,
     subsidyPipeline: opts.subsidyPipeline,
-    hasCloseOverride: opts.hasCloseOverride,
   });
 
   const typeLabel =
@@ -563,7 +558,6 @@ export async function getAdminWorkbench() {
       subsidyType,
       assistedProgram,
       subsidyPipeline,
-      hasCloseOverride: !!sub?.closeOverrideAt,
       adminStatus: status,
     });
 
@@ -663,9 +657,7 @@ export async function getAdminWorkbench() {
       needsSubsidy: subsidyType === "company_assisted",
       canMarkApplied: displayStatus === "docs_complete" || displayStatus === "applied",
       canCloseReady:
-        subsidyType !== "company_assisted" ||
-        subsidyPipeline === "applied" ||
-        !!sub?.closeOverrideAt,
+        subsidyType !== "company_assisted" || subsidyPipeline === "applied",
       customerDocuments: subsidyDocs.slice(0, 40).map((d) => ({
         id: d.id,
         docType: d.docType,
@@ -756,14 +748,9 @@ export async function getAdminWorkbench() {
       }
     }
 
-    // 13. Pending close — only when paid AND subsidy not blocking
-    // (needs-subsidy unpaid→paid cases stay in subsidy sections until applied/override)
-    const subsidyBlocksClose =
-      subsidyType === "company_assisted" &&
-      subsidyPipeline !== "applied" &&
-      !sub?.closeOverrideAt;
+    // 13. Pending close — all paid cases (incl. waiting for subsidy complete)
     const isPaid = card.receivableStatus === "paid" || status === "pending_close" || status === "paid";
-    if (isPaid && !subsidyBlocksClose) {
+    if (isPaid) {
       sections.pendingClose.push(base);
     }
   }
@@ -1787,10 +1774,9 @@ export async function completeClose(
     .where(eq(subsidyApplicationsTable.workOrderId, workOrderId))
     .limit(1);
 
-  const subsidyType: SubsidyType =
-    sub?.subsidyType === "company_assisted" || wo.adminNeedsSubsidy
-      ? "company_assisted"
-      : "none";
+  const subsidyType: SubsidyType | null =
+    normalizeSubsidyType(sub?.subsidyType) ??
+    (wo.adminNeedsSubsidy ? "company_assisted" : null);
   const total = recv ? num(recv.totalAmount) : 0;
   const received = recv ? num(recv.receivedAmount) : 0;
   const isPaid =
@@ -1803,7 +1789,6 @@ export async function completeClose(
     isPaid,
     subsidyType,
     subsidyPipeline: (sub?.pipelineStatus as SubsidyPipelineStatus) ?? null,
-    hasCloseOverride: !!sub?.closeOverrideAt,
   });
 
   if (!check.canClose) {

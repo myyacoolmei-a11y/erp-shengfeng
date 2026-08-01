@@ -367,7 +367,7 @@ function WorkOrderSubsidyPanel({ order }: { order: any }) {
       <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">補助狀態</p>
       <p className="text-sm">
         {done ? (
-          <span className="text-emerald-800 font-medium">補助完成</span>
+          <span className="text-emerald-800 font-medium">補助已完成</span>
         ) : (
           <span className="text-blue-700 font-medium">等待客戶上傳</span>
         )}
