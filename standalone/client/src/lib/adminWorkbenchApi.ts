@@ -62,6 +62,8 @@ export type AdminWorkbenchItem = {
   needsManualReview?: boolean;
   aiTips?: string[];
   subsidyDisplayStatus?: SubsidyDisplayStatus;
+  /** Display-only: completed + receivable but no subsidy_applications row */
+  virtualPendingConfirmation?: boolean;
   needsSubsidy?: boolean;
   canMarkApplied?: boolean;
   canCloseReady?: boolean;

@@ -698,21 +698,6 @@ export default function AdminWorkbench() {
             登記收款
           </Button>
         )}
-        {canOperate && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-10 sm:h-9"
-            onClick={() =>
-              setDueModal({
-                item,
-                date: item.expectedPaymentDate ?? "",
-              })
-            }
-          >
-            設定收款日
-          </Button>
-        )}
         <Button asChild size="sm" variant="outline" className="h-10 sm:h-9">
           <Link href={caseHref(item.workOrderId)}>查看案件</Link>
         </Button>
@@ -970,6 +955,21 @@ export default function AdminWorkbench() {
                   }
                 >
                   4. 公司協助申請－舊換新補助
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="h-10 justify-start"
+                  disabled={subsidyTypeMut.isPending}
+                  onClick={() =>
+                    subsidyTypeMut.mutate({
+                      id: item.workOrderId,
+                      subsidyType: "company_assisted",
+                      assistedProgram: "new_unit_and_trade_in",
+                    })
+                  }
+                >
+                  5. 公司協助申請－新機＋舊換新
                 </Button>
               </div>
             )}

@@ -530,11 +530,30 @@ export async function getAdminWorkbench() {
 
     const recv = recvByWo.get(r.wo.id) ?? null;
     const sub = subByWo.get(r.wo.id) ?? null;
-    const subsidyType: SubsidyType | null = sub
+    const rawSubsidyType: SubsidyType | null = sub
       ? normalizeSubsidyType(sub.subsidyType) ?? "pending_confirmation"
       : null;
     const assistedProgram = normalizeAssistedProgram(sub?.assistedProgram ?? null);
     const subsidyPipeline = (sub?.pipelineStatus ?? null) as SubsidyPipelineStatus | null;
+
+    /**
+     * Display-only virtual todo: completed / in admin AR flow, has receivable (or
+     * billed), but no subsidy_applications row yet. Does NOT insert DB rows —
+     * admin choosing a method uses existing subsidy-type API.
+     */
+    const virtualPendingConfirmation =
+      !sub &&
+      status !== "closed" &&
+      (!!recv ||
+        status === "pending_billing" ||
+        status === "billed" ||
+        status === "partially_paid" ||
+        status === "paid" ||
+        status === "pending_close");
+
+    const subsidyType: SubsidyType | null = virtualPendingConfirmation
+      ? "pending_confirmation"
+      : rawSubsidyType;
 
     const engConfirmed = !!r.wo.adminConfirmedAt;
 
@@ -568,19 +587,23 @@ export async function getAdminWorkbench() {
       subsidyDocs.map((d) => d.docType),
       assistedProgram,
     );
-    const displayStatus: SubsidyDisplayStatus = resolveSubsidyDisplayStatus({
-      subsidyType,
-      pipeline: subsidyPipeline,
-      missingDocs,
-      needsManualReview: !!subsidyMeta.needsManualReview,
-      assistedProgram,
-    });
-    const subsidyStatusLabel = subsidyCombinedStatusLabel({
-      subsidyType,
-      assistedProgram,
-      displayStatus,
-      pipeline: subsidyPipeline,
-    });
+    const displayStatus: SubsidyDisplayStatus = virtualPendingConfirmation
+      ? "pending_confirmation"
+      : resolveSubsidyDisplayStatus({
+          subsidyType,
+          pipeline: subsidyPipeline,
+          missingDocs,
+          needsManualReview: !!subsidyMeta.needsManualReview,
+          assistedProgram,
+        });
+    const subsidyStatusLabel = virtualPendingConfirmation
+      ? "待確認補助方式"
+      : subsidyCombinedStatusLabel({
+          subsidyType,
+          assistedProgram,
+          displayStatus,
+          pipeline: subsidyPipeline,
+        });
     const lastUploadAt =
       subsidyDocs
         .map((d) => d.uploadedAt?.getTime() ?? d.createdAt?.getTime() ?? 0)
@@ -636,6 +659,7 @@ export async function getAdminWorkbench() {
       aiTips: subsidyMeta.aiTips ?? [],
       subsidyDisplayStatus: displayStatus,
       subsidyStatusLabel,
+      virtualPendingConfirmation,
       needsSubsidy: subsidyType === "company_assisted",
       canMarkApplied: displayStatus === "docs_complete" || displayStatus === "applied",
       canCloseReady:
@@ -696,8 +720,8 @@ export async function getAdminWorkbench() {
       }
     }
 
-    // Subsidy center buckets
-    if (subsidyType === "pending_confirmation") {
+    // Subsidy center buckets (includes virtual pending: no SA row yet)
+    if (subsidyType === "pending_confirmation" || virtualPendingConfirmation) {
       sections.subsidyPendingConfirmation.push(base);
     } else if (subsidyType === "not_needed" || subsidyType === "customer_self_apply") {
       sections.subsidySettled.push(base);
