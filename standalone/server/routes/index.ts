@@ -35,6 +35,7 @@ import pushRouter from "./push";
 import inventoryRouter from "./inventory";
 import adminWorkbenchRouter from "./adminWorkbench";
 import subsidyCaseFilesRouter, { subsidyCaseFilesTokenRouter } from "./subsidyCaseFiles";
+import operationCenterRouter from "./operationCenter";
 
 import { authenticate } from "../lib/auth";
 
@@ -86,6 +87,7 @@ router.use(pushRouter);
 router.use(workOrderFieldProgressRouter);
 router.use(adminWorkbenchRouter);
 router.use(subsidyCaseFilesRouter);
+router.use(operationCenterRouter);
 router.use(inventoryRouter);
 
 export default router;

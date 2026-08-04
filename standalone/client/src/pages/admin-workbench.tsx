@@ -22,6 +22,7 @@ import {
   type AdminWorkbenchItem,
 } from "@/lib/adminWorkbenchApi";
 import { SubsidyFilesDialog } from "@/components/subsidy/SubsidyFilesDialog";
+import { SubsidyAcceptanceDialog } from "@/components/subsidy/SubsidyAcceptanceDialog";
 import { downloadSubsidyCaseZip } from "@/lib/subsidyFilesApi";
 
 function money(v?: string | null) {
@@ -237,6 +238,7 @@ export default function AdminWorkbench() {
 
   const [filesModal, setFilesModal] = useState<number | null>(null);
   const [zipBusyId, setZipBusyId] = useState<number | null>(null);
+  const [acceptModal, setAcceptModal] = useState<number | null>(null);
 
   async function downloadZip(item: AdminWorkbenchItem) {
     setZipBusyId(item.workOrderId);
@@ -514,10 +516,7 @@ export default function AdminWorkbench() {
                   ? undefined
                   : "補助資料尚未齊全，請按「查看案件」檢視或人工確認資料完整"
               }
-              onClick={() => {
-                if (!window.confirm("確定此案件的補助申請已完成？已收款的話會自動結案。")) return;
-                subsidyPipeMut.mutate({ id: item.workOrderId, status: "applied" });
-              }}
+              onClick={() => setAcceptModal(item.workOrderId)}
             >
               標記補助完成
             </Button>
@@ -723,6 +722,13 @@ export default function AdminWorkbench() {
           workOrderId={filesModal}
           open
           onOpenChange={open => !open && setFilesModal(null)}
+        />
+      )}
+      {acceptModal != null && (
+        <SubsidyAcceptanceDialog
+          workOrderId={acceptModal}
+          open
+          onOpenChange={open => !open && setAcceptModal(null)}
         />
       )}
     </div>

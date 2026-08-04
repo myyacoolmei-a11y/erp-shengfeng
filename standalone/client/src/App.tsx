@@ -24,6 +24,7 @@ import Maintenance from "@/pages/maintenance";
 import Users from "@/pages/users";
 import EngineerDashboard from "@/pages/engineer-dashboard";
 import AdminWorkbench from "@/pages/admin-workbench";
+import OperationCenterPage from "@/pages/operation-center";
 import SubsidyUploadPage from "@/pages/subsidy-upload";
 import Employees from "@/pages/employees";
 import Products from "@/pages/products";
@@ -246,6 +247,11 @@ function AppRoutes() {
             </Route>
             <Route path="/admin-workbench">
               <AdminWorkbenchRoute />
+            </Route>
+            <Route path="/operation-center">
+              <RoleGuard roles={["super_admin", "owner"]}>
+                <OperationCenterPage />
+              </RoleGuard>
             </Route>
             <Route path="/boss-dashboard">
               <Guard feature="dashboard"><Dashboard /></Guard>

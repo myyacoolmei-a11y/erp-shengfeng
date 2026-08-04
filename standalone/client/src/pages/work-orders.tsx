@@ -100,6 +100,7 @@ import {
   unmarkAdminSubsidyApplied,
 } from "@/lib/adminWorkbenchApi";
 import { SubsidyFilesDialog } from "@/components/subsidy/SubsidyFilesDialog";
+import { SubsidyAcceptanceDialog } from "@/components/subsidy/SubsidyAcceptanceDialog";
 import { downloadSubsidyCaseZip } from "@/lib/subsidyFilesApi";
 
 const ADMIN_FILTER_TABS = ["待派工", "待施工", "施工中", "異常／暫停", "施工完成", "歷史紀錄"] as const;
@@ -366,8 +367,11 @@ function WorkOrderSubsidyPanel({ order }: { order: any }) {
     },
   });
 
+  // markMut 保留給非 UI 路徑；UI 改走 SubsidyAcceptanceDialog
+
   const [filesOpen, setFilesOpen] = useState(false);
   const [zipping, setZipping] = useState(false);
+  const [acceptOpen, setAcceptOpen] = useState(false);
 
   async function downloadZip() {
     setZipping(true);
@@ -617,10 +621,7 @@ function WorkOrderSubsidyPanel({ order }: { order: any }) {
             size="sm"
             className="h-10 sm:h-9 bg-green-700 hover:bg-green-800"
             disabled={markMut.isPending || !detail!.canMarkApplied}
-            onClick={() => {
-              if (!window.confirm("確定此案件的補助申請已完成？已收款的話會自動結案。")) return;
-              markMut.mutate();
-            }}
+            onClick={() => setAcceptOpen(true)}
           >
             標記補助完成
           </Button>
@@ -670,6 +671,13 @@ function WorkOrderSubsidyPanel({ order }: { order: any }) {
           workOrderId={order.id}
           open
           onOpenChange={setFilesOpen}
+        />
+      )}
+      {acceptOpen && (
+        <SubsidyAcceptanceDialog
+          workOrderId={order.id}
+          open
+          onOpenChange={setAcceptOpen}
         />
       )}
     </div>

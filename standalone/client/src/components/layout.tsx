@@ -22,6 +22,7 @@ import {
   Heart,
   Clock,
   Sparkles,
+  BarChart3,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -44,14 +45,14 @@ import {
   wholesaleSubItems,
   type NavIconName,
   type NavItemDef,
-} from "../../../shared/userPermissions.ts";
+} from "../../../shared/navigationPermissions.ts";
 
 const NAV_ITEM_BASE =
   "flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] font-medium transition-colors";
 const NAV_ITEM_ACTIVE = "bg-foreground text-background";
 const NAV_ITEM_INACTIVE = "text-muted-foreground hover:bg-muted/60 hover:text-foreground";
 
-const ICON_MAP: Record<NavIconName, LucideIcon> = {
+const ICON_MAP: Record<NavIconName | "BarChart3", LucideIcon> = {
   LayoutDashboard,
   Users,
   FileText,
@@ -70,6 +71,7 @@ const ICON_MAP: Record<NavIconName, LucideIcon> = {
   Bell,
   Sparkles,
   Heart,
+  BarChart3,
 };
 
 const ROLE_COLORS: Record<UserRole, string> = {
@@ -115,7 +117,7 @@ function filterByPermission(items: NavItemDef[], user: AuthUser): NavItemDef[] {
   return items.filter((item) => userCanAccessNav(user, item.path));
 }
 
-function NavIcon({ name, active }: { name: NavIconName; active: boolean }) {
+function NavIcon({ name, active }: { name: NavIconName | "BarChart3"; active: boolean }) {
   const Icon = ICON_MAP[name];
   return (
     <Icon
@@ -141,6 +143,9 @@ function NavContent() {
 
   const userRoles = effectiveRoles(user);
   const showWholesale = !!(user && userHasFeature(user, "wholesale"));
+
+  const showOperationCenter =
+    userRoles.includes("super_admin") || userRoles.includes("owner");
 
   const workRaw = user ? filterByPermission(sidebarItemsForGroup("work_center"), user) : [];
   const dash = user ? pickDashboardItem(workRaw, userRoles) : null;
@@ -196,6 +201,23 @@ function NavContent() {
           {workBeforeWholesale.map((item) => (
             <NavLink key={`${item.path}-${item.label}`} item={item} />
           ))}
+
+          {showOperationCenter && (
+            <Link
+              href="/operation-center"
+              className={`${NAV_ITEM_BASE} ${
+                location === "/operation-center" || location.startsWith("/operation-center")
+                  ? NAV_ITEM_ACTIVE
+                  : NAV_ITEM_INACTIVE
+              }`}
+            >
+              <NavIcon
+                name="BarChart3"
+                active={location === "/operation-center" || location.startsWith("/operation-center")}
+              />
+              <span className="truncate">營運中心</span>
+            </Link>
+          )}
 
           {showWholesale && (
             <div>

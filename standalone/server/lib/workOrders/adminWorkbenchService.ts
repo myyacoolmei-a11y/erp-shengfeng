@@ -1485,6 +1485,19 @@ export async function advanceSubsidyPipeline(
         );
       }
     }
+
+    // 驗收清單：標記 applied 必須先經「補助完成確認」勾選（或旗標已齊）
+    const needMoea = !!sub.moeaRequired;
+    if (
+      !sub.lFolderCreated ||
+      !sub.mofCompleted ||
+      !sub.adminLineAlbumCreated ||
+      !sub.mofScreenshotSaved ||
+      !sub.arAmountConfirmed ||
+      (needMoea && (!sub.moeaCompleted || !sub.moeaScreenshotSaved))
+    ) {
+      throw new Error("請使用「標記補助完成」並完成驗收清單後再確認");
+    }
   }
 
   await db

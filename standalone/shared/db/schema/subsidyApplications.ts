@@ -1,4 +1,13 @@
-import { pgTable, text, serial, integer, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  text,
+  serial,
+  integer,
+  timestamp,
+  uniqueIndex,
+  boolean,
+  jsonb,
+} from "drizzle-orm/pg-core";
 import { workOrdersTable } from "./workOrders";
 import { customersTable } from "./customers";
 import { usersTable } from "./users";
@@ -8,6 +17,7 @@ import type {
   SubsidyPipelineStatus,
   SubsidyType,
 } from "../../adminWorkflowConstants";
+import type { SubsidyAcceptanceChecklist } from "../../operationCenterConstants";
 
 /** Company-assisted subsidy pipeline — independent of payment. */
 export const subsidyApplicationsTable = pgTable(
@@ -53,6 +63,34 @@ export const subsidyApplicationsTable = pgTable(
       onDelete: "set null",
     }),
     closeOverrideNote: text("close_override_note"),
+
+    /** 行政流程：L夾 / 財政部 / 經濟部 / 驗收 */
+    lFolderCreated: boolean("l_folder_created").notNull().default(false),
+    lFolderCreatedAt: timestamp("l_folder_created_at", { withTimezone: true }),
+    lFolderCreatedBy: integer("l_folder_created_by").references(() => usersTable.id, {
+      onDelete: "set null",
+    }),
+    mofCompleted: boolean("mof_completed").notNull().default(false),
+    mofCompletedAt: timestamp("mof_completed_at", { withTimezone: true }),
+    mofCompletedBy: integer("mof_completed_by").references(() => usersTable.id, {
+      onDelete: "set null",
+    }),
+    /** 行政開關：本案是否需經濟部補助 */
+    moeaRequired: boolean("moea_required").notNull().default(false),
+    moeaCompleted: boolean("moea_completed").notNull().default(false),
+    moeaCompletedAt: timestamp("moea_completed_at", { withTimezone: true }),
+    moeaCompletedBy: integer("moea_completed_by").references(() => usersTable.id, {
+      onDelete: "set null",
+    }),
+    adminLineAlbumCreated: boolean("admin_line_album_created").notNull().default(false),
+    adminLineAlbumCreatedAt: timestamp("admin_line_album_created_at", { withTimezone: true }),
+    mofScreenshotSaved: boolean("mof_screenshot_saved").notNull().default(false),
+    moeaScreenshotSaved: boolean("moea_screenshot_saved").notNull().default(false),
+    arAmountConfirmed: boolean("ar_amount_confirmed").notNull().default(false),
+    arAmountConfirmedAt: timestamp("ar_amount_confirmed_at", { withTimezone: true }),
+    /** 補助完成驗收勾選內容快照 */
+    acceptanceChecklist: jsonb("acceptance_checklist").$type<SubsidyAcceptanceChecklist | null>(),
+
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true })
       .notNull()
