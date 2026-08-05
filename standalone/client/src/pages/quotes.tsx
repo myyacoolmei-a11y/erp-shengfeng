@@ -136,44 +136,45 @@ const WAITING_CLIENT_STATUSES = new Set([
 ]);
 const DRAFT_STATUSES = new Set(["草稿", "尚未完成", "尚未送出"]);
 const HISTORY_STATUSES = new Set(["已拒絕", "已取消", "已失效"]);
-const DISPATCHED_STATUSES = new Set(["已派工", "施工中", "已完工"]);
 
 /**
- * Assign each quote to exactly one tab (priority: 歷史 → 已成交待派工 → 等待客戶 → 草稿).
+ * Assign each quote to exactly one tab (priority: 歷史 → 已成交待派工／進行中 → 等待客戶 → 草稿).
  * Tab mapping may use dispatchStatus; action buttons must use quoteHasLinkedWorkOrder only.
+ *
+ * 進行中（「已成交待派工」分頁）：已成交＋待施工／已派工／施工中（含尚未派工）
+ * 歷史紀錄：已成交＋已完工、已結案、以及拒絕／取消／失效
  */
 function quoteCategory(q: any): QuoteFilterTab {
   const raw = String(q.status ?? "");
   const status = normalizeQuoteStatus(raw);
-  const hasWo = quoteHasLinkedWorkOrder(q);
-  const dispatched = DISPATCHED_STATUSES.has(q.dispatchStatus ?? "");
+  const dispatchStatus = String(q.dispatchStatus ?? "");
 
-  // 4. 歷史紀錄 — already dispatched / rejected / cancelled / expired
+  // 歷史紀錄 — 已完工／已結案／拒絕／取消／失效（不可因「已有派工單」或「已派工」誤判）
   if (
     HISTORY_STATUSES.has(raw) ||
     HISTORY_STATUSES.has(status) ||
-    (dispatched && hasWo) ||
-    (status === "已成交" && hasWo)
+    raw === "已結案" ||
+    status === "已結案" ||
+    (status === "已成交" && dispatchStatus === "已完工")
   ) {
     return "歷史紀錄";
   }
 
-  // 3. 已成交待派工 — won, no work order yet
-  if (status === "已成交" && !hasWo) {
+  // 進行中 — 已成交且尚未完工（待派工／待施工／已派工／施工中）
+  if (status === "已成交") {
     return "已成交待派工";
   }
 
-  // 2. 等待客戶回覆
+  // 等待客戶回覆
   if (WAITING_CLIENT_STATUSES.has(raw) || WAITING_CLIENT_STATUSES.has(status)) {
     return "等待客戶回覆";
   }
 
-  // 1. 草稿 (default for incomplete / not sent)
+  // 草稿
   if (DRAFT_STATUSES.has(raw) || DRAFT_STATUSES.has(status) || !raw) {
     return "草稿";
   }
 
-  // Fallback: treat unknown non-won statuses as waiting / draft conservatively
   return "草稿";
 }
 
