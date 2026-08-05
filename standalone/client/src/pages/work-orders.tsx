@@ -1049,10 +1049,10 @@ export default function WorkOrders() {
   });
 
   const handoffMut = useMutation({
-    mutationFn: (workOrderId: number) => handoffCaseToAdmin(workOrderId, "派工單頁補送"),
+    mutationFn: (workOrderId: number) => handoffCaseToAdmin(workOrderId, "派工單頁交給行政"),
     onSuccess: (res) => {
       toast({
-        title: res.alreadyHandedOff ? "此案件已交由行政處理" : "已交由行政處理",
+        title: res.alreadyHandedOff ? "此案件已交行政" : "已交給行政",
         description: res.alreadyHandedOff ? undefined : "案件已進入行政「未收款／待結案」",
       });
       queryClient.invalidateQueries({ queryKey: getListWorkOrdersQueryKey() });
@@ -1060,7 +1060,7 @@ export default function WorkOrders() {
     },
     onError: (err: any) => {
       toast({
-        title: "補送失敗",
+        title: "交給行政失敗",
         description: err?.message || "請稍後再試",
         variant: "destructive",
       });
@@ -1408,10 +1408,10 @@ export default function WorkOrders() {
                           查看施工
                         </Button>
                       )}
-                      {isAdmin && WO_COMPLETED.has(statusLabel) && (
+                      {isAdmin && (
                         (o as any).adminWorkflowStatus ? (
                           <span className="text-xs px-2 py-1 rounded font-medium bg-sky-50 text-sky-800 border border-sky-200">
-                            已交行政處理
+                            已交行政
                           </span>
                         ) : (
                           <Button
@@ -1419,9 +1419,12 @@ export default function WorkOrders() {
                             variant="outline"
                             className="h-11 sm:h-9 w-auto px-3 shrink-0 border-sky-400 text-sky-800"
                             disabled={handoffMut.isPending}
-                            onClick={() => handoffMut.mutate(o.id)}
+                            onClick={() => {
+                              if (!window.confirm("確定要將此案件直接交給行政處理嗎？")) return;
+                              handoffMut.mutate(o.id);
+                            }}
                           >
-                            交由行政處理
+                            交給行政
                           </Button>
                         )
                       )}
