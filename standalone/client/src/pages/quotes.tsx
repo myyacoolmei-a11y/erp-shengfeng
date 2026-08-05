@@ -126,6 +126,7 @@ const DISPATCH_COLORS: Record<string, string> = {
   "已派工": "bg-green-100 text-green-700",
   "施工中": "bg-blue-100 text-blue-700",
   "已完工": "bg-emerald-100 text-emerald-700",
+  "已結案": "bg-slate-200 text-slate-700",
 };
 
 const WAITING_CLIENT_STATUSES = new Set([
@@ -158,6 +159,7 @@ function quoteCategory(q: any): QuoteFilterTab {
     HISTORY_STATUSES.has(status) ||
     raw === "已結案" ||
     status === "已結案" ||
+    dispatchStatus === "已結案" ||
     (status === "已成交" && dispatchStatus === "已完工")
   ) {
     return "歷史紀錄";
@@ -168,8 +170,8 @@ function quoteCategory(q: any): QuoteFilterTab {
     return "待派工";
   }
 
-  // 進行中 — 已成交、已有派工單、尚未完工
-  if (status === "已成交" && hasWo && dispatchStatus !== "已完工") {
+  // 進行中 — 已成交、已有派工單、尚未完工／結案
+  if (status === "已成交" && hasWo && dispatchStatus !== "已完工" && dispatchStatus !== "已結案") {
     return "進行中";
   }
 

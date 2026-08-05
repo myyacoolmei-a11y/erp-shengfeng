@@ -6,7 +6,7 @@ import { eq, inArray, desc, or } from "drizzle-orm";
 import { db, quotesTable, workOrdersTable } from "@workspace/db";
 import { isQuoteWon } from "./quoteStatus";
 
-export const DISPATCH_STATUSES = ["未派工", "待派工", "已派工", "施工中", "已完工"] as const;
+export const DISPATCH_STATUSES = ["未派工", "待派工", "已派工", "施工中", "已完工", "已結案"] as const;
 export type DispatchStatus = typeof DISPATCH_STATUSES[number];
 
 export function deriveDispatchStatus(
@@ -16,8 +16,17 @@ export function deriveDispatchStatus(
   if (!workOrderStatus) {
     return isQuoteWon(quoteStatus) ? "待派工" : "未派工";
   }
+  if (workOrderStatus === "已結案") return "已結案";
   if (workOrderStatus === "已完成") return "已完工";
-  if (workOrderStatus === "進行中") return "施工中";
+  if (
+    workOrderStatus === "施工中" ||
+    workOrderStatus === "進行中" ||
+    workOrderStatus === "異常" ||
+    workOrderStatus === "暫停"
+  ) {
+    return "施工中";
+  }
+  // 待派工、待施工，以及其他尚未開始施工的狀態
   return "已派工";
 }
 
