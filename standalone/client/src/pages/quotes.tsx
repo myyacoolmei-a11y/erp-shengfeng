@@ -105,8 +105,9 @@ function LineGlyph({ className = "h-4 w-4" }: { className?: string }) {
 // ── Constants ──────────────────────────────────────────────────────────────
 const STATUSES = ["草稿", "已送出", "已成交", "已拒絕"];
 /** Mutually exclusive quote list tabs — one quote appears in exactly one tab. */
-const FILTER_TABS = ["草稿", "等待客戶回覆", "已成交待派工", "歷史紀錄"] as const;
+const FILTER_TABS = ["草稿", "等待客戶回覆", "待派工", "進行中", "歷史紀錄"] as const;
 type QuoteFilterTab = (typeof FILTER_TABS)[number];
+const LIST_PAGE_SIZE = 10;
 const STATUS_COLORS: Record<string, string> = {
   "草稿": "bg-gray-100 text-gray-700",
   "已送出": "bg-blue-100 text-blue-700",
@@ -138,18 +139,20 @@ const DRAFT_STATUSES = new Set(["草稿", "尚未完成", "尚未送出"]);
 const HISTORY_STATUSES = new Set(["已拒絕", "已取消", "已失效"]);
 
 /**
- * Assign each quote to exactly one tab (priority: 歷史 → 已成交待派工／進行中 → 等待客戶 → 草稿).
- * Tab mapping may use dispatchStatus; action buttons must use quoteHasLinkedWorkOrder only.
+ * Assign each quote to exactly one tab (priority: 歷史 → 待派工 → 進行中 → 等待客戶 → 草稿).
+ * Tab mapping may use dispatchStatus / hasWo; action buttons must use quoteHasLinkedWorkOrder only.
  *
- * 進行中（「已成交待派工」分頁）：已成交＋待施工／已派工／施工中（含尚未派工）
- * 歷史紀錄：已成交＋已完工、已結案、以及拒絕／取消／失效
+ * 待派工：已成交且尚未建立派工單
+ * 進行中：已成交、已有派工單、尚未完工（已派工／施工中等）
+ * 歷史紀錄：已完工／已結案／拒絕／取消／失效
  */
 function quoteCategory(q: any): QuoteFilterTab {
   const raw = String(q.status ?? "");
   const status = normalizeQuoteStatus(raw);
+  const hasWo = quoteHasLinkedWorkOrder(q);
   const dispatchStatus = String(q.dispatchStatus ?? "");
 
-  // 歷史紀錄 — 已完工／已結案／拒絕／取消／失效（不可因「已有派工單」或「已派工」誤判）
+  // 歷史紀錄 — 真正完成或結束的案件（不可因已派工／施工中誤判）
   if (
     HISTORY_STATUSES.has(raw) ||
     HISTORY_STATUSES.has(status) ||
@@ -160,9 +163,14 @@ function quoteCategory(q: any): QuoteFilterTab {
     return "歷史紀錄";
   }
 
-  // 進行中 — 已成交且尚未完工（待派工／待施工／已派工／施工中）
-  if (status === "已成交") {
-    return "已成交待派工";
+  // 待派工 — 已成交、尚未建立派工單（每天建立派工單的主要清單）
+  if (status === "已成交" && !hasWo) {
+    return "待派工";
+  }
+
+  // 進行中 — 已成交、已有派工單、尚未完工
+  if (status === "已成交" && hasWo && dispatchStatus !== "已完工") {
+    return "進行中";
   }
 
   // 等待客戶回覆
@@ -586,6 +594,7 @@ export default function QuotesPage() {
 
   const [statusFilter, setStatusFilter] = useState<QuoteFilterTab>("等待客戶回覆");
   const [listSearch, setListSearch] = useState("");
+  const [listPage, setListPage] = useState(1);
   const [pdfPreview, setPdfPreview] = useState<{ url: string; filename: string } | null>(null);
   const [pdfBusyId, setPdfBusyId] = useState<number | null>(null);
   const [lineFallback, setLineFallback] = useState<{ message: string; url: string } | null>(null);
@@ -636,7 +645,8 @@ export default function QuotesPage() {
     const counts: Record<QuoteFilterTab, number> = {
       草稿: 0,
       等待客戶回覆: 0,
-      已成交待派工: 0,
+      待派工: 0,
+      進行中: 0,
       歷史紀錄: 0,
     };
     for (const q of quotes ?? []) {
@@ -658,6 +668,21 @@ export default function QuotesPage() {
     }
     return true;
   });
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / LIST_PAGE_SIZE));
+  const currentPage = Math.min(listPage, totalPages);
+  const paged = filtered.slice(
+    (currentPage - 1) * LIST_PAGE_SIZE,
+    currentPage * LIST_PAGE_SIZE,
+  );
+
+  useEffect(() => {
+    setListPage(1);
+  }, [statusFilter, listSearch, filterCustomerName]);
+
+  useEffect(() => {
+    if (listPage > totalPages) setListPage(totalPages);
+  }, [listPage, totalPages]);
 
   function startConvertToWorkOrder(q: any) {
     if (!q.customerId) {
@@ -856,7 +881,7 @@ export default function QuotesPage() {
           <button key={s} onClick={() => setStatusFilter(s)}
             className={`text-xs px-3 py-1.5 rounded-full border transition-colors whitespace-nowrap shrink-0 ${
               statusFilter === s
-                ? s === "已成交待派工"
+                ? s === "待派工"
                   ? PENDING_DISPATCH_FILTER_ACTIVE
                   : "bg-primary text-primary-foreground border-primary"
                 : "bg-background border-border hover:bg-muted"
@@ -871,7 +896,7 @@ export default function QuotesPage() {
         <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-24 w-full" />)}</div>
       ) : filtered.length > 0 ? (
         <div className="grid grid-cols-1 gap-3 max-w-3xl">
-          {filtered.map(q => {
+          {paged.map(q => {
             const qItems = (q.items ?? []) as any[];
             const qRaw = qItems.length > 0 ? qItems.reduce((s: number, i: any) => s + Number(i.subtotal ?? 0), 0) : Number(q.finalAmount ?? q.amount ?? 0);
             const qDisc = Number(q.discountAmount ?? 0);
@@ -1036,6 +1061,45 @@ export default function QuotesPage() {
         </div>
       ) : (
         <Card><CardContent className="py-12 text-center"><p className="text-muted-foreground">{`目前無「${statusFilter}」的報價單`}</p></CardContent></Card>
+      )}
+
+      {!isLoading && filtered.length > 0 && (
+        <div className="flex flex-col items-center gap-2 max-w-3xl pt-1">
+          <p className="text-xs text-muted-foreground">
+            第 {currentPage} / {totalPages} 頁（共 {filtered.length} 筆）
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-1.5">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-9 px-3"
+              disabled={currentPage <= 1}
+              onClick={() => setListPage(p => Math.max(1, p - 1))}
+            >
+              上一頁
+            </Button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
+              <Button
+                key={page}
+                size="sm"
+                variant={page === currentPage ? "default" : "outline"}
+                className="h-9 w-9 px-0"
+                onClick={() => setListPage(page)}
+              >
+                {page}
+              </Button>
+            ))}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-9 px-3"
+              disabled={currentPage >= totalPages}
+              onClick={() => setListPage(p => Math.min(totalPages, p + 1))}
+            >
+              下一頁
+            </Button>
+          </div>
+        </div>
       )}
 
       {/* Create / Edit Dialog */}
