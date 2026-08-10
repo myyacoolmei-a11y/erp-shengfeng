@@ -667,6 +667,8 @@ export async function getAdminWorkbench(user?: JwtPayload) {
     const base = {
       workOrderId: r.wo.id,
       workOrderNumber: r.wo.workOrderNumber,
+      /** 案件名稱＝派工單 title（與報價 title／應收 projectName 同源） */
+      title: r.wo.title?.trim() || null,
       customerId: r.wo.customerId,
       customerName: r.wo.customerName,
       installAddress: r.wo.installAddress,

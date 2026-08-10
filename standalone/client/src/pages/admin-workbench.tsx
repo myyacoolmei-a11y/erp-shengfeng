@@ -92,6 +92,15 @@ function AmountSummary({ item }: { item: AdminWorkbenchItem }) {
   );
 }
 
+/** 卡片主標題：案件名稱 → 施工地址 → 派工單號（不再用客戶名稱／未命名客戶） */
+function caseCardPrimaryTitle(item: AdminWorkbenchItem): string {
+  const title = item.title?.trim();
+  if (title) return title;
+  const address = item.installAddress?.trim();
+  if (address) return address;
+  return item.workOrderNumber?.trim() || `WO#${item.workOrderId}`;
+}
+
 function ItemShell({
   item,
   children,
@@ -101,14 +110,26 @@ function ItemShell({
   children?: React.ReactNode;
   showViewCase?: boolean;
 }) {
+  const primary = caseCardPrimaryTitle(item);
+  const woNo = item.workOrderNumber?.trim() || `WO#${item.workOrderId}`;
+  const address = item.installAddress?.trim() || "";
+  const titleIsCaseName = !!item.title?.trim();
+  const titleIsAddress = !titleIsCaseName && !!address;
+
   return (
     <div className="rounded-lg border p-3 space-y-2 text-sm">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
-          <p className="font-medium">{item.customerName ?? "未命名客戶"}</p>
-          <p className="text-muted-foreground text-xs">
-            {item.workOrderNumber ?? `#${item.workOrderId}`} · {item.installAddress ?? "—"}
-          </p>
+          <p className="font-medium">{primary}</p>
+          {/* 主標題已是案件名稱時：下一行單號，再下一行地址 */}
+          {titleIsCaseName && (
+            <>
+              <p className="text-muted-foreground text-xs">{woNo}</p>
+              {address ? <p className="text-muted-foreground text-xs">{address}</p> : null}
+            </>
+          )}
+          {/* 主標題已是地址時：只再顯示單號，避免重複地址 */}
+          {titleIsAddress && <p className="text-muted-foreground text-xs">{woNo}</p>}
           <p className="text-xs mt-0.5">工程師／師傅：{item.engineerName ?? "—"}</p>
         </div>
         {showViewCase && (

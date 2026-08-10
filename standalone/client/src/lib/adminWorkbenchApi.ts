@@ -9,6 +9,8 @@ import type { SubsidyDisplayStatus } from "../../../shared/subsidyDocs.ts";
 export type AdminWorkbenchItem = {
   workOrderId: number;
   workOrderNumber?: string | null;
+  /** 案件名稱（派工單 title） */
+  title?: string | null;
   customerId?: number | null;
   customerName?: string | null;
   installAddress?: string | null;
