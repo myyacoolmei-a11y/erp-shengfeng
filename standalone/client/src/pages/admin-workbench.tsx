@@ -401,8 +401,7 @@ export default function AdminWorkbench() {
         return;
       }
       toast({
-        title: "✓ 已複製補助資料上傳連結",
-        description: "請貼至該案件的客戶 LINE 群組",
+        title: "已複製補助資料連結，請貼至該案件的客戶 LINE 群組",
         duration: 4000,
       });
       if (item.subsidyPipelineStatus === "link_not_sent") {
@@ -516,7 +515,7 @@ export default function AdminWorkbench() {
               title={hasUploadLink ? undefined : "尚未產生補助連結"}
               onClick={() => void copySubsidyUploadLink()}
             >
-              {hasUploadLink ? "複製補助資料上傳連結" : "尚未產生補助連結"}
+              {hasUploadLink ? "複製補助資料連結" : "尚未產生補助連結"}
             </Button>
             <Button
               size="sm"
