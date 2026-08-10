@@ -9,7 +9,6 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import type { SubsidyInvoiceKind } from "../../../shared/adminWorkflowConstants.ts";
-import { openLineShareText } from "@/components/pdf/pdf-service";
 import { getListReceivablesQueryKey } from "@workspace/api-client-react";
 import {
   advanceAdminSubsidyPipeline,
@@ -150,60 +149,43 @@ function absoluteUploadUrl(item: AdminWorkbenchItem): string | null {
   return `${window.location.origin}${path.startsWith("/") ? "" : "/"}${path}`;
 }
 
-/**
- * LINE「通知客戶」訊息模板。日後要改文案改這裡即可。
- *
- * 依案件狀況自動切換兩種版本：
- * - 尚未上傳任何資料 → 第一次補助資料上傳通知
- * - 已上傳但仍有缺件 → 提醒補件，並列出實際缺少的資料
- *
- * 三聯式（invoiceKind === "triple"）才會加上公司名稱與統一編號提醒。
- */
-function subsidyLineNotifyText(item: AdminWorkbenchItem): string {
-  const uploadUrl = absoluteUploadUrl(item) || "（尚未產生上傳網址）";
-  const firstTime = (item.uploadedDocCount ?? item.customerDocumentCount ?? 0) === 0;
-  const missingDocuments =
-    (item.missingDocLabels?.length ?? 0) > 0
-      ? item.missingDocLabels!.map((label) => `• ${label}`).join("\n")
-      : "• （目前系統未標示缺件，請依上傳頁提示確認）";
-
-  const lines = [
-    "您好 😊",
-    "",
-    "我是【晟風工程小秘書】。",
-    "",
-    "感謝您選擇晟風工程，您的冷氣安裝案件已順利完工！🎉",
-    "",
-    "接下來需要麻煩您協助我們完成最後一個步驟。",
-    "",
-    "請將以下資料補齊，方便我們協助您辦理政府冷氣補助。",
-    "",
-    firstTime ? "📋 需要準備的資料：" : "📋 目前尚缺資料：",
-    "",
-    missingDocuments,
-    "",
-  ];
-
-  if (item.invoiceKind === "triple") {
-    lines.push(
-      "若需開立公司三聯式發票，請一併填寫：",
-      "• 公司名稱",
-      "• 統一編號",
-      "",
-    );
-  }
-
-  lines.push(
-    "🔗 請點擊下方連結完成資料填寫與上傳：",
+/** 複製到客戶 LINE 群組的補助上傳通知文案（含完整上傳網址） */
+function subsidyUploadNotifyCopyText(uploadUrl: string): string {
+  return [
+    "您好，麻煩協助點擊以下連結，上傳本次冷氣補助申請所需資料：",
     "",
     uploadUrl,
     "",
-    "如有任何問題，歡迎隨時與我們聯繫，我們將竭誠為您服務。",
-    "",
-    "感謝您的支持與配合，祝您順心愉快！😊",
-  );
+    "資料上傳完成後，我們會接續為您辦理補助，謝謝。",
+  ].join("\n");
+}
 
-  return lines.join("\n");
+/** Clipboard API + textarea fallback；絕不導向 line.me */
+async function copyTextToClipboard(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // fall through to legacy copy
+  }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.left = "-9999px";
+    ta.style.top = "0";
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -398,22 +380,31 @@ export default function AdminWorkbench() {
   function renderOpenCard(item: AdminWorkbenchItem) {
     const phone = item.mobilePhone || item.telephone;
     const subsidyDone = item.subsidyPipelineStatus === "applied";
-    const shareReady = !!item.invoiceKind && !!item.uploadUrl;
+    const uploadUrl = absoluteUploadUrl(item);
+    const hasUploadLink = !!uploadUrl;
     const missing = [...(item.missingDocLabels ?? []), ...(item.missingBuyerLabels ?? [])];
     const uploadedCount = item.uploadedDocCount ?? item.customerDocumentCount ?? 0;
     const isPaid = item.receivableStatus === "paid";
     const canMarkSubsidy = item.canMarkApplied !== false;
 
-    function notifyViaLine() {
-      const text = subsidyLineNotifyText(item);
-      const win = openLineShareText(text);
-      if (!win) {
-        void navigator.clipboard.writeText(text).then(() =>
-          toast({ title: "已複製通知內容", description: "請貼到 LINE 傳送" }),
-        );
+    async function copySubsidyUploadLink() {
+      if (!uploadUrl) return;
+      const text = subsidyUploadNotifyCopyText(uploadUrl);
+      const ok = await copyTextToClipboard(text);
+      if (!ok) {
+        toast({
+          title: "複製失敗",
+          description: "請手動選取連結後複製",
+          variant: "destructive",
+          duration: 4000,
+        });
         return;
       }
-      toast({ title: "已開啟 LINE 分享", description: "請選擇聊天室後送出" });
+      toast({
+        title: "✓ 已複製補助資料上傳連結",
+        description: "請貼至該案件的客戶 LINE 群組",
+        duration: 4000,
+      });
       if (item.subsidyPipelineStatus === "link_not_sent") {
         subsidyPipeMut.mutate({ id: item.workOrderId, status: "awaiting_upload" });
       }
@@ -517,17 +508,16 @@ export default function AdminWorkbench() {
         {/* 補助操作 — 選好發票類型後才出現 */}
         {canOperate && !subsidyDone && (
           <div className="flex flex-wrap gap-2">
-            {shareReady && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-10 sm:h-9"
-                disabled={subsidyPipeMut.isPending}
-                onClick={notifyViaLine}
-              >
-                LINE 通知客戶
-              </Button>
-            )}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-10 sm:h-9"
+              disabled={!hasUploadLink || subsidyPipeMut.isPending}
+              title={hasUploadLink ? undefined : "尚未產生補助連結"}
+              onClick={() => void copySubsidyUploadLink()}
+            >
+              {hasUploadLink ? "複製補助資料上傳連結" : "尚未產生補助連結"}
+            </Button>
             <Button
               size="sm"
               className="h-10 sm:h-9 bg-green-700 hover:bg-green-800"
