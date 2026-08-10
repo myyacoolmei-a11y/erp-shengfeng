@@ -95,6 +95,10 @@ function errMsg(err: unknown): string {
   if (err instanceof ApiError) {
     const d = err.data as { error?: string } | undefined;
     if (d?.error) return d.error;
+    // 避免只顯示「HTTP 500 Internal Server Error」
+    if (err.status === 409) return "此庫存品項已存在";
+    if (err.status >= 500) return "伺服器錯誤，請稍後再試";
+    if (err.status >= 400) return "資料格式錯誤";
     return err.message;
   }
   if (err instanceof Error) return err.message;
@@ -174,7 +178,9 @@ export default function Inventory() {
     onSuccess: () => {
       invalidate();
       setDialogOpen(false);
-      toast({ title: "已新增庫存品項", description: "數量請透過「庫存異動」調整" });
+      setEditing(null);
+      setForm(emptyForm());
+      toast({ title: "新增成功" });
     },
     onError: (e) => toast({ title: "新增失敗", description: errMsg(e), variant: "destructive" }),
   });
