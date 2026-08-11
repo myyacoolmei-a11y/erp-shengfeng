@@ -105,10 +105,14 @@ export interface WorkOrderHtmlOptions {
 /**
  * 產生紙張／頁面容器的 CSS。
  * - digital 模式：完全維持既有輸出（240×140mm，四邊 6mm 邊距），供 PDF 下載／分享使用。
- * - continuous-print 模式：換算連續報表紙的送紙孔／撕線安全邊距，並以
- *   `transform: translate()` 套用列印校正偏移量（僅影響列印視覺位置，
- *   不影響版面資料）。同時將 html/body/.sheet 固定為紙張實際尺寸並
- *   overflow:hidden，確保絕不因內容過長而產生第二頁或空白頁。
+ * - continuous-print 模式：根容器（.sheet）直接固定為紙張實際尺寸
+ *   241.3mm × 139.7mm、box-sizing:border-box，送紙孔／撕線安全邊界以
+ *   padding 方式內縮（而非額外的絕對定位偏移），確保「宣告尺寸＝實際佔用
+ *   尺寸」不會有算式誤差導致水平溢出。列印校正透過 `transform: translate()`
+ *   套用在內層 `.page`，僅影響視覺位置、不影響 .sheet 的實際尺寸。
+ *   html/body/.sheet/.page 全部 overflow:hidden 並加上
+ *   break-inside/page-break-inside/page-break-after:avoid，確保每筆
+ *   派工單絕對只產生一個列印頁面，不會水平或垂直跨頁。
  */
 function buildPageBoxCss(mode: WorkOrderHtmlMode, calibration: PrintCalibration): string {
   if (mode !== "continuous-print") {
@@ -132,75 +136,169 @@ function buildPageBoxCss(mode: WorkOrderHtmlMode, calibration: PrintCalibration)
     MARGIN_LEFT_MM, MARGIN_RIGHT_MM,
     MARGIN_TOP_MM, MARGIN_BOTTOM_MM,
   } = CONTINUOUS_PAPER;
-  const round2 = (n: number) => Math.round(n * 100) / 100;
-  const contentWidthMm = round2(WIDTH_MM - MARGIN_LEFT_MM - MARGIN_RIGHT_MM);
-  const contentHeightMm = round2(HEIGHT_MM - MARGIN_TOP_MM - MARGIN_BOTTOM_MM);
   const offsetXMm = Number.isFinite(calibration?.offsetXMm) ? calibration.offsetXMm : 0;
   const offsetYMm = Number.isFinite(calibration?.offsetYMm) ? calibration.offsetYMm : 0;
 
   return `
-/* 連續報表紙（點陣印表機）— 紙張 ${WIDTH_MM}mm × ${HEIGHT_MM}mm，實際尺寸 100% 輸出，
-   不縮放、不自動 fit-to-page。已預留左右送紙孔安全邊距
-   ${MARGIN_LEFT_MM}mm／${MARGIN_RIGHT_MM}mm，上下（含中央撕線）安全邊距
-   ${MARGIN_TOP_MM}mm／${MARGIN_BOTTOM_MM}mm。列印校正偏移：X=${offsetXMm}mm，Y=${offsetYMm}mm。
+/* 連續報表紙（點陣印表機）— 紙張 ${WIDTH_MM}mm × ${HEIGHT_MM}mm（9.5×5.5 英吋），
+   實際尺寸 100% 輸出，不縮放、不自動 fit-to-page，每筆派工單僅輸出一頁。
+   已預留左右送紙孔安全邊距 ${MARGIN_LEFT_MM}mm／${MARGIN_RIGHT_MM}mm（可印刷寬度
+   = 8.5 英吋），上下（含中央撕線）安全邊距 ${MARGIN_TOP_MM}mm／${MARGIN_BOTTOM_MM}mm。
+   列印校正偏移：X=${offsetXMm}mm，Y=${offsetYMm}mm。
    注意：size 使用明確寬高兩個長度值時不可再併用 landscape 關鍵字（不符合
    CSS Paged Media 規範會導致整條宣告失效、退回瀏覽器預設紙張如 Letter），
    寬 > 高已代表橫向，故省略該關鍵字。 */
 @page{size:${WIDTH_MM}mm ${HEIGHT_MM}mm;margin:0}
 html,body{
+  box-sizing:border-box;
   width:${WIDTH_MM}mm;height:${HEIGHT_MM}mm;
+  margin:0;padding:0;
   overflow:hidden;
+  background:#fff;
 }
+/* 根容器：固定為紙張實際尺寸，border-box 確保 padding（送紙孔／撕線安全區）
+   內縮在宣告尺寸之內，絕對不會讓實際佔用寬度超過 ${WIDTH_MM}mm。 */
 .sheet{
-  position:relative;
+  box-sizing:border-box;
   width:${WIDTH_MM}mm;height:${HEIGHT_MM}mm;
+  padding:${MARGIN_TOP_MM}mm ${MARGIN_RIGHT_MM}mm ${MARGIN_BOTTOM_MM}mm ${MARGIN_LEFT_MM}mm;
   overflow:hidden;
+  break-inside:avoid;page-break-inside:avoid;page-break-after:avoid;
 }
 .page{
-  position:absolute;
-  top:${MARGIN_TOP_MM}mm;left:${MARGIN_LEFT_MM}mm;
-  width:${contentWidthMm}mm;height:${contentHeightMm}mm;
+  box-sizing:border-box;
+  width:100%;height:100%;
+  max-width:100%;
   padding:0;
   display:flex;
   flex-direction:column;
   overflow:hidden;
   transform:translate(${offsetXMm}mm, ${offsetYMm}mm);
+  break-inside:avoid;page-break-inside:avoid;page-break-after:avoid;
 }
-  /* 內容過長時（例如長備註或設備品項較多）：由「施工內容」「備註」兩個
+/* 內容過長時（例如長備註或設備品項較多）：由「施工內容」「備註」兩個
    自由文字區塊優先收縮並裁切多餘內容，表頭／欄位／材料表格／簽名列維持
    完整顯示，確保絕不因此產生第二頁或跨頁空白。備註（補充說明）的收縮
    優先權高於施工內容（核心施工說明），空間不足時備註會先被壓縮。 */
 .section-flex{flex:0 1 auto;min-height:0;overflow:hidden}
-.section-flex-notes{flex:0 2 auto;min-height:0;overflow:hidden}`;
+.section-flex-notes{flex:0 2 auto;min-height:0;overflow:hidden}
+/* 所有可能承載使用者輸入文字的欄位一律允許換行，杜絕任何水平溢出
+   （長地址、長客戶名稱、長品項名稱等都必須在自身欄寬內換行，而不是撐開版面）。 */
+.field,.val,.lbl,.box,.col-item,.col-notes,td,th{
+  min-width:0;overflow-wrap:anywhere;word-break:break-word;
+}
+.grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}`;
 }
 
 /**
- * continuous-print 專用的緊湊排版覆寫。
+ * continuous-print 專用的點陣機高辨識樣式覆寫。
  *
- * 共用的 PDF_LAYOUT_CSS（brand-config.ts）針對 A4 報表調整為較寬鬆的行高／
- * 表格列高（例如 min-height:40px），在 240×140mm 的連續報表紙上會過度
- * 佔用有限高度，導致「施工內容」「備註」等可收縮區塊被壓縮到接近 0
- * 而顯示不出來。此處提供更緊湊的間距，且僅套用於 continuous-print 模式，
- * 不影響 digital 模式（PDF 下載／LINE 分享）既有輸出。
- * 必須置於 <style> 區塊最後（PDF_LAYOUT_CSS 之後）以確保覆寫生效。
+ * 點陣印表機無法可靠呈現深色底＋反白文字、淺灰階或細筆畫字型，因此
+ * continuous-print 模式改為全黑純文字／實線框／白底的高對比樣式：
+ * - 所有文字、框線、Logo 一律純黑 #000，背景一律白色。
+ * - 移除「深色底＋反白文字」的表頭／表格標題樣式，改為白底、黑色粗體、
+ *   黑色實線框。
+ * - 主要內容字級 ≥ 11pt，重要欄位 12–14pt，標題與欄位值 font-weight:700。
+ * - 表格框線 ≥ 0.35mm 實線黑色。
+ * - Logo（無法確保單色列印品質）於 continuous-print 模式隱藏，改以加大的
+ *   黑色粗體公司名稱呈現，避免點陣機列印灰階/半色調圖檔時模糊不清。
+ *
+ * 共用的 PDF_LAYOUT_CSS（brand-config.ts）與上方 digital 版面 CSS 皆為
+ * A4／彩色設計，僅套用於 continuous-print 模式，不影響 digital 模式
+ * （PDF 下載／LINE 分享）既有輸出。必須置於 <style> 區塊最後（PDF_LAYOUT_CSS
+ * 之後）以確保覆寫生效。
  */
 function buildCompactOverridesCss(mode: WorkOrderHtmlMode): string {
   if (mode !== "continuous-print") return "";
   return `
-/* ===== continuous-print 緊湊排版覆寫 ===== */
-.hdr{padding-bottom:2mm;margin-bottom:2mm}
-.co-logo{width:40px;height:40px;max-width:40px;max-height:40px}
-.grid{gap:0.8mm 5mm;margin-bottom:1mm}
-.lbl{min-width:44px}
-.section{margin-bottom:1mm}
-.sec-title{padding:0.6mm 2mm;margin-bottom:0.8mm}
-.box{padding:1.5mm 3mm;line-height:1.3}
-.head-row th{padding:1px 3px;min-height:0;line-height:1.3}
-tbody td{padding:1px 3px;min-height:0;line-height:1.3}
+/* ===== continuous-print：點陣機高辨識樣式（純黑／白底／粗體／實線） ===== */
+*{
+  -webkit-print-color-adjust:economy!important;
+  print-color-adjust:economy!important;
+}
+/* 案件編號與表頭右上角的派工單號重複，continuous-print 版面精簡不重複顯示。
+   置於此區塊（樣式表最後）以確保優先權高於前面的 .field{display:flex}。 */
+.field.wo-id-field{display:none!important}
+body,.sheet,.page{background:#fff}
+body{
+  font-family:"Noto Sans TC","Microsoft JhengHei",Arial,sans-serif;
+  line-height:1.2;
+}
+body,.hdr,.co-name,.co-sub,.wo-right,.wo-label,.wo-num,.wo-meta,
+.grid,.field,.lbl,.val,.sec-title,.section,table,.head-row,.head-row th,
+tbody td,.box,.bottom-block,.sigs,.sig,.sig-date,.pf{
+  color:#000;text-shadow:none;opacity:1;
+}
+
+/* 隱藏彩色 Logo 圖檔（點陣機無法可靠呈現灰階／半色調圖像），
+   改以加大的黑色粗體公司名稱作為抬頭識別 */
+.co-logo{display:none}
+.co{gap:0}
+.hdr{border-bottom:0.5mm solid #000;padding-bottom:1.5mm;margin-bottom:1.5mm}
+.co-name{font-size:14pt;font-weight:700}
+.co-sub{font-size:9pt;font-weight:700}
+.wo-label{font-size:14pt;font-weight:700;letter-spacing:2px}
+.wo-num{font-size:11.5pt;font-weight:700}
+.wo-meta{font-size:11pt;font-weight:700;margin-top:0.3mm}
+
+/* 欄位表格：字級提高至規範下限（主要 11pt／重要欄位 12-14pt），
+   標籤與欄位值一律粗體黑色。以 CSS order／grid-column 調整視覺排列
+   （不更動 HTML 原始順序，digital 模式輸出不受影響），將「技師」提前、
+   「工程名稱」改為單欄，把 6 列欄位表壓縮為 4 列，騰出空間給施工內容／
+   備註兩個自由文字區塊。 */
+.grid{gap:1mm 5mm;margin-bottom:1.5mm;font-size:11pt}
+.lbl{font-size:11pt;font-weight:700;min-width:44px}
+.val{font-size:13pt;font-weight:700}
+.f-tech{order:4}
+.f-title{order:5;grid-column:auto}
+.f-contact{order:6}
+.f-address{order:7}
+
+/* 區塊標題：由「深色底＋反白字」改為白底黑字＋黑色實線框 */
+.sec-title{
+  background:#fff;color:#000;
+  border:0.5mm solid #000;
+  font-size:12.5pt;font-weight:700;
+  padding:0.8mm 2.5mm;margin-bottom:1mm;
+}
+.section{margin-bottom:1.2mm}
+
+/* 表格：白底黑字表頭＋粗黑實線框（原本深色底＋反白字改掉） */
+table{font-size:11.5pt;line-height:1.2}
+.head-row{background:#fff;color:#000}
+.head-row th{
+  border:0.45mm solid #000;
+  font-size:11.5pt;font-weight:700;
+  padding:0.9mm 2mm;min-height:0;line-height:1.15;
+}
+tbody td{
+  border:0.45mm solid #000;
+  font-size:11.5pt;font-weight:600;
+  padding:0.9mm 2mm;min-height:0;line-height:1.15;
+}
 tbody tr{min-height:0}
-.bottom-block{margin-top:1.5mm}
-.sigs{gap:6mm;margin-bottom:1.5mm}
-.sig{font-size:7.5pt;padding-top:1.5mm;padding-bottom:0;min-height:0}
+
+/* 施工內容／備註方框：白底黑色實線框（原本淺灰底＋彩色左邊條改掉） */
+.box{
+  border:0.45mm solid #000;
+  background:#fff;
+  padding:1.8mm 3mm;
+  font-size:11.5pt;font-weight:600;line-height:1.25;
+}
+
+/* 簽名列與頁尾：加黑加粗，日期底線改為清楚的黑色實線文字 */
+.bottom-block{margin-top:1.2mm}
+.sigs{gap:5mm;margin-bottom:1.2mm}
+.sig{
+  font-size:11pt;font-weight:700;
+  border-top:0.45mm solid #000;
+  padding-top:1.2mm;padding-bottom:0;min-height:0;
+}
+.sig-date{font-size:10pt;font-weight:700;color:#000}
+.pf{
+  font-size:9.5pt;font-weight:700;
+  border-top:0.35mm solid #000;padding-top:1.2mm;
+}
 `;
 }
 
@@ -334,6 +432,7 @@ tbody tr{page-break-inside:avoid;break-inside:avoid}
   text-align:center;border-top:1.5px solid ${COLORS.black};
   font-size:8.5pt;color:${COLORS.midGray};
 }
+.sig-date{font-size:6.5pt;color:#aaa}
 .pf{
   display:flex;justify-content:space-between;align-items:center;
   font-size:6.5pt;color:${COLORS.lightGray};
@@ -366,14 +465,14 @@ ${buildCompactOverridesCss(mode)}
 
   <!-- Field Grid -->
   <div class="grid">
-    <div class="field"><span class="lbl">案件編號</span><span class="val">${woNum}</span></div>
-    <div class="field"><span class="lbl">日期</span><span class="val">${esc(order.scheduledDate || printDate)}</span></div>
-    <div class="field"><span class="lbl">客戶</span><span class="val">${esc(order.customerName || "—")}</span></div>
-    <div class="field"><span class="lbl">電話</span><span class="val">${esc(phoneDisplay)}</span></div>
-    ${order.title ? `<div class="field full"><span class="lbl">工程名稱</span><span class="val">${esc(order.title)}</span></div>` : ""}
-    ${order.contactPerson ? `<div class="field"><span class="lbl">現場聯絡</span><span class="val">${esc(order.contactPerson)}</span></div>` : ""}
-    <div class="field full"><span class="lbl">地址</span><span class="val">${esc(order.installAddress || "—")}</span></div>
-    <div class="field"><span class="lbl">技師</span><span class="val">${esc(techDisplay)}</span></div>
+    <div class="field wo-id-field"><span class="lbl">案件編號</span><span class="val">${woNum}</span></div>
+    <div class="field f-date"><span class="lbl">日期</span><span class="val">${esc(order.scheduledDate || printDate)}</span></div>
+    <div class="field f-customer"><span class="lbl">客戶</span><span class="val">${esc(order.customerName || "—")}</span></div>
+    <div class="field f-phone"><span class="lbl">電話</span><span class="val">${esc(phoneDisplay)}</span></div>
+    ${order.title ? `<div class="field full f-title"><span class="lbl">工程名稱</span><span class="val">${esc(order.title)}</span></div>` : ""}
+    ${order.contactPerson ? `<div class="field f-contact"><span class="lbl">現場聯絡</span><span class="val">${esc(order.contactPerson)}</span></div>` : ""}
+    <div class="field full f-address"><span class="lbl">地址</span><span class="val">${esc(order.installAddress || "—")}</span></div>
+    <div class="field f-tech"><span class="lbl">技師</span><span class="val">${esc(techDisplay)}</span></div>
   </div>
 
   <!-- Work Content -->
@@ -406,9 +505,9 @@ ${buildCompactOverridesCss(mode)}
   <!-- Signature + Footer -->
   <div class="bottom-block">
     <div class="sigs">
-      <div class="sig">客戶簽名<br><span style="font-size:6.5pt;color:#aaa">日期：________</span></div>
-      <div class="sig">技師簽名<br><span style="font-size:6.5pt;color:#aaa">日期：________</span></div>
-      <div class="sig">公司經手人<br><span style="font-size:6.5pt;color:#aaa">日期：________</span></div>
+      <div class="sig">客戶簽名<br><span class="sig-date">日期：________</span></div>
+      <div class="sig">技師簽名<br><span class="sig-date">日期：________</span></div>
+      <div class="sig">公司經手人<br><span class="sig-date">日期：________</span></div>
     </div>
     <div class="pf">
       <div>${COMPANY.name}　${COMPANY.phone}</div>
