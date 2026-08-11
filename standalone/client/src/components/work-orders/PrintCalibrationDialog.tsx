@@ -26,7 +26,7 @@ interface PrintCalibrationDialogProps {
 
 /**
  * 派工單列印校正設定 — 調整連續報表紙的上下／左右列印位置偏移量。
- * 校正值只影響「正式列印」時的視覺位置（透過 CSS transform 位移），
+ * 校正值只影響「正式列印」時的視覺位置（透過 CSS padding 偏移，不用 transform），
  * 不會變更派工單資料或畫面顯示內容；儲存於瀏覽器 localStorage，
  * 重新整理頁面後仍會保留。
  */

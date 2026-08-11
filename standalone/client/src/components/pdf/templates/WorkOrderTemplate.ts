@@ -116,8 +116,7 @@ export interface WorkOrderHtmlOptions {
    * "digital"（預設）：既有 PDF 下載／行動裝置／LINE 分享流程使用，
    * 版面與既有輸出完全相同，不受連續報表紙改版影響。
    * "continuous-print"：實際列印到點陣印表機連續報表紙時使用 —
-   * 套用送紙孔／撕線安全邊界，並套用「列印校正」偏移量，強制單頁輸出、
-   * 100% 實際尺寸、不縮放。
+   * @page size:auto（方向由列印對話框決定），套用送紙孔／撕線安全邊界與列印校正。
    */
   mode?: WorkOrderHtmlMode;
   /** 僅 mode==="continuous-print" 時套用：正式列印時的上下左右位置校正（mm）。 */
@@ -127,9 +126,9 @@ export interface WorkOrderHtmlOptions {
 /**
  * 產生紙張／頁面容器的 CSS。
  * - digital：維持既有 240×140mm。
- * - continuous-print：固定 @page 與根容器為 241.3mm × 139.7mm（不可加 landscape），
- *   安全邊以 padding 內縮；內容寬度不得超過可印區，避免水平拆成兩頁。
- *   不以 overflow:hidden 裁掉必要文字；長文靠換行與彈性區塊收縮維持單頁。
+ * - continuous-print：@page 使用 size:auto（不鎖定直向／橫向），由 Windows 列印對話框
+ *   的 9.5×5.5in 自訂紙張決定方向；內容根容器仍維持 241.3×139.7mm 版面。
+ *   安全邊以 padding 內縮；不以 overflow:hidden 裁掉必要文字。
  */
 function buildPageBoxCss(mode: WorkOrderHtmlMode, calibration: PrintCalibration): string {
   if (mode !== "continuous-print") {
@@ -158,11 +157,11 @@ function buildPageBoxCss(mode: WorkOrderHtmlMode, calibration: PrintCalibration)
   const padLeft = Math.max(0, MARGIN_LEFT_MM + offsetXMm);
 
   return `
-/* EPSON 點陣機連續紙半張：${WIDTH_MM}mm × ${HEIGHT_MM}mm（9.5×5.5in，非 9.5×11）。
-   明確寬高後不可再加 landscape。根容器固定同尺寸 + border-box；
-   送紙孔／撕線安全區以 padding 內縮。列印校正併入 padding（不用 transform）。
+/* EPSON 點陣機連續紙半張內容區：${WIDTH_MM}mm × ${HEIGHT_MM}mm（9.5×5.5in）。
+   @page size:auto — 不鎖定直向／橫向／landscape，由列印對話框自訂紙張控制方向。
+   根容器固定同尺寸 + border-box；送紙孔／撕線安全區以 padding 內縮（不用 transform）。
    內容區採正常文件流（block），禁止 flex 壓縮／absolute／負 margin 造成材料末筆與備註重疊。 */
-@page{size:${WIDTH_MM}mm ${HEIGHT_MM}mm;margin:0}
+@page{size:auto;margin:0}
 html,body{
   box-sizing:border-box;
   width:${WIDTH_MM}mm;
