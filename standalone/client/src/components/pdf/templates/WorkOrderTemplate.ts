@@ -1,5 +1,6 @@
 // 派工單 Template — 24×14cm Landscape, 工程現場單據風格
 // 獨立版面：修改此檔不影響其他 Template
+// continuous-print：EPSON 點陣機 9.5×5.5in（241.3×139.7mm）單頁極簡黑白版型
 
 import { logoUrl, COMPANY, COLORS, esc, PDF_LAYOUT_CSS } from "./brand-config";
 import { stripQuotePricingFromNotes } from "@/lib/quoteToWorkOrder";
@@ -66,6 +67,7 @@ function equipmentRemark(it: EquipmentRow): string {
   return parts.join("／");
 }
 
+/** digital 模式材料列（含單位／備註）；空資料仍留一空白列維持表格結構。 */
 function buildMaterialRows(equipment: EquipmentRow[]): string {
   if (equipment.length === 0) {
     return `<tr>
@@ -87,6 +89,27 @@ function buildMaterialRows(equipment: EquipmentRow[]): string {
     </tr>`).join("");
 }
 
+/**
+ * continuous-print 材料列：僅項次／品項名稱／數量。
+ * 無資料時不輸出空白列（節省色帶與版面）。
+ * 品項名稱含品牌／型號／樓層等既有資訊，不新增 DB 欄位。
+ */
+function buildContinuousMaterialRows(equipment: EquipmentRow[]): string {
+  if (equipment.length === 0) return "";
+  return equipment.map((it, i) => {
+    const qty = it.quantity != null ? String(it.quantity) : "—";
+    const unit = it.unit ? esc(it.unit) : "";
+    const qtyDisplay = unit ? `${qty}${unit}` : qty;
+    const remark = equipmentRemark(it);
+    const name = remark ? `${equipmentSpec(it)}（${remark}）` : equipmentSpec(it);
+    return `<div class="mat-row">
+      <span class="mat-no">${i + 1}</span>
+      <span class="mat-name">${esc(name)}</span>
+      <span class="mat-qty">${qtyDisplay}</span>
+    </div>`;
+  }).join("");
+}
+
 export type WorkOrderHtmlMode = "digital" | "continuous-print";
 
 export interface WorkOrderHtmlOptions {
@@ -104,27 +127,13 @@ export interface WorkOrderHtmlOptions {
 
 /**
  * 產生紙張／頁面容器的 CSS。
- * - digital 模式：完全維持既有輸出（240×140mm，四邊 6mm 邊距），供 PDF 下載／分享使用。
- * - continuous-print 模式：
- *   目標紙張為 9.5×5.5 in（241.3×139.7mm）。
- *
- *   實機「左右拆成兩張」根因（已用 100% 縮放列印視口量測確認）：
- *   先前把 html/body/.sheet 寫死為固定 241.3mm 寬。
- *   當 Chrome 列印對話框實際可印寬度小於該固定值時（常見原因：
- *   Margins=Default 吃掉左右邊、印表機改用 Letter/A4、驅動回報可印寬 8.5in 等），
- *   版面在 100% 縮放下會水平跨成 2 頁。連續紙切換直向／橫向通常不改變紙寬，
- *   因此調 orientation 無效。
- *
- *   修正：html/body/.sheet/.page 一律 width/max-width:100%（相對 @page 頁面盒），
- *   不再使用會超過可印寬的固定 mm 寬度；送紙孔安全邊改由 padding 內縮；
- *   列印校正改調 padding（不用 transform，避免把內容推出頁面盒）。
- *   文字允許換行，表格 width:100% + table-layout:fixed，欄寬百分比加總 ≤100%。
+ * - digital：維持既有 240×140mm。
+ * - continuous-print：固定 @page 與根容器為 241.3mm × 139.7mm（不可加 landscape），
+ *   安全邊以 padding 內縮；內容寬度不得超過可印區，避免水平拆成兩頁。
+ *   不以 overflow:hidden 裁掉必要文字；長文靠換行與彈性區塊收縮維持單頁。
  */
 function buildPageBoxCss(mode: WorkOrderHtmlMode, calibration: PrintCalibration): string {
   if (mode !== "continuous-print") {
-    // 注意：CSS @page 的 size 屬性不可將明確寬高兩個長度值與 landscape/portrait
-    // 關鍵字併用（不符合 CSS Paged Media 規範，瀏覽器會整條宣告失效並改用預設
-    // 紙張，例如 Letter）。寬 > 高本身已代表橫向，故不需再加 landscape 關鍵字。
     return `
 @page{size:240mm 140mm;margin:6mm}
 .sheet{}
@@ -138,194 +147,233 @@ function buildPageBoxCss(mode: WorkOrderHtmlMode, calibration: PrintCalibration)
   }
 
   const {
-    WIDTH_IN, HEIGHT_IN,
     WIDTH_MM, HEIGHT_MM,
     MARGIN_LEFT_MM, MARGIN_RIGHT_MM,
     MARGIN_TOP_MM, MARGIN_BOTTOM_MM,
   } = CONTINUOUS_PAPER;
   const offsetXMm = Number.isFinite(calibration?.offsetXMm) ? calibration.offsetXMm : 0;
   const offsetYMm = Number.isFinite(calibration?.offsetYMm) ? calibration.offsetYMm : 0;
-  // 校正併入 padding，避免 transform 把內容推出頁面盒造成水平第二頁
   const padTop = MARGIN_TOP_MM + offsetYMm;
   const padRight = Math.max(0, MARGIN_RIGHT_MM - offsetXMm);
   const padBottom = Math.max(0, MARGIN_BOTTOM_MM - offsetYMm);
   const padLeft = Math.max(0, MARGIN_LEFT_MM + offsetXMm);
 
   return `
-/* 連續報表紙（點陣印表機）— 建議紙張 ${WIDTH_IN}in × ${HEIGHT_IN}in
-   （${WIDTH_MM}mm × ${HEIGHT_MM}mm）。@page 使用英吋以貼近驅動紙張名稱；
-   不可再併用 landscape 關鍵字。
-   根容器採 100% 填滿「實際頁面盒」：即使對話框改用較窄紙張／Default 邊界，
-   內容寬度仍跟隨可印區，不會因固定 mm 寬度水平拆成兩頁。
-   送紙孔／撕線安全邊：左 ${MARGIN_LEFT_MM}mm／右 ${MARGIN_RIGHT_MM}mm／
-   上 ${MARGIN_TOP_MM}mm／下 ${MARGIN_BOTTOM_MM}mm；列印校正 X=${offsetXMm}mm Y=${offsetYMm}mm。 */
-@page{size:${WIDTH_IN}in ${HEIGHT_IN}in;margin:0}
+/* EPSON 點陣機連續紙半張：${WIDTH_MM}mm × ${HEIGHT_MM}mm（9.5×5.5in，非 9.5×11）。
+   明確寬高後不可再加 landscape。根容器固定同尺寸 + border-box；
+   送紙孔／撕線安全區以 padding 內縮。列印校正併入 padding（不用 transform）。 */
+@page{size:${WIDTH_MM}mm ${HEIGHT_MM}mm;margin:0}
 html,body{
-  box-sizing:border-box!important;
-  width:100%!important;max-width:100%!important;
-  height:100%!important;max-height:100%!important;
-  margin:0!important;padding:0!important;
-  overflow:hidden!important;
+  box-sizing:border-box;
+  width:${WIDTH_MM}mm;
+  height:${HEIGHT_MM}mm;
+  max-width:${WIDTH_MM}mm;
+  max-height:${HEIGHT_MM}mm;
+  margin:0;padding:0;
   background:#fff;
 }
 .sheet{
-  box-sizing:border-box!important;
-  width:100%!important;max-width:100%!important;
-  height:100%!important;max-height:100%!important;
+  box-sizing:border-box;
+  width:${WIDTH_MM}mm;
+  height:${HEIGHT_MM}mm;
+  max-width:${WIDTH_MM}mm;
+  max-height:${HEIGHT_MM}mm;
   padding:${padTop}mm ${padRight}mm ${padBottom}mm ${padLeft}mm;
-  overflow:hidden!important;
-  break-inside:avoid;page-break-inside:avoid;page-break-after:avoid;
-  break-after:avoid;page-break-before:avoid;
+  break-inside:avoid;
+  page-break-inside:avoid;
+  page-break-after:avoid;
+  page-break-before:avoid;
+  break-after:avoid;
+  break-before:avoid;
 }
 .page{
-  box-sizing:border-box!important;
-  width:100%!important;max-width:100%!important;
-  height:100%!important;max-height:100%!important;
+  box-sizing:border-box;
+  width:100%;
+  max-width:100%;
+  height:100%;
+  max-height:100%;
   min-width:0;
-  padding:0;margin:0;
-  display:flex;flex-direction:column;
-  overflow:hidden!important;
-  transform:none!important;
-  break-inside:avoid;page-break-inside:avoid;page-break-after:avoid;
+  margin:0;padding:0;
+  display:flex;
+  flex-direction:column;
+  break-inside:avoid;
+  page-break-inside:avoid;
 }
-/* 內容過長時：施工內容／備註優先收縮；禁止水平撐開 */
-.section-flex{flex:0 1 auto;min-height:0;min-width:0;max-width:100%;overflow:hidden}
-.section-flex-notes{flex:0 2 auto;min-height:0;min-width:0;max-width:100%;overflow:hidden}
-.section,table,.grid,.box,.bottom-block,.sigs,.cp-title{
-  max-width:100%!important;min-width:0;box-sizing:border-box!important;
-}
-table{
-  width:100%!important;max-width:100%!important;
-  table-layout:fixed!important;
-}
-.field,.val,.lbl,.col-item,.col-notes,td,th,div,span{
+.cp-block,.cp-grid,.cp-mat,.cp-sigs,.cp-title,.cp-text,.cp-field,.cp-val,.cp-lbl{
   min-width:0;
   max-width:100%;
+  box-sizing:border-box;
+}
+.cp-text,.cp-val,.cp-mat-name,.mat-name{
   overflow-wrap:anywhere;
   word-break:break-word;
-  white-space:normal!important;
-}
-.box{
-  min-width:0;max-width:100%;
-  overflow-wrap:anywhere;word-break:break-word;
-  white-space:pre-wrap!important;
-}
-.lbl{flex-shrink:1!important}
-.grid{
-  width:100%;max-width:100%;
-  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
-}
-.sigs{
-  width:100%;max-width:100%;
-  grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1fr);
+  white-space:pre-wrap;
 }`;
 }
 
 /**
- * continuous-print 專用：點陣機極簡黑白樣式覆寫。
- *
- * - 頁首僅「晟風工程｜派工單」純文字標題（無 Logo、無副標、無品牌裝飾）。
- * - 全文件純黑 #000／白底；禁止色塊、灰底、反白字、裝飾線／圖示。
- * - 表格標題：白底、黑字粗體、黑色實線框。
- * - 版面緊湊以節省紙張與色帶；備註／客戶簽名／技師簽名保留手寫空間。
- * - 不影響 digital 模式（PDF 下載／LINE 分享）。
- * 必須置於 <style> 最後（PDF_LAYOUT_CSS 之後）以確保覆寫生效。
+ * continuous-print 點陣機極簡樣式（置於 PDF_LAYOUT_CSS 之後以覆寫）。
+ * 白底 #fff、字線 #000、無 Logo／色塊／縱線／品項間橫線；簽名區加大。
  */
 function buildCompactOverridesCss(mode: WorkOrderHtmlMode): string {
   if (mode !== "continuous-print") return "";
   return `
-/* ===== continuous-print：極簡點陣機（純黑／白底／無裝飾） ===== */
 *{
   -webkit-print-color-adjust:economy!important;
   print-color-adjust:economy!important;
   box-shadow:none!important;
   text-shadow:none!important;
 }
-html,body,.sheet,.page,
-.cp-title,.grid,.field,.lbl,.val,.sec-title,.section,
-table,.head-row,.head-row th,tbody td,.box,
-.bottom-block,.sigs,.sig,.sig-date{
+html,body,.sheet,.page{
   color:#000!important;
   background:#fff!important;
-  background-color:#fff!important;
-  opacity:1;
+  opacity:1!important;
 }
 body{
   font-family:"Noto Sans TC","Microsoft JhengHei",Arial,sans-serif;
-  line-height:1.15;
-  font-size:10pt;
+  font-size:11pt;
+  line-height:1.25;
+  font-weight:500;
 }
-
-/* 頁首：僅文字標題，無底線／色塊／Logo */
 .cp-title{
-  font-size:12pt;font-weight:700;color:#000!important;
-  text-align:left;letter-spacing:0.5px;
-  margin:0 0 1.2mm;padding:0;line-height:1.2;
-  flex-shrink:0;border:none;
-}
-
-/* 欄位區：緊湊雙欄；技師提前、工程名稱單欄以減少列數 */
-.grid{gap:0.6mm 4mm;margin-bottom:1mm;font-size:10pt;width:100%;max-width:100%}
-.lbl{font-size:9.5pt;font-weight:700;min-width:0;flex:0 1 auto;color:#000!important}
-.val{font-size:11pt;font-weight:700;min-width:0;flex:1 1 auto;color:#000!important}
-.f-tech{order:4}
-.f-title{order:5;grid-column:auto}
-.f-contact{order:6}
-.f-address{order:7}
-
-/* 區塊標題：白底黑字粗體＋黑色實線框（禁止黑底反白） */
-.sec-title{
-  background:#fff!important;color:#000!important;
-  border:0.4mm solid #000;
-  font-size:10.5pt;font-weight:700;
-  padding:0.4mm 1.8mm;margin-bottom:0.6mm;
+  flex-shrink:0;
+  text-align:center;
+  font-size:13pt;
+  font-weight:700;
+  color:#000!important;
   letter-spacing:1px;
+  margin:0 0 1.5mm;
+  padding:0;
+  border:none;
+  background:transparent!important;
 }
-.section{margin-bottom:0.9mm}
-
-/* 表格：白底黑字表頭＋黑色實線框；覆寫 PDF_LAYOUT_CSS 的大 padding／min-height */
-table{font-size:10pt;line-height:1.15;border-collapse:collapse;width:100%!important;table-layout:fixed!important}
-.head-row,.head-row th{background:#fff!important;color:#000!important}
-.head-row th{
-  border:0.4mm solid #000;border-color:#000!important;
-  font-size:10pt;font-weight:700;
-  padding:0.5mm 1.4mm;min-height:0;line-height:1.1;
+.cp-grid{
+  flex-shrink:0;
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  column-gap:6mm;
+  row-gap:0.4mm;
+  width:100%;
+  margin:0;
+  padding:0 0 1.2mm;
+  border-bottom:0.3mm solid #000;
 }
-tbody td{
-  border:0.4mm solid #000;border-color:#000!important;
-  background:#fff!important;color:#000!important;
-  font-size:10pt;font-weight:600;
-  padding:0.5mm 1.4mm;min-height:0;line-height:1.1;
+.cp-col{display:flex;flex-direction:column;gap:0.35mm;min-width:0}
+.cp-field{display:flex;gap:2mm;align-items:baseline;min-width:0}
+.cp-lbl{
+  flex:0 0 22mm;
+  font-size:11pt;font-weight:700;color:#000!important;
 }
-tbody tr{min-height:0}
-/* 欄寬加總 ≤100%（5+53+8+8+26），避免固定欄寬撐破父容器 */
-.col-w6{width:5%!important}
-.col-w8{width:8%!important}
-.col-w25{width:26%!important}
-.col-item{width:53%!important}
-
-/* 施工內容／備註：白底黑框；備註保留手寫高度 */
-.box{
-  border:0.4mm solid #000;border-left:0.4mm solid #000;
-  background:#fff!important;color:#000!important;
-  padding:1mm 2mm;
-  font-size:10pt;font-weight:600;line-height:1.2;
+.cp-val{
+  flex:1 1 auto;
+  font-size:12pt;font-weight:700;color:#000!important;
+  min-width:0;
 }
-.section-flex .box{min-height:8mm}
-.section-flex-notes .box{min-height:12mm}
-
-/* 簽名列：保留手寫空間；隱藏品牌頁尾（公司全名／電話等無列印用途資訊） */
-.bottom-block{margin-top:1mm}
-.sigs{gap:4mm;margin-bottom:0}
-.sig{
-  font-size:10pt;font-weight:700;color:#000!important;
-  border-top:0.4mm solid #000;
-  padding-top:0.8mm;padding-bottom:9mm;min-height:14mm;
-  background:#fff!important;
+.cp-block{
+  flex:0 1 auto;
+  min-height:0;
+  width:100%;
+  margin:0;
+  padding:1mm 0 1.2mm;
+  border-bottom:0.3mm solid #000;
 }
-.sig-date{font-size:9pt;font-weight:700;color:#000!important}
-.pf{display:none!important}
+.cp-block-grow{flex:1 1 auto}
+.cp-sec{
+  font-size:11pt;font-weight:700;color:#000!important;
+  margin:0 0 0.6mm;padding:0;
+  border:none;background:transparent!important;
+  display:block;
+}
+.cp-text{
+  font-size:11pt;font-weight:500;color:#000!important;
+  margin:0;padding:0;line-height:1.3;
+  border:none;background:transparent!important;
+}
+.cp-mat{width:100%}
+.mat-head,.mat-row{
+  display:grid;
+  grid-template-columns:12mm minmax(0,1fr) 22mm;
+  column-gap:2mm;
+  width:100%;
+  max-width:100%;
+  align-items:start;
+}
+.mat-head{
+  font-size:11pt;font-weight:700;color:#000!important;
+  padding:0 0 0.5mm;
+  border-bottom:0.3mm solid #000;
+  margin-bottom:0.6mm;
+}
+.mat-row{
+  font-size:11pt;font-weight:500;color:#000!important;
+  padding:0.45mm 0;
+  border:none;
+  line-height:1.3;
+}
+.mat-no{text-align:center;font-weight:700}
+.mat-name{text-align:left;min-width:0}
+.mat-qty{text-align:right;font-weight:700}
+.mat-foot{
+  border-bottom:0.3mm solid #000;
+  margin-top:0.4mm;
+  height:0;
+}
+.cp-mat-empty{
+  font-size:11pt;color:#000!important;margin:0;
+}
+.cp-sigs{
+  flex-shrink:0;
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+  column-gap:10mm;
+  width:100%;
+  max-width:100%;
+  margin:0;
+  padding-top:1.5mm;
+  border:none;
+}
+.cp-sig{
+  min-width:0;
+  min-height:25mm;
+  display:flex;
+  flex-direction:column;
+  color:#000!important;
+  background:transparent!important;
+  border:none;
+}
+.cp-sig-title{
+  font-size:11pt;font-weight:700;
+  margin:0 0 1mm;padding:0;
+}
+.cp-sig-space{flex:1 1 auto;min-height:14mm}
+.cp-sig-line{
+  width:70mm;
+  max-width:100%;
+  border:none;
+  border-bottom:0.3mm solid #000;
+  height:0;
+  margin:0 0 1.2mm;
+}
+.cp-sig-date{
+  font-size:11pt;font-weight:700;
+  display:flex;align-items:baseline;gap:1.5mm;
+}
+.cp-sig-date-line{
+  flex:1 1 auto;
+  max-width:40mm;
+  border:none;
+  border-bottom:0.3mm solid #000;
+  height:0;
+  min-width:20mm;
+}
+/* 隱藏 digital 殘留樣式（若誤套用） */
+.hdr,.co-logo,.pf,.head-row,table{display:none!important}
 `;
+}
+
+function dash(v: unknown): string {
+  const s = v == null ? "" : String(v).trim();
+  return s ? esc(s) : "—";
 }
 
 export function buildWorkOrderHtml(order: any, options: WorkOrderHtmlOptions = {}): string {
@@ -351,34 +399,81 @@ export function buildWorkOrderHtml(order: any, options: WorkOrderHtmlOptions = {
   const woNotes = stripQuotePricingFromNotes(order.notes || "");
   const isContinuousPrint = mode === "continuous-print";
 
-  /** continuous-print：頁首僅文字標題；digital：完整品牌抬頭（含 Logo）。 */
-  const headerHtml = isContinuousPrint
-    ? `<div class="cp-title">晟風工程｜派工單</div>`
-    : `<div class="hdr">
-    <div class="co">
-      <img src="${logoUrl()}" class="co-logo" alt="">
-      <div>
-        <div class="co-name">${COMPANY.shortName}</div>
-        <div class="co-sub">${COMPANY.subTitle}</div>
-      </div>
-    </div>
-    <div class="wo-right">
-      <div class="wo-label">派工單</div>
-      <div class="wo-num">${woNum}</div>
-      <div class="wo-meta">
-        日期：${esc(order.scheduledDate || printDate)}　狀態：${esc(order.status || "—")}
-      </div>
-    </div>
-  </div>`;
+  if (isContinuousPrint) {
+    const matRows = buildContinuousMaterialRows(equipment);
+    const descText = (order.description && String(order.description).trim()) || "—";
+    const notesText = (woNotes && woNotes.trim()) || "—";
+    return `<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>派工單 ${esc(woNum)}</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+${buildPageBoxCss(mode, calibration)}
+${buildCompactOverridesCss(mode)}
+</style>
+</head>
+<body>
+<div class="sheet">
+<div class="page">
+  <div class="cp-title">晟風工程｜派工單</div>
 
-  /** continuous-print：不列印品牌頁尾（公司全名／電話／列印日）；簽名欄保留。 */
-  const footerBrandHtml = isContinuousPrint
-    ? ""
-    : `<div class="pf">
-      <div>${COMPANY.name}　${COMPANY.phone}</div>
-      <div>列印：${printDate}</div>
-    </div>`;
+  <div class="cp-grid">
+    <div class="cp-col">
+      <div class="cp-field"><span class="cp-lbl">案件編號</span><span class="cp-val">${esc(woNum)}</span></div>
+      <div class="cp-field"><span class="cp-lbl">客戶</span><span class="cp-val">${dash(order.customerName)}</span></div>
+      <div class="cp-field"><span class="cp-lbl">技師</span><span class="cp-val">${esc(techDisplay)}</span></div>
+      <div class="cp-field"><span class="cp-lbl">現場聯絡人</span><span class="cp-val">${dash(order.contactPerson)}</span></div>
+      <div class="cp-field"><span class="cp-lbl">地址</span><span class="cp-val">${dash(order.installAddress)}</span></div>
+    </div>
+    <div class="cp-col">
+      <div class="cp-field"><span class="cp-lbl">日期</span><span class="cp-val">${dash(order.scheduledDate || printDate)}</span></div>
+      <div class="cp-field"><span class="cp-lbl">電話</span><span class="cp-val">${esc(phoneDisplay)}</span></div>
+      <div class="cp-field"><span class="cp-lbl">工程名稱</span><span class="cp-val">${dash(order.title)}</span></div>
+    </div>
+  </div>
 
+  <div class="cp-block">
+    <div class="cp-sec">施工內容</div>
+    <div class="cp-text">${esc(descText)}</div>
+  </div>
+
+  <div class="cp-block cp-block-grow">
+    <div class="cp-sec">材料／設備</div>
+    <div class="cp-mat">
+      ${matRows
+        ? `<div class="mat-head"><span class="mat-no">項次</span><span class="mat-name">品項名稱</span><span class="mat-qty">數量</span></div>${matRows}<div class="mat-foot"></div>`
+        : `<p class="cp-mat-empty">—</p>`}
+    </div>
+  </div>
+
+  <div class="cp-block">
+    <div class="cp-sec">備註</div>
+    <div class="cp-text">${esc(notesText)}</div>
+  </div>
+
+  <div class="cp-sigs">
+    <div class="cp-sig">
+      <div class="cp-sig-title">客戶簽名</div>
+      <div class="cp-sig-space"></div>
+      <div class="cp-sig-line"></div>
+      <div class="cp-sig-date">日期<div class="cp-sig-date-line"></div></div>
+    </div>
+    <div class="cp-sig">
+      <div class="cp-sig-title">技師簽名</div>
+      <div class="cp-sig-space"></div>
+      <div class="cp-sig-line"></div>
+      <div class="cp-sig-date">日期<div class="cp-sig-date-line"></div></div>
+    </div>
+  </div>
+</div>
+</div>
+</body>
+</html>`;
+  }
+
+  // ─── digital 模式：維持既有 PDF／LINE 版面 ───
   return `<!DOCTYPE html>
 <html lang="zh-TW">
 <head>
@@ -458,7 +553,7 @@ tbody tr{page-break-inside:avoid;break-inside:avoid}
 .tal{text-align:left}
 .small{font-size:8.5pt}
 
-/* Column widths — continuous-print 另以覆寫確保加總 ≤100%；digital 維持原比例 */
+/* Column widths */
 .col-w6{width:6%}
 .col-w8{width:8%}
 .col-w25{width:25%}
@@ -495,15 +590,28 @@ tbody tr{page-break-inside:avoid;break-inside:avoid}
   border-top:1px solid ${COLORS.borderGray};padding-top:1.5mm;
 }
 ${PDF_LAYOUT_CSS}
-${buildCompactOverridesCss(mode)}
 </style>
 </head>
 <body>
 <div class="sheet">
 <div class="page">
-  ${headerHtml}
+  <div class="hdr">
+    <div class="co">
+      <img src="${logoUrl()}" class="co-logo" alt="">
+      <div>
+        <div class="co-name">${COMPANY.shortName}</div>
+        <div class="co-sub">${COMPANY.subTitle}</div>
+      </div>
+    </div>
+    <div class="wo-right">
+      <div class="wo-label">派工單</div>
+      <div class="wo-num">${woNum}</div>
+      <div class="wo-meta">
+        日期：${esc(order.scheduledDate || printDate)}　狀態：${esc(order.status || "—")}
+      </div>
+    </div>
+  </div>
 
-  <!-- Field Grid -->
   <div class="grid">
     <div class="field wo-id-field"><span class="lbl">案件編號</span><span class="val">${woNum}</span></div>
     <div class="field f-date"><span class="lbl">日期</span><span class="val">${esc(order.scheduledDate || printDate)}</span></div>
@@ -515,13 +623,11 @@ ${buildCompactOverridesCss(mode)}
     <div class="field f-tech"><span class="lbl">技師</span><span class="val">${esc(techDisplay)}</span></div>
   </div>
 
-  <!-- Work Content -->
   <div class="section section-flex">
     <div class="sec-title">施工內容</div>
     <div class="box">${esc(order.description || "（無）")}</div>
   </div>
 
-  <!-- Materials -->
   <div class="section">
     <div class="sec-title">材料 / 設備</div>
     <table>
@@ -536,20 +642,21 @@ ${buildCompactOverridesCss(mode)}
     </table>
   </div>
 
-  <!-- Notes -->
   <div class="section section-flex-notes">
     <div class="sec-title">備註</div>
     <div class="box">${esc(woNotes || "（無）")}</div>
   </div>
 
-  <!-- Signature + Footer -->
   <div class="bottom-block">
     <div class="sigs">
       <div class="sig">客戶簽名<br><span class="sig-date">日期：________</span></div>
       <div class="sig">技師簽名<br><span class="sig-date">日期：________</span></div>
       <div class="sig">公司經手人<br><span class="sig-date">日期：________</span></div>
     </div>
-    ${footerBrandHtml}
+    <div class="pf">
+      <div>${COMPANY.name}　${COMPANY.phone}</div>
+      <div>列印：${printDate}</div>
+    </div>
   </div>
 </div>
 </div>
