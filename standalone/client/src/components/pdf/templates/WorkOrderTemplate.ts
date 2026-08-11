@@ -194,26 +194,37 @@ html,body{
   max-height:100%;
   min-width:0;
   margin:0;padding:0;
+  /* 正常直向文件流：各區塊依內容高度堆疊，禁止互相覆蓋 */
   display:flex;
   flex-direction:column;
+  align-items:stretch;
+  position:static;
   break-inside:avoid;
   page-break-inside:avoid;
 }
-.cp-block,.cp-grid,.cp-mat,.cp-sigs,.cp-title,.cp-text,.cp-field,.cp-val,.cp-lbl{
+.cp-block,.cp-grid,.cp-mat,.cp-sigs,.cp-title,.cp-text,.cp-field,.cp-val,.cp-lbl,.mat-row,.mat-head,.mat-name{
   min-width:0;
   max-width:100%;
   box-sizing:border-box;
+  position:static;
 }
-.cp-text,.cp-val,.cp-mat-name,.mat-name{
+.cp-text,.cp-val{
   overflow-wrap:anywhere;
   word-break:break-word;
   white-space:pre-wrap;
+}
+.mat-name{
+  overflow-wrap:anywhere;
+  word-break:break-word;
+  white-space:normal;
 }`;
 }
 
 /**
  * continuous-print 點陣機極簡樣式（置於 PDF_LAYOUT_CSS 之後以覆寫）。
  * 白底 #fff、字線 #000、無 Logo／色塊／縱線／品項間橫線；簽名區加大。
+ * 材料／備註／簽名必須以正常文流排列：區塊高度隨內容自動展開，
+ * 禁止 min-height:0 + flex-shrink 把品項壓進下一區造成重疊。
  */
 function buildCompactOverridesCss(mode: WorkOrderHtmlMode): string {
   if (mode !== "continuous-print") return "";
@@ -236,32 +247,37 @@ body{
   font-weight:500;
 }
 .cp-title{
+  flex:0 0 auto;
   flex-shrink:0;
   text-align:center;
-  font-size:13pt;
+  font-size:12pt;
   font-weight:700;
   color:#000!important;
-  letter-spacing:1px;
-  margin:0 0 1.5mm;
+  letter-spacing:0.5px;
+  margin:0 0 0.5mm;
   padding:0;
   border:none;
   background:transparent!important;
+  position:static;
+  line-height:1.15;
 }
 .cp-grid{
+  flex:0 0 auto;
   flex-shrink:0;
   display:grid;
   grid-template-columns:minmax(0,1fr) minmax(0,1fr);
-  column-gap:6mm;
-  row-gap:0.4mm;
+  column-gap:4mm;
+  row-gap:0;
   width:100%;
   margin:0;
-  padding:0 0 1.2mm;
+  padding:0 0 0.5mm;
   border-bottom:0.3mm solid #000;
+  position:static;
 }
-.cp-col{display:flex;flex-direction:column;gap:0.35mm;min-width:0}
-.cp-field{display:flex;gap:2mm;align-items:baseline;min-width:0}
+.cp-col{display:flex;flex-direction:column;gap:0;min-width:0}
+.cp-field{display:flex;gap:1.2mm;align-items:baseline;min-width:0;line-height:1.15}
 .cp-lbl{
-  flex:0 0 22mm;
+  flex:0 0 20mm;
   font-size:11pt;font-weight:700;color:#000!important;
 }
 .cp-val{
@@ -270,93 +286,115 @@ body{
   min-width:0;
 }
 .cp-block{
-  flex:0 1 auto;
-  min-height:0;
+  flex:0 0 auto;
+  flex-shrink:0;
+  min-height:auto;
   width:100%;
   margin:0;
-  padding:1mm 0 1.2mm;
+  padding:0.4mm 0 0.5mm;
+  border:none;
   border-bottom:0.3mm solid #000;
+  position:static;
+  overflow:visible;
 }
-.cp-block-grow{flex:1 1 auto}
+.cp-mat-block{padding-bottom:0.6mm}
+.cp-notes-block{padding-top:0.4mm;padding-bottom:0.5mm}
 .cp-sec{
-  font-size:11pt;font-weight:700;color:#000!important;
-  margin:0 0 0.6mm;padding:0;
-  border:none;background:transparent!important;
   display:block;
+  width:100%;
+  font-size:11pt;font-weight:700;color:#000!important;
+  margin:0 0 0.25mm;padding:0;
+  border:none;background:transparent!important;
+  position:static;
+  line-height:1.15;
 }
 .cp-text{
+  display:block;
+  width:100%;
   font-size:11pt;font-weight:500;color:#000!important;
-  margin:0;padding:0;line-height:1.3;
+  margin:0;padding:0;line-height:1.15;
   border:none;background:transparent!important;
+  position:static;
+  height:auto;
 }
-.cp-mat{width:100%}
+.cp-mat{display:block;width:100%;position:static}
 .mat-head,.mat-row{
   display:grid;
-  grid-template-columns:12mm minmax(0,1fr) 22mm;
-  column-gap:2mm;
+  grid-template-columns:9mm minmax(0,1fr) 16mm;
+  column-gap:1.2mm;
   width:100%;
   max-width:100%;
   align-items:start;
+  position:static;
+  height:auto;
 }
 .mat-head{
   font-size:11pt;font-weight:700;color:#000!important;
-  padding:0 0 0.5mm;
+  padding:0 0 0.25mm;
+  margin:0 0 0.2mm;
+  border:none;
   border-bottom:0.3mm solid #000;
-  margin-bottom:0.6mm;
+  line-height:1.15;
 }
 .mat-row{
   font-size:11pt;font-weight:500;color:#000!important;
-  padding:0.45mm 0;
+  padding:0.1mm 0;
+  margin:0;
   border:none;
-  line-height:1.3;
+  line-height:1.15;
+  grid-column:1/-1;
 }
 .mat-no{text-align:center;font-weight:700}
-.mat-name{text-align:left;min-width:0}
+.mat-name{text-align:left;min-width:0;height:auto}
 .mat-qty{text-align:right;font-weight:700}
-.mat-foot{
-  border-bottom:0.3mm solid #000;
-  margin-top:0.4mm;
-  height:0;
-}
-.cp-mat-empty{
-  font-size:11pt;color:#000!important;margin:0;
-}
+.cp-mat-empty{display:block;font-size:11pt;color:#000!important;margin:0}
 .cp-sigs{
+  flex:0 0 auto;
   flex-shrink:0;
+  margin-top:auto;
   display:grid;
   grid-template-columns:minmax(0,1fr) minmax(0,1fr);
-  column-gap:10mm;
+  column-gap:8mm;
   width:100%;
   max-width:100%;
-  margin:0;
-  padding-top:1.5mm;
+  padding-top:0.5mm;
   border:none;
+  position:static;
 }
 .cp-sig{
+  box-sizing:border-box;
   min-width:0;
   min-height:25mm;
+  max-height:25mm;
+  height:25mm;
   display:flex;
   flex-direction:column;
   color:#000!important;
   background:transparent!important;
   border:none;
+  position:static;
 }
 .cp-sig-title{
   font-size:11pt;font-weight:700;
-  margin:0 0 1mm;padding:0;
+  margin:0;padding:0;
+  flex:0 0 auto;
+  line-height:1.15;
 }
-.cp-sig-space{flex:1 1 auto;min-height:14mm}
+.cp-sig-space{flex:1 1 auto;min-height:0}
 .cp-sig-line{
   width:70mm;
   max-width:100%;
   border:none;
   border-bottom:0.3mm solid #000;
   height:0;
-  margin:0 0 1.2mm;
+  margin:0 0 0.5mm;
+  flex:0 0 auto;
 }
 .cp-sig-date{
   font-size:11pt;font-weight:700;
-  display:flex;align-items:baseline;gap:1.5mm;
+  display:flex;align-items:baseline;gap:1.2mm;
+  flex:0 0 auto;
+  line-height:1.15;
 }
 .cp-sig-date-line{
   flex:1 1 auto;
@@ -364,9 +402,8 @@ body{
   border:none;
   border-bottom:0.3mm solid #000;
   height:0;
-  min-width:20mm;
+  min-width:18mm;
 }
-/* 隱藏 digital 殘留樣式（若誤套用） */
 .hdr,.co-logo,.pf,.head-row,table{display:none!important}
 `;
 }
@@ -439,16 +476,16 @@ ${buildCompactOverridesCss(mode)}
     <div class="cp-text">${esc(descText)}</div>
   </div>
 
-  <div class="cp-block cp-block-grow">
+  <div class="cp-block cp-mat-block">
     <div class="cp-sec">材料／設備</div>
     <div class="cp-mat">
       ${matRows
-        ? `<div class="mat-head"><span class="mat-no">項次</span><span class="mat-name">品項名稱</span><span class="mat-qty">數量</span></div>${matRows}<div class="mat-foot"></div>`
+        ? `<div class="mat-head"><span class="mat-no">項次</span><span class="mat-name">品項名稱</span><span class="mat-qty">數量</span></div>${matRows}`
         : `<p class="cp-mat-empty">—</p>`}
     </div>
   </div>
 
-  <div class="cp-block">
+  <div class="cp-block cp-notes-block">
     <div class="cp-sec">備註</div>
     <div class="cp-text">${esc(notesText)}</div>
   </div>
