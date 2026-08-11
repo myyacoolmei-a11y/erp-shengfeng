@@ -657,19 +657,28 @@ export default function QuotesPage() {
     return counts;
   })();
 
-  const filtered = (quotes ?? []).filter((q: any) => {
-    if (!quoteMatchesFilter(q, statusFilter)) return false;
-    if (filterCustomerName && !q.customerName?.toLowerCase().includes(filterCustomerName.toLowerCase())) return false;
-    const qSearch = listSearch.trim().toLowerCase();
-    if (qSearch) {
-      const hay = [q.title, q.customerName, q.customerPhone, q.address, formatQuoteNumber(q)]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-      if (!hay.includes(qSearch)) return false;
-    }
-    return true;
-  });
+  const filtered = (quotes ?? [])
+    .filter((q: any) => {
+      if (!quoteMatchesFilter(q, statusFilter)) return false;
+      if (filterCustomerName && !q.customerName?.toLowerCase().includes(filterCustomerName.toLowerCase())) return false;
+      const qSearch = listSearch.trim().toLowerCase();
+      if (qSearch) {
+        const hay = [q.title, q.customerName, q.customerPhone, q.address, formatQuoteNumber(q)]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase();
+        if (!hay.includes(qSearch)) return false;
+      }
+      return true;
+    })
+    .slice()
+    .sort((a: any, b: any) => {
+      // 報價日期＝createdAt：新→舊；同時間再依 id DESC
+      const ca = a.createdAt ? String(a.createdAt) : "";
+      const cb = b.createdAt ? String(b.createdAt) : "";
+      if (ca !== cb) return cb.localeCompare(ca);
+      return (b.id ?? 0) - (a.id ?? 0);
+    });
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / LIST_PAGE_SIZE));
   const currentPage = Math.min(listPage, totalPages);

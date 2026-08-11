@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, desc, sql } from "drizzle-orm";
 import {
   db,
   workOrdersTable,
@@ -312,7 +312,12 @@ router.get("/work-orders", async (req, res): Promise<void> => {
     .leftJoin(customersTable, eq(workOrdersTable.customerId, customersTable.id))
     .leftJoin(quotesTable, eq(workOrdersTable.quoteId, quotesTable.id))
     .where(conditions.length > 0 ? and(...conditions) : undefined)
-    .orderBy(workOrdersTable.createdAt);
+    // 施工日新→舊；無施工日排後面；同日再依建立時間新→舊
+    .orderBy(
+      sql`${workOrdersTable.scheduledDate} DESC NULLS LAST`,
+      desc(workOrdersTable.createdAt),
+      desc(workOrdersTable.id),
+    );
 
   const totalBeforeFilter = orders.length;
   let assignmentContext = null;

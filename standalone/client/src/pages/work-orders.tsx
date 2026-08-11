@@ -130,14 +130,17 @@ function normalizeWoStatus(status: string | null | undefined): string {
   return status;
 }
 
-/** Schedule bucket for 待施工 sort: overdue → today → tomorrow → future */
-function scheduleSortKey(scheduledDate: string | null | undefined, today: string): number {
-  if (!scheduledDate) return 0; // treat missing as most urgent (待派工-like)
-  if (scheduledDate < today) return 0;
-  if (scheduledDate === today) return 1;
-  const tomorrow = addDaysTaipei(today, 1);
-  if (scheduledDate === tomorrow) return 2;
-  return 3;
+/** 列表排序：施工日 DESC → createdAt DESC（最新在前；無施工日依建立時間） */
+function compareWorkOrdersNewestFirst(a: any, b: any): number {
+  const da = typeof a.scheduledDate === "string" ? a.scheduledDate : "";
+  const db = typeof b.scheduledDate === "string" ? b.scheduledDate : "";
+  if (da && db && da !== db) return db.localeCompare(da);
+  if (da && !db) return -1;
+  if (!da && db) return 1;
+  const ca = a.createdAt ? String(a.createdAt) : "";
+  const cb = b.createdAt ? String(b.createdAt) : "";
+  if (ca !== cb) return cb.localeCompare(ca);
+  return (b.id ?? 0) - (a.id ?? 0);
 }
 
 function matchesAdminFilter(o: any, tab: AdminFilterTab, _today: string): boolean {
@@ -891,20 +894,11 @@ export default function WorkOrders() {
           return hay.includes(q);
         });
       }
-      if (statusFilter === "待施工") {
-        filtered = [...filtered].sort((a, b) => {
-          const ka = scheduleSortKey(a.scheduledDate, today);
-          const kb = scheduleSortKey(b.scheduledDate, today);
-          if (ka !== kb) return ka - kb;
-          const da = a.scheduledDate ?? "";
-          const db = b.scheduledDate ?? "";
-          return da.localeCompare(db);
-        });
-      }
-      return filtered;
+      return [...filtered].sort(compareWorkOrdersNewestFirst);
     }
 
-    return list.filter((o) => {
+    return list
+      .filter((o) => {
       const prog = progressMap.get(o.id);
       const fieldDone = prog?.fieldStatus === "completed" || !!prog?.completedAt;
       const woDone = WO_COMPLETED.has(normalizeWoStatus(o.status)) || fieldDone;
@@ -933,7 +927,8 @@ export default function WorkOrders() {
         default:
           return true;
       }
-    });
+    })
+      .sort(compareWorkOrdersNewestFirst);
   }, [orders, isEngineerView, engineerFilter, progressMap, today, completedSince, statusFilter, listSearch, focusId]);
 
   // 工程師不打客戶／報價 API（常因無 customers/quotations 權限而 403）

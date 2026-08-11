@@ -1,5 +1,5 @@
 import { Router, type IRouter } from "express";
-import { eq, and, inArray } from "drizzle-orm";
+import { eq, and, inArray, desc } from "drizzle-orm";
 import { db, quotesTable, customersTable, employeesTable, quoteItemsTable } from "@workspace/db";
 import { CreateQuoteBody, UpdateQuoteBody } from "@workspace/api-zod";
 import { requireFeature } from "../lib/auth";
@@ -127,7 +127,7 @@ router.get("/quotes", async (req, res): Promise<void> => {
     .leftJoin(customersTable, eq(quotesTable.customerId, customersTable.id))
     .leftJoin(employeesTable, eq(quotesTable.salesRepId, employeesTable.id))
     .where(conditions.length > 0 ? and(...conditions) : undefined)
-    .orderBy(quotesTable.createdAt);
+    .orderBy(desc(quotesTable.createdAt), desc(quotesTable.id));
 
   if (quoteRows.length === 0) { res.json([]); return; }
 
