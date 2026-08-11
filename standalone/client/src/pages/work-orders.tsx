@@ -20,7 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Pencil, Trash2, ChevronDown, ChevronUp, CreditCard, Printer, MapPin, X, FileText, AlertCircle, UserPlus, Eye } from "lucide-react";
+import { Plus, Pencil, Trash2, ChevronDown, ChevronUp, CreditCard, Printer, MapPin, X, FileText, AlertCircle, UserPlus, Eye, Ruler } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth, hasRole, userHasFeature } from "@/contexts/auth-context";
@@ -33,6 +33,8 @@ import {
   type AiReminderRuleSource,
 } from "@/lib/aiWorkReminderSettings";
 import { stripQuotePricingFromNotes } from "@/lib/quoteToWorkOrder";
+import { loadPrintCalibration } from "@/lib/printPaperConfig";
+import { PrintCalibrationDialog } from "@/components/work-orders/PrintCalibrationDialog";
 import { VoiceAssistantButton } from "@/components/voice-assistant/VoiceAssistantDialog";
 import { applyVoiceToWorkOrderForm } from "@/lib/voice/applyVoiceToWorkOrder";
 import type { VoiceAssistantApplyPayload } from "@/components/voice-assistant/types";
@@ -213,8 +215,9 @@ async function printWorkOrderPDF(
   toast: any,
 ) {
   const woNum = order.workOrderNumber || `#${order.id}`;
-  const html = buildWorkOrderHtml(order);
   if (isMobileDevice()) {
+    // 行動裝置：維持原有 PDF 下載版面，不套用連續報表紙送紙孔／撕線邊界與列印校正
+    const html = buildWorkOrderHtml(order);
     await handlePdfAction({
       html,
       docNo: woNum,
@@ -226,6 +229,11 @@ async function printWorkOrderPDF(
       pageFormat: "custom-240x140-landscape",
     });
   } else {
+    // 桌機列印：套用點陣印表機連續報表紙安全邊界，並套用使用者儲存的列印校正偏移量
+    const html = buildWorkOrderHtml(order, {
+      mode: "continuous-print",
+      calibration: loadPrintCalibration(),
+    });
     openPrintWindow(html, `晟風工程派工單 — ${woNum}`);
   }
 }
@@ -830,6 +838,7 @@ export default function WorkOrders() {
   const [pdfPreview, setPdfPreview] = useState<{ url: string; filename: string } | null>(null);
   const pendingARRef = useRef<any>(null);
   const [reopenModal, setReopenModal] = useState<{ payload: Record<string, unknown> } | null>(null);
+  const [showPrintCalibration, setShowPrintCalibration] = useState(false);
 
   const COMPLETED_STATUSES = ["已完成", "已結案"];
   const isAdmin =
@@ -1178,14 +1187,19 @@ export default function WorkOrders() {
           <h1 className="text-xl sm:text-2xl font-bold">派工單管理</h1>
           <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">冷氣工程派工管理</p>
         </div>
-        {canWrite && (
-          <div className="flex items-center gap-2 shrink-0">
-            <VoiceAssistantButton formType="work_order" onApply={handleVoiceApply} />
-            <Button size="sm" onClick={openCreate}>
-              <Plus className="h-4 w-4 mr-1" />新增派工單
-            </Button>
-          </div>
-        )}
+        <div className="flex items-center gap-2 shrink-0">
+          <Button variant="outline" size="sm" onClick={() => setShowPrintCalibration(true)}>
+            <Ruler className="h-4 w-4 mr-1" />列印校正
+          </Button>
+          {canWrite && (
+            <>
+              <VoiceAssistantButton formType="work_order" onApply={handleVoiceApply} />
+              <Button size="sm" onClick={openCreate}>
+                <Plus className="h-4 w-4 mr-1" />新增派工單
+              </Button>
+            </>
+          )}
+        </div>
       </div>
 
       {filterCustomerName && (
@@ -1678,6 +1692,8 @@ export default function WorkOrders() {
           a.click();
         }}
       />
+
+      <PrintCalibrationDialog open={showPrintCalibration} onOpenChange={setShowPrintCalibration} />
     </div>
   );
 }
