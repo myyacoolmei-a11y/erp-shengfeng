@@ -105,14 +105,20 @@ export interface WorkOrderHtmlOptions {
 /**
  * 產生紙張／頁面容器的 CSS。
  * - digital 模式：完全維持既有輸出（240×140mm，四邊 6mm 邊距），供 PDF 下載／分享使用。
- * - continuous-print 模式：根容器（.sheet）直接固定為紙張實際尺寸
- *   241.3mm × 139.7mm、box-sizing:border-box，送紙孔／撕線安全邊界以
- *   padding 方式內縮（而非額外的絕對定位偏移），確保「宣告尺寸＝實際佔用
- *   尺寸」不會有算式誤差導致水平溢出。列印校正透過 `transform: translate()`
- *   套用在內層 `.page`，僅影響視覺位置、不影響 .sheet 的實際尺寸。
- *   html/body/.sheet/.page 全部 overflow:hidden 並加上
- *   break-inside/page-break-inside/page-break-after:avoid，確保每筆
- *   派工單絕對只產生一個列印頁面，不會水平或垂直跨頁。
+ * - continuous-print 模式：
+ *   目標紙張為 9.5×5.5 in（${CONTINUOUS_PAPER.WIDTH_MM}×${CONTINUOUS_PAPER.HEIGHT_MM}mm）。
+ *
+ *   實機「左右拆成兩張」根因（已用 100% 縮放列印視口量測確認）：
+ *   先前把 html/body/.sheet 寫死為固定 ${CONTINUOUS_PAPER.WIDTH_MM}mm 寬。
+ *   當 Chrome 列印對話框實際可印寬度小於該固定值時（常見原因：
+ *   Margins=Default 吃掉左右邊、印表機改用 Letter/A4、驅動回報可印寬 8.5in 等），
+ *   版面在 100% 縮放下會水平跨成 2 頁。連續紙切換直向／橫向通常不改變紙寬，
+ *   因此調 orientation 無效。
+ *
+ *   修正：html/body/.sheet/.page 一律 width/max-width:100%（相對 @page 頁面盒），
+ *   不再使用會超過可印寬的固定 mm 寬度；送紙孔安全邊改由 padding 內縮；
+ *   列印校正改調 padding（不用 transform，避免把內容推出頁面盒）。
+ *   文字允許換行，表格 width:100% + table-layout:fixed，欄寬百分比加總 ≤100%。
  */
 function buildPageBoxCss(mode: WorkOrderHtmlMode, calibration: PrintCalibration): string {
   if (mode !== "continuous-print") {
@@ -132,62 +138,87 @@ function buildPageBoxCss(mode: WorkOrderHtmlMode, calibration: PrintCalibration)
   }
 
   const {
+    WIDTH_IN, HEIGHT_IN,
     WIDTH_MM, HEIGHT_MM,
     MARGIN_LEFT_MM, MARGIN_RIGHT_MM,
     MARGIN_TOP_MM, MARGIN_BOTTOM_MM,
   } = CONTINUOUS_PAPER;
   const offsetXMm = Number.isFinite(calibration?.offsetXMm) ? calibration.offsetXMm : 0;
   const offsetYMm = Number.isFinite(calibration?.offsetYMm) ? calibration.offsetYMm : 0;
+  // 校正併入 padding，避免 transform 把內容推出頁面盒造成水平第二頁
+  const padTop = MARGIN_TOP_MM + offsetYMm;
+  const padRight = Math.max(0, MARGIN_RIGHT_MM - offsetXMm);
+  const padBottom = Math.max(0, MARGIN_BOTTOM_MM - offsetYMm);
+  const padLeft = Math.max(0, MARGIN_LEFT_MM + offsetXMm);
 
   return `
-/* 連續報表紙（點陣印表機）— 紙張 ${WIDTH_MM}mm × ${HEIGHT_MM}mm（9.5×5.5 英吋），
-   實際尺寸 100% 輸出，不縮放、不自動 fit-to-page，每筆派工單僅輸出一頁。
-   已預留左右送紙孔安全邊距 ${MARGIN_LEFT_MM}mm／${MARGIN_RIGHT_MM}mm（可印刷寬度
-   = 8.5 英吋），上下（含中央撕線）安全邊距 ${MARGIN_TOP_MM}mm／${MARGIN_BOTTOM_MM}mm。
-   列印校正偏移：X=${offsetXMm}mm，Y=${offsetYMm}mm。
-   注意：size 使用明確寬高兩個長度值時不可再併用 landscape 關鍵字（不符合
-   CSS Paged Media 規範會導致整條宣告失效、退回瀏覽器預設紙張如 Letter），
-   寬 > 高已代表橫向，故省略該關鍵字。 */
-@page{size:${WIDTH_MM}mm ${HEIGHT_MM}mm;margin:0}
+/* 連續報表紙（點陣印表機）— 建議紙張 ${WIDTH_IN}in × ${HEIGHT_IN}in
+   （${WIDTH_MM}mm × ${HEIGHT_MM}mm）。@page 使用英吋以貼近驅動紙張名稱；
+   不可再併用 landscape 關鍵字。
+   根容器採 100% 填滿「實際頁面盒」：即使對話框改用較窄紙張／Default 邊界，
+   內容寬度仍跟隨可印區，不會因固定 mm 寬度水平拆成兩頁。
+   送紙孔／撕線安全邊：左 ${MARGIN_LEFT_MM}mm／右 ${MARGIN_RIGHT_MM}mm／
+   上 ${MARGIN_TOP_MM}mm／下 ${MARGIN_BOTTOM_MM}mm；列印校正 X=${offsetXMm}mm Y=${offsetYMm}mm。 */
+@page{size:${WIDTH_IN}in ${HEIGHT_IN}in;margin:0}
 html,body{
-  box-sizing:border-box;
-  width:${WIDTH_MM}mm;height:${HEIGHT_MM}mm;
-  margin:0;padding:0;
-  overflow:hidden;
+  box-sizing:border-box!important;
+  width:100%!important;max-width:100%!important;
+  height:100%!important;max-height:100%!important;
+  margin:0!important;padding:0!important;
+  overflow:hidden!important;
   background:#fff;
 }
-/* 根容器：固定為紙張實際尺寸，border-box 確保 padding（送紙孔／撕線安全區）
-   內縮在宣告尺寸之內，絕對不會讓實際佔用寬度超過 ${WIDTH_MM}mm。 */
 .sheet{
-  box-sizing:border-box;
-  width:${WIDTH_MM}mm;height:${HEIGHT_MM}mm;
-  padding:${MARGIN_TOP_MM}mm ${MARGIN_RIGHT_MM}mm ${MARGIN_BOTTOM_MM}mm ${MARGIN_LEFT_MM}mm;
-  overflow:hidden;
+  box-sizing:border-box!important;
+  width:100%!important;max-width:100%!important;
+  height:100%!important;max-height:100%!important;
+  padding:${padTop}mm ${padRight}mm ${padBottom}mm ${padLeft}mm;
+  overflow:hidden!important;
   break-inside:avoid;page-break-inside:avoid;page-break-after:avoid;
+  break-after:avoid;page-break-before:avoid;
 }
 .page{
-  box-sizing:border-box;
-  width:100%;height:100%;
-  max-width:100%;
-  padding:0;
-  display:flex;
-  flex-direction:column;
-  overflow:hidden;
-  transform:translate(${offsetXMm}mm, ${offsetYMm}mm);
+  box-sizing:border-box!important;
+  width:100%!important;max-width:100%!important;
+  height:100%!important;max-height:100%!important;
+  min-width:0;
+  padding:0;margin:0;
+  display:flex;flex-direction:column;
+  overflow:hidden!important;
+  transform:none!important;
   break-inside:avoid;page-break-inside:avoid;page-break-after:avoid;
 }
-/* 內容過長時（例如長備註或設備品項較多）：由「施工內容」「備註」兩個
-   自由文字區塊優先收縮並裁切多餘內容，表頭／欄位／材料表格／簽名列維持
-   完整顯示，確保絕不因此產生第二頁或跨頁空白。備註（補充說明）的收縮
-   優先權高於施工內容（核心施工說明），空間不足時備註會先被壓縮。 */
-.section-flex{flex:0 1 auto;min-height:0;overflow:hidden}
-.section-flex-notes{flex:0 2 auto;min-height:0;overflow:hidden}
-/* 所有可能承載使用者輸入文字的欄位一律允許換行，杜絕任何水平溢出
-   （長地址、長客戶名稱、長品項名稱等都必須在自身欄寬內換行，而不是撐開版面）。 */
-.field,.val,.lbl,.box,.col-item,.col-notes,td,th{
-  min-width:0;overflow-wrap:anywhere;word-break:break-word;
+/* 內容過長時：施工內容／備註優先收縮；禁止水平撐開 */
+.section-flex{flex:0 1 auto;min-height:0;min-width:0;max-width:100%;overflow:hidden}
+.section-flex-notes{flex:0 2 auto;min-height:0;min-width:0;max-width:100%;overflow:hidden}
+.section,table,.grid,.box,.bottom-block,.sigs,.cp-title{
+  max-width:100%!important;min-width:0;box-sizing:border-box!important;
 }
-.grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}`;
+table{
+  width:100%!important;max-width:100%!important;
+  table-layout:fixed!important;
+}
+.field,.val,.lbl,.col-item,.col-notes,td,th,div,span{
+  min-width:0;
+  max-width:100%;
+  overflow-wrap:anywhere;
+  word-break:break-word;
+  white-space:normal!important;
+}
+.box{
+  min-width:0;max-width:100%;
+  overflow-wrap:anywhere;word-break:break-word;
+  white-space:pre-wrap!important;
+}
+.lbl{flex-shrink:1!important}
+.grid{
+  width:100%;max-width:100%;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+}
+.sigs{
+  width:100%;max-width:100%;
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1fr);
+}`;
 }
 
 /**
@@ -234,9 +265,9 @@ body{
 }
 
 /* 欄位區：緊湊雙欄；技師提前、工程名稱單欄以減少列數 */
-.grid{gap:0.6mm 4mm;margin-bottom:1mm;font-size:10pt}
-.lbl{font-size:9.5pt;font-weight:700;min-width:40px;color:#000!important}
-.val{font-size:11pt;font-weight:700;color:#000!important}
+.grid{gap:0.6mm 4mm;margin-bottom:1mm;font-size:10pt;width:100%;max-width:100%}
+.lbl{font-size:9.5pt;font-weight:700;min-width:0;flex:0 1 auto;color:#000!important}
+.val{font-size:11pt;font-weight:700;min-width:0;flex:1 1 auto;color:#000!important}
 .f-tech{order:4}
 .f-title{order:5;grid-column:auto}
 .f-contact{order:6}
@@ -253,7 +284,7 @@ body{
 .section{margin-bottom:0.9mm}
 
 /* 表格：白底黑字表頭＋黑色實線框；覆寫 PDF_LAYOUT_CSS 的大 padding／min-height */
-table{font-size:10pt;line-height:1.15;border-collapse:collapse}
+table{font-size:10pt;line-height:1.15;border-collapse:collapse;width:100%!important;table-layout:fixed!important}
 .head-row,.head-row th{background:#fff!important;color:#000!important}
 .head-row th{
   border:0.4mm solid #000;border-color:#000!important;
@@ -267,6 +298,11 @@ tbody td{
   padding:0.5mm 1.4mm;min-height:0;line-height:1.1;
 }
 tbody tr{min-height:0}
+/* 欄寬加總 ≤100%（5+53+8+8+26），避免固定欄寬撐破父容器 */
+.col-w6{width:5%!important}
+.col-w8{width:8%!important}
+.col-w25{width:26%!important}
+.col-item{width:53%!important}
 
 /* 施工內容／備註：白底黑框；備註保留手寫高度 */
 .box{
@@ -422,10 +458,11 @@ tbody tr{page-break-inside:avoid;break-inside:avoid}
 .tal{text-align:left}
 .small{font-size:8.5pt}
 
-/* Column widths */
+/* Column widths — continuous-print 另以覆寫確保加總 ≤100%；digital 維持原比例 */
 .col-w6{width:6%}
 .col-w8{width:8%}
 .col-w25{width:25%}
+.col-item{width:auto}
 
 /* ===== Box ===== */
 .box{
