@@ -106,10 +106,10 @@ export interface WorkOrderHtmlOptions {
  * 產生紙張／頁面容器的 CSS。
  * - digital 模式：完全維持既有輸出（240×140mm，四邊 6mm 邊距），供 PDF 下載／分享使用。
  * - continuous-print 模式：
- *   目標紙張為 9.5×5.5 in（${CONTINUOUS_PAPER.WIDTH_MM}×${CONTINUOUS_PAPER.HEIGHT_MM}mm）。
+ *   目標紙張為 9.5×5.5 in（241.3×139.7mm）。
  *
  *   實機「左右拆成兩張」根因（已用 100% 縮放列印視口量測確認）：
- *   先前把 html/body/.sheet 寫死為固定 ${CONTINUOUS_PAPER.WIDTH_MM}mm 寬。
+ *   先前把 html/body/.sheet 寫死為固定 241.3mm 寬。
  *   當 Chrome 列印對話框實際可印寬度小於該固定值時（常見原因：
  *   Margins=Default 吃掉左右邊、印表機改用 Letter/A4、驅動回報可印寬 8.5in 等），
  *   版面在 100% 縮放下會水平跨成 2 頁。連續紙切換直向／橫向通常不改變紙寬，
