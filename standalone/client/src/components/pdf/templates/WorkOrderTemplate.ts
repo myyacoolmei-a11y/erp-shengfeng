@@ -3,6 +3,7 @@
 
 import { logoUrl, COMPANY, COLORS, esc, PDF_LAYOUT_CSS } from "./brand-config";
 import { stripQuotePricingFromNotes } from "@/lib/quoteToWorkOrder";
+import { CONTINUOUS_PAPER, PRINT_CALIBRATION_DEFAULT, type PrintCalibration } from "@/lib/printPaperConfig";
 
 interface EquipmentRow {
   brand?: string | null;
@@ -86,7 +87,126 @@ function buildMaterialRows(equipment: EquipmentRow[]): string {
     </tr>`).join("");
 }
 
-export function buildWorkOrderHtml(order: any): string {
+export type WorkOrderHtmlMode = "digital" | "continuous-print";
+
+export interface WorkOrderHtmlOptions {
+  /**
+   * "digital"（預設）：既有 PDF 下載／行動裝置／LINE 分享流程使用，
+   * 版面與既有輸出完全相同，不受連續報表紙改版影響。
+   * "continuous-print"：實際列印到點陣印表機連續報表紙時使用 —
+   * 套用送紙孔／撕線安全邊界，並套用「列印校正」偏移量，強制單頁輸出、
+   * 100% 實際尺寸、不縮放。
+   */
+  mode?: WorkOrderHtmlMode;
+  /** 僅 mode==="continuous-print" 時套用：正式列印時的上下左右位置校正（mm）。 */
+  calibration?: PrintCalibration;
+}
+
+/**
+ * 產生紙張／頁面容器的 CSS。
+ * - digital 模式：完全維持既有輸出（240×140mm，四邊 6mm 邊距），供 PDF 下載／分享使用。
+ * - continuous-print 模式：換算連續報表紙的送紙孔／撕線安全邊距，並以
+ *   `transform: translate()` 套用列印校正偏移量（僅影響列印視覺位置，
+ *   不影響版面資料）。同時將 html/body/.sheet 固定為紙張實際尺寸並
+ *   overflow:hidden，確保絕不因內容過長而產生第二頁或空白頁。
+ */
+function buildPageBoxCss(mode: WorkOrderHtmlMode, calibration: PrintCalibration): string {
+  if (mode !== "continuous-print") {
+    // 注意：CSS @page 的 size 屬性不可將明確寬高兩個長度值與 landscape/portrait
+    // 關鍵字併用（不符合 CSS Paged Media 規範，瀏覽器會整條宣告失效並改用預設
+    // 紙張，例如 Letter）。寬 > 高本身已代表橫向，故不需再加 landscape 關鍵字。
+    return `
+@page{size:240mm 140mm;margin:6mm}
+.sheet{}
+.page{
+  width:228mm;
+  min-height:128mm;
+  padding:0;
+  display:flex;
+  flex-direction:column;
+}`;
+  }
+
+  const {
+    WIDTH_MM, HEIGHT_MM,
+    MARGIN_LEFT_MM, MARGIN_RIGHT_MM,
+    MARGIN_TOP_MM, MARGIN_BOTTOM_MM,
+  } = CONTINUOUS_PAPER;
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+  const contentWidthMm = round2(WIDTH_MM - MARGIN_LEFT_MM - MARGIN_RIGHT_MM);
+  const contentHeightMm = round2(HEIGHT_MM - MARGIN_TOP_MM - MARGIN_BOTTOM_MM);
+  const offsetXMm = Number.isFinite(calibration?.offsetXMm) ? calibration.offsetXMm : 0;
+  const offsetYMm = Number.isFinite(calibration?.offsetYMm) ? calibration.offsetYMm : 0;
+
+  return `
+/* 連續報表紙（點陣印表機）— 紙張 ${WIDTH_MM}mm × ${HEIGHT_MM}mm，實際尺寸 100% 輸出，
+   不縮放、不自動 fit-to-page。已預留左右送紙孔安全邊距
+   ${MARGIN_LEFT_MM}mm／${MARGIN_RIGHT_MM}mm，上下（含中央撕線）安全邊距
+   ${MARGIN_TOP_MM}mm／${MARGIN_BOTTOM_MM}mm。列印校正偏移：X=${offsetXMm}mm，Y=${offsetYMm}mm。
+   注意：size 使用明確寬高兩個長度值時不可再併用 landscape 關鍵字（不符合
+   CSS Paged Media 規範會導致整條宣告失效、退回瀏覽器預設紙張如 Letter），
+   寬 > 高已代表橫向，故省略該關鍵字。 */
+@page{size:${WIDTH_MM}mm ${HEIGHT_MM}mm;margin:0}
+html,body{
+  width:${WIDTH_MM}mm;height:${HEIGHT_MM}mm;
+  overflow:hidden;
+}
+.sheet{
+  position:relative;
+  width:${WIDTH_MM}mm;height:${HEIGHT_MM}mm;
+  overflow:hidden;
+}
+.page{
+  position:absolute;
+  top:${MARGIN_TOP_MM}mm;left:${MARGIN_LEFT_MM}mm;
+  width:${contentWidthMm}mm;height:${contentHeightMm}mm;
+  padding:0;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+  transform:translate(${offsetXMm}mm, ${offsetYMm}mm);
+}
+  /* 內容過長時（例如長備註或設備品項較多）：由「施工內容」「備註」兩個
+   自由文字區塊優先收縮並裁切多餘內容，表頭／欄位／材料表格／簽名列維持
+   完整顯示，確保絕不因此產生第二頁或跨頁空白。備註（補充說明）的收縮
+   優先權高於施工內容（核心施工說明），空間不足時備註會先被壓縮。 */
+.section-flex{flex:0 1 auto;min-height:0;overflow:hidden}
+.section-flex-notes{flex:0 2 auto;min-height:0;overflow:hidden}`;
+}
+
+/**
+ * continuous-print 專用的緊湊排版覆寫。
+ *
+ * 共用的 PDF_LAYOUT_CSS（brand-config.ts）針對 A4 報表調整為較寬鬆的行高／
+ * 表格列高（例如 min-height:40px），在 240×140mm 的連續報表紙上會過度
+ * 佔用有限高度，導致「施工內容」「備註」等可收縮區塊被壓縮到接近 0
+ * 而顯示不出來。此處提供更緊湊的間距，且僅套用於 continuous-print 模式，
+ * 不影響 digital 模式（PDF 下載／LINE 分享）既有輸出。
+ * 必須置於 <style> 區塊最後（PDF_LAYOUT_CSS 之後）以確保覆寫生效。
+ */
+function buildCompactOverridesCss(mode: WorkOrderHtmlMode): string {
+  if (mode !== "continuous-print") return "";
+  return `
+/* ===== continuous-print 緊湊排版覆寫 ===== */
+.hdr{padding-bottom:2mm;margin-bottom:2mm}
+.co-logo{width:40px;height:40px;max-width:40px;max-height:40px}
+.grid{gap:0.8mm 5mm;margin-bottom:1mm}
+.lbl{min-width:44px}
+.section{margin-bottom:1mm}
+.sec-title{padding:0.6mm 2mm;margin-bottom:0.8mm}
+.box{padding:1.5mm 3mm;line-height:1.3}
+.head-row th{padding:1px 3px;min-height:0;line-height:1.3}
+tbody td{padding:1px 3px;min-height:0;line-height:1.3}
+tbody tr{min-height:0}
+.bottom-block{margin-top:1.5mm}
+.sigs{gap:6mm;margin-bottom:1.5mm}
+.sig{font-size:7.5pt;padding-top:1.5mm;padding-bottom:0;min-height:0}
+`;
+}
+
+export function buildWorkOrderHtml(order: any, options: WorkOrderHtmlOptions = {}): string {
+  const mode: WorkOrderHtmlMode = options.mode ?? "digital";
+  const calibration: PrintCalibration = options.calibration ?? PRINT_CALIBRATION_DEFAULT;
   const woNum = order.workOrderNumber || `WO-${String(order.id).padStart(4, "0")}`;
   const printDate = new Date().toLocaleDateString("zh-TW");
   let techDisplay = "—";
@@ -121,14 +241,7 @@ body{
 }
 
 /* ===== Page setup ===== */
-@page{size:240mm 140mm landscape;margin:6mm}
-.page{
-  width:228mm;
-  min-height:128mm;
-  padding:0;
-  display:flex;
-  flex-direction:column;
-}
+${buildPageBoxCss(mode, calibration)}
 
 /* ===== Header ===== */
 .hdr{
@@ -227,9 +340,11 @@ tbody tr{page-break-inside:avoid;break-inside:avoid}
   border-top:1px solid ${COLORS.borderGray};padding-top:1.5mm;
 }
 ${PDF_LAYOUT_CSS}
+${buildCompactOverridesCss(mode)}
 </style>
 </head>
 <body>
+<div class="sheet">
 <div class="page">
   <!-- Header -->
   <div class="hdr">
@@ -262,7 +377,7 @@ ${PDF_LAYOUT_CSS}
   </div>
 
   <!-- Work Content -->
-  <div class="section">
+  <div class="section section-flex">
     <div class="sec-title">施工內容</div>
     <div class="box">${esc(order.description || "（無）")}</div>
   </div>
@@ -283,7 +398,7 @@ ${PDF_LAYOUT_CSS}
   </div>
 
   <!-- Notes -->
-  <div class="section">
+  <div class="section section-flex-notes">
     <div class="sec-title">備註</div>
     <div class="box">${esc(woNotes || "（無）")}</div>
   </div>
@@ -300,6 +415,7 @@ ${PDF_LAYOUT_CSS}
       <div>列印：${printDate}</div>
     </div>
   </div>
+</div>
 </div>
 </body>
 </html>`;
