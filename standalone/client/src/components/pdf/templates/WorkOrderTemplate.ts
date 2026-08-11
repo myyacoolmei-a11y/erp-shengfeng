@@ -191,114 +191,104 @@ html,body{
 }
 
 /**
- * continuous-print 專用的點陣機高辨識樣式覆寫。
+ * continuous-print 專用：點陣機極簡黑白樣式覆寫。
  *
- * 點陣印表機無法可靠呈現深色底＋反白文字、淺灰階或細筆畫字型，因此
- * continuous-print 模式改為全黑純文字／實線框／白底的高對比樣式：
- * - 所有文字、框線、Logo 一律純黑 #000，背景一律白色。
- * - 移除「深色底＋反白文字」的表頭／表格標題樣式，改為白底、黑色粗體、
- *   黑色實線框。
- * - 主要內容字級 ≥ 11pt，重要欄位 12–14pt，標題與欄位值 font-weight:700。
- * - 表格框線 ≥ 0.35mm 實線黑色。
- * - Logo（無法確保單色列印品質）於 continuous-print 模式隱藏，改以加大的
- *   黑色粗體公司名稱呈現，避免點陣機列印灰階/半色調圖檔時模糊不清。
- *
- * 共用的 PDF_LAYOUT_CSS（brand-config.ts）與上方 digital 版面 CSS 皆為
- * A4／彩色設計，僅套用於 continuous-print 模式，不影響 digital 模式
- * （PDF 下載／LINE 分享）既有輸出。必須置於 <style> 區塊最後（PDF_LAYOUT_CSS
- * 之後）以確保覆寫生效。
+ * - 頁首僅「晟風工程｜派工單」純文字標題（無 Logo、無副標、無品牌裝飾）。
+ * - 全文件純黑 #000／白底；禁止色塊、灰底、反白字、裝飾線／圖示。
+ * - 表格標題：白底、黑字粗體、黑色實線框。
+ * - 版面緊湊以節省紙張與色帶；備註／客戶簽名／技師簽名保留手寫空間。
+ * - 不影響 digital 模式（PDF 下載／LINE 分享）。
+ * 必須置於 <style> 最後（PDF_LAYOUT_CSS 之後）以確保覆寫生效。
  */
 function buildCompactOverridesCss(mode: WorkOrderHtmlMode): string {
   if (mode !== "continuous-print") return "";
   return `
-/* ===== continuous-print：點陣機高辨識樣式（純黑／白底／粗體／實線） ===== */
+/* ===== continuous-print：極簡點陣機（純黑／白底／無裝飾） ===== */
 *{
   -webkit-print-color-adjust:economy!important;
   print-color-adjust:economy!important;
+  box-shadow:none!important;
+  text-shadow:none!important;
 }
-/* 案件編號與表頭右上角的派工單號重複，continuous-print 版面精簡不重複顯示。
-   置於此區塊（樣式表最後）以確保優先權高於前面的 .field{display:flex}。 */
-.field.wo-id-field{display:none!important}
-body,.sheet,.page{background:#fff}
+html,body,.sheet,.page,
+.cp-title,.grid,.field,.lbl,.val,.sec-title,.section,
+table,.head-row,.head-row th,tbody td,.box,
+.bottom-block,.sigs,.sig,.sig-date{
+  color:#000!important;
+  background:#fff!important;
+  background-color:#fff!important;
+  opacity:1;
+}
 body{
   font-family:"Noto Sans TC","Microsoft JhengHei",Arial,sans-serif;
-  line-height:1.2;
-}
-body,.hdr,.co-name,.co-sub,.wo-right,.wo-label,.wo-num,.wo-meta,
-.grid,.field,.lbl,.val,.sec-title,.section,table,.head-row,.head-row th,
-tbody td,.box,.bottom-block,.sigs,.sig,.sig-date,.pf{
-  color:#000;text-shadow:none;opacity:1;
+  line-height:1.15;
+  font-size:10pt;
 }
 
-/* 隱藏彩色 Logo 圖檔（點陣機無法可靠呈現灰階／半色調圖像），
-   改以加大的黑色粗體公司名稱作為抬頭識別 */
-.co-logo{display:none}
-.co{gap:0}
-.hdr{border-bottom:0.5mm solid #000;padding-bottom:1.5mm;margin-bottom:1.5mm}
-.co-name{font-size:14pt;font-weight:700}
-.co-sub{font-size:9pt;font-weight:700}
-.wo-label{font-size:14pt;font-weight:700;letter-spacing:2px}
-.wo-num{font-size:11.5pt;font-weight:700}
-.wo-meta{font-size:11pt;font-weight:700;margin-top:0.3mm}
+/* 頁首：僅文字標題，無底線／色塊／Logo */
+.cp-title{
+  font-size:12pt;font-weight:700;color:#000!important;
+  text-align:left;letter-spacing:0.5px;
+  margin:0 0 1.2mm;padding:0;line-height:1.2;
+  flex-shrink:0;border:none;
+}
 
-/* 欄位表格：字級提高至規範下限（主要 11pt／重要欄位 12-14pt），
-   標籤與欄位值一律粗體黑色。以 CSS order／grid-column 調整視覺排列
-   （不更動 HTML 原始順序，digital 模式輸出不受影響），將「技師」提前、
-   「工程名稱」改為單欄，把 6 列欄位表壓縮為 4 列，騰出空間給施工內容／
-   備註兩個自由文字區塊。 */
-.grid{gap:1mm 5mm;margin-bottom:1.5mm;font-size:11pt}
-.lbl{font-size:11pt;font-weight:700;min-width:44px}
-.val{font-size:13pt;font-weight:700}
+/* 欄位區：緊湊雙欄；技師提前、工程名稱單欄以減少列數 */
+.grid{gap:0.6mm 4mm;margin-bottom:1mm;font-size:10pt}
+.lbl{font-size:9.5pt;font-weight:700;min-width:40px;color:#000!important}
+.val{font-size:11pt;font-weight:700;color:#000!important}
 .f-tech{order:4}
 .f-title{order:5;grid-column:auto}
 .f-contact{order:6}
 .f-address{order:7}
 
-/* 區塊標題：由「深色底＋反白字」改為白底黑字＋黑色實線框 */
+/* 區塊標題：白底黑字粗體＋黑色實線框（禁止黑底反白） */
 .sec-title{
-  background:#fff;color:#000;
-  border:0.5mm solid #000;
-  font-size:12.5pt;font-weight:700;
-  padding:0.8mm 2.5mm;margin-bottom:1mm;
+  background:#fff!important;color:#000!important;
+  border:0.4mm solid #000;
+  font-size:10.5pt;font-weight:700;
+  padding:0.4mm 1.8mm;margin-bottom:0.6mm;
+  letter-spacing:1px;
 }
-.section{margin-bottom:1.2mm}
+.section{margin-bottom:0.9mm}
 
-/* 表格：白底黑字表頭＋粗黑實線框（原本深色底＋反白字改掉） */
-table{font-size:11.5pt;line-height:1.2}
-.head-row{background:#fff;color:#000}
+/* 表格：白底黑字表頭＋黑色實線框；覆寫 PDF_LAYOUT_CSS 的大 padding／min-height */
+table{font-size:10pt;line-height:1.15;border-collapse:collapse}
+.head-row,.head-row th{background:#fff!important;color:#000!important}
 .head-row th{
-  border:0.45mm solid #000;
-  font-size:11.5pt;font-weight:700;
-  padding:0.9mm 2mm;min-height:0;line-height:1.15;
+  border:0.4mm solid #000;border-color:#000!important;
+  font-size:10pt;font-weight:700;
+  padding:0.5mm 1.4mm;min-height:0;line-height:1.1;
 }
 tbody td{
-  border:0.45mm solid #000;
-  font-size:11.5pt;font-weight:600;
-  padding:0.9mm 2mm;min-height:0;line-height:1.15;
+  border:0.4mm solid #000;border-color:#000!important;
+  background:#fff!important;color:#000!important;
+  font-size:10pt;font-weight:600;
+  padding:0.5mm 1.4mm;min-height:0;line-height:1.1;
 }
 tbody tr{min-height:0}
 
-/* 施工內容／備註方框：白底黑色實線框（原本淺灰底＋彩色左邊條改掉） */
+/* 施工內容／備註：白底黑框；備註保留手寫高度 */
 .box{
-  border:0.45mm solid #000;
-  background:#fff;
-  padding:1.8mm 3mm;
-  font-size:11.5pt;font-weight:600;line-height:1.25;
+  border:0.4mm solid #000;border-left:0.4mm solid #000;
+  background:#fff!important;color:#000!important;
+  padding:1mm 2mm;
+  font-size:10pt;font-weight:600;line-height:1.2;
 }
+.section-flex .box{min-height:8mm}
+.section-flex-notes .box{min-height:12mm}
 
-/* 簽名列與頁尾：加黑加粗，日期底線改為清楚的黑色實線文字 */
-.bottom-block{margin-top:1.2mm}
-.sigs{gap:5mm;margin-bottom:1.2mm}
+/* 簽名列：保留手寫空間；隱藏品牌頁尾（公司全名／電話等無列印用途資訊） */
+.bottom-block{margin-top:1mm}
+.sigs{gap:4mm;margin-bottom:0}
 .sig{
-  font-size:11pt;font-weight:700;
-  border-top:0.45mm solid #000;
-  padding-top:1.2mm;padding-bottom:0;min-height:0;
+  font-size:10pt;font-weight:700;color:#000!important;
+  border-top:0.4mm solid #000;
+  padding-top:0.8mm;padding-bottom:9mm;min-height:14mm;
+  background:#fff!important;
 }
-.sig-date{font-size:10pt;font-weight:700;color:#000}
-.pf{
-  font-size:9.5pt;font-weight:700;
-  border-top:0.35mm solid #000;padding-top:1.2mm;
-}
+.sig-date{font-size:9pt;font-weight:700;color:#000!important}
+.pf{display:none!important}
 `;
 }
 
@@ -323,6 +313,35 @@ export function buildWorkOrderHtml(order: any, options: WorkOrderHtmlOptions = {
   const companyPhone = order.telephone || "";
   const phoneDisplay = [sitePhone, companyPhone ? `公司 ${companyPhone}` : ""].filter(Boolean).join("　") || "—";
   const woNotes = stripQuotePricingFromNotes(order.notes || "");
+  const isContinuousPrint = mode === "continuous-print";
+
+  /** continuous-print：頁首僅文字標題；digital：完整品牌抬頭（含 Logo）。 */
+  const headerHtml = isContinuousPrint
+    ? `<div class="cp-title">晟風工程｜派工單</div>`
+    : `<div class="hdr">
+    <div class="co">
+      <img src="${logoUrl()}" class="co-logo" alt="">
+      <div>
+        <div class="co-name">${COMPANY.shortName}</div>
+        <div class="co-sub">${COMPANY.subTitle}</div>
+      </div>
+    </div>
+    <div class="wo-right">
+      <div class="wo-label">派工單</div>
+      <div class="wo-num">${woNum}</div>
+      <div class="wo-meta">
+        日期：${esc(order.scheduledDate || printDate)}　狀態：${esc(order.status || "—")}
+      </div>
+    </div>
+  </div>`;
+
+  /** continuous-print：不列印品牌頁尾（公司全名／電話／列印日）；簽名欄保留。 */
+  const footerBrandHtml = isContinuousPrint
+    ? ""
+    : `<div class="pf">
+      <div>${COMPANY.name}　${COMPANY.phone}</div>
+      <div>列印：${printDate}</div>
+    </div>`;
 
   return `<!DOCTYPE html>
 <html lang="zh-TW">
@@ -445,23 +464,7 @@ ${buildCompactOverridesCss(mode)}
 <body>
 <div class="sheet">
 <div class="page">
-  <!-- Header -->
-  <div class="hdr">
-    <div class="co">
-      <img src="${logoUrl()}" class="co-logo" alt="">
-      <div>
-        <div class="co-name">${COMPANY.shortName}</div>
-        <div class="co-sub">${COMPANY.subTitle}</div>
-      </div>
-    </div>
-    <div class="wo-right">
-      <div class="wo-label">派工單</div>
-      <div class="wo-num">${woNum}</div>
-      <div class="wo-meta">
-        日期：${esc(order.scheduledDate || printDate)}　狀態：${esc(order.status || "—")}
-      </div>
-    </div>
-  </div>
+  ${headerHtml}
 
   <!-- Field Grid -->
   <div class="grid">
@@ -509,10 +512,7 @@ ${buildCompactOverridesCss(mode)}
       <div class="sig">技師簽名<br><span class="sig-date">日期：________</span></div>
       <div class="sig">公司經手人<br><span class="sig-date">日期：________</span></div>
     </div>
-    <div class="pf">
-      <div>${COMPANY.name}　${COMPANY.phone}</div>
-      <div>列印：${printDate}</div>
-    </div>
+    ${footerBrandHtml}
   </div>
 </div>
 </div>
