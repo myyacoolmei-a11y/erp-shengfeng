@@ -96,15 +96,16 @@ function buildMaterialRows(equipment: EquipmentRow[]): string {
 function buildContinuousMaterialRows(equipment: EquipmentRow[]): string {
   if (equipment.length === 0) return "";
   return equipment.map((it, i) => {
-    const qty = it.quantity != null ? String(it.quantity) : "—";
-    const unit = it.unit ? esc(it.unit) : "";
-    const qtyDisplay = unit ? `${qty}${unit}` : qty;
+    // 連續紙只顯示數量數字，不附加單位／規格欄
+    const qtyDisplay = it.quantity != null && String(it.quantity).trim() !== ""
+      ? String(it.quantity)
+      : "";
     const remark = equipmentRemark(it);
     const name = remark ? `${equipmentSpec(it)}（${remark}）` : equipmentSpec(it);
     return `<div class="cp-mat-row" data-mat-index="${i + 1}">
       <div class="cp-mat-no">${i + 1}</div>
       <div class="cp-mat-name">${esc(name)}</div>
-      <div class="cp-mat-qty">${qtyDisplay}</div>
+      <div class="cp-mat-qty">${esc(qtyDisplay)}</div>
       <div class="cp-mat-pad" aria-hidden="true"></div>
     </div>`;
   }).join("");
@@ -335,17 +336,19 @@ body{
   flex:0 0 auto;
 }
 .cp-col{display:block;min-width:0}
-.cp-field{display:flex;gap:1.2mm;align-items:baseline;min-width:0;line-height:1.2;margin:0 0 0.15mm}
-/* 技師：保留足夠手寫空間；無資料時空白（不加破折號） */
+.cp-field{display:flex;gap:1.2mm;align-items:baseline;min-width:0;line-height:1.2;margin:0 0 0.12mm}
+/* 技師：保留足夠手寫空間；無資料時空白（不加破折號），僅空值時顯示底線 */
 .cp-field-tech{
-  min-height:5.5mm;
+  min-height:6mm;
   align-items:flex-end;
-  margin-bottom:0.35mm;
+  margin-bottom:0.4mm;
 }
 .cp-field-tech .cp-val{
-  min-height:4.2mm;
-  border-bottom:0.2mm solid #000;
-  padding-bottom:0.2mm;
+  min-height:4.8mm;
+  padding-bottom:0.25mm;
+}
+.cp-field-tech.is-empty .cp-val{
+  border-bottom:0.25mm solid #000;
 }
 .cp-lbl{
   flex:0 0 20mm;
@@ -387,9 +390,9 @@ body{
 }
 .cp-write-space{
   flex:0 0 auto;
-  height:4.5mm;
+  height:5mm;
   width:100%;
-  margin-top:0.3mm;
+  margin-top:0.35mm;
   border:none;
 }
 /* 材料區：吸收剩餘高度；標題／列淺虛線；底部實線與備註分隔 */
@@ -398,7 +401,7 @@ body{
   flex-direction:column;
   width:100%;
   margin:0;
-  padding:0.2mm 0 0.3mm;
+  padding:0.15mm 0 0.25mm;
   border:none;
   border-bottom:0.3mm solid #000;
   overflow:visible;
@@ -406,12 +409,13 @@ body{
   min-height:0;
 }
 .cp-mat-block > .cp-sec{
-  margin:0 0 0.2mm;
+  margin:0 0 0.15mm;
 }
 .cp-mat-header,
 .cp-mat-row{
   display:grid;
-  grid-template-columns:8% 62% 12% 18%;
+  /* 數量靠近品項，右側僅留少量餘白，避免數量孤懸紙緣 */
+  grid-template-columns:7% 68% 11% 14%;
   column-gap:0;
   width:100%;
   max-width:100%;
@@ -420,10 +424,10 @@ body{
 }
 .cp-mat-header{
   font-size:9.5pt;font-weight:700;color:#000!important;
-  padding:0.25mm 0 0.35mm;
+  padding:0.3mm 0 0.4mm;
   margin:0;
   border:none;
-  border-bottom:0.2mm dashed #666;
+  border-bottom:0.18mm dotted #888;
   line-height:1.15;
   flex:0 0 auto;
 }
@@ -438,18 +442,18 @@ body{
 }
 .cp-mat-row{
   font-size:9.5pt;font-weight:500;color:#000!important;
-  padding:0.55mm 0;
+  padding:0.65mm 0;
   margin:0;
   border:none;
-  border-bottom:0.15mm dashed #999;
-  line-height:1.25;
-  min-height:4.2mm;
+  border-bottom:0.15mm dotted #999;
+  line-height:1.28;
+  min-height:4.6mm;
 }
 .cp-mat-row:last-child{
-  border-bottom:0.15mm dashed #999;
+  border-bottom:0.15mm dotted #999;
 }
 .cp-mat-no{text-align:center;font-weight:700}
-.cp-mat-name{text-align:left;min-width:0;padding-right:1mm}
+.cp-mat-name{text-align:left;min-width:0;padding-right:1.2mm}
 .cp-mat-qty{text-align:center;font-weight:700}
 .cp-mat-pad{min-width:0}
 /* 材料下方手寫留白：0/1/2 筆較大；5/8 筆縮小；並吸收剩餘高度 */
@@ -461,9 +465,9 @@ body{
   border:none;
   min-height:8mm;
 }
-.cp-mat-block[data-mat-count="0"] .cp-mat-handwrite{min-height:26mm}
-.cp-mat-block[data-mat-count="1"] .cp-mat-handwrite{min-height:20mm}
-.cp-mat-block[data-mat-count="2"] .cp-mat-handwrite{min-height:16mm}
+.cp-mat-block[data-mat-count="0"] .cp-mat-handwrite{min-height:28mm}
+.cp-mat-block[data-mat-count="1"] .cp-mat-handwrite{min-height:22mm}
+.cp-mat-block[data-mat-count="2"] .cp-mat-handwrite{min-height:17mm}
 .cp-mat-block[data-mat-count="3"] .cp-mat-handwrite{min-height:12mm}
 .cp-mat-block[data-mat-count="4"] .cp-mat-handwrite{min-height:9mm}
 .cp-mat-block[data-mat-count="5"] .cp-mat-handwrite{min-height:6mm}
@@ -476,7 +480,7 @@ body{
   flex-direction:column;
   width:100%;
   margin:0;
-  padding:0.2mm 0 0.25mm;
+  padding:0.15mm 0 0.2mm;
   border:none;
   border-bottom:0.3mm solid #000;
   overflow:visible;
@@ -490,7 +494,7 @@ body{
   align-items:stretch;
   width:100%;
   margin:0;
-  padding:0.2mm 0 0.25mm;
+  padding:0.15mm 0 0.2mm;
   border:none;
   border-bottom:0.3mm solid #000;
   overflow:visible;
@@ -523,9 +527,9 @@ body{
 }
 .cp-fee-blank{
   display:inline-block;
-  width:26mm;
-  max-width:26mm;
-  min-width:24mm;
+  width:28mm;
+  max-width:28mm;
+  min-width:25mm;
   border:none;
   border-bottom:0.3mm solid #000;
   height:0;
@@ -535,21 +539,21 @@ body{
 /* 客戶備註：乾淨留白，不畫輔助線 */
 .cp-cust-space{
   flex:1 1 auto;
-  min-height:5mm;
+  min-height:4.5mm;
   width:100%;
-  margin-top:0.2mm;
+  margin-top:0.15mm;
   border:none;
 }
-/* 簽名：標題 → 14mm 留白 → 簽名線 → 短距 → 日期：（不加線） */
+/* 簽名：標題 → 13mm 留白 → 簽名線 → 短距 → 日期：（不加線） */
 .cp-sigs{
   display:grid;
   grid-template-columns:minmax(0,1fr) minmax(0,1fr);
   column-gap:8mm;
   width:100%;
   max-width:100%;
-  margin-top:0.35mm;
+  margin-top:0.25mm;
   margin-bottom:0;
-  padding-top:0.2mm;
+  padding-top:0.15mm;
   border:none;
   overflow:visible;
   align-items:start;
@@ -573,9 +577,9 @@ body{
   line-height:1.1;
 }
 .cp-sig-space{
-  flex:0 0 14mm;
-  height:14mm;
-  min-height:14mm;
+  flex:0 0 13mm;
+  height:13mm;
+  min-height:13mm;
   width:100%;
 }
 .cp-sig-line{
@@ -590,7 +594,7 @@ body{
 .cp-sig-date{
   font-size:10pt;font-weight:700;
   display:block;
-  margin-top:1.6mm;
+  margin-top:1.2mm;
   flex:0 0 auto;
   line-height:1.1;
   border:none;
@@ -675,7 +679,7 @@ ${buildCompactOverridesCss(mode)}
     <div class="cp-col">
       <div class="cp-field"><span class="cp-lbl">案件編號</span><span class="cp-val">${esc(woNum)}</span></div>
       <div class="cp-field"><span class="cp-lbl">客戶</span><span class="cp-val">${dash(order.customerName)}</span></div>
-      <div class="cp-field cp-field-tech"><span class="cp-lbl">技師</span><span class="cp-val">${esc(techDisplay)}</span></div>
+      <div class="cp-field cp-field-tech${techDisplay ? "" : " is-empty"}"><span class="cp-lbl">技師</span><span class="cp-val">${esc(techDisplay)}</span></div>
       <div class="cp-field"><span class="cp-lbl">現場聯絡人</span><span class="cp-val">${dash(order.contactPerson)}</span></div>
       <div class="cp-field"><span class="cp-lbl">地址</span><span class="cp-val">${dash(order.installAddress)}</span></div>
     </div>
