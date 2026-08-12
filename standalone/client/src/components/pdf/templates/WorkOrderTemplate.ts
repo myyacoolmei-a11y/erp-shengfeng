@@ -504,19 +504,18 @@ body{
 .page:has(.cp-mat-block[data-mat-count="8"]) .cp-sig-date{margin-top:1mm}
 .page:has(.cp-mat-block[data-mat-count="7"]) .cp-write-space,
 .page:has(.cp-mat-block[data-mat-count="5"]) .cp-write-space{height:3mm}
-/* 備註：僅標題＋內容；緊湊；底部實線與工程收費分隔 */
+/* 備註：僅標題＋內容；緊湊；與工程收費之間不加分隔線，僅留白銜接 */
 .cp-notes-block{
   display:flex;
   flex-direction:column;
   width:100%;
   margin:0;
-  padding:0.1mm 0 0.15mm;
+  padding:0.1mm 0 0.55mm;
   border:none;
-  border-bottom:0.3mm solid #000;
   overflow:visible;
   flex:0 0 auto;
 }
-/* 工程收費（左）＋客戶備註（右）；底部單條實線靠近簽名 */
+/* 工程收費（左）＋客戶備註（右）；底部單條實線與簽名分隔 */
 .cp-fee-block{
   display:grid;
   grid-template-columns:minmax(0,42%) minmax(0,58%);
@@ -524,7 +523,7 @@ body{
   align-items:stretch;
   width:100%;
   margin:0;
-  padding:0.1mm 0 0.15mm;
+  padding:0.2mm 0 0.15mm;
   border:none;
   border-bottom:0.3mm solid #000;
   overflow:visible;
@@ -574,21 +573,24 @@ body{
   margin-top:0.1mm;
   border:none;
 }
-/* 簽名：標題 → 12mm 留白 → 簽名線 → 短距 → 日期：（不加線） */
+/* 簽名：與上方分隔線留 2–3mm → 標題 → 12mm 留白 → 簽名線 → 短距 → 日期：（不加線） */
 .cp-sigs{
   display:grid;
   grid-template-columns:minmax(0,1fr) minmax(0,1fr);
   column-gap:8mm;
   width:100%;
   max-width:100%;
-  margin-top:0.15mm;
+  margin-top:0;
   margin-bottom:0;
-  padding-top:0.1mm;
+  padding-top:2.4mm;
   border:none;
   overflow:visible;
   align-items:start;
   flex:0 0 auto;
 }
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-sigs{padding-top:2mm}
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-notes-block{padding-bottom:0.35mm}
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-sig-date{margin-top:0.9mm}
 .cp-sig{
   box-sizing:border-box;
   min-width:0;
@@ -722,7 +724,7 @@ ${buildCompactOverridesCss(mode)}
   </div>
 
   <section class="cp-block">
-    <h2 class="cp-sec">施工內容</h2>
+    <h2 class="cp-sec">施工內容：</h2>
     <div class="cp-text">${esc(descText)}</div>
     <div class="cp-write-space" aria-hidden="true"></div>
   </section>
@@ -733,13 +735,13 @@ ${buildCompactOverridesCss(mode)}
   </section>
 
   <section class="cp-notes-block">
-    <h2 class="cp-sec">備註</h2>
+    <h2 class="cp-sec">備註：</h2>
     <div class="cp-text">${esc(notesText)}</div>
   </section>
 
   <section class="cp-fee-block">
     <div class="cp-fee-left">
-      <h2 class="cp-sec">工程收費</h2>
+      <h2 class="cp-sec">工程收費：</h2>
       <div class="cp-fee-opt"><span class="cp-check" aria-hidden="true"></span>收費 <span class="cp-fee-blank"></span> 元</div>
       <div class="cp-fee-opt"><span class="cp-check" aria-hidden="true"></span>無收費</div>
     </div>
@@ -751,13 +753,13 @@ ${buildCompactOverridesCss(mode)}
 
   <div class="cp-sigs">
     <div class="cp-sig">
-      <div class="cp-sig-title">客戶簽名</div>
+      <div class="cp-sig-title">客戶簽名：</div>
       <div class="cp-sig-space"></div>
       <div class="cp-sig-line"></div>
       <div class="cp-sig-date">日期：</div>
     </div>
     <div class="cp-sig">
-      <div class="cp-sig-title">技師簽名</div>
+      <div class="cp-sig-title">技師簽名：</div>
       <div class="cp-sig-space"></div>
       <div class="cp-sig-line"></div>
       <div class="cp-sig-date">日期：</div>
