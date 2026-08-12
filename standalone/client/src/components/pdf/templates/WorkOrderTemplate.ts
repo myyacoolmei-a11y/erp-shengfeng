@@ -105,6 +105,7 @@ function buildContinuousMaterialRows(equipment: EquipmentRow[]): string {
       <div class="cp-mat-no">${i + 1}</div>
       <div class="cp-mat-name">${esc(name)}</div>
       <div class="cp-mat-qty">${qtyDisplay}</div>
+      <div class="cp-mat-pad" aria-hidden="true"></div>
     </div>`;
   }).join("");
 }
@@ -211,8 +212,8 @@ html,body{
   transform:none;
   zoom:normal;
 }
-/* 標題／欄位區：依內容高度，不壓縮 */
-.cp-title,.cp-grid,.cp-mat-list,.cp-mat-row,.cp-text,.cp-field,.cp-val,.cp-lbl,.cp-mat-name{
+/* 標題／基本資料／材料列：依內容高度，不壓縮 */
+.cp-title,.cp-grid,.cp-mat-list,.cp-mat-row,.cp-mat-header,.cp-text,.cp-field,.cp-val,.cp-lbl,.cp-mat-name,.cp-mat-no,.cp-mat-qty,.cp-mat-pad{
   box-sizing:border-box;
   position:static;
   flex-shrink:0;
@@ -222,8 +223,19 @@ html,body{
   transform:none;
   zoom:normal;
 }
-/* 施工／材料／備註：剩餘垂直空間均分放大，避免內容擠在上半部 */
-.cp-block,.cp-mat-block,.cp-notes-block{
+/* 材料區：列數多時不額外搶垂直空間，避免壓到下方 */
+.cp-mat-block{
+  box-sizing:border-box;
+  position:static;
+  flex:0 0 auto;
+  height:auto;
+  min-height:auto;
+  max-height:none;
+  transform:none;
+  zoom:normal;
+}
+/* 施工／備註／工程收費+客戶備註：剩餘高度均分填補（材料少時） */
+.cp-block,.cp-notes-block,.cp-fee-block{
   box-sizing:border-box;
   position:static;
   flex:1 0 auto;
@@ -233,7 +245,7 @@ html,body{
   transform:none;
   zoom:normal;
 }
-/* 簽名欄固定靠近頁底，完整顯示客戶／技師簽名與日期 */
+/* 簽名欄固定靠近頁底 */
 .cp-sigs{
   box-sizing:border-box;
   position:static;
@@ -259,10 +271,8 @@ html,body{
 
 /**
  * continuous-print 點陣機極簡樣式（置於 PDF_LAYOUT_CSS 之後以覆寫）。
- * 白底 #fff、字線 #000、無 Logo／色塊／縱線／品項間橫線。
- * 橫向撐滿可印安全區；中段區塊均分剩餘高度；簽名靠頁底。
- * 禁止 absolute／transform:scale／zoom／負 margin／overflow:hidden 裁切。
- * 字級維持單頁可容納最多材料列；以 flex 垂直填滿 139.7mm，不用 scale 壓縮。
+ * 白底 #fff、字線 #000；標題放大加粗；材料三欄＋右側手寫空白；
+ * 備註後接工程收費／客戶備註；簽名靠頁底。禁止 scale／zoom／裁切。
  */
 function buildCompactOverridesCss(mode: WorkOrderHtmlMode): string {
   if (mode !== "continuous-print") return "";
@@ -282,22 +292,22 @@ html,body,.sheet,.page{
 }
 body{
   font-family:"Noto Sans TC","Microsoft JhengHei",Arial,sans-serif;
-  font-size:11pt;
-  line-height:1.25;
+  font-size:10.5pt;
+  line-height:1.2;
   font-weight:500;
 }
 .cp-title{
   display:block;
   text-align:center;
-  font-size:12pt;
-  font-weight:700;
+  font-size:15pt;
+  font-weight:900;
   color:#000!important;
-  letter-spacing:0.5px;
-  margin:0 0 0.5mm;
+  letter-spacing:1.2px;
+  margin:0 0 0.4mm;
   padding:0;
   border:none;
   background:transparent!important;
-  line-height:1.15;
+  line-height:1.1;
   flex:0 0 auto;
 }
 .cp-grid{
@@ -306,8 +316,8 @@ body{
   column-gap:4mm;
   row-gap:0;
   width:100%;
-  margin:0 0 0.5mm;
-  padding:0 0 0.5mm;
+  margin:0 0 0.4mm;
+  padding:0 0 0.4mm;
   border:none;
   border-bottom:0.3mm solid #000;
   flex:0 0 auto;
@@ -316,11 +326,11 @@ body{
 .cp-field{display:flex;gap:1.2mm;align-items:baseline;min-width:0;line-height:1.15;margin:0}
 .cp-lbl{
   flex:0 0 20mm;
-  font-size:11pt;font-weight:700;color:#000!important;
+  font-size:10.5pt;font-weight:700;color:#000!important;
 }
 .cp-val{
   flex:1 1 auto;
-  font-size:12pt;font-weight:700;color:#000!important;
+  font-size:11pt;font-weight:700;color:#000!important;
   min-width:0;
 }
 .cp-block{
@@ -328,35 +338,45 @@ body{
   flex-direction:column;
   width:100%;
   margin:0;
-  padding:0.4mm 0 0.5mm;
+  padding:0.3mm 0 0.35mm;
   border:none;
   border-bottom:0.3mm solid #000;
   overflow:visible;
+  min-height:9mm;
 }
 .cp-sec{
   display:block;
   width:100%;
-  font-size:11pt;font-weight:700;color:#000!important;
-  margin:0 0 0.25mm;padding:0;
+  font-size:10.5pt;font-weight:700;color:#000!important;
+  margin:0 0 0.15mm;padding:0;
   border:none;background:transparent!important;
-  line-height:1.15;
+  line-height:1.1;
   flex:0 0 auto;
 }
 .cp-text{
   display:block;
   width:100%;
-  font-size:11pt;font-weight:500;color:#000!important;
+  font-size:10.5pt;font-weight:500;color:#000!important;
   margin:0;padding:0;line-height:1.15;
   border:none;background:transparent!important;
   flex:0 0 auto;
 }
-/* 材料區：標題 → 表頭 → 列表（同一 map）→ 區塊底線；備註在區塊之後 */
+/* 手寫線：材料少時由 flex 拉高；材料多時僅保留最小高度 */
+.cp-write-space{
+  flex:1 1 auto;
+  min-height:3.5mm;
+  width:100%;
+  margin-top:0.8mm;
+  border:none;
+  border-bottom:0.25mm solid #000;
+}
+/* 材料區：項次 8%／品項 62%／數量 12%／右側手寫空白 18% */
 .cp-mat-block{
   display:flex;
   flex-direction:column;
   width:100%;
   margin:0;
-  padding:0.4mm 0 0.6mm;
+  padding:0.25mm 0 0.3mm;
   border:none;
   border-bottom:0.3mm solid #000;
   overflow:visible;
@@ -364,20 +384,20 @@ body{
 .cp-mat-header,
 .cp-mat-row{
   display:grid;
-  grid-template-columns:12mm minmax(0,1fr) 15mm;
-  column-gap:1.2mm;
+  grid-template-columns:8% 62% 12% 18%;
+  column-gap:0;
   width:100%;
   max-width:100%;
   align-items:start;
   overflow:visible;
 }
 .cp-mat-header{
-  font-size:11pt;font-weight:700;color:#000!important;
-  padding:0 0 0.25mm;
-  margin:0 0 0.2mm;
+  font-size:10pt;font-weight:700;color:#000!important;
+  padding:0 0 0.15mm;
+  margin:0 0 0.1mm;
   border:none;
   border-bottom:0.3mm solid #000;
-  line-height:1.15;
+  line-height:1.1;
   flex:0 0 auto;
 }
 .cp-mat-list{
@@ -390,25 +410,77 @@ body{
   flex:0 0 auto;
 }
 .cp-mat-row{
-  font-size:11pt;font-weight:500;color:#000!important;
-  padding:0.15mm 0;
+  font-size:10pt;font-weight:500;color:#000!important;
+  padding:0.08mm 0;
   margin:0;
   border:none;
-  line-height:1.2;
+  line-height:1.12;
 }
 .cp-mat-no{text-align:center;font-weight:700}
-.cp-mat-name{text-align:left;min-width:0}
-.cp-mat-qty{text-align:right;font-weight:700}
-.cp-mat-empty{display:block;font-size:11pt;color:#000!important;margin:0}
+.cp-mat-name{text-align:left;min-width:0;padding-right:1mm}
+.cp-mat-qty{text-align:center;font-weight:700}
+.cp-mat-pad{min-width:0}
+.cp-mat-empty-row .cp-mat-name{font-weight:500}
 .cp-notes-block{
   display:flex;
   flex-direction:column;
   width:100%;
   margin:0;
-  padding:0.4mm 0 0.5mm;
+  padding:0.25mm 0 0.3mm;
   border:none;
   border-bottom:0.3mm solid #000;
   overflow:visible;
+  min-height:6mm;
+}
+/* 工程收費（左）＋客戶備註（右） */
+.cp-fee-block{
+  display:grid;
+  grid-template-columns:minmax(0,42%) minmax(0,58%);
+  column-gap:4mm;
+  width:100%;
+  margin:0;
+  padding:0.3mm 0 0.35mm;
+  border:none;
+  border-bottom:0.3mm solid #000;
+  overflow:visible;
+  min-height:12mm;
+}
+.cp-fee-left,.cp-fee-right{
+  display:flex;
+  flex-direction:column;
+  min-width:0;
+  overflow:visible;
+}
+.cp-fee-opt{
+  display:block;
+  font-size:10pt;font-weight:500;color:#000!important;
+  line-height:1.25;
+  margin:0.15mm 0 0;
+}
+.cp-fee-blank{
+  display:inline-block;
+  min-width:20mm;
+  border:none;
+  border-bottom:0.25mm solid #000;
+  height:0;
+  vertical-align:baseline;
+  margin:0 0.8mm;
+}
+.cp-cust-lines{
+  flex:1 1 auto;
+  display:flex;
+  flex-direction:column;
+  justify-content:flex-end;
+  gap:2.8mm;
+  min-height:7mm;
+  margin-top:0.3mm;
+}
+.cp-cust-line{
+  width:100%;
+  border:none;
+  border-bottom:0.25mm solid #000;
+  height:0;
+  flex:0 0 auto;
 }
 .cp-sigs{
   display:grid;
@@ -418,15 +490,15 @@ body{
   max-width:100%;
   margin-top:auto;
   margin-bottom:0;
-  padding-top:0.5mm;
+  padding-top:0.3mm;
   border:none;
   overflow:visible;
 }
 .cp-sig{
   box-sizing:border-box;
   min-width:0;
-  min-height:25mm;
-  height:25mm;
+  min-height:18mm;
+  height:18mm;
   display:flex;
   flex-direction:column;
   color:#000!important;
@@ -435,26 +507,26 @@ body{
   overflow:visible;
 }
 .cp-sig-title{
-  font-size:11pt;font-weight:700;
+  font-size:10.5pt;font-weight:700;
   margin:0;padding:0;
   flex:0 0 auto;
-  line-height:1.15;
+  line-height:1.1;
 }
-.cp-sig-space{flex:1 1 auto;min-height:8mm}
+.cp-sig-space{flex:1 1 auto;min-height:5mm}
 .cp-sig-line{
   width:100%;
   max-width:70mm;
   border:none;
   border-bottom:0.3mm solid #000;
   height:0;
-  margin:0 0 0.5mm;
+  margin:0 0 0.3mm;
   flex:0 0 auto;
 }
 .cp-sig-date{
-  font-size:11pt;font-weight:700;
+  font-size:10pt;font-weight:700;
   display:flex;align-items:baseline;gap:1.2mm;
   flex:0 0 auto;
-  line-height:1.15;
+  line-height:1.1;
 }
 .cp-sig-date-line{
   flex:1 1 auto;
@@ -464,7 +536,6 @@ body{
   height:0;
   min-width:18mm;
 }
-/* 僅隱藏 digital 模式殘留選擇器；連續紙材料不用 table，避免誤傷 */
 .hdr,.co-logo,.pf,.head-row{display:none!important}
 `;
 }
@@ -501,10 +572,15 @@ export function buildWorkOrderHtml(order: any, options: WorkOrderHtmlOptions = {
     const matRows = buildContinuousMaterialRows(equipment);
     const descText = (order.description && String(order.description).trim()) || "—";
     const notesText = (woNotes && woNotes.trim()) || "—";
-    const matBody = matRows
-      ? `<div class="cp-mat-header"><div class="cp-mat-no">項次</div><div class="cp-mat-name">品項名稱</div><div class="cp-mat-qty">數量</div></div>
-    <div class="cp-mat-list">${matRows}</div>`
-      : `<p class="cp-mat-empty">—</p>`;
+    const matList = matRows
+      || `<div class="cp-mat-row cp-mat-empty-row" data-mat-index="0">
+      <div class="cp-mat-no"></div>
+      <div class="cp-mat-name">—</div>
+      <div class="cp-mat-qty"></div>
+      <div class="cp-mat-pad" aria-hidden="true"></div>
+    </div>`;
+    const matBody = `<div class="cp-mat-header"><div class="cp-mat-no">項次</div><div class="cp-mat-name">品項名稱</div><div class="cp-mat-qty">數量</div><div class="cp-mat-pad" aria-hidden="true"></div></div>
+    <div class="cp-mat-list">${matList}</div>`;
     return `<!DOCTYPE html>
 <html lang="zh-TW">
 <head>
@@ -519,7 +595,7 @@ ${buildCompactOverridesCss(mode)}
 <body>
 <div class="sheet">
 <div class="page">
-  <div class="cp-title">晟風工程｜派工單</div>
+  <div class="cp-title">晟風空調工程｜派工單</div>
 
   <div class="cp-grid">
     <div class="cp-col">
@@ -539,6 +615,7 @@ ${buildCompactOverridesCss(mode)}
   <section class="cp-block">
     <h2 class="cp-sec">施工內容</h2>
     <div class="cp-text">${esc(descText)}</div>
+    <div class="cp-write-space" aria-hidden="true"></div>
   </section>
 
   <section class="cp-mat-block" data-mat-count="${equipment.length}">
@@ -549,6 +626,21 @@ ${buildCompactOverridesCss(mode)}
   <section class="cp-notes-block">
     <h2 class="cp-sec">備註</h2>
     <div class="cp-text">${esc(notesText)}</div>
+  </section>
+
+  <section class="cp-fee-block">
+    <div class="cp-fee-left">
+      <h2 class="cp-sec">工程收費</h2>
+      <div class="cp-fee-opt">□ 收費 <span class="cp-fee-blank"></span> 元</div>
+      <div class="cp-fee-opt">□ 無收費</div>
+    </div>
+    <div class="cp-fee-right">
+      <h2 class="cp-sec">客戶備註：</h2>
+      <div class="cp-cust-lines" aria-hidden="true">
+        <div class="cp-cust-line"></div>
+        <div class="cp-cust-line"></div>
+      </div>
+    </div>
   </section>
 
   <div class="cp-sigs">
