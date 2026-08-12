@@ -116,8 +116,7 @@ export interface WorkOrderHtmlOptions {
    * "digital"（預設）：既有 PDF 下載／行動裝置／LINE 分享流程使用，
    * 版面與既有輸出完全相同，不受連續報表紙改版影響。
    * "continuous-print"：實際列印到點陣印表機連續報表紙時使用 —
-   * 套用送紙孔／撕線安全邊界，並套用「列印校正」偏移量，強制單頁輸出、
-   * 100% 實際尺寸、不縮放。
+   * @page size:auto（方向由列印對話框決定），套用送紙孔／撕線安全邊界與列印校正。
    */
   mode?: WorkOrderHtmlMode;
   /** 僅 mode==="continuous-print" 時套用：正式列印時的上下左右位置校正（mm）。 */
@@ -127,9 +126,9 @@ export interface WorkOrderHtmlOptions {
 /**
  * 產生紙張／頁面容器的 CSS。
  * - digital：維持既有 240×140mm。
- * - continuous-print：固定 @page 與根容器為 241.3mm × 139.7mm（不可加 landscape），
- *   安全邊以 padding 內縮；內容寬度不得超過可印區，避免水平拆成兩頁。
- *   不以 overflow:hidden 裁掉必要文字；長文靠換行與彈性區塊收縮維持單頁。
+ * - continuous-print：@page 使用 size:auto（不鎖定直向／橫向），由 Windows 列印對話框
+ *   的 9.5×5.5in 自訂紙張決定方向；內容根容器仍維持 241.3×139.7mm 版面。
+ *   安全邊以 padding 內縮；不以 overflow:hidden 裁掉必要文字。
  */
 function buildPageBoxCss(mode: WorkOrderHtmlMode, calibration: PrintCalibration): string {
   if (mode !== "continuous-print") {
@@ -158,11 +157,12 @@ function buildPageBoxCss(mode: WorkOrderHtmlMode, calibration: PrintCalibration)
   const padLeft = Math.max(0, MARGIN_LEFT_MM + offsetXMm);
 
   return `
-/* EPSON 點陣機連續紙半張：${WIDTH_MM}mm × ${HEIGHT_MM}mm（9.5×5.5in，非 9.5×11）。
-   明確寬高後不可再加 landscape。根容器固定同尺寸 + border-box；
-   送紙孔／撕線安全區以 padding 內縮。列印校正併入 padding（不用 transform）。
-   內容區採正常文件流（block），禁止 flex 壓縮／absolute／負 margin 造成材料末筆與備註重疊。 */
-@page{size:${WIDTH_MM}mm ${HEIGHT_MM}mm;margin:0}
+/* EPSON 點陣機連續紙半張內容區：${WIDTH_MM}mm × ${HEIGHT_MM}mm（9.5×5.5in）。
+   @page size:auto — 不鎖定直向／橫向；由列印對話框自訂紙張控制方向。
+   .sheet 高度固定 ${HEIGHT_MM}mm，寬度滿版；左右送紙孔以 padding 保留。
+   .page 撐滿可印區；中段區塊均分垂直空間；簽名靠底。
+   禁止 transform:scale／zoom／自動壓縮；禁止 overflow 裁切底部。 */
+@page{size:auto;margin:0}
 html,body{
   box-sizing:border-box;
   width:${WIDTH_MM}mm;
@@ -171,6 +171,8 @@ html,body{
   max-height:${HEIGHT_MM}mm;
   margin:0;padding:0;
   background:#fff;
+  transform:none;
+  zoom:normal;
 }
 .sheet{
   box-sizing:border-box;
@@ -187,30 +189,61 @@ html,body{
   break-before:avoid;
   position:static;
   overflow:visible;
+  transform:none;
+  zoom:normal;
 }
 .page{
   box-sizing:border-box;
-  display:block;
+  display:flex;
+  flex-direction:column;
+  align-items:stretch;
+  justify-content:flex-start;
   width:100%;
   max-width:100%;
-  height:auto;
-  min-height:0;
-  max-height:none;
+  height:100%;
+  min-height:100%;
+  max-height:100%;
   margin:0;padding:0;
   position:static;
   overflow:visible;
   break-inside:avoid;
   page-break-inside:avoid;
+  transform:none;
+  zoom:normal;
 }
-.cp-title,.cp-grid,.cp-block,.cp-mat-block,.cp-mat-list,.cp-mat-row,.cp-notes-block,.cp-sigs,.cp-text,.cp-field,.cp-val,.cp-lbl,.cp-mat-name{
+/* 標題／欄位區：依內容高度，不壓縮 */
+.cp-title,.cp-grid,.cp-mat-list,.cp-mat-row,.cp-text,.cp-field,.cp-val,.cp-lbl,.cp-mat-name{
   box-sizing:border-box;
   position:static;
-  flex:none;
+  flex-shrink:0;
   height:auto;
   min-height:auto;
   max-height:none;
   transform:none;
-  margin-top:0;
+  zoom:normal;
+}
+/* 施工／材料／備註：剩餘垂直空間均分放大，避免內容擠在上半部 */
+.cp-block,.cp-mat-block,.cp-notes-block{
+  box-sizing:border-box;
+  position:static;
+  flex:1 0 auto;
+  height:auto;
+  min-height:auto;
+  max-height:none;
+  transform:none;
+  zoom:normal;
+}
+/* 簽名欄固定靠近頁底，完整顯示客戶／技師簽名與日期 */
+.cp-sigs{
+  box-sizing:border-box;
+  position:static;
+  flex:0 0 auto;
+  margin-top:auto;
+  height:auto;
+  min-height:auto;
+  max-height:none;
+  transform:none;
+  zoom:normal;
 }
 .cp-text,.cp-val{
   overflow-wrap:anywhere;
@@ -226,9 +259,10 @@ html,body{
 
 /**
  * continuous-print 點陣機極簡樣式（置於 PDF_LAYOUT_CSS 之後以覆寫）。
- * 白底 #fff、字線 #000、無 Logo／色塊／縱線／品項間橫線；簽名區加大。
- * 材料／備註採單一文件流：材料列表同一容器 map 渲染，底線在列表結束後，
- * 備註在材料區塊結束標籤之後。禁止 absolute／transform／負 margin／overflow:hidden 裁切。
+ * 白底 #fff、字線 #000、無 Logo／色塊／縱線／品項間橫線。
+ * 橫向撐滿可印安全區；中段區塊均分剩餘高度；簽名靠頁底。
+ * 禁止 absolute／transform:scale／zoom／負 margin／overflow:hidden 裁切。
+ * 字級維持單頁可容納最多材料列；以 flex 垂直填滿 139.7mm，不用 scale 壓縮。
  */
 function buildCompactOverridesCss(mode: WorkOrderHtmlMode): string {
   if (mode !== "continuous-print") return "";
@@ -238,6 +272,8 @@ function buildCompactOverridesCss(mode: WorkOrderHtmlMode): string {
   print-color-adjust:economy!important;
   box-shadow:none!important;
   text-shadow:none!important;
+  transform:none!important;
+  zoom:normal!important;
 }
 html,body,.sheet,.page{
   color:#000!important;
@@ -262,6 +298,7 @@ body{
   border:none;
   background:transparent!important;
   line-height:1.15;
+  flex:0 0 auto;
 }
 .cp-grid{
   display:grid;
@@ -273,6 +310,7 @@ body{
   padding:0 0 0.5mm;
   border:none;
   border-bottom:0.3mm solid #000;
+  flex:0 0 auto;
 }
 .cp-col{display:block;min-width:0}
 .cp-field{display:flex;gap:1.2mm;align-items:baseline;min-width:0;line-height:1.15;margin:0}
@@ -286,7 +324,8 @@ body{
   min-width:0;
 }
 .cp-block{
-  display:block;
+  display:flex;
+  flex-direction:column;
   width:100%;
   margin:0;
   padding:0.4mm 0 0.5mm;
@@ -301,6 +340,7 @@ body{
   margin:0 0 0.25mm;padding:0;
   border:none;background:transparent!important;
   line-height:1.15;
+  flex:0 0 auto;
 }
 .cp-text{
   display:block;
@@ -308,10 +348,12 @@ body{
   font-size:11pt;font-weight:500;color:#000!important;
   margin:0;padding:0;line-height:1.15;
   border:none;background:transparent!important;
+  flex:0 0 auto;
 }
 /* 材料區：標題 → 表頭 → 列表（同一 map）→ 區塊底線；備註在區塊之後 */
 .cp-mat-block{
-  display:block;
+  display:flex;
+  flex-direction:column;
   width:100%;
   margin:0;
   padding:0.4mm 0 0.6mm;
@@ -336,6 +378,7 @@ body{
   border:none;
   border-bottom:0.3mm solid #000;
   line-height:1.15;
+  flex:0 0 auto;
 }
 .cp-mat-list{
   display:block;
@@ -344,6 +387,7 @@ body{
   padding:0;
   border:none;
   overflow:visible;
+  flex:0 0 auto;
 }
 .cp-mat-row{
   font-size:11pt;font-weight:500;color:#000!important;
@@ -357,7 +401,8 @@ body{
 .cp-mat-qty{text-align:right;font-weight:700}
 .cp-mat-empty{display:block;font-size:11pt;color:#000!important;margin:0}
 .cp-notes-block{
-  display:block;
+  display:flex;
+  flex-direction:column;
   width:100%;
   margin:0;
   padding:0.4mm 0 0.5mm;
@@ -371,7 +416,8 @@ body{
   column-gap:8mm;
   width:100%;
   max-width:100%;
-  margin:0.8mm 0 0;
+  margin-top:auto;
+  margin-bottom:0;
   padding-top:0.5mm;
   border:none;
   overflow:visible;
@@ -396,8 +442,8 @@ body{
 }
 .cp-sig-space{flex:1 1 auto;min-height:8mm}
 .cp-sig-line{
-  width:70mm;
-  max-width:100%;
+  width:100%;
+  max-width:70mm;
   border:none;
   border-bottom:0.3mm solid #000;
   height:0;

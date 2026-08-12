@@ -8,8 +8,9 @@
 // 版面／列印程式碼。
 export const CONTINUOUS_PAPER = {
   /**
-   * 紙張寬度（英吋）＝ 9.5（僅供說明／校正 UI；@page 必須使用 WIDTH_MM／HEIGHT_MM，
-   * 不可改設為 9.5×11，也不可在明確寬高後再加 landscape）。
+   * 紙張寬度（英吋）＝ 9.5（說明／校正 UI／內容根容器尺寸用）。
+   * window.print 的 @page 使用 size:auto，由 Windows 列印對話框的 9.5×5.5
+   * 自訂紙張控制直向／橫向；不可在 @page 寫死 mm 尺寸或加 landscape。
    */
   WIDTH_IN: 9.5,
   /** 紙張高度（英吋）＝ 5.5（半張；非整張 11in）。 */
