@@ -416,8 +416,8 @@ body{
 .cp-mat-header,
 .cp-mat-row{
   display:grid;
-  /* 數量靠近品項，右側僅留少量餘白 */
-  grid-template-columns:8% 70% 12% 10%;
+  /* 數量縮窄並靠近品項；右側留白避免貼孔，但不把數量甩到紙緣 */
+  grid-template-columns:8% 58% 12% 22%;
   column-gap:0;
   width:100%;
   max-width:100%;
