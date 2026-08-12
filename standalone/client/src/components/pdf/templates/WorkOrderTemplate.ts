@@ -213,7 +213,7 @@ html,body{
   zoom:normal;
 }
 /* 標題／基本資料／材料列／施工／備註：依內容高度，不硬撐空白 */
-.cp-title,.cp-grid,.cp-block,.cp-notes-block,.cp-mat-list,.cp-mat-row,.cp-mat-header,.cp-text,.cp-field,.cp-val,.cp-lbl,.cp-mat-name,.cp-mat-no,.cp-mat-qty,.cp-mat-pad,.cp-write-space{
+.cp-title,.cp-grid,.cp-block,.cp-notes-block,.cp-mat-list,.cp-mat-row,.cp-mat-header,.cp-text,.cp-field,.cp-val,.cp-lbl,.cp-mat-name,.cp-mat-no,.cp-mat-qty,.cp-mat-pad,.cp-write-space,.cp-cust-space{
   box-sizing:border-box;
   position:static;
   flex-shrink:0;
@@ -223,7 +223,7 @@ html,body{
   transform:none;
   zoom:normal;
 }
-/* 材料區：依列數佔高，行距在 compact CSS 加大 */
+/* 材料區：依列數佔高 */
 .cp-mat-block{
   box-sizing:border-box;
   position:static;
@@ -234,7 +234,7 @@ html,body{
   transform:none;
   zoom:normal;
 }
-/* 工程收費＋客戶備註：內容高度；材料少時不搶簽名區 */
+/* 工程收費＋客戶備註 */
 .cp-fee-block{
   box-sizing:border-box;
   position:static;
@@ -245,11 +245,11 @@ html,body{
   transform:none;
   zoom:normal;
 }
-/* 簽名欄靠底；剩餘高度給簽名留白 */
+/* 簽名欄靠頁底，但內部高度固定、不硬撐大片空白 */
 .cp-sigs{
   box-sizing:border-box;
   position:static;
-  flex:1 0 auto;
+  flex:0 0 auto;
   margin-top:auto;
   height:auto;
   min-height:auto;
@@ -270,9 +270,9 @@ html,body{
 }
 
 /**
- * continuous-print 點陣機極簡樣式（置於 PDF_LAYOUT_CSS 之後以覆寫）。
- * 施工／備註不硬撐空白；材料行距加大；工程收費用 CSS 勾選框；
- * 簽名留白加大、日期僅文字無底線。禁止 scale／zoom／裁切。
+ * continuous-print 點陣機極簡樣式。
+ * 主區塊單條實線分隔；材料標題／列用淺虛線；簽名每側一條實線＋一條日期線。
+ * 禁止 scale／zoom／裁切；禁止連續多條貼近實線。
  */
 function buildCompactOverridesCss(mode: WorkOrderHtmlMode): string {
   if (mode !== "continuous-print") return "";
@@ -317,7 +317,7 @@ body{
   row-gap:0;
   width:100%;
   margin:0 0 0.4mm;
-  padding:0 0 0.4mm;
+  padding:0 0 0.45mm;
   border:none;
   border-bottom:0.3mm solid #000;
   flex:0 0 auto;
@@ -333,13 +333,13 @@ body{
   font-size:11pt;font-weight:700;color:#000!important;
   min-width:0;
 }
-/* 施工內容：內容＋約 1～2 行手寫，不硬撐大片空白 */
+/* 施工內容：精簡高度；底部單條實線與材料區分隔（手寫區不加線） */
 .cp-block{
   display:flex;
   flex-direction:column;
   width:100%;
   margin:0;
-  padding:0.3mm 0 0.35mm;
+  padding:0.25mm 0 0.35mm;
   border:none;
   border-bottom:0.3mm solid #000;
   overflow:visible;
@@ -364,26 +364,25 @@ body{
 }
 .cp-write-space{
   flex:0 0 auto;
-  height:3mm;
+  height:2mm;
   width:100%;
-  margin-top:0.35mm;
+  margin-top:0.25mm;
   border:none;
-  border-bottom:0.25mm solid #000;
 }
-/* 材料區：項次 8%／品項 62%／數量 12%／右側手寫空白 18%；行距加大（仍須容納 8 筆單頁） */
+/* 材料區：欄位標題／列用虛線；區塊底部單條實線與備註分隔 */
 .cp-mat-block{
   display:flex;
   flex-direction:column;
   width:100%;
   margin:0;
-  padding:0.3mm 0 0.35mm;
+  padding:0.25mm 0 0.35mm;
   border:none;
   border-bottom:0.3mm solid #000;
   overflow:visible;
   flex:0 0 auto;
 }
 .cp-mat-block > .cp-sec{
-  margin:0 0 0.25mm;
+  margin:0 0 0.2mm;
 }
 .cp-mat-header,
 .cp-mat-row{
@@ -392,16 +391,16 @@ body{
   column-gap:0;
   width:100%;
   max-width:100%;
-  align-items:center;
+  align-items:start;
   overflow:visible;
 }
 .cp-mat-header{
-  font-size:10pt;font-weight:700;color:#000!important;
-  padding:0.22mm 0 0.28mm;
-  margin:0 0 0.22mm;
+  font-size:9.5pt;font-weight:700;color:#000!important;
+  padding:0.15mm 0 0.2mm;
+  margin:0;
   border:none;
-  border-bottom:0.3mm solid #000;
-  line-height:1.22;
+  border-bottom:0.2mm dashed #000;
+  line-height:1.12;
   flex:0 0 auto;
 }
 .cp-mat-list{
@@ -414,30 +413,34 @@ body{
   flex:0 0 auto;
 }
 .cp-mat-row{
-  font-size:10pt;font-weight:500;color:#000!important;
-  padding:0.14mm 0;
+  font-size:9.5pt;font-weight:500;color:#000!important;
+  padding:0.12mm 0;
   margin:0;
   border:none;
-  line-height:1.2;
+  border-bottom:0.15mm dashed #000;
+  line-height:1.12;
+}
+.cp-mat-row:last-child{
+  border-bottom:none;
 }
 .cp-mat-no{text-align:center;font-weight:700}
 .cp-mat-name{text-align:left;min-width:0;padding-right:1mm}
 .cp-mat-qty{text-align:center;font-weight:700}
 .cp-mat-pad{min-width:0}
 .cp-mat-empty-row .cp-mat-name{font-weight:500}
-/* 備註：內容完整顯示即可，不硬撐空白 */
+/* 備註：僅標題＋內容；底部實線與工程收費分隔 */
 .cp-notes-block{
   display:flex;
   flex-direction:column;
   width:100%;
   margin:0;
-  padding:0.2mm 0 0.25mm;
+  padding:0.25mm 0 0.3mm;
   border:none;
   border-bottom:0.3mm solid #000;
   overflow:visible;
   flex:0 0 auto;
 }
-/* 工程收費（左）＋客戶備註（右） */
+/* 工程收費（左）＋客戶備註（右）；底部單條實線與簽名分隔 */
 .cp-fee-block{
   display:grid;
   grid-template-columns:minmax(0,42%) minmax(0,58%);
@@ -445,7 +448,7 @@ body{
   align-items:stretch;
   width:100%;
   margin:0;
-  padding:0.2mm 0 0.3mm;
+  padding:0.25mm 0 0.35mm;
   border:none;
   border-bottom:0.3mm solid #000;
   overflow:visible;
@@ -460,51 +463,42 @@ body{
 .cp-fee-opt{
   display:flex;
   align-items:center;
-  gap:1.5mm;
-  font-size:10.5pt;font-weight:500;color:#000!important;
-  line-height:1.15;
-  margin:0.55mm 0 0;
+  gap:1.4mm;
+  font-size:10pt;font-weight:500;color:#000!important;
+  line-height:1.1;
+  margin:0.3mm 0 0;
 }
 .cp-check{
   box-sizing:border-box;
-  flex:0 0 4.2mm;
-  width:4.2mm;
-  height:4.2mm;
-  min-width:4.2mm;
-  min-height:4.2mm;
+  flex:0 0 4mm;
+  width:4mm;
+  height:4mm;
+  min-width:4mm;
+  min-height:4mm;
   border:0.35mm solid #000;
   background:transparent!important;
   display:inline-block;
 }
 .cp-fee-blank{
   display:inline-block;
-  width:28mm;
-  max-width:28mm;
-  min-width:25mm;
+  width:26mm;
+  max-width:26mm;
+  min-width:24mm;
   border:none;
   border-bottom:0.3mm solid #000;
   height:0;
   vertical-align:baseline;
-  margin:0 1mm 0 0.6mm;
+  margin:0 0.8mm 0 0.5mm;
 }
-.cp-cust-lines{
+/* 客戶備註：乾淨留白，不畫手寫橫線 */
+.cp-cust-space{
   flex:1 1 auto;
-  display:flex;
-  flex-direction:column;
-  justify-content:space-evenly;
-  gap:0;
-  min-height:8mm;
-  margin-top:0.4mm;
-  padding-bottom:0.2mm;
-}
-.cp-cust-line{
+  min-height:5mm;
   width:100%;
+  margin-top:0.2mm;
   border:none;
-  border-bottom:0.25mm solid #000;
-  height:0;
-  flex:0 0 auto;
 }
-/* 簽名：大留白；日期僅文字、無短底線 */
+/* 簽名：標題 → 留白 12mm → 簽名線 → 3mm → 日期：____ */
 .cp-sigs{
   display:grid;
   grid-template-columns:minmax(0,1fr) minmax(0,1fr);
@@ -513,17 +507,16 @@ body{
   max-width:100%;
   margin-top:auto;
   margin-bottom:0;
-  padding-top:0.4mm;
+  padding-top:0.3mm;
   border:none;
   overflow:visible;
-  align-items:stretch;
-  flex:1 0 auto;
+  align-items:start;
+  flex:0 0 auto;
 }
 .cp-sig{
   box-sizing:border-box;
   min-width:0;
-  min-height:16.5mm;
-  height:100%;
+  height:auto;
   display:flex;
   flex-direction:column;
   color:#000!important;
@@ -532,24 +525,63 @@ body{
   overflow:visible;
 }
 .cp-sig-title{
-  font-size:10.5pt;font-weight:700;
+  font-size:10pt;font-weight:700;
   margin:0;padding:0;
   flex:0 0 auto;
-  line-height:1.15;
+  line-height:1.1;
 }
 .cp-sig-space{
-  flex:1 1 auto;
-  min-height:9mm;
+  flex:0 0 12mm;
+  height:12mm;
+  min-height:12mm;
+  width:100%;
+}
+.cp-sig-line{
+  width:100%;
+  max-width:75mm;
+  border:none;
+  border-bottom:0.3mm solid #000;
+  height:0;
+  margin:0;
+  flex:0 0 auto;
 }
 .cp-sig-date{
-  font-size:10.5pt;font-weight:700;
-  display:block;
-  margin-top:1.5mm;
+  font-size:10pt;font-weight:700;
+  display:flex;
+  align-items:baseline;
+  gap:1mm;
+  margin-top:2.8mm;
   flex:0 0 auto;
-  line-height:1.2;
+  line-height:1.1;
+}
+.cp-sig-date-line{
+  flex:1 1 auto;
+  max-width:42mm;
+  min-width:28mm;
+  border:none;
+  border-bottom:0.3mm solid #000;
+  height:0;
 }
 .hdr,.co-logo,.pf,.head-row{display:none!important}
 `;
+}
+
+/** 從備註抽出「負責業務」供基本資料欄顯示（列印版面用，不改資料來源）。 */
+function splitSalesRepFromNotes(notes: string, order: Record<string, unknown>): { notesText: string; salesRep: string } {
+  let salesRep = String(order.salesRepName || order.primarySalesRepName || "").trim();
+  const kept: string[] = [];
+  for (const line of notes.split(/\r?\n/)) {
+    const m = line.match(/^\s*負責業務\s*[：:]\s*(.*)$/);
+    if (m) {
+      if (!salesRep) salesRep = String(m[1] || "").trim();
+      continue;
+    }
+    kept.push(line);
+  }
+  return {
+    notesText: kept.join("\n").replace(/\n+$/g, "").trim(),
+    salesRep,
+  };
 }
 
 function dash(v: unknown): string {
@@ -583,7 +615,8 @@ export function buildWorkOrderHtml(order: any, options: WorkOrderHtmlOptions = {
   if (isContinuousPrint) {
     const matRows = buildContinuousMaterialRows(equipment);
     const descText = (order.description && String(order.description).trim()) || "—";
-    const notesText = (woNotes && woNotes.trim()) || "—";
+    const { notesText: notesBody, salesRep } = splitSalesRepFromNotes(woNotes, order);
+    const notesText = (notesBody && notesBody.trim()) || "—";
     const matList = matRows
       || `<div class="cp-mat-row cp-mat-empty-row" data-mat-index="0">
       <div class="cp-mat-no"></div>
@@ -621,6 +654,7 @@ ${buildCompactOverridesCss(mode)}
       <div class="cp-field"><span class="cp-lbl">日期</span><span class="cp-val">${dash(order.scheduledDate || printDate)}</span></div>
       <div class="cp-field"><span class="cp-lbl">電話</span><span class="cp-val">${esc(phoneDisplay)}</span></div>
       <div class="cp-field"><span class="cp-lbl">工程名稱</span><span class="cp-val">${dash(order.title)}</span></div>
+      <div class="cp-field"><span class="cp-lbl">負責業務</span><span class="cp-val">${dash(salesRep)}</span></div>
     </div>
   </div>
 
@@ -648,10 +682,7 @@ ${buildCompactOverridesCss(mode)}
     </div>
     <div class="cp-fee-right">
       <h2 class="cp-sec">客戶備註：</h2>
-      <div class="cp-cust-lines" aria-hidden="true">
-        <div class="cp-cust-line"></div>
-        <div class="cp-cust-line"></div>
-      </div>
+      <div class="cp-cust-space" aria-hidden="true"></div>
     </div>
   </section>
 
@@ -659,12 +690,14 @@ ${buildCompactOverridesCss(mode)}
     <div class="cp-sig">
       <div class="cp-sig-title">客戶簽名</div>
       <div class="cp-sig-space"></div>
-      <div class="cp-sig-date">日期：</div>
+      <div class="cp-sig-line"></div>
+      <div class="cp-sig-date">日期：<span class="cp-sig-date-line"></span></div>
     </div>
     <div class="cp-sig">
       <div class="cp-sig-title">技師簽名</div>
       <div class="cp-sig-space"></div>
-      <div class="cp-sig-date">日期：</div>
+      <div class="cp-sig-line"></div>
+      <div class="cp-sig-date">日期：<span class="cp-sig-date-line"></span></div>
     </div>
   </div>
 </div>
