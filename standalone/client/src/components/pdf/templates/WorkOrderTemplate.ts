@@ -352,8 +352,14 @@ body{
   border-bottom:0.25mm solid #000;
 }
 .cp-lbl{
-  flex:0 0 20mm;
+  flex:0 0 24mm;
+  width:24mm;
+  min-width:24mm;
+  max-width:24mm;
   font-size:10.5pt;font-weight:700;color:#000!important;
+  white-space:nowrap;
+  letter-spacing:0;
+  overflow:visible;
 }
 .cp-val{
   flex:1 1 auto;
@@ -701,17 +707,17 @@ ${buildCompactOverridesCss(mode)}
 
   <div class="cp-grid">
     <div class="cp-col">
-      <div class="cp-field"><span class="cp-lbl">案件編號</span><span class="cp-val">${esc(woNum)}</span></div>
-      <div class="cp-field"><span class="cp-lbl">客戶</span><span class="cp-val">${dash(order.customerName)}</span></div>
-      <div class="cp-field cp-field-tech${techDisplay ? "" : " is-empty"}"><span class="cp-lbl">技師</span><span class="cp-val">${esc(techDisplay)}</span></div>
-      <div class="cp-field"><span class="cp-lbl">現場聯絡人</span><span class="cp-val">${dash(order.contactPerson)}</span></div>
-      <div class="cp-field"><span class="cp-lbl">地址</span><span class="cp-val">${dash(order.installAddress)}</span></div>
+      <div class="cp-field"><span class="cp-lbl">案件編號：</span><span class="cp-val">${esc(woNum)}</span></div>
+      <div class="cp-field"><span class="cp-lbl">客戶：</span><span class="cp-val">${dash(order.customerName)}</span></div>
+      <div class="cp-field cp-field-tech${techDisplay ? "" : " is-empty"}"><span class="cp-lbl">技師：</span><span class="cp-val">${esc(techDisplay)}</span></div>
+      <div class="cp-field"><span class="cp-lbl">現場聯絡人：</span><span class="cp-val">${dash(order.contactPerson)}</span></div>
+      <div class="cp-field"><span class="cp-lbl">地址：</span><span class="cp-val">${dash(order.installAddress)}</span></div>
     </div>
     <div class="cp-col">
-      <div class="cp-field"><span class="cp-lbl">日期</span><span class="cp-val">${dash(order.scheduledDate || printDate)}</span></div>
-      <div class="cp-field"><span class="cp-lbl">電話</span><span class="cp-val">${esc(phoneDisplay)}</span></div>
-      <div class="cp-field"><span class="cp-lbl">工程名稱</span><span class="cp-val">${dash(order.title)}</span></div>
-      <div class="cp-field"><span class="cp-lbl">負責業務</span><span class="cp-val">${dash(salesRep)}</span></div>
+      <div class="cp-field"><span class="cp-lbl">日期：</span><span class="cp-val">${dash(order.scheduledDate || printDate)}</span></div>
+      <div class="cp-field"><span class="cp-lbl">電話：</span><span class="cp-val">${esc(phoneDisplay)}</span></div>
+      <div class="cp-field"><span class="cp-lbl">工程名稱：</span><span class="cp-val">${dash(order.title)}</span></div>
+      <div class="cp-field"><span class="cp-lbl">負責業務：</span><span class="cp-val">${dash(salesRep)}</span></div>
     </div>
   </div>
 
