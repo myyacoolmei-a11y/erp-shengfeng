@@ -224,7 +224,7 @@ html,body{
   transform:none;
   zoom:normal;
 }
-/* 材料區吸收剩餘高度；手寫留白在清單與備註之間 */
+/* 材料區吸收剩餘高度；手寫留白在清單與備註之間；不可縮到小於內容（避免壓到下方） */
 .cp-mat-block{
   box-sizing:border-box;
   position:static;
@@ -232,10 +232,11 @@ html,body{
   display:flex;
   flex-direction:column;
   height:auto;
-  min-height:0;
+  min-height:auto;
   max-height:none;
   transform:none;
   zoom:normal;
+  overflow:visible;
 }
 .cp-mat-handwrite{
   box-sizing:border-box;
@@ -316,11 +317,11 @@ body{
   font-weight:900;
   color:#000!important;
   letter-spacing:1.2px;
-  margin:0 0 0.4mm;
+  margin:0 0 0.25mm;
   padding:0;
   border:none;
   background:transparent!important;
-  line-height:1.1;
+  line-height:1.08;
   flex:0 0 auto;
 }
 .cp-grid{
@@ -329,14 +330,14 @@ body{
   column-gap:4mm;
   row-gap:0;
   width:100%;
-  margin:0 0 0.4mm;
-  padding:0 0 0.45mm;
+  margin:0 0 0.25mm;
+  padding:0 0 0.3mm;
   border:none;
   border-bottom:0.3mm solid #000;
   flex:0 0 auto;
 }
 .cp-col{display:block;min-width:0}
-.cp-field{display:flex;gap:1.2mm;align-items:baseline;min-width:0;line-height:1.2;margin:0 0 0.12mm}
+.cp-field{display:flex;gap:1.2mm;align-items:baseline;min-width:0;line-height:1.12;margin:0}
 /* 技師：保留足夠手寫空間；無資料時空白（不加破折號），僅空值時顯示底線 */
 .cp-field-tech{
   min-height:6mm;
@@ -365,7 +366,7 @@ body{
   flex-direction:column;
   width:100%;
   margin:0;
-  padding:0.2mm 0 0.3mm;
+  padding:0.12mm 0 0.2mm;
   border:none;
   border-bottom:0.3mm solid #000;
   overflow:visible;
@@ -375,27 +376,27 @@ body{
   display:block;
   width:100%;
   font-size:10.5pt;font-weight:700;color:#000!important;
-  margin:0 0 0.2mm;padding:0;
+  margin:0 0 0.15mm;padding:0;
   border:none;background:transparent!important;
-  line-height:1.15;
+  line-height:1.1;
   flex:0 0 auto;
 }
 .cp-text{
   display:block;
   width:100%;
   font-size:10.5pt;font-weight:500;color:#000!important;
-  margin:0;padding:0;line-height:1.2;
+  margin:0;padding:0;line-height:1.15;
   border:none;background:transparent!important;
   flex:0 0 auto;
 }
 .cp-write-space{
   flex:0 0 auto;
-  height:5mm;
+  height:3.5mm;
   width:100%;
-  margin-top:0.35mm;
+  margin-top:0.2mm;
   border:none;
 }
-/* 材料區：吸收剩餘高度；標題／列淺虛線；底部實線與備註分隔 */
+/* 材料區：可長高吸收留白，但不縮到小於材料列（避免重疊下方） */
 .cp-mat-block{
   display:flex;
   flex-direction:column;
@@ -406,16 +407,17 @@ body{
   border-bottom:0.3mm solid #000;
   overflow:visible;
   flex:1 1 auto;
-  min-height:0;
+  min-height:auto;
 }
 .cp-mat-block > .cp-sec{
   margin:0 0 0.15mm;
+  flex:0 0 auto;
 }
 .cp-mat-header,
 .cp-mat-row{
   display:grid;
-  /* 數量靠近品項，右側僅留少量餘白，避免數量孤懸紙緣 */
-  grid-template-columns:7% 68% 11% 14%;
+  /* 數量靠近品項，右側僅留少量餘白 */
+  grid-template-columns:8% 70% 12% 10%;
   column-gap:0;
   width:100%;
   max-width:100%;
@@ -424,11 +426,11 @@ body{
 }
 .cp-mat-header{
   font-size:9.5pt;font-weight:700;color:#000!important;
-  padding:0.3mm 0 0.4mm;
+  padding:0.25mm 0 0.3mm;
   margin:0;
   border:none;
   border-bottom:0.18mm dotted #888;
-  line-height:1.15;
+  line-height:1.12;
   flex:0 0 auto;
 }
 .cp-mat-list{
@@ -442,12 +444,13 @@ body{
 }
 .cp-mat-row{
   font-size:9.5pt;font-weight:500;color:#000!important;
-  padding:0.65mm 0;
+  padding:0.28mm 0;
   margin:0;
   border:none;
   border-bottom:0.15mm dotted #999;
-  line-height:1.28;
-  min-height:4.6mm;
+  line-height:1.15;
+  min-height:3.4mm;
+  flex:0 0 auto;
 }
 .cp-mat-row:last-child{
   border-bottom:0.15mm dotted #999;
@@ -456,31 +459,52 @@ body{
 .cp-mat-name{text-align:left;min-width:0;padding-right:1.2mm}
 .cp-mat-qty{text-align:center;font-weight:700}
 .cp-mat-pad{min-width:0}
-/* 材料下方手寫留白：0/1/2 筆較大；5/8 筆縮小；並吸收剩餘高度 */
+/* 材料下方手寫留白：0/1/2 筆較大；5/8 筆縮小；有餘高時再伸展 */
 .cp-mat-handwrite{
   flex:1 1 auto;
   width:100%;
   margin:0;
   padding:0;
   border:none;
-  min-height:8mm;
+  min-height:5mm;
 }
-.cp-mat-block[data-mat-count="0"] .cp-mat-handwrite{min-height:28mm}
-.cp-mat-block[data-mat-count="1"] .cp-mat-handwrite{min-height:22mm}
-.cp-mat-block[data-mat-count="2"] .cp-mat-handwrite{min-height:17mm}
-.cp-mat-block[data-mat-count="3"] .cp-mat-handwrite{min-height:12mm}
-.cp-mat-block[data-mat-count="4"] .cp-mat-handwrite{min-height:9mm}
-.cp-mat-block[data-mat-count="5"] .cp-mat-handwrite{min-height:6mm}
-.cp-mat-block[data-mat-count="6"] .cp-mat-handwrite{min-height:5mm}
-.cp-mat-block[data-mat-count="7"] .cp-mat-handwrite{min-height:4mm}
-.cp-mat-block[data-mat-count="8"] .cp-mat-handwrite{min-height:3mm}
+.cp-mat-block[data-mat-count="0"] .cp-mat-handwrite{min-height:26mm}
+.cp-mat-block[data-mat-count="1"] .cp-mat-handwrite{min-height:20mm}
+.cp-mat-block[data-mat-count="2"] .cp-mat-handwrite{min-height:15mm}
+.cp-mat-block[data-mat-count="3"] .cp-mat-handwrite{min-height:10mm}
+.cp-mat-block[data-mat-count="4"] .cp-mat-handwrite{min-height:7mm}
+.cp-mat-block[data-mat-count="5"] .cp-mat-handwrite{min-height:4mm}
+.cp-mat-block[data-mat-count="6"] .cp-mat-handwrite{min-height:3mm}
+.cp-mat-block[data-mat-count="7"] .cp-mat-handwrite{min-height:2.5mm}
+.cp-mat-block[data-mat-count="8"] .cp-mat-handwrite{min-height:2mm}
+/* 多筆材料時略壓材料列高，確保單頁且不重疊 */
+.cp-mat-block[data-mat-count="5"] .cp-mat-row,
+.cp-mat-block[data-mat-count="6"] .cp-mat-row{
+  padding:0.2mm 0;
+  min-height:3.2mm;
+  line-height:1.12;
+}
+.cp-mat-block[data-mat-count="7"] .cp-mat-row,
+.cp-mat-block[data-mat-count="8"] .cp-mat-row{
+  padding:0.08mm 0;
+  min-height:2.85mm;
+  line-height:1.08;
+  font-size:9pt;
+}
+.cp-mat-block[data-mat-count="8"] .cp-mat-handwrite{min-height:1.5mm}
+/* 8 筆時再壓縮施工手寫與客戶備註最小高，確保單頁 */
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-write-space{height:2.5mm}
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-cust-space{min-height:2.8mm}
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-sig-date{margin-top:1mm}
+.page:has(.cp-mat-block[data-mat-count="7"]) .cp-write-space,
+.page:has(.cp-mat-block[data-mat-count="5"]) .cp-write-space{height:3mm}
 /* 備註：僅標題＋內容；緊湊；底部實線與工程收費分隔 */
 .cp-notes-block{
   display:flex;
   flex-direction:column;
   width:100%;
   margin:0;
-  padding:0.15mm 0 0.2mm;
+  padding:0.1mm 0 0.15mm;
   border:none;
   border-bottom:0.3mm solid #000;
   overflow:visible;
@@ -494,7 +518,7 @@ body{
   align-items:stretch;
   width:100%;
   margin:0;
-  padding:0.15mm 0 0.2mm;
+  padding:0.1mm 0 0.15mm;
   border:none;
   border-bottom:0.3mm solid #000;
   overflow:visible;
@@ -511,8 +535,8 @@ body{
   align-items:center;
   gap:1.4mm;
   font-size:10pt;font-weight:500;color:#000!important;
-  line-height:1.1;
-  margin:0.35mm 0 0;
+  line-height:1.08;
+  margin:0.2mm 0 0;
 }
 .cp-check{
   box-sizing:border-box;
@@ -539,21 +563,21 @@ body{
 /* 客戶備註：乾淨留白，不畫輔助線 */
 .cp-cust-space{
   flex:1 1 auto;
-  min-height:4.5mm;
+  min-height:3.5mm;
   width:100%;
-  margin-top:0.15mm;
+  margin-top:0.1mm;
   border:none;
 }
-/* 簽名：標題 → 13mm 留白 → 簽名線 → 短距 → 日期：（不加線） */
+/* 簽名：標題 → 12mm 留白 → 簽名線 → 短距 → 日期：（不加線） */
 .cp-sigs{
   display:grid;
   grid-template-columns:minmax(0,1fr) minmax(0,1fr);
   column-gap:8mm;
   width:100%;
   max-width:100%;
-  margin-top:0.25mm;
+  margin-top:0.15mm;
   margin-bottom:0;
-  padding-top:0.15mm;
+  padding-top:0.1mm;
   border:none;
   overflow:visible;
   align-items:start;
@@ -577,9 +601,9 @@ body{
   line-height:1.1;
 }
 .cp-sig-space{
-  flex:0 0 13mm;
-  height:13mm;
-  min-height:13mm;
+  flex:0 0 12mm;
+  height:12mm;
+  min-height:12mm;
   width:100%;
 }
 .cp-sig-line{
