@@ -4,7 +4,7 @@ import {
   useDeleteWholesaleOrder, useGetWholesaleOrder,
   useListWholesaleCustomers, useListWholesaleProducts, useListWholesaleReceivables,
   getListWholesaleOrdersQueryKey, getListWholesaleReceivablesQueryKey,
-  getGetWholesaleOrderQueryKey,
+  getGetWholesaleOrderQueryKey, getWholesaleOrder,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -66,13 +66,26 @@ function emptyForm(): OForm {
   };
 }
 
+/** 列表 API 刻意不帶 items；列印／分享前改抓單筆完整訂單（含商品明細）。 */
+async function loadOrderForPrint(order: any): Promise<any> {
+  if (!order?.id) return order;
+  const hasItems = Array.isArray(order.items) && order.items.length > 0;
+  if (hasItems) return order;
+  try {
+    return await getWholesaleOrder(order.id);
+  } catch {
+    return order;
+  }
+}
+
 async function printOrder(
   order: any,
   setPdfPreview: (v: { url: string; filename: string } | null) => void,
   toast: any,
 ) {
-  const orderNo = order.orderNumber || `WO-${String(order.id).padStart(4, "0")}`;
-  const html = buildDeliveryHtml(order);
+  const full = await loadOrderForPrint(order);
+  const orderNo = full.orderNumber || `WO-${String(full.id).padStart(4, "0")}`;
+  const html = buildDeliveryHtml(full);
   if (isMobileDevice()) {
     await handlePdfAction({
       html,
@@ -94,8 +107,9 @@ async function shareOrderViaLine(
   setPdfPreview: (v: { url: string; filename: string } | null) => void,
   toast: any,
 ) {
-  const orderNo = order.orderNumber || `WO-${String(order.id).padStart(4, "0")}`;
-  const html = buildDeliveryHtml(order);
+  const full = await loadOrderForPrint(order);
+  const orderNo = full.orderNumber || `WO-${String(full.id).padStart(4, "0")}`;
+  const html = buildDeliveryHtml(full);
   await handlePdfAction({
     html,
     docNo: orderNo,
