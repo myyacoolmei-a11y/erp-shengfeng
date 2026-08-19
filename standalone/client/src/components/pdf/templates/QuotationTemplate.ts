@@ -5,7 +5,9 @@ import { logoUrl, COMPANY, COLORS, esc, fmtMoney, PDF_LAYOUT_CSS } from "./brand
 import { computeQuoteAmounts } from "../quote-amounts";
 
 export function buildQuotationHtml(quote: any, baseOrigin?: string): string {
-  const items: any[] = quote.items ?? [];
+  // Line items come only from quotation.items (quotes / quote_items).
+  // Never fall back to work-order equipmentItems or other dispatch fields.
+  const items: any[] = Array.isArray(quote?.items) ? quote.items : [];
   const d = quote.createdAt ? new Date(quote.createdAt) : new Date();
   const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
   const quoteNo = `Q-${ymd}-${String(quote.id).padStart(4, "0")}`;

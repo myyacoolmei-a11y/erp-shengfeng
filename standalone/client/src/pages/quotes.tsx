@@ -26,11 +26,16 @@ import { CustomerSelector, type CustomerSelectorValue } from "@/components/custo
 import { BindCustomerDialog } from "@/components/bind-customer-dialog";
 import { PdfPreviewDialog } from "@/components/pdf/pdf-preview-dialog";
 import {
-  handlePdfAction,
   openLineShareText,
 } from "@/components/pdf/pdf-service";
-import { buildQuotationHtml } from "@/components/pdf/templates/QuotationTemplate";
 import { computeQuoteAmounts } from "@/components/pdf/quote-amounts";
+import {
+  getQuoteNo,
+  loadQuoteForDocument,
+  printQuoteDocument,
+  downloadQuoteDocument,
+  previewQuoteDocument,
+} from "@/lib/quotationPdf";
 import { invalidateStatistics } from "@/lib/invalidateStatistics";
 import {
   formatQuoteNumber,
@@ -309,11 +314,6 @@ function quoteToForm(q: any): QuoteForm {
   };
 }
 
-// ── Shared PDF helpers (client-side A4 html2pdf; same source for print / LINE / download) ──
-function getQuoteNo(quote: any): string {
-  return formatQuoteNumber(quote);
-}
-
 function buildLineShareMessage(quote: any, shareUrl: string): string {
   const quoteNo = getQuoteNo(quote);
   const name = quote.customerName || quote.title || "客戶";
@@ -352,44 +352,6 @@ async function createQuoteShareUrl(quoteId: number): Promise<string> {
   const data = await res.json();
   if (!data?.url) throw new Error(data?.message || "未取得分享網址");
   return String(data.url);
-}
-
-async function printQuote(
-  quote: any,
-  setPdfPreview: (v: { url: string; filename: string } | null) => void,
-  toast: any,
-) {
-  const quoteNo = getQuoteNo(quote);
-  const html = buildQuotationHtml(quote);
-  await handlePdfAction({
-    html,
-    docNo: quoteNo,
-    filename: `報價單_${quoteNo}.pdf`,
-    title: "晟風工程報價單",
-    action: "print",
-    setPdfPreview,
-    toast,
-    pageFormat: "a4",
-  });
-}
-
-async function downloadQuotePdf(
-  quote: any,
-  setPdfPreview: (v: { url: string; filename: string } | null) => void,
-  toast: any,
-) {
-  const quoteNo = getQuoteNo(quote);
-  const html = buildQuotationHtml(quote);
-  await handlePdfAction({
-    html,
-    docNo: quoteNo,
-    filename: `報價單_${quoteNo}.pdf`,
-    title: "晟風工程報價單",
-    action: "download",
-    setPdfPreview,
-    toast,
-    pageFormat: "a4",
-  });
 }
 
 // ── ItemCard ───────────────────────────────────────────────────────────────
@@ -755,7 +717,17 @@ export default function QuotesPage() {
     createMutation.mutate({ data: formToApi(draft) as any });
   }
 
-  function openEdit(q: any) { setForm(quoteToForm(q)); setEditItem(q); }
+  async function openEdit(q: any) {
+    setForm(quoteToForm(q));
+    setEditItem(q);
+    try {
+      const full = await loadQuoteForDocument(q.id);
+      setForm(quoteToForm(full));
+      setEditItem(full);
+    } catch {
+      /* keep list snapshot if GET /quotes/:id fails */
+    }
+  }
 
   async function runPdfAction(quoteId: number, fn: () => Promise<void>) {
     if (pdfBusyId != null) return;
@@ -768,11 +740,22 @@ export default function QuotesPage() {
   }
 
   async function shareQuoteViaLineWithFallback(q: any) {
-    const quoteNo = getQuoteNo(q);
     toast({ title: "PDF 產生中…", description: "準備 LINE 分享內容" });
+    let quote = q;
+    try {
+      quote = await loadQuoteForDocument(q.id);
+    } catch (e: any) {
+      toast({
+        title: "無法載入原始報價單",
+        description: String(e?.message || e),
+        variant: "destructive",
+      });
+      return;
+    }
+
     let shareUrl = "";
     try {
-      shareUrl = await createQuoteShareUrl(q.id);
+      shareUrl = await createQuoteShareUrl(quote.id);
     } catch (e: any) {
       toast({
         title: "無法建立公開分享連結",
@@ -782,20 +765,10 @@ export default function QuotesPage() {
       return;
     }
 
-    const html = buildQuotationHtml(q);
-    const blob = await handlePdfAction({
-      html,
-      docNo: quoteNo,
-      filename: `報價單_${quoteNo}.pdf`,
-      title: "晟風工程報價單",
-      action: "preview",
-      setPdfPreview,
-      toast,
-      pageFormat: "a4",
-    });
+    const blob = await previewQuoteDocument(quote, setPdfPreview, toast as any);
     if (!blob) return;
 
-    const message = buildLineShareMessage(q, shareUrl);
+    const message = buildLineShareMessage(quote, shareUrl);
     const win = openLineShareText(message);
     if (win) {
       toast({ title: "已開啟 LINE 分享", description: "分享內容含報價單公開連結" });
@@ -820,10 +793,26 @@ export default function QuotesPage() {
   }
 
   useEffect(() => {
-    if (!focusQuoteId || !quotes?.length) return;
-    const q = quotes.find((x: any) => x.id === focusQuoteId);
-    if (q) openEdit(q);
-  }, [focusQuoteId, quotes]);
+    if (!focusQuoteId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const q = await loadQuoteForDocument(focusQuoteId);
+        if (cancelled) return;
+        setStatusFilter(quoteCategory(q));
+        setForm(quoteToForm(q));
+        setEditItem(q);
+      } catch (e: any) {
+        if (cancelled) return;
+        toast({
+          title: "無法載入來源報價單",
+          description: String(e?.message || e),
+          variant: "destructive",
+        });
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [focusQuoteId]);
 
   function addItem() { setForm(f => ({ ...f, items: [...f.items, { ...DEFAULT_ITEM(), sortOrder: f.items.length }] })); }
   function removeItem(idx: number) { setForm(f => ({ ...f, items: f.items.filter((_, i) => i !== idx) })); }
@@ -988,7 +977,10 @@ export default function QuotesPage() {
                           label={pdfBusyId === q.id ? "PDF 產生中…" : "列印報價單"}
                           disabled={pdfBusyId != null}
                           onClick={() =>
-                            void runPdfAction(q.id, () => printQuote(q, setPdfPreview, toast as any))
+                            void runPdfAction(q.id, async () => {
+                              const quote = await loadQuoteForDocument(q.id);
+                              await printQuoteDocument(quote, setPdfPreview, toast as any);
+                            })
                           }
                         >
                           <Printer className="h-4 w-4" />
@@ -1034,9 +1026,10 @@ export default function QuotesPage() {
                             <DropdownMenuItem
                               disabled={pdfBusyId != null}
                               onClick={() =>
-                                void runPdfAction(q.id, () =>
-                                  downloadQuotePdf(q, setPdfPreview, toast as any),
-                                )
+                                void runPdfAction(q.id, async () => {
+                                  const quote = await loadQuoteForDocument(q.id);
+                                  await downloadQuoteDocument(quote, setPdfPreview, toast as any);
+                                })
                               }
                             >
                               <Download className="h-3.5 w-3.5 mr-2" />下載 PDF

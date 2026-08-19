@@ -13,6 +13,7 @@ import { CreateWorkOrderBody, UpdateWorkOrderBody, CreateProgressBody } from "@w
 import { requireRoleOrFeature, effectiveRoles } from "../lib/auth";
 import { syncQuoteDispatchStatus } from "../lib/quoteWorkflow";
 import { formatQuoteNumber } from "../lib/quoteStatus";
+import { loadQuoteDocument } from "../lib/quoteDocument";
 import { stripQuotePricingFromNotes } from "../../shared/workOrderNotes.ts";
 import {
   buildUserAssignmentContext,
@@ -423,6 +424,50 @@ router.post("/work-orders", async (req, res): Promise<void> => {
   });
 
   res.status(201).json(formatOrder({ ...updated, linkedCustomerName: null }, insertedItems));
+});
+
+/**
+ * 派工單 → 來源報價單：依 work_orders.quote_id 回查原始 quotes + quote_items。
+ * 禁止用施工內容／材料設備重組報價單。
+ */
+router.get("/work-orders/:id/source-quote", async (req, res): Promise<void> => {
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const id = parseInt(raw, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const [order] = await db
+    .select({
+      id: workOrdersTable.id,
+      quoteId: workOrdersTable.quoteId,
+      assignedTo: workOrdersTable.assignedTo,
+      assistantTo: workOrdersTable.assistantTo,
+      technicians: workOrdersTable.technicians,
+    })
+    .from(workOrdersTable)
+    .where(eq(workOrdersTable.id, id));
+
+  if (!order) { res.status(404).json({ error: "找不到派工單" }); return; }
+
+  if (req.user && shouldFilterWorkOrdersByAssignment(req.user)) {
+    const ctx = await buildUserAssignmentContext(req.user);
+    if (!canUserAccessWorkOrder(req.user, order, ctx)) {
+      res.status(403).json({ error: "您沒有權限查看此派工單" });
+      return;
+    }
+  }
+
+  if (order.quoteId == null) {
+    res.status(404).json({ error: "此派工單沒有來源報價單" });
+    return;
+  }
+
+  const quote = await loadQuoteDocument(order.quoteId);
+  if (!quote) {
+    res.status(404).json({ error: "找不到來源報價單" });
+    return;
+  }
+
+  res.json(quote);
 });
 
 router.get("/work-orders/:id", async (req, res): Promise<void> => {

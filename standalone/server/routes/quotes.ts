@@ -7,6 +7,12 @@ import { syncQuoteDispatchBatch, syncQuoteDispatchStatus } from "../lib/quoteWor
 import { normalizeQuoteStatus } from "../lib/quoteStatus";
 import { resolveQuoteItemsForSave } from "../lib/productCatalog";
 import { signQuoteShareToken } from "../lib/quoteShareToken";
+import {
+  QUOTE_DOCUMENT_SELECT,
+  serializeQuoteItem,
+  serializeQuoteDocument,
+  loadQuoteDocument,
+} from "../lib/quoteDocument";
 
 const router: IRouter = Router();
 router.use("/quotes", requireFeature("quotations"));
@@ -14,54 +20,9 @@ router.use("/quotes", requireFeature("quotations"));
 
 const DISPATCH_FILTER_VALUES = new Set(["待派工", "已派工", "施工中", "已完工"]);
 
-function serializeItem(item: typeof quoteItemsTable.$inferSelect) {
-  return {
-    id: item.id,
-    quoteId: item.quoteId,
-    productId: item.productId ?? null,
-    category: item.category,
-    itemName: item.itemName,
-    brand: item.brand ?? null,
-    model: item.model ?? null,
-    quantity: parseFloat(item.quantity as string),
-    unit: item.unit,
-    unitPrice: parseFloat(item.unitPrice as string),
-    subtotal: parseFloat(item.subtotal as string),
-    notes: item.notes ?? null,
-    sortOrder: item.sortOrder,
-  };
-}
-
-function serializeQuote(
-  q: any,
-  items: any[] = [],
-  workflow?: { dispatchStatus: string; workOrderId: number | null; workOrderNumber: string | null },
-) {
-  return {
-    id: q.id,
-    customerId: q.customerId ?? null,
-    customerName: q.customerName ?? q.joinedCustomerName ?? null,
-    contactPerson: q.contactPerson ?? null,
-    title: q.title,
-    description: q.description ?? null,
-    amount: parseFloat(q.amount as string),
-    discountAmount: q.discountAmount != null ? parseFloat(q.discountAmount as string) : null,
-    finalAmount: q.finalAmount != null ? parseFloat(q.finalAmount as string) : null,
-    status: normalizeQuoteStatus(q.status),
-    dispatchStatus: workflow?.dispatchStatus ?? q.dispatchStatus ?? "未派工",
-    workOrderId: workflow?.workOrderId ?? null,
-    workOrderNumber: workflow?.workOrderNumber ?? null,
-    notes: q.notes ?? null,
-    address: q.address ?? null,
-    customerPhone: q.customerPhone ?? null,
-    taxType: q.taxType ?? "未稅",
-    salesRepId: q.salesRepId ?? null,
-    salesRepName: q.salesRepName ?? null,
-    items,
-    createdAt: q.createdAt instanceof Date ? q.createdAt.toISOString() : q.createdAt,
-    updatedAt: q.updatedAt instanceof Date ? q.updatedAt.toISOString() : q.updatedAt,
-  };
-}
+const serializeItem = serializeQuoteItem;
+const serializeQuote = serializeQuoteDocument;
+const QUOTE_SELECT = QUOTE_DOCUMENT_SELECT;
 
 async function buildItemsInsert(itemInputs: any[], quoteId: number) {
   return itemInputs.map((item: any, idx: number) => ({
@@ -79,29 +40,6 @@ async function buildItemsInsert(itemInputs: any[], quoteId: number) {
     sortOrder: item.sortOrder ?? idx,
   }));
 }
-
-const QUOTE_SELECT = {
-  id: quotesTable.id,
-  customerId: quotesTable.customerId,
-  customerName: quotesTable.customerName,
-  joinedCustomerName: customersTable.name,
-  contactPerson: quotesTable.contactPerson,
-  title: quotesTable.title,
-  description: quotesTable.description,
-  amount: quotesTable.amount,
-  discountAmount: quotesTable.discountAmount,
-  finalAmount: quotesTable.finalAmount,
-  status: quotesTable.status,
-  dispatchStatus: quotesTable.dispatchStatus,
-  notes: quotesTable.notes,
-  address: quotesTable.address,
-  customerPhone: quotesTable.customerPhone,
-  taxType: quotesTable.taxType,
-  salesRepId: quotesTable.salesRepId,
-  salesRepName: employeesTable.name,
-  createdAt: quotesTable.createdAt,
-  updatedAt: quotesTable.updatedAt,
-};
 
 router.get("/quotes", async (req, res): Promise<void> => {
   const { customerId, status, dispatchStatus } = req.query as {
@@ -193,22 +131,10 @@ router.get("/quotes/:id", async (req, res): Promise<void> => {
   const id = parseInt(raw, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
-  const [quote] = await db
-    .select(QUOTE_SELECT)
-    .from(quotesTable)
-    .leftJoin(customersTable, eq(quotesTable.customerId, customersTable.id))
-    .leftJoin(employeesTable, eq(quotesTable.salesRepId, employeesTable.id))
-    .where(eq(quotesTable.id, id));
-
+  const quote = await loadQuoteDocument(id);
   if (!quote) { res.status(404).json({ error: "找不到報價單" }); return; }
 
-  const workflow = await syncQuoteDispatchStatus(id);
-
-  const items = await db.select().from(quoteItemsTable)
-    .where(eq(quoteItemsTable.quoteId, id))
-    .orderBy(quoteItemsTable.sortOrder);
-
-  res.json(serializeQuote(quote, items.map(serializeItem), workflow ?? undefined));
+  res.json(quote);
 });
 
 router.patch("/quotes/:id", async (req, res): Promise<void> => {

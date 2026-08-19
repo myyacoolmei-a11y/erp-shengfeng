@@ -33,6 +33,7 @@ import {
   type AiReminderRuleSource,
 } from "@/lib/aiWorkReminderSettings";
 import { stripQuotePricingFromNotes } from "@/lib/quoteToWorkOrder";
+import { printSourceQuoteFromWorkOrder } from "@/lib/quotationPdf";
 import { loadPrintCalibration } from "@/lib/printPaperConfig";
 import { PrintCalibrationDialog } from "@/components/work-orders/PrintCalibrationDialog";
 import { VoiceAssistantButton } from "@/components/voice-assistant/VoiceAssistantDialog";
@@ -1373,7 +1374,16 @@ export default function WorkOrders() {
                       <button
                         type="button"
                         className="text-xs font-mono text-blue-600 hover:underline mt-1"
-                        onClick={() => navigate(`/quotes?focusId=${o.quoteId}`)}
+                        title="查看／列印原始報價單（非派工資料）"
+                        onClick={() => {
+                          void printSourceQuoteFromWorkOrder(o, setPdfPreview, toast as any).catch((err: any) => {
+                            toast({
+                              title: "無法載入來源報價單",
+                              description: String(err?.message || err),
+                              variant: "destructive",
+                            });
+                          });
+                        }}
                       >
                         來源報價單：{(o as any).quoteNumber}
                       </button>
