@@ -2,7 +2,7 @@
 // 獨立版面：修改此檔不影響其他 Template
 // continuous-print：EPSON 點陣機 9.5×5.5in（241.3×139.7mm）單頁極簡黑白版型
 
-import { logoUrl, COMPANY, COLORS, esc, PRINT_DOC_TYPE_CSS } from "./brand-config";
+import { logoUrl, COMPANY, COLORS, esc, PRINT_DOC_TYPE_CSS, PRINT_CJK_FONT_STACK, PRINT_CJK_METRIC_CSS, printFontLinksHtml } from "./brand-config";
 import { stripQuotePricingFromNotes } from "@/lib/quoteToWorkOrder";
 import { CONTINUOUS_PAPER, PRINT_CALIBRATION_DEFAULT, type PrintCalibration } from "@/lib/printPaperConfig";
 import { displayQuoteItemCategory } from "./printCategory";
@@ -93,7 +93,7 @@ function buildMaterialRows(equipment: EquipmentRow[]): string {
       <td class="tac col-model">${esc(model)}</td>
       <td class="tac col-qty">${it.quantity ?? ""}</td>
       <td class="tac col-unit">${esc(it.unit || "台")}</td>
-      <td class="tal col-notes">${esc(equipmentRemark(it))}</td>
+      <td class="tac col-notes">${esc(equipmentRemark(it))}</td>
     </tr>`;
   }).join("");
 }
@@ -317,10 +317,15 @@ html,body,.sheet,.page{
   opacity:1!important;
 }
 body{
-  font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
+  font-family:${PRINT_CJK_FONT_STACK};
   font-size:15px;
   line-height:1.4;
   font-weight:500;
+  font-stretch:100%;
+  font-synthesis:none;
+  font-variation-settings:normal;
+  transform:none;
+  zoom:normal;
 }
 .cp-title{
   display:block;
@@ -733,10 +738,12 @@ export function buildWorkOrderHtml(order: any, options: WorkOrderHtmlOptions = {
 <head>
 <meta charset="UTF-8">
 <title>派工單 ${esc(woNum)}</title>
+${printFontLinksHtml()}
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 ${buildPageBoxCss(mode, calibration)}
 ${buildCompactOverridesCss(mode)}
+${PRINT_CJK_METRIC_CSS}
 </style>
 </head>
 <body>
@@ -814,12 +821,15 @@ ${buildCompactOverridesCss(mode)}
 <head>
 <meta charset="UTF-8">
 <title>派工單 ${woNum}</title>
+${printFontLinksHtml()}
 <style>
 /* ===== Base ===== */
 *{margin:0;padding:0;box-sizing:border-box}
-body{
-  font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
+body,.sheet,.page{
+  font-family:${PRINT_CJK_FONT_STACK};
+  font-stretch:100%;font-synthesis:none;font-variation-settings:normal;
   font-size:14px;font-weight:400;line-height:1.4;color:#111;background:#fff;
+  transform:none;zoom:normal;
   -webkit-print-color-adjust:exact;print-color-adjust:exact;
 }
 
@@ -872,34 +882,41 @@ ${buildPageBoxCss(mode, calibration)}
 }
 .section{margin-bottom:2.5mm;flex:0 0 auto}
 
-table{
+.eq-table{
   width:100%;border-collapse:collapse;
   table-layout:fixed;font-size:16px;line-height:1.4;
+  font-family:${PRINT_CJK_FONT_STACK};
+  font-stretch:100%;transform:none;zoom:normal;
 }
-.head-row{background:#f4f4f4;color:#111}
-.head-row th{
+.eq-table .head-row{background:#f4f4f4;color:#111}
+.eq-table .head-row th{
   border:1px solid #ccc;
   font-size:14px;font-weight:700;text-align:center;
   vertical-align:middle;line-height:1.4;
   padding:8px 6px;color:#111;
+  font-stretch:100%;letter-spacing:0;transform:none;zoom:normal;
+  white-space:nowrap;
 }
-tbody td{
+.eq-table tbody td{
   border:1px solid #ccc;
   vertical-align:middle;font-size:16px;font-weight:500;
-  line-height:1.4;padding:8px 6px;color:#111;
+  line-height:1.4;padding:8px 6px;color:#111;text-align:center;
+  font-stretch:100%;letter-spacing:0;transform:none;zoom:normal;
+  overflow:visible;
 }
-tbody tr{page-break-inside:avoid;break-inside:avoid}
+.eq-table tbody tr{page-break-inside:avoid;break-inside:avoid}
 .tac{text-align:center}
 .tar{text-align:right}
 .tal{text-align:left}
-.col-item{font-size:17px;font-weight:600;text-align:left;word-break:break-word}
-.col-cat,.col-model,.col-qty,.col-unit{text-align:center;font-weight:600;font-size:16px}
-.col-notes{font-size:13px;font-weight:400}
-.col-w6{width:7%}
+.eq-table .col-item{font-size:18px;font-weight:700;text-align:left;word-break:break-word}
+.eq-table .col-cat,.eq-table .col-model,.eq-table .col-qty,.eq-table .col-unit{text-align:center;font-weight:700;font-size:16px}
+.eq-table .col-qty,.eq-table .col-unit{white-space:nowrap}
+.eq-table .col-notes{font-size:13px;font-weight:400;text-align:center}
+.col-w6{width:6%}
 .col-w10{width:12%}
-.col-w12{width:14%}
-.col-w8{width:9%}
-.col-w16{width:16%}
+.col-w12{width:16%}
+.col-w8{width:10%}
+.col-w16{width:14%}
 
 .box{
   border:1px solid #e5e5e5;
@@ -932,7 +949,7 @@ tbody tr{page-break-inside:avoid;break-inside:avoid}
 ${PRINT_DOC_TYPE_CSS}
 .section-flex .box{font-size:16px!important;font-weight:500!important}
 .section-flex-notes .box{font-size:15px!important;font-weight:400!important}
-.head-row th,tbody td{padding:8px 6px!important}
+.eq-table .head-row th,.eq-table tbody td{padding:8px 6px!important}
 </style>
 </head>
 <body>
@@ -973,7 +990,7 @@ ${PRINT_DOC_TYPE_CSS}
 
   <div class="section">
     <div class="eq-title">材料／設備</div>
-    <table>
+    <table class="eq-table">
       <thead><tr class="head-row">
         <th class="col-w6">項次</th>
         <th class="col-w10">類別</th>

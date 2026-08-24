@@ -130,20 +130,140 @@ tbody tr{min-height:40px}
 }
 `;
 
+/** 報價單／派工單中文：靜態比例字型，禁止窄體／可變寬度軸。 */
+export const PRINT_CJK_FONT_STACK =
+  '"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif';
+
+/** 自架靜態 woff2 + 系統正黑體；不用 Google variable／unicode-range 切片（html2canvas 會變形）。 */
+export const PRINT_CJK_FONT_FACE_CSS = `
+@font-face{
+  font-family:"Noto Sans TC";font-style:normal;font-weight:400;font-stretch:100%;font-display:block;
+  src:local("Microsoft JhengHei"),local("Microsoft JhengHei UI"),local("PingFang TC"),local("Noto Sans CJK TC");
+}
+@font-face{
+  font-family:"Noto Sans TC";font-style:normal;font-weight:700;font-stretch:100%;font-display:block;
+  src:local("Microsoft JhengHei Bold"),local("Microsoft JhengHei"),local("PingFang TC"),local("Noto Sans CJK TC Bold"),local("Noto Sans CJK TC");
+}
+@font-face{
+  font-family:"Noto Sans TC";font-style:normal;font-weight:400;font-stretch:100%;font-display:block;
+  src:url("/fonts/NotoSansTC-latin-400.woff2") format("woff2");
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+20AC,U+2122,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face{
+  font-family:"Noto Sans TC";font-style:normal;font-weight:700;font-stretch:100%;font-display:block;
+  src:url("/fonts/NotoSansTC-latin-700.woff2") format("woff2");
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+20AC,U+2122,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face{
+  font-family:"Noto Sans TC";font-style:normal;font-weight:400;font-stretch:100%;font-display:block;
+  src:url("/fonts/NotoSansTC-TC-400.woff2") format("woff2");
+  unicode-range:U+3000-303F,U+3400-4DBF,U+4E00-9FFF,U+F900-FAFF,U+FF00-FFEF;
+}
+@font-face{
+  font-family:"Noto Sans TC";font-style:normal;font-weight:700;font-stretch:100%;font-display:block;
+  src:url("/fonts/NotoSansTC-TC-700.woff2") format("woff2");
+  unicode-range:U+3000-303F,U+3400-4DBF,U+4E00-9FFF,U+F900-FAFF,U+FF00-FFEF;
+}
+`;
+
+export function printFontLinksHtml(): string {
+  return `<style data-print-cjk-font>${PRINT_CJK_FONT_FACE_CSS}</style>`;
+}
+
+/**
+ * 套在列印根節點與工程設備表格：clone 進主文件時不會繼承 App 的 Inter。
+ * 禁止 scale／zoom／font-stretch／過度 letter-spacing。
+ */
+export const PRINT_CJK_METRIC_CSS = `
+.quotation-print-page,.sheet,.page,.cp-mat-block,.eq-table{
+  font-family:${PRINT_CJK_FONT_STACK}!important;
+  font-stretch:100%!important;
+  font-synthesis:none!important;
+  font-variation-settings:normal!important;
+  font-optical-sizing:none!important;
+  transform:none!important;
+  zoom:normal!important;
+}
+.eq-table,.eq-table th,.eq-table td,
+.cp-mat-header,.cp-mat-row,.cp-mat-no,.cp-mat-name,.cp-mat-qty{
+  font-family:${PRINT_CJK_FONT_STACK}!important;
+  font-stretch:100%!important;
+  font-synthesis:none!important;
+  font-variation-settings:normal!important;
+  font-optical-sizing:none!important;
+  transform:none!important;
+  zoom:normal!important;
+  letter-spacing:0!important;
+  word-spacing:normal!important;
+  font-kerning:normal!important;
+}
+.eq-table{
+  table-layout:fixed;
+  width:100%;
+  border-collapse:collapse;
+}
+.eq-table th,.eq-table td{
+  vertical-align:middle!important;
+  overflow:visible!important;
+  white-space:normal;
+  word-break:break-word;
+  overflow-wrap:break-word;
+  line-height:1.4!important;
+  border:1px solid #ccc!important;
+  color:#111!important;
+}
+.eq-table .head-row{background:#f4f4f4!important;color:#111!important}
+.eq-table .head-row th{
+  font-size:14px!important;
+  font-weight:700!important;
+  text-align:center!important;
+  padding:10px 6px!important;
+  min-height:0!important;
+  white-space:nowrap!important;
+}
+.eq-table tbody td{
+  font-size:16px!important;
+  font-weight:400!important;
+  text-align:center!important;
+  padding:10px 8px!important;
+  min-height:0!important;
+}
+.eq-table .col-item,td.col-item{
+  font-size:18px!important;
+  font-weight:700!important;
+  text-align:left!important;
+  padding:10px 10px!important;
+}
+.eq-table .col-cat,.eq-table .col-brand,.eq-table .col-model,
+.eq-table .col-qty,.eq-table .col-unit,.eq-table .col-price,.eq-table .col-sub{
+  font-size:16px!important;
+  font-weight:700!important;
+  text-align:center!important;
+}
+.eq-table .col-cat,.eq-table .col-brand{white-space:nowrap}
+.eq-table .col-qty,.eq-table .col-unit{white-space:nowrap}
+.eq-table .col-model{overflow-wrap:anywhere}
+.eq-table .col-notes{font-size:13px!important;font-weight:400!important;text-align:center!important}
+`;
+
 /**
  * 報價單／派工單列印視覺（僅這兩份單據引用）。
  * 必須接在各 template 自己的 CSS 之後。出貨單／對帳單不要引用。
  * 層級：工程設備明細 > 客戶資料 > 其他資訊 > 主標題／金額。
  */
 export const PRINT_DOC_TYPE_CSS = `
-@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap");
+${PRINT_CJK_FONT_FACE_CSS}
 body{
-  font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif!important;
+  font-family:${PRINT_CJK_FONT_STACK}!important;
+  font-stretch:100%!important;
+  font-synthesis:none!important;
+  font-variation-settings:normal!important;
   font-weight:400;
   color:#111!important;
   background:#fff!important;
   -webkit-print-color-adjust:exact;print-color-adjust:exact;
 }
+${PRINT_CJK_METRIC_CSS}
 .co-name{font-size:15px!important;font-weight:700;line-height:1.4!important;color:#111!important}
 .co-sub,.co-info{font-size:12px!important;font-weight:400;line-height:1.4!important;color:#555!important}
 .doc-label,.wo-label{
@@ -166,39 +286,15 @@ body{
   border-bottom:2.5px solid ${COLORS.primary}!important;
   font-weight:700!important;
   line-height:1.3!important;
+  font-family:${PRINT_CJK_FONT_STACK}!important;
+  font-stretch:100%!important;
+  transform:none!important;
+  zoom:normal!important;
 }
 .eq-title,.stitle-eq{font-size:19px!important}
 .stitle,.sec-title,.bank-title{font-size:16px!important}
 .info-label,.lbl{font-size:13px!important;font-weight:500!important;color:#666!important}
 .info-value,.val,.info-grid strong{font-size:16px!important;font-weight:600!important;color:#111!important;line-height:1.4!important}
-.eq-table .head-row,.head-row{
-  background:#f4f4f4!important;color:#111!important;
-}
-.eq-table .head-row th,.head-row th{
-  font-size:14px!important;font-weight:700!important;
-  text-align:center!important;vertical-align:middle!important;
-  color:#111!important;
-  border:1px solid #ccc!important;
-  padding:12px 8px!important;
-  line-height:1.4!important;
-  min-height:0!important;
-}
-.eq-table tbody td,table tbody td{
-  font-size:16px!important;font-weight:500!important;
-  vertical-align:middle!important;
-  line-height:1.4!important;
-  border:1px solid #ccc!important;
-  padding:12px 8px!important;
-  min-height:0!important;
-  color:#111!important;
-}
-.eq-table .col-item,td.col-item{
-  font-size:18px!important;font-weight:600!important;text-align:left!important;
-}
-.eq-table .col-cat,.eq-table .col-brand,.eq-table .col-model,
-.eq-table .col-qty,.eq-table .col-unit,.eq-table .col-price,.eq-table .col-sub{
-  font-size:16px!important;font-weight:600!important;text-align:center!important;
-}
 .amt-r{font-size:13px!important;font-weight:500!important;line-height:1.4!important}
 .amt-r .val{font-size:14px!important;font-weight:600!important}
 .amt-total .lbl{font-size:16px!important;font-weight:700!important;color:#111!important}

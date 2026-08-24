@@ -29,9 +29,9 @@ const demoQuote = {
   description: "施工方式：壁掛分離式\n施工天數：1天\n注意事項：施工前需清空場地",
   notes: "報價單有效期限30日，施工前請支付50%訂金。",
   items: [
-    { category: "裝新機", brand: "三菱重工", itemName: "壁掛分離式 3.5kW 超長品項名稱測試自動換行顯示效果", quantity: 2, unit: "台", unitPrice: 28500, subtotal: 57000, notes: "含安裝及基本配管" },
-    { category: "裝新機", brand: "三菱重工", itemName: "壁掛分離式 2.2kW", quantity: 1, unit: "台", unitPrice: 22000, subtotal: 22000, notes: "" },
-    { category: "配管工程", brand: "—", itemName: "銅管配管 5公尺", quantity: 1, unit: "式", unitPrice: 8500, subtotal: 8500, notes: "含吸排管" },
+    { category: "安裝新機", brand: "聲寶", itemName: "壁掛分離式 變頻冷暖", model: "AU/AM-JF50DC", quantity: 1, unit: "台", unitPrice: 32800, subtotal: 32800, notes: "含基本安裝" },
+    { category: "裝新機", brand: "三菱重工", itemName: "壁掛分離式 3.5kW 超長品項名稱測試自動換行顯示效果", model: "MSZ-AP35VG", quantity: 2, unit: "台", unitPrice: 28500, subtotal: 57000, notes: "含安裝及基本配管" },
+    { category: "配管工程", brand: "—", itemName: "銅管配管 5公尺", model: "", quantity: 1, unit: "式", unitPrice: 8500, subtotal: 8500, notes: "含吸排管" },
   ],
 };
 
@@ -49,6 +49,7 @@ const demoWorkOrder = {
   description: "客廳及房間冷氣安裝，含配管、配線、洞孔封塞。",
   notes: "請於上午 9:00 前到達，戶主會在現場。",
   equipmentItems: [
+    { category: "安裝新機", brand: "聲寶", itemName: "壁掛分離式 變頻冷暖", model: "AU/AM-JF50DC", quantity: 1, unit: "台", indoorUnits: 1, outdoorUnits: 1, floor: "客廳" },
     { brand: "三菱重工", model: "MSZ-AP35VG 3.5kW", quantity: 2, indoorUnits: 2, outdoorUnits: 2, floor: "客廳/臥室" },
     { brand: "格力", model: "KFR-35GW", quantity: 1, indoorUnits: 1, outdoorUnits: 1, floor: "書房" },
   ],
@@ -60,8 +61,12 @@ const demoStatementItems = [
   { orderId: 3, orderNumber: "DO-20250610-0103", orderDate: "2025-06-10", productName: "銅管配管 5公尺", brand: "晟風自製", model: "JFP-5M", spec: null, unit: "式", qty: 1, unitPrice: "8000", amount: "8000", notes: "含吸排管" },
 ];
 
-const quoteHtml = buildQuotationHtml(demoQuote).replace(/src="\/logo.png"/g, 'src="../logo.png"');
-const workHtml = buildWorkOrderHtml(demoWorkOrder).replace(/src="\/logo.png"/g, 'src="../logo.png"');
+const quoteHtml = buildQuotationHtml(demoQuote)
+  .replace(/src="\/logo.png"/g, 'src="../logo.png"')
+  .replace(/url\("\/fonts\//g, 'url("../fonts/');
+const workHtml = buildWorkOrderHtml(demoWorkOrder)
+  .replace(/src="\/logo.png"/g, 'src="../logo.png"')
+  .replace(/url\("\/fonts\//g, 'url("../fonts/');
 const stmtHtml = buildStatementHtml("林記冷氣行", "2025-06-01", "2025-06-30", demoStatementItems, 55400, 0, 0, 55400, 0, 55400).replace(/src="\/logo.png"/g, 'src="../logo.png"');
 
 writeFileSync(join(outDir, "quotation.html"), quoteHtml);

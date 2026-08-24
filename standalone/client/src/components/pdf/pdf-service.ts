@@ -3,6 +3,7 @@
 // html2pdf is statically imported so SW/SPA cannot serve index.html as the module.
 
 import html2pdfFactory from "html2pdf.js";
+import { PRINT_CJK_FONT_STACK, PRINT_CJK_FONT_FACE_CSS } from "@/components/pdf/templates/brand-config";
 
 export interface PdfBlobResult {
   blob: Blob;
@@ -13,8 +14,10 @@ export interface PdfBlobResult {
 export type PageFormat = "a4" | "custom-240x140-landscape";
 
 const PAGE_CONFIG: Record<PageFormat, { format: string | number[]; orientation: "portrait" | "landscape"; margin: number[]; scale: number; renderWidth: number }> = {
-  "a4": { format: "a4", orientation: "portrait", margin: [8, 8, 8, 8], scale: 2, renderWidth: 720 },
-  "custom-240x140-landscape": { format: [240, 140] as any, orientation: "landscape", margin: [0, 0, 0, 0], scale: 2, renderWidth: 960 },
+  // 210mm @ 96dpi ≈ 794px，與 A4 CSS mm 單位同比例，避免 canvas 被非等比拉高／壓窄
+  "a4": { format: "a4", orientation: "portrait", margin: [10, 12, 10, 12], scale: 2, renderWidth: 794 },
+  // 240mm @ 96dpi ≈ 907px
+  "custom-240x140-landscape": { format: [240, 140] as any, orientation: "landscape", margin: [0, 0, 0, 0], scale: 2, renderWidth: 907 },
 };
 
 function resolveHtml2Pdf(): any {
@@ -105,7 +108,7 @@ export async function generatePdfBlobFromHtml(
   iframe.style.cssText = `position:fixed;top:0;left:0;width:${cfg.renderWidth}px;height:2400px;opacity:0;pointer-events:none;touch-action:none;overflow:hidden;border:none;`;
   document.body.appendChild(iframe);
 
-  let tempStyles: HTMLStyleElement[] = [];
+  let tempNodes: HTMLElement[] = [];
   try {
     const doc = iframe.contentDocument || iframe.contentWindow!.document;
     doc.open();
@@ -114,6 +117,16 @@ export async function generatePdfBlobFromHtml(
 
     const body = doc.body;
     await doc.fonts.ready;
+    try {
+      await Promise.all([
+        doc.fonts.load('400 16px "Noto Sans TC"'),
+        doc.fonts.load('500 16px "Noto Sans TC"'),
+        doc.fonts.load('700 14px "Noto Sans TC"'),
+        doc.fonts.load('700 18px "Noto Sans TC"'),
+      ]);
+    } catch {
+      /* 本機未安裝 Noto 時仍用 PingFang／微軟正黑體 */
+    }
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
     const images = Array.from(body.querySelectorAll("img"));
@@ -144,14 +157,29 @@ export async function generatePdfBlobFromHtml(
     console.log("PDF capture target:", pageEl.className, pageEl.dataset.templateType);
 
     // html2pdf.js deep-clones the element into the main document; CSS from the iframe <head> is lost.
-    // Inject all iframe styles into the main document so the clone renders correctly.
+    // Inject fonts + iframe styles into the main document so the clone does not inherit Inter.
+    const fontStyle = document.createElement("style");
+    fontStyle.textContent = PRINT_CJK_FONT_FACE_CSS;
+    fontStyle.dataset.pdfTempStyle = "1";
+    document.head.appendChild(fontStyle);
+    tempNodes.push(fontStyle);
+    try {
+      await Promise.all([
+        document.fonts.load('400 16px "Noto Sans TC"'),
+        document.fonts.load('700 14px "Noto Sans TC"'),
+        document.fonts.load('700 18px "Noto Sans TC"'),
+      ]);
+    } catch {
+      /* 系統正黑體仍可使用 */
+    }
+
     const iframeStyles = Array.from(doc.querySelectorAll("style"));
     iframeStyles.forEach((styleEl) => {
       const newStyle = document.createElement("style");
       newStyle.textContent = styleEl.textContent || "";
       newStyle.dataset.pdfTempStyle = "1";
       document.head.appendChild(newStyle);
-      tempStyles.push(newStyle);
+      tempNodes.push(newStyle);
     });
 
     let html2pdf: any;
@@ -173,7 +201,29 @@ export async function generatePdfBlobFromHtml(
     const opt = {
       margin: cfg.margin,
       image: { type: "jpeg", quality: 0.98 },
-      html2canvas: { scale: cfg.scale, useCORS: true, logging: false, windowWidth: cfg.renderWidth },
+      html2canvas: {
+        scale: cfg.scale,
+        useCORS: true,
+        logging: false,
+        windowWidth: cfg.renderWidth,
+        letterRendering: false,
+        onclone: (clonedDoc: Document) => {
+          const el = clonedDoc.querySelector(".page, .quotation-print-page") as HTMLElement | null;
+          if (!el) return;
+          el.style.setProperty("font-family", PRINT_CJK_FONT_STACK, "important");
+          el.style.setProperty("font-stretch", "100%", "important");
+          el.style.setProperty("transform", "none", "important");
+          el.style.setProperty("zoom", "normal", "important");
+          el.querySelectorAll(".eq-table, .eq-table th, .eq-table td, .cp-mat-row, .cp-mat-name, .cp-mat-qty, .cp-mat-no").forEach((node) => {
+            const h = node as HTMLElement;
+            h.style.setProperty("font-family", PRINT_CJK_FONT_STACK, "important");
+            h.style.setProperty("font-stretch", "100%", "important");
+            h.style.setProperty("transform", "none", "important");
+            h.style.setProperty("zoom", "normal", "important");
+            h.style.setProperty("letter-spacing", "0", "important");
+          });
+        },
+      },
       jsPDF: { unit: "mm", format: cfg.format, orientation: cfg.orientation },
       pagebreak: { mode: ["css", "legacy"], avoid: [".bottom-block", "tr"] },
     };
@@ -186,7 +236,7 @@ export async function generatePdfBlobFromHtml(
 
     return { blob, docNo, html };
   } finally {
-    tempStyles.forEach((el) => el.remove());
+    tempNodes.forEach((el) => el.remove());
     if (document.body.contains(iframe)) {
       document.body.removeChild(iframe);
     }

@@ -3,17 +3,51 @@
 <head>
 <meta charset="UTF-8">
 <title>派工單 WO-20250704-0567</title>
+<style data-print-cjk-font>
+@font-face{
+  font-family:"Noto Sans TC";font-style:normal;font-weight:400;font-stretch:100%;font-display:block;
+  src:local("Microsoft JhengHei"),local("Microsoft JhengHei UI"),local("PingFang TC"),local("Noto Sans CJK TC");
+}
+@font-face{
+  font-family:"Noto Sans TC";font-style:normal;font-weight:700;font-stretch:100%;font-display:block;
+  src:local("Microsoft JhengHei Bold"),local("Microsoft JhengHei"),local("PingFang TC"),local("Noto Sans CJK TC Bold"),local("Noto Sans CJK TC");
+}
+@font-face{
+  font-family:"Noto Sans TC";font-style:normal;font-weight:400;font-stretch:100%;font-display:block;
+  src:url("../fonts/NotoSansTC-latin-400.woff2") format("woff2");
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+20AC,U+2122,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face{
+  font-family:"Noto Sans TC";font-style:normal;font-weight:700;font-stretch:100%;font-display:block;
+  src:url("../fonts/NotoSansTC-latin-700.woff2") format("woff2");
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+20AC,U+2122,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face{
+  font-family:"Noto Sans TC";font-style:normal;font-weight:400;font-stretch:100%;font-display:block;
+  src:url("../fonts/NotoSansTC-TC-400.woff2") format("woff2");
+  unicode-range:U+3000-303F,U+3400-4DBF,U+4E00-9FFF,U+F900-FAFF,U+FF00-FFEF;
+}
+@font-face{
+  font-family:"Noto Sans TC";font-style:normal;font-weight:700;font-stretch:100%;font-display:block;
+  src:url("../fonts/NotoSansTC-TC-700.woff2") format("woff2");
+  unicode-range:U+3000-303F,U+3400-4DBF,U+4E00-9FFF,U+F900-FAFF,U+FF00-FFEF;
+}
+</style>
 <style>
 /* ===== Base ===== */
 *{margin:0;padding:0;box-sizing:border-box}
-body{
-  font-family:'Microsoft JhengHei','\5fae\8edf\6b63\9ed1\9ad4',Arial,sans-serif;
-  font-size:10pt;color:#111111;background:#fff;
+body,.sheet,.page{
+  font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
+  font-stretch:100%;font-synthesis:none;font-variation-settings:normal;
+  font-size:14px;font-weight:400;line-height:1.4;color:#111;background:#fff;
+  transform:none;zoom:normal;
   -webkit-print-color-adjust:exact;print-color-adjust:exact;
 }
 
 /* ===== Page setup ===== */
-@page{size:240mm 140mm landscape;margin:6mm}
+
+@page{size:240mm 140mm;margin:6mm}
+.sheet{}
 .page{
   width:228mm;
   min-height:128mm;
@@ -25,167 +59,273 @@ body{
 /* ===== Header ===== */
 .hdr{
   display:flex;justify-content:space-between;align-items:flex-start;
-  border-bottom:2px solid #111111;
-  padding-bottom:3mm;margin-bottom:3mm;
+  border-bottom:1px solid #ddd;
+  padding-bottom:2mm;margin-bottom:2.5mm;
   flex-shrink:0;
 }
 .co{display:flex;align-items:center;gap:3mm}
 .co-logo{
-  width:55px;height:55px;max-width:55px;max-height:55px;
+  width:44px;height:44px;max-width:44px;max-height:44px;
   object-fit:contain;flex-shrink:0;
-  border:1px solid #e0e0e0;border-radius:3px;
 }
-.co-name{font-size:13pt;font-weight:700}
-.co-sub{font-size:7.5pt;color:#555555}
+.co-name{font-size:15px;font-weight:700;line-height:1.4;color:#111}
+.co-sub{font-size:12px;font-weight:400;color:#666;line-height:1.4}
 .wo-right{text-align:right}
-.wo-label{font-size:14pt;font-weight:700;color:#9ACD32;letter-spacing:4px}
-.wo-num{font-size:10pt;font-weight:700;font-family:monospace}
-.wo-meta{font-size:8pt;color:#555555;margin-top:1px}
+.wo-label{font-size:28px;font-weight:700;color:#111;letter-spacing:2px;line-height:1.2}
+.wo-num{font-size:13px;font-weight:600;font-family:monospace;line-height:1.4}
+.wo-meta{font-size:12px;font-weight:400;color:#666;margin-top:1px;line-height:1.4}
 
-/* ===== Field grid ===== */
 .grid{
   display:grid;grid-template-columns:1fr 1fr;
-  gap:1.5mm 6mm;margin-bottom:2mm;font-size:9pt;
+  gap:1.2mm 6mm;margin-bottom:2.5mm;
   flex-shrink:0;
 }
-.field{display:flex;gap:2mm;align-items:baseline}
-.lbl{font-size:7.5pt;color:#555555;min-width:52px;flex-shrink:0}
-.val{font-size:9.5pt;font-weight:600}
+.field{display:flex;flex-direction:column;gap:0.6mm}
+.lbl{font-size:13px;font-weight:500;color:#666;line-height:1.3}
+.val{font-size:16px;font-weight:600;color:#111;line-height:1.4}
 .full{grid-column:1/-1}
 
-/* ===== Section titles ===== */
 .sec-title{
-  font-size:7.5pt;font-weight:700;
-  background:#111111;color:#9ACD32;
-  padding:1mm 2.5mm;letter-spacing:2px;margin-bottom:1.5mm;
-  display:inline-block;
+  color:#111;font-size:16px;font-weight:700;
+  background:transparent;border:none;
+  padding:0 0 1.2mm;margin:0 0 2mm;
+  display:block;width:fit-content;
+  border-bottom:2.5px solid #9ACD32;
+  letter-spacing:0;line-height:1.3;
 }
-.section{margin-bottom:2mm}
+.eq-title{
+  color:#111;font-size:18px;font-weight:700;
+  background:transparent;border:none;
+  padding:0 0 1.2mm;margin:0 0 2mm;
+  display:block;width:fit-content;
+  border-bottom:2.5px solid #9ACD32;
+}
+.section{margin-bottom:2.5mm;flex:0 0 auto}
 
-/* ===== Table ===== */
-table{
+.eq-table{
   width:100%;border-collapse:collapse;
-  table-layout:fixed;font-size:9pt;
+  table-layout:fixed;font-size:16px;line-height:1.4;
+  font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
+  font-stretch:100%;transform:none;zoom:normal;
 }
-.head-row{background:#111111;color:#9ACD32}
-.head-row th{
-  border:1px solid #111111;
-  font-size:8.5pt;font-weight:700;text-align:center;
+.eq-table .head-row{background:#f4f4f4;color:#111}
+.eq-table .head-row th{
+  border:1px solid #ccc;
+  font-size:14px;font-weight:700;text-align:center;
+  vertical-align:middle;line-height:1.4;
+  padding:8px 6px;color:#111;
+  font-stretch:100%;letter-spacing:0;transform:none;zoom:normal;
+  white-space:nowrap;
 }
-tbody td{
-  border:1px solid #111111;
-  vertical-align:middle;font-size:9pt;
+.eq-table tbody td{
+  border:1px solid #ccc;
+  vertical-align:middle;font-size:16px;font-weight:500;
+  line-height:1.4;padding:8px 6px;color:#111;text-align:center;
+  font-stretch:100%;letter-spacing:0;transform:none;zoom:normal;
+  overflow:visible;
 }
-tbody tr{page-break-inside:avoid;break-inside:avoid}
-
-/* Text align helpers */
+.eq-table tbody tr{page-break-inside:avoid;break-inside:avoid}
 .tac{text-align:center}
 .tar{text-align:right}
 .tal{text-align:left}
-.small{font-size:8.5pt}
-
-/* Column widths */
+.eq-table .col-item{font-size:18px;font-weight:700;text-align:left;word-break:break-word}
+.eq-table .col-cat,.eq-table .col-model,.eq-table .col-qty,.eq-table .col-unit{text-align:center;font-weight:700;font-size:16px}
+.eq-table .col-qty,.eq-table .col-unit{white-space:nowrap}
+.eq-table .col-notes{font-size:13px;font-weight:400;text-align:center}
 .col-w6{width:6%}
-.col-w8{width:8%}
-.col-w25{width:25%}
+.col-w10{width:12%}
+.col-w12{width:16%}
+.col-w8{width:10%}
+.col-w16{width:14%}
 
-/* ===== Box ===== */
 .box{
-  border:1px solid #e0e0e0;
-  border-left:3px solid #9ACD32;
-  padding:3mm 4mm;
-  font-size:9pt;white-space:pre-wrap;
-  line-height:1.6;background:#fafafa;
-  page-break-inside:auto;break-inside:auto;
+  border:1px solid #e5e5e5;
+  padding:2mm 3mm;
+  font-size:16px;font-weight:500;white-space:pre-wrap;
+  line-height:1.45;background:#fff;color:#111;
 }
+.section-flex-notes .box{font-size:15px}
 
-/* ===== Bottom block (signatures + footer) ===== */
 .bottom-block{
-  margin-top:4mm;
+  margin-top:auto;
   flex-shrink:0;
   page-break-inside:avoid;break-inside:avoid;
 }
 .sigs{
-  display:grid;grid-template-columns:repeat(3,1fr);gap:10mm;
-  margin-bottom:3mm;
+  display:grid;grid-template-columns:repeat(3,1fr);gap:6mm;
+  margin-bottom:1.5mm;
 }
 .sig{
-  text-align:center;border-top:1.5px solid #111111;
-  font-size:8.5pt;color:#555555;
+  text-align:center;border-top:1px solid #111;
+  font-size:13px;font-weight:500;color:#555;line-height:1.4;
+  padding-top:2mm;padding-bottom:6mm;
 }
+.sig-date{font-size:12px;font-weight:400;color:#888;line-height:1.4}
 .pf{
   display:flex;justify-content:space-between;align-items:center;
-  font-size:6.5pt;color:#888888;
-  border-top:1px solid #e0e0e0;padding-top:1.5mm;
+  font-size:12px;font-weight:400;color:#888;line-height:1.4;
+  border-top:1px solid #eee;padding-top:1.5mm;
 }
 
-/* ===== Shared PDF readability ===== */
-body{line-height:1.55}
-table{font-size:9pt;line-height:1.55}
-.head-row th{
-  padding:6px 8px;
-  min-height:40px;
-  line-height:1.55;
-  vertical-align:middle;
+
+@font-face{
+  font-family:"Noto Sans TC";font-style:normal;font-weight:400;font-stretch:100%;font-display:block;
+  src:local("Microsoft JhengHei"),local("Microsoft JhengHei UI"),local("PingFang TC"),local("Noto Sans CJK TC");
 }
-tbody td{
-  padding:6px 8px;
-  min-height:40px;
-  line-height:1.55;
-  vertical-align:middle;
+@font-face{
+  font-family:"Noto Sans TC";font-style:normal;font-weight:700;font-stretch:100%;font-display:block;
+  src:local("Microsoft JhengHei Bold"),local("Microsoft JhengHei"),local("PingFang TC"),local("Noto Sans CJK TC Bold"),local("Noto Sans CJK TC");
 }
-tbody tr{min-height:40px}
-.col-item{
-  word-wrap:break-word;
-  word-break:break-word;
+@font-face{
+  font-family:"Noto Sans TC";font-style:normal;font-weight:400;font-stretch:100%;font-display:block;
+  src:url("../fonts/NotoSansTC-latin-400.woff2") format("woff2");
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+20AC,U+2122,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face{
+  font-family:"Noto Sans TC";font-style:normal;font-weight:700;font-stretch:100%;font-display:block;
+  src:url("../fonts/NotoSansTC-latin-700.woff2") format("woff2");
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+20AC,U+2122,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face{
+  font-family:"Noto Sans TC";font-style:normal;font-weight:400;font-stretch:100%;font-display:block;
+  src:url("../fonts/NotoSansTC-TC-400.woff2") format("woff2");
+  unicode-range:U+3000-303F,U+3400-4DBF,U+4E00-9FFF,U+F900-FAFF,U+FF00-FFEF;
+}
+@font-face{
+  font-family:"Noto Sans TC";font-style:normal;font-weight:700;font-stretch:100%;font-display:block;
+  src:url("../fonts/NotoSansTC-TC-700.woff2") format("woff2");
+  unicode-range:U+3000-303F,U+3400-4DBF,U+4E00-9FFF,U+F900-FAFF,U+FF00-FFEF;
+}
+
+body{
+  font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif!important;
+  font-stretch:100%!important;
+  font-synthesis:none!important;
+  font-variation-settings:normal!important;
+  font-weight:400;
+  color:#111!important;
+  background:#fff!important;
+  -webkit-print-color-adjust:exact;print-color-adjust:exact;
+}
+
+.quotation-print-page,.sheet,.page,.cp-mat-block,.eq-table{
+  font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif!important;
+  font-stretch:100%!important;
+  font-synthesis:none!important;
+  font-variation-settings:normal!important;
+  font-optical-sizing:none!important;
+  transform:none!important;
+  zoom:normal!important;
+}
+.eq-table,.eq-table th,.eq-table td,
+.cp-mat-header,.cp-mat-row,.cp-mat-no,.cp-mat-name,.cp-mat-qty{
+  font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif!important;
+  font-stretch:100%!important;
+  font-synthesis:none!important;
+  font-variation-settings:normal!important;
+  font-optical-sizing:none!important;
+  transform:none!important;
+  zoom:normal!important;
+  letter-spacing:0!important;
+  word-spacing:normal!important;
+  font-kerning:normal!important;
+}
+.eq-table{
+  table-layout:fixed;
+  width:100%;
+  border-collapse:collapse;
+}
+.eq-table th,.eq-table td{
+  vertical-align:middle!important;
+  overflow:visible!important;
   white-space:normal;
+  word-break:break-word;
+  overflow-wrap:break-word;
+  line-height:1.4!important;
+  border:1px solid #ccc!important;
+  color:#111!important;
 }
-.col-notes{
-  padding-left:10px!important;
-  padding-right:10px!important;
+.eq-table .head-row{background:#f4f4f4!important;color:#111!important}
+.eq-table .head-row th{
+  font-size:14px!important;
+  font-weight:700!important;
+  text-align:center!important;
+  padding:10px 6px!important;
+  min-height:0!important;
+  white-space:nowrap!important;
 }
-.notes-box,.remarks-box{
-  border:1px solid #e0e0e0;
-  padding:3mm 4mm;
-  font-size:9pt;
-  line-height:1.6;
-  min-height:18mm;
-  background:#fafafa;
+.eq-table tbody td{
+  font-size:16px!important;
+  font-weight:400!important;
+  text-align:center!important;
+  padding:10px 8px!important;
+  min-height:0!important;
 }
-.note-line{
-  font-size:8.5pt;
-  line-height:1.6;
-  padding:1px 0;
-  color:#333333;
+.eq-table .col-item,td.col-item{
+  font-size:18px!important;
+  font-weight:700!important;
+  text-align:left!important;
+  padding:10px 10px!important;
 }
-.amt-r{
-  padding:2.5mm 5mm!important;
+.eq-table .col-cat,.eq-table .col-brand,.eq-table .col-model,
+.eq-table .col-qty,.eq-table .col-unit,.eq-table .col-price,.eq-table .col-sub{
+  font-size:16px!important;
+  font-weight:700!important;
+  text-align:center!important;
 }
-.amt-r .val{
-  text-align:right;
-  min-width:28mm;
-  padding-left:4mm;
-  font-variant-numeric:tabular-nums;
-}
-.amt-total{
-  padding:3mm 5mm!important;
-}
-.amt-total .val{
-  text-align:right;
-  padding-left:4mm;
-  font-variant-numeric:tabular-nums;
-}
-.sig-box,.sig{
-  padding-top:3mm;
-  padding-bottom:10mm;
-  min-height:18mm;
-}
+.eq-table .col-cat,.eq-table .col-brand{white-space:nowrap}
+.eq-table .col-qty,.eq-table .col-unit{white-space:nowrap}
+.eq-table .col-model{overflow-wrap:anywhere}
+.eq-table .col-notes{font-size:13px!important;font-weight:400!important;text-align:center!important}
 
+.co-name{font-size:15px!important;font-weight:700;line-height:1.4!important;color:#111!important}
+.co-sub,.co-info{font-size:12px!important;font-weight:400;line-height:1.4!important;color:#555!important}
+.doc-label,.wo-label{
+  font-size:28px!important;font-weight:700!important;line-height:1.2!important;
+  color:#111!important;letter-spacing:2px!important;
+}
+.doc-en{font-size:12px!important;font-weight:500;color:#888!important;letter-spacing:2px!important}
+.doc-no,.wo-num{font-size:13px!important;font-weight:600;line-height:1.4!important}
+.doc-dates,.wo-meta,.pf,.sig-date{font-size:12px!important;font-weight:400;line-height:1.4!important;color:#666!important}
+.stitle,.sec-title,.bank-title,.eq-title{
+  color:#111!important;
+  background:transparent!important;
+  border:none!important;
+  padding:0 0 2mm!important;
+  margin:0 0 2.5mm!important;
+  letter-spacing:0!important;
+  display:block!important;
+  width:fit-content;
+  max-width:100%;
+  border-bottom:2.5px solid #9ACD32!important;
+  font-weight:700!important;
+  line-height:1.3!important;
+  font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif!important;
+  font-stretch:100%!important;
+  transform:none!important;
+  zoom:normal!important;
+}
+.eq-title,.stitle-eq{font-size:19px!important}
+.stitle,.sec-title,.bank-title{font-size:16px!important}
+.info-label,.lbl{font-size:13px!important;font-weight:500!important;color:#666!important}
+.info-value,.val,.info-grid strong{font-size:16px!important;font-weight:600!important;color:#111!important;line-height:1.4!important}
+.amt-r{font-size:13px!important;font-weight:500!important;line-height:1.4!important}
+.amt-r .val{font-size:14px!important;font-weight:600!important}
+.amt-total .lbl{font-size:16px!important;font-weight:700!important;color:#111!important}
+.amt-total .val{font-size:24px!important;font-weight:700!important;color:#111!important}
+.box,.notes-box,.remarks-box{font-size:14px!important;line-height:1.45!important;font-weight:400}
+.note-line{font-size:13px!important;line-height:1.45!important}
+.bank-row{font-size:13px!important;line-height:1.4!important}
+.sig-box,.sig{font-size:13px!important;line-height:1.4!important;min-height:14mm!important;padding-bottom:6mm!important}
+
+.section-flex .box{font-size:16px!important;font-weight:500!important}
+.section-flex-notes .box{font-size:15px!important;font-weight:400!important}
+.eq-table .head-row th,.eq-table tbody td{padding:8px 6px!important}
 </style>
 </head>
 <body>
-<div class="page">
-  <!-- Header -->
+<div class="sheet">
+<div class="page" data-mat-count="3">
   <div class="hdr">
     <div class="co">
       <img src="../logo.png" class="co-logo" alt="">
@@ -203,70 +343,82 @@ tbody tr{min-height:40px}
     </div>
   </div>
 
-  <!-- Field Grid -->
   <div class="grid">
-    <div class="field"><span class="lbl">案件編號</span><span class="val">WO-20250704-0567</span></div>
-    <div class="field"><span class="lbl">日期</span><span class="val">2025-07-05</span></div>
-    <div class="field"><span class="lbl">客戶</span><span class="val">張小芳</span></div>
-    <div class="field"><span class="lbl">電話</span><span class="val">0933-456-789</span></div>
-    <div class="field"><span class="lbl">現場聯絡</span><span class="val">張小姐</span></div>
-    <div class="field full"><span class="lbl">地址</span><span class="val">彰化市南門路88號12F</span></div>
-    <div class="field"><span class="lbl">技師</span><span class="val">李技師 / 陳助手</span></div>
+    <div class="field wo-id-field"><span class="lbl">案件編號</span><span class="val">WO-20250704-0567</span></div>
+    <div class="field f-date"><span class="lbl">日期</span><span class="val">2025-07-05</span></div>
+    <div class="field f-customer"><span class="lbl">客戶</span><span class="val">張小芳</span></div>
+    <div class="field f-phone"><span class="lbl">電話</span><span class="val">0933-456-789</span></div>
+    
+    <div class="field f-contact"><span class="lbl">現場聯絡</span><span class="val">張小姐</span></div>
+    <div class="field full f-address"><span class="lbl">地址</span><span class="val">彰化市南門路88號12F</span></div>
+    <div class="field f-tech"><span class="lbl">技師</span><span class="val">李技師 / 陳助手</span></div>
   </div>
 
-  <!-- Work Content -->
-  <div class="section">
+  <div class="section section-flex">
     <div class="sec-title">施工內容</div>
     <div class="box">客廳及房間冷氣安裝，含配管、配線、洞孔封塞。</div>
   </div>
 
-  <!-- Materials -->
   <div class="section">
-    <div class="sec-title">材料</div>
-    <table>
+    <div class="eq-title">材料／設備</div>
+    <table class="eq-table">
       <thead><tr class="head-row">
         <th class="col-w6">項次</th>
-        <th>材料名稱 / 規格</th>
+        <th class="col-w10">類別</th>
+        <th>品項／規格</th>
+        <th class="col-w12">型號</th>
         <th class="col-w8">數量</th>
         <th class="col-w8">單位</th>
-        <th class="col-w25">備註</th>
+        <th class="col-w16">備註</th>
       </tr></thead>
       <tbody>
     <tr>
       <td class="tac">1</td>
-      <td class="tal col-item">三菱重工 MSZ-AP35VG 3.5kW</td>
-      <td class="tac">2</td>
-      <td class="tac">台</td>
-      <td class="tal small col-notes">室內機2台／室外機2台／客廳/臥室</td>
+      <td class="tac col-cat">安裝新機</td>
+      <td class="tal col-item">聲寶 壁掛分離式 變頻冷暖</td>
+      <td class="tac col-model">AU/AM-JF50DC</td>
+      <td class="tac col-qty">1</td>
+      <td class="tac col-unit">台</td>
+      <td class="tac col-notes">室內機1台／室外機1台／客廳</td>
     </tr>
     <tr>
       <td class="tac">2</td>
+      <td class="tac col-cat">安裝新機</td>
+      <td class="tal col-item">三菱重工 MSZ-AP35VG 3.5kW</td>
+      <td class="tac col-model">—</td>
+      <td class="tac col-qty">2</td>
+      <td class="tac col-unit">台</td>
+      <td class="tac col-notes">室內機2台／室外機2台／客廳/臥室</td>
+    </tr>
+    <tr>
+      <td class="tac">3</td>
+      <td class="tac col-cat">安裝新機</td>
       <td class="tal col-item">格力 KFR-35GW</td>
-      <td class="tac">1</td>
-      <td class="tac">台</td>
-      <td class="tal small col-notes">室內機1台／室外機1台／書房</td>
+      <td class="tac col-model">—</td>
+      <td class="tac col-qty">1</td>
+      <td class="tac col-unit">台</td>
+      <td class="tac col-notes">室內機1台／室外機1台／書房</td>
     </tr></tbody>
     </table>
   </div>
 
-  <!-- Notes -->
-  <div class="section">
+  <div class="section section-flex-notes">
     <div class="sec-title">備註</div>
     <div class="box">請於上午 9:00 前到達，戶主會在現場。</div>
   </div>
 
-  <!-- Signature + Footer -->
   <div class="bottom-block">
     <div class="sigs">
-      <div class="sig">客戶簽名<br><span style="font-size:6.5pt;color:#aaa">日期：________</span></div>
-      <div class="sig">技師簽名<br><span style="font-size:6.5pt;color:#aaa">日期：________</span></div>
-      <div class="sig">公司經手人<br><span style="font-size:6.5pt;color:#aaa">日期：________</span></div>
+      <div class="sig">客戶簽名<br><span class="sig-date">日期：________</span></div>
+      <div class="sig">技師簽名<br><span class="sig-date">日期：________</span></div>
+      <div class="sig">公司經手人<br><span class="sig-date">日期：________</span></div>
     </div>
     <div class="pf">
       <div>晟風工程有限公司　Tel：0955-980-798</div>
-      <div>列印：2026/7/7</div>
+      <div>列印：2026/8/24</div>
     </div>
   </div>
+</div>
 </div>
 </body>
 </html>

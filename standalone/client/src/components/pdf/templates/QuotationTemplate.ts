@@ -1,7 +1,7 @@
 // 報價單 Template — A4 Portrait, 正式工程文件風格
 // 獨立版面：修改此檔不影響其他 Template
 
-import { logoUrl, COMPANY, COLORS, esc, fmtMoney, PRINT_DOC_TYPE_CSS } from "./brand-config";
+import { logoUrl, COMPANY, COLORS, esc, fmtMoney, PRINT_DOC_TYPE_CSS, PRINT_CJK_FONT_STACK, printFontLinksHtml } from "./brand-config";
 import { computeQuoteAmounts } from "../quote-amounts";
 import { displayQuoteItemCategory } from "./printCategory";
 
@@ -40,15 +40,15 @@ export function buildQuotationHtml(quote: any, baseOrigin?: string): string {
   ] as const;
   const TABLE_COL_WIDTHS = [
     "5%",
-    "10%",
-    "10%",
-    "24%",
     "12%",
-    "6%",
-    "6%",
-    "10%",
-    "10%",
+    "8%",
+    "20%",
+    "14%",
     "7%",
+    "8%",
+    "10%",
+    "10%",
+    "6%",
   ] as const;
 
   function renderItemRow(item: any, index: number): string {
@@ -91,12 +91,15 @@ export function buildQuotationHtml(quote: any, baseOrigin?: string): string {
 <head>
 <meta charset="UTF-8">
 <title>報價單 ${quoteNo}</title>
+${printFontLinksHtml()}
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{margin:0;padding:0}
-body{
-  font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
+body,.quotation-print-page{
+  font-family:${PRINT_CJK_FONT_STACK};
+  font-stretch:100%;font-synthesis:none;font-variation-settings:normal;
   font-size:14px;font-weight:400;line-height:1.4;color:#111;background:#fff;
+  transform:none;zoom:normal;
   -webkit-print-color-adjust:exact;print-color-adjust:exact;
 }
 
@@ -156,30 +159,35 @@ body{
   width:100%;max-width:100%;
   border-collapse:collapse;border-spacing:0;
   table-layout:fixed;font-size:16px;line-height:1.4;
+  font-family:${PRINT_CJK_FONT_STACK};
+  font-stretch:100%;transform:none;zoom:normal;
 }
 .eq-table .head-row{background:#f4f4f4;color:#111}
 .eq-table .head-row th{
   border:1px solid #ccc;
   font-size:14px;font-weight:700;text-align:center;vertical-align:middle;
   box-sizing:border-box;
-  padding:12px 8px;
+  padding:10px 8px;
   line-height:1.4;color:#111;
+  font-stretch:100%;letter-spacing:0;transform:none;zoom:normal;
 }
 .eq-table tbody td{
   border:1px solid #ccc;
   vertical-align:middle;font-size:16px;font-weight:500;
   box-sizing:border-box;
-  padding:12px 8px;
-  line-height:1.4;color:#111;
+  padding:10px 8px;
+  line-height:1.4;color:#111;text-align:center;
+  font-stretch:100%;letter-spacing:0;transform:none;zoom:normal;
+  overflow:visible;
 }
 .eq-table .col-item{
-  font-size:18px;font-weight:600;text-align:left;
+  font-size:18px;font-weight:700;text-align:left;
   word-wrap:break-word;word-break:break-word;white-space:normal;
 }
 .eq-table .col-cat,.eq-table .col-brand,.eq-table .col-model,
 .eq-table .col-qty,.eq-table .col-unit,.eq-table .col-price,.eq-table .col-sub,
 .eq-table .col-notes{
-  text-align:center;font-weight:600;font-size:16px;
+  text-align:center;font-weight:700;font-size:16px;
 }
 .eq-table .col-notes{font-size:13px;font-weight:400}
 .eq-table tr{page-break-inside:avoid;break-inside:avoid}
