@@ -2,9 +2,10 @@
 // 獨立版面：修改此檔不影響其他 Template
 // continuous-print：EPSON 點陣機 9.5×5.5in（241.3×139.7mm）單頁極簡黑白版型
 
-import { logoUrl, COMPANY, COLORS, esc, PDF_LAYOUT_CSS } from "./brand-config";
+import { logoUrl, COMPANY, COLORS, esc, PRINT_DOC_TYPE_CSS } from "./brand-config";
 import { stripQuotePricingFromNotes } from "@/lib/quoteToWorkOrder";
 import { CONTINUOUS_PAPER, PRINT_CALIBRATION_DEFAULT, type PrintCalibration } from "@/lib/printPaperConfig";
+import { displayQuoteItemCategory } from "./printCategory";
 
 interface EquipmentRow {
   brand?: string | null;
@@ -67,26 +68,34 @@ function equipmentRemark(it: EquipmentRow): string {
   return parts.join("／");
 }
 
-/** digital 模式材料列（含單位／備註）；空資料仍留一空白列維持表格結構。 */
+/** digital 模式材料列：類別／品項／型號分開顯示；空資料仍留一空白列維持表格結構。 */
 function buildMaterialRows(equipment: EquipmentRow[]): string {
   if (equipment.length === 0) {
     return `<tr>
       <td class="tac">&nbsp;</td>
+      <td class="tac">&nbsp;</td>
       <td>&nbsp;</td>
+      <td class="tac">&nbsp;</td>
       <td class="tac">&nbsp;</td>
       <td class="tac">&nbsp;</td>
       <td>&nbsp;</td>
     </tr>`;
   }
 
-  return equipment.map((it, i) => `
+  return equipment.map((it, i) => {
+    const spec = [it.brand, it.itemName || it.model].filter(Boolean).join(" ").trim() || "—";
+    const model = it.itemName && it.model && it.model !== it.itemName ? it.model : (it.itemName ? (it.model || "—") : "—");
+    return `
     <tr>
       <td class="tac">${i + 1}</td>
-      <td class="tal col-item">${esc(equipmentSpec(it))}</td>
-      <td class="tac">${it.quantity ?? ""}</td>
-      <td class="tac">${esc(it.unit || "台")}</td>
-      <td class="tal small col-notes">${esc(equipmentRemark(it))}</td>
-    </tr>`).join("");
+      <td class="tac col-cat">${esc(displayQuoteItemCategory(it))}</td>
+      <td class="tal col-item">${esc(spec)}</td>
+      <td class="tac col-model">${esc(model)}</td>
+      <td class="tac col-qty">${it.quantity ?? ""}</td>
+      <td class="tac col-unit">${esc(it.unit || "台")}</td>
+      <td class="tal col-notes">${esc(equipmentRemark(it))}</td>
+    </tr>`;
+  }).join("");
 }
 
 /**
@@ -101,7 +110,10 @@ function buildContinuousMaterialRows(equipment: EquipmentRow[]): string {
       ? String(it.quantity)
       : "";
     const remark = equipmentRemark(it);
-    const name = remark ? `${equipmentSpec(it)}（${remark}）` : equipmentSpec(it);
+    const spec = equipmentSpec(it);
+    const cat = displayQuoteItemCategory(it);
+    const nameCore = remark ? `${spec}（${remark}）` : spec;
+    const name = cat ? `${cat}｜${nameCore}` : nameCore;
     return `<div class="cp-mat-row" data-mat-index="${i + 1}">
       <div class="cp-mat-no">${i + 1}</div>
       <div class="cp-mat-name">${esc(name)}</div>
@@ -305,23 +317,23 @@ html,body,.sheet,.page{
   opacity:1!important;
 }
 body{
-  font-family:"Noto Sans TC","Microsoft JhengHei",Arial,sans-serif;
-  font-size:10.5pt;
-  line-height:1.2;
+  font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
+  font-size:15px;
+  line-height:1.4;
   font-weight:500;
 }
 .cp-title{
   display:block;
   text-align:center;
-  font-size:15pt;
-  font-weight:900;
+  font-size:24px;
+  font-weight:700;
   color:#000!important;
-  letter-spacing:1.2px;
-  margin:0 0 0.25mm;
+  letter-spacing:1px;
+  margin:0 0 0.3mm;
   padding:0;
   border:none;
   background:transparent!important;
-  line-height:1.08;
+  line-height:1.25;
   flex:0 0 auto;
 }
 .cp-grid{
@@ -330,14 +342,14 @@ body{
   column-gap:4mm;
   row-gap:0;
   width:100%;
-  margin:0 0 0.25mm;
-  padding:0 0 0.3mm;
+  margin:0 0 0.2mm;
+  padding:0 0 0.25mm;
   border:none;
   border-bottom:0.3mm solid #000;
   flex:0 0 auto;
 }
 .cp-col{display:block;min-width:0}
-.cp-field{display:flex;gap:1.2mm;align-items:baseline;min-width:0;line-height:1.12;margin:0}
+.cp-field{display:flex;gap:1.2mm;align-items:baseline;min-width:0;line-height:1.35;margin:0}
 /* 技師：保留足夠手寫空間；無資料時空白（不加破折號），僅空值時顯示底線 */
 .cp-field-tech{
   min-height:6mm;
@@ -356,15 +368,17 @@ body{
   width:24mm;
   min-width:24mm;
   max-width:24mm;
-  font-size:10.5pt;font-weight:700;color:#000!important;
+  font-size:13px;font-weight:500;color:#000!important;
   white-space:nowrap;
   letter-spacing:0;
   overflow:visible;
+  line-height:1.35;
 }
 .cp-val{
   flex:1 1 auto;
-  font-size:11pt;font-weight:700;color:#000!important;
+  font-size:16px;font-weight:600;color:#000!important;
   min-width:0;
+  line-height:1.35;
 }
 /* 施工內容：精簡；約 1～2 行手寫補充；底部單條實線與材料分隔 */
 .cp-block{
@@ -381,25 +395,29 @@ body{
 .cp-sec{
   display:block;
   width:100%;
-  font-size:10.5pt;font-weight:700;color:#000!important;
-  margin:0 0 0.15mm;padding:0;
+  font-size:16px;font-weight:700;color:#000!important;
+  margin:0 0 0.12mm;padding:0;
   border:none;background:transparent!important;
-  line-height:1.1;
+  line-height:1.35;
   flex:0 0 auto;
 }
 .cp-text{
   display:block;
   width:100%;
-  font-size:10.5pt;font-weight:500;color:#000!important;
-  margin:0;padding:0;line-height:1.15;
+  font-size:16px;font-weight:500;color:#000!important;
+  margin:0;padding:0;line-height:1.4;
   border:none;background:transparent!important;
   flex:0 0 auto;
 }
+.cp-notes-block .cp-text{
+  font-size:15px;
+  line-height:1.4;
+}
 .cp-write-space{
   flex:0 0 auto;
-  height:3.5mm;
+  height:2.5mm;
   width:100%;
-  margin-top:0.2mm;
+  margin-top:0.15mm;
   border:none;
 }
 /* 材料區：可長高吸收留白，但不縮到小於材料列（避免重疊下方） */
@@ -431,12 +449,12 @@ body{
   overflow:visible;
 }
 .cp-mat-header{
-  font-size:9.5pt;font-weight:700;color:#000!important;
-  padding:0.25mm 0 0.3mm;
+  font-size:14px;font-weight:700;color:#000!important;
+  padding:0.2mm 0 0.25mm;
   margin:0;
   border:none;
   border-bottom:0.18mm dotted #888;
-  line-height:1.12;
+  line-height:1.35;
   flex:0 0 auto;
 }
 .cp-mat-list{
@@ -449,21 +467,21 @@ body{
   flex:0 0 auto;
 }
 .cp-mat-row{
-  font-size:9.5pt;font-weight:500;color:#000!important;
-  padding:0.28mm 0;
+  font-size:16px;font-weight:500;color:#000!important;
+  padding:0.35mm 0;
   margin:0;
   border:none;
   border-bottom:0.15mm dotted #999;
-  line-height:1.15;
-  min-height:3.4mm;
+  line-height:1.4;
+  min-height:5mm;
   flex:0 0 auto;
 }
 .cp-mat-row:last-child{
   border-bottom:0.15mm dotted #999;
 }
 .cp-mat-no{text-align:center;font-weight:700}
-.cp-mat-name{text-align:left;min-width:0;padding-right:1.2mm}
-.cp-mat-qty{text-align:center;font-weight:700}
+.cp-mat-name{text-align:left;min-width:0;padding-right:1.2mm;font-size:16px;font-weight:600}
+.cp-mat-qty{text-align:center;font-weight:700;font-size:16px}
 .cp-mat-pad{min-width:0}
 /* 材料下方手寫留白：0/1/2 筆較大；5/8 筆縮小；有餘高時再伸展 */
 .cp-mat-handwrite{
@@ -474,36 +492,50 @@ body{
   border:none;
   min-height:5mm;
 }
-.cp-mat-block[data-mat-count="0"] .cp-mat-handwrite{min-height:26mm}
-.cp-mat-block[data-mat-count="1"] .cp-mat-handwrite{min-height:20mm}
-.cp-mat-block[data-mat-count="2"] .cp-mat-handwrite{min-height:15mm}
-.cp-mat-block[data-mat-count="3"] .cp-mat-handwrite{min-height:10mm}
-.cp-mat-block[data-mat-count="4"] .cp-mat-handwrite{min-height:7mm}
-.cp-mat-block[data-mat-count="5"] .cp-mat-handwrite{min-height:4mm}
-.cp-mat-block[data-mat-count="6"] .cp-mat-handwrite{min-height:3mm}
-.cp-mat-block[data-mat-count="7"] .cp-mat-handwrite{min-height:2.5mm}
-.cp-mat-block[data-mat-count="8"] .cp-mat-handwrite{min-height:2mm}
-/* 多筆材料時略壓材料列高，確保單頁且不重疊 */
+.cp-mat-block[data-mat-count="0"] .cp-mat-handwrite{min-height:20mm}
+.cp-mat-block[data-mat-count="1"] .cp-mat-handwrite{min-height:16mm}
+.cp-mat-block[data-mat-count="2"] .cp-mat-handwrite{min-height:12mm}
+.cp-mat-block[data-mat-count="3"] .cp-mat-handwrite{min-height:8mm}
+.cp-mat-block[data-mat-count="4"] .cp-mat-handwrite{min-height:5mm}
+.cp-mat-block[data-mat-count="5"] .cp-mat-handwrite{min-height:3mm}
+.cp-mat-block[data-mat-count="6"] .cp-mat-handwrite{min-height:2mm}
+.cp-mat-block[data-mat-count="7"] .cp-mat-handwrite{min-height:1.2mm}
+.cp-mat-block[data-mat-count="8"] .cp-mat-handwrite{min-height:0.8mm}
+/* 多筆材料時略壓列高，重要欄位不得小於 15px */
 .cp-mat-block[data-mat-count="5"] .cp-mat-row,
-.cp-mat-block[data-mat-count="6"] .cp-mat-row{
-  padding:0.2mm 0;
-  min-height:3.2mm;
-  line-height:1.12;
-}
+.cp-mat-block[data-mat-count="6"] .cp-mat-row,
 .cp-mat-block[data-mat-count="7"] .cp-mat-row,
 .cp-mat-block[data-mat-count="8"] .cp-mat-row{
-  padding:0.08mm 0;
-  min-height:2.85mm;
-  line-height:1.08;
-  font-size:9pt;
+  padding:0.12mm 0;
+  min-height:4.2mm;
+  line-height:1.35;
+  font-size:15px;
 }
-.cp-mat-block[data-mat-count="8"] .cp-mat-handwrite{min-height:1.5mm}
-/* 8 筆時再壓縮施工手寫與客戶備註最小高，確保單頁 */
-.page:has(.cp-mat-block[data-mat-count="8"]) .cp-write-space{height:2.5mm}
-.page:has(.cp-mat-block[data-mat-count="8"]) .cp-cust-space{min-height:2.8mm}
-.page:has(.cp-mat-block[data-mat-count="8"]) .cp-sig-date{margin-top:1mm}
+.cp-mat-block[data-mat-count="7"] .cp-mat-name,
+.cp-mat-block[data-mat-count="8"] .cp-mat-name,
+.cp-mat-block[data-mat-count="7"] .cp-mat-qty,
+.cp-mat-block[data-mat-count="8"] .cp-mat-qty{
+  font-size:15px;
+}
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-write-space{height:0}
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-cust-space{min-height:0}
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-sig-date{margin-top:0.6mm}
 .page:has(.cp-mat-block[data-mat-count="7"]) .cp-write-space,
-.page:has(.cp-mat-block[data-mat-count="5"]) .cp-write-space{height:3mm}
+.page:has(.cp-mat-block[data-mat-count="6"]) .cp-write-space,
+.page:has(.cp-mat-block[data-mat-count="5"]) .cp-write-space{height:1.2mm}
+.page:has(.cp-mat-block[data-mat-count="7"]) .cp-val,
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-val{font-size:15px}
+.page:has(.cp-mat-block[data-mat-count="7"]) .cp-field-tech,
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-field-tech,
+.page:has(.cp-mat-block[data-mat-count="7"]) .cp-field-tech .cp-val,
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-field-tech .cp-val{min-height:0}
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-block,
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-notes-block,
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-mat-block{padding-top:0;padding-bottom:0}
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-fee-block{padding:0 0 0.1mm}
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-grid{margin:0;padding-bottom:0.15mm}
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-fee-opt{margin:0;line-height:1.25}
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-mat-handwrite{min-height:0}
 /* 備註：僅標題＋內容；緊湊；與工程收費之間不加分隔線，僅留白銜接 */
 .cp-notes-block{
   display:flex;
@@ -539,9 +571,9 @@ body{
   display:flex;
   align-items:center;
   gap:1.4mm;
-  font-size:10pt;font-weight:500;color:#000!important;
-  line-height:1.08;
-  margin:0.2mm 0 0;
+  font-size:15px;font-weight:700;color:#000!important;
+  line-height:1.35;
+  margin:0.15mm 0 0;
 }
 .cp-check{
   box-sizing:border-box;
@@ -588,9 +620,14 @@ body{
   align-items:start;
   flex:0 0 auto;
 }
-.page:has(.cp-mat-block[data-mat-count="8"]) .cp-sigs{padding-top:2mm}
-.page:has(.cp-mat-block[data-mat-count="8"]) .cp-notes-block{padding-bottom:0.35mm}
-.page:has(.cp-mat-block[data-mat-count="8"]) .cp-sig-date{margin-top:0.9mm}
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-sigs{padding-top:0.6mm}
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-notes-block{padding-bottom:0}
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-sig-date{margin-top:0.3mm}
+.page:has(.cp-mat-block[data-mat-count="7"]) .cp-title,
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-title{font-size:24px;line-height:1.25;margin:0}
+.page:has(.cp-mat-block[data-mat-count="7"]) .cp-field,
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-field{line-height:1.3}
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-mat-row{line-height:1.25;min-height:0}
 .cp-sig{
   box-sizing:border-box;
   min-width:0;
@@ -603,10 +640,10 @@ body{
   overflow:visible;
 }
 .cp-sig-title{
-  font-size:10pt;font-weight:700;
+  font-size:13px;font-weight:700;
   margin:0;padding:0;
   flex:0 0 auto;
-  line-height:1.1;
+  line-height:1.35;
 }
 .cp-sig-space{
   flex:0 0 12mm;
@@ -624,11 +661,11 @@ body{
   flex:0 0 auto;
 }
 .cp-sig-date{
-  font-size:10pt;font-weight:700;
+  font-size:12px;font-weight:700;
   display:block;
   margin-top:1.2mm;
   flex:0 0 auto;
-  line-height:1.1;
+  line-height:1.35;
   border:none;
 }
 .hdr,.co-logo,.pf,.head-row{display:none!important}
@@ -781,8 +818,8 @@ ${buildCompactOverridesCss(mode)}
 /* ===== Base ===== */
 *{margin:0;padding:0;box-sizing:border-box}
 body{
-  font-family:'Microsoft JhengHei','\\5fae\\8edf\\6b63\\9ed1\\9ad4',Arial,sans-serif;
-  font-size:10pt;color:${COLORS.black};background:#fff;
+  font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
+  font-size:14px;font-weight:400;line-height:1.4;color:#111;background:#fff;
   -webkit-print-color-adjust:exact;print-color-adjust:exact;
 }
 
@@ -792,107 +829,115 @@ ${buildPageBoxCss(mode, calibration)}
 /* ===== Header ===== */
 .hdr{
   display:flex;justify-content:space-between;align-items:flex-start;
-  border-bottom:2px solid ${COLORS.black};
-  padding-bottom:3mm;margin-bottom:3mm;
+  border-bottom:1px solid #ddd;
+  padding-bottom:2mm;margin-bottom:2.5mm;
   flex-shrink:0;
 }
 .co{display:flex;align-items:center;gap:3mm}
 .co-logo{
-  width:55px;height:55px;max-width:55px;max-height:55px;
+  width:44px;height:44px;max-width:44px;max-height:44px;
   object-fit:contain;flex-shrink:0;
-  border:1px solid ${COLORS.borderGray};border-radius:3px;
 }
-.co-name{font-size:13pt;font-weight:700}
-.co-sub{font-size:7.5pt;color:${COLORS.midGray}}
+.co-name{font-size:15px;font-weight:700;line-height:1.4;color:#111}
+.co-sub{font-size:12px;font-weight:400;color:#666;line-height:1.4}
 .wo-right{text-align:right}
-.wo-label{font-size:14pt;font-weight:700;color:${COLORS.primary};letter-spacing:4px}
-.wo-num{font-size:10pt;font-weight:700;font-family:monospace}
-.wo-meta{font-size:8pt;color:${COLORS.midGray};margin-top:1px}
+.wo-label{font-size:28px;font-weight:700;color:#111;letter-spacing:2px;line-height:1.2}
+.wo-num{font-size:13px;font-weight:600;font-family:monospace;line-height:1.4}
+.wo-meta{font-size:12px;font-weight:400;color:#666;margin-top:1px;line-height:1.4}
 
-/* ===== Field grid ===== */
 .grid{
   display:grid;grid-template-columns:1fr 1fr;
-  gap:1.5mm 6mm;margin-bottom:2mm;font-size:9pt;
+  gap:1.2mm 6mm;margin-bottom:2.5mm;
   flex-shrink:0;
 }
-.field{display:flex;gap:2mm;align-items:baseline}
-.lbl{font-size:7.5pt;color:${COLORS.midGray};min-width:52px;flex-shrink:0}
-.val{font-size:9.5pt;font-weight:600}
+.field{display:flex;flex-direction:column;gap:0.6mm}
+.lbl{font-size:13px;font-weight:500;color:#666;line-height:1.3}
+.val{font-size:16px;font-weight:600;color:#111;line-height:1.4}
 .full{grid-column:1/-1}
 
-/* ===== Section titles ===== */
 .sec-title{
-  font-size:7.5pt;font-weight:700;
-  background:${COLORS.black};color:${COLORS.primary};
-  padding:1mm 2.5mm;letter-spacing:2px;margin-bottom:1.5mm;
-  display:inline-block;
+  color:#111;font-size:16px;font-weight:700;
+  background:transparent;border:none;
+  padding:0 0 1.2mm;margin:0 0 2mm;
+  display:block;width:fit-content;
+  border-bottom:2.5px solid ${COLORS.primary};
+  letter-spacing:0;line-height:1.3;
 }
-.section{margin-bottom:2mm}
+.eq-title{
+  color:#111;font-size:18px;font-weight:700;
+  background:transparent;border:none;
+  padding:0 0 1.2mm;margin:0 0 2mm;
+  display:block;width:fit-content;
+  border-bottom:2.5px solid ${COLORS.primary};
+}
+.section{margin-bottom:2.5mm;flex:0 0 auto}
 
-/* ===== Table ===== */
 table{
   width:100%;border-collapse:collapse;
-  table-layout:fixed;font-size:9pt;
+  table-layout:fixed;font-size:16px;line-height:1.4;
 }
-.head-row{background:${COLORS.black};color:${COLORS.primary}}
+.head-row{background:#f4f4f4;color:#111}
 .head-row th{
-  border:1px solid ${COLORS.black};
-  font-size:8.5pt;font-weight:700;text-align:center;
+  border:1px solid #ccc;
+  font-size:14px;font-weight:700;text-align:center;
+  vertical-align:middle;line-height:1.4;
+  padding:8px 6px;color:#111;
 }
 tbody td{
-  border:1px solid ${COLORS.black};
-  vertical-align:middle;font-size:9pt;
+  border:1px solid #ccc;
+  vertical-align:middle;font-size:16px;font-weight:500;
+  line-height:1.4;padding:8px 6px;color:#111;
 }
 tbody tr{page-break-inside:avoid;break-inside:avoid}
-
-/* Text align helpers */
 .tac{text-align:center}
 .tar{text-align:right}
 .tal{text-align:left}
-.small{font-size:8.5pt}
+.col-item{font-size:17px;font-weight:600;text-align:left;word-break:break-word}
+.col-cat,.col-model,.col-qty,.col-unit{text-align:center;font-weight:600;font-size:16px}
+.col-notes{font-size:13px;font-weight:400}
+.col-w6{width:7%}
+.col-w10{width:12%}
+.col-w12{width:14%}
+.col-w8{width:9%}
+.col-w16{width:16%}
 
-/* Column widths */
-.col-w6{width:6%}
-.col-w8{width:8%}
-.col-w25{width:25%}
-.col-item{width:auto}
-
-/* ===== Box ===== */
 .box{
-  border:1px solid ${COLORS.borderGray};
-  border-left:3px solid ${COLORS.primary};
-  padding:3mm 4mm;
-  font-size:9pt;white-space:pre-wrap;
-  line-height:1.6;background:#fafafa;
-  page-break-inside:auto;break-inside:auto;
+  border:1px solid #e5e5e5;
+  padding:2mm 3mm;
+  font-size:16px;font-weight:500;white-space:pre-wrap;
+  line-height:1.45;background:#fff;color:#111;
 }
+.section-flex-notes .box{font-size:15px}
 
-/* ===== Bottom block (signatures + footer) ===== */
 .bottom-block{
-  margin-top:4mm;
+  margin-top:auto;
   flex-shrink:0;
   page-break-inside:avoid;break-inside:avoid;
 }
 .sigs{
-  display:grid;grid-template-columns:repeat(3,1fr);gap:10mm;
-  margin-bottom:3mm;
+  display:grid;grid-template-columns:repeat(3,1fr);gap:6mm;
+  margin-bottom:1.5mm;
 }
 .sig{
-  text-align:center;border-top:1.5px solid ${COLORS.black};
-  font-size:8.5pt;color:${COLORS.midGray};
+  text-align:center;border-top:1px solid #111;
+  font-size:13px;font-weight:500;color:#555;line-height:1.4;
+  padding-top:2mm;padding-bottom:6mm;
 }
-.sig-date{font-size:6.5pt;color:#aaa}
+.sig-date{font-size:12px;font-weight:400;color:#888;line-height:1.4}
 .pf{
   display:flex;justify-content:space-between;align-items:center;
-  font-size:6.5pt;color:${COLORS.lightGray};
-  border-top:1px solid ${COLORS.borderGray};padding-top:1.5mm;
+  font-size:12px;font-weight:400;color:#888;line-height:1.4;
+  border-top:1px solid #eee;padding-top:1.5mm;
 }
-${PDF_LAYOUT_CSS}
+${PRINT_DOC_TYPE_CSS}
+.section-flex .box{font-size:16px!important;font-weight:500!important}
+.section-flex-notes .box{font-size:15px!important;font-weight:400!important}
+.head-row th,tbody td{padding:8px 6px!important}
 </style>
 </head>
 <body>
 <div class="sheet">
-<div class="page">
+<div class="page" data-mat-count="${equipment.length}">
   <div class="hdr">
     <div class="co">
       <img src="${logoUrl()}" class="co-logo" alt="">
@@ -927,14 +972,16 @@ ${PDF_LAYOUT_CSS}
   </div>
 
   <div class="section">
-    <div class="sec-title">材料 / 設備</div>
+    <div class="eq-title">材料／設備</div>
     <table>
       <thead><tr class="head-row">
         <th class="col-w6">項次</th>
-        <th>品牌 / 品項 / 型號</th>
+        <th class="col-w10">類別</th>
+        <th>品項／規格</th>
+        <th class="col-w12">型號</th>
         <th class="col-w8">數量</th>
         <th class="col-w8">單位</th>
-        <th class="col-w25">備註</th>
+        <th class="col-w16">備註</th>
       </tr></thead>
       <tbody>${itemRows}</tbody>
     </table>
