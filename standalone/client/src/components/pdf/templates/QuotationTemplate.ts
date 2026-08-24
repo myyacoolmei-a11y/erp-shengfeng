@@ -38,17 +38,18 @@ export function buildQuotationHtml(quote: any, baseOrigin?: string): string {
     "小計",
     "備註",
   ] as const;
+  /* A4 直式有效寬度約 186mm：品項／規格、型號優先；項次／數量／單位縮窄。 */
   const TABLE_COL_WIDTHS = [
+    "4%",
+    "11%",
+    "8%",
+    "26%",
+    "17%",
+    "4.5%",
+    "4.5%",
+    "10%",
+    "10%",
     "5%",
-    "12%",
-    "8%",
-    "20%",
-    "14%",
-    "7%",
-    "8%",
-    "10%",
-    "10%",
-    "6%",
   ] as const;
 
   function renderItemRow(item: any, index: number): string {
@@ -94,22 +95,28 @@ export function buildQuotationHtml(quote: any, baseOrigin?: string): string {
 ${printFontLinksHtml()}
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-html,body{margin:0;padding:0}
+html,body{
+  margin:0;padding:0;
+  width:186mm;
+  min-height:277mm;
+}
 body,.quotation-print-page{
   font-family:${PRINT_CJK_FONT_STACK};
-  font-stretch:100%;font-synthesis:none;font-variation-settings:normal;
+  font-synthesis:none;font-variation-settings:normal;
   font-size:14px;font-weight:400;line-height:1.4;color:#111;background:#fff;
-  transform:none;zoom:normal;
+  transform:none;
   -webkit-print-color-adjust:exact;print-color-adjust:exact;
 }
 
-@page{size:A4 portrait;margin:10mm 12mm}
+@page{size:A4 portrait;margin:10mm 12mm} /* 紙張 210mm × 297mm 直式；左右 12mm、上下 10mm */
 .quotation-print-page{
-  width:100%;
-  min-height:calc(297mm - 20mm);
+  width:186mm;
+  max-width:186mm;
+  min-height:277mm;
   margin:0;padding:0;
   display:flex;flex-direction:column;
   break-after:auto;page-break-after:auto;
+  transform:none;
 }
 .quotation-print-content{flex:0 0 auto}
 .quotation-signature-section{
@@ -160,25 +167,28 @@ body,.quotation-print-page{
   border-collapse:collapse;border-spacing:0;
   table-layout:fixed;font-size:16px;line-height:1.4;
   font-family:${PRINT_CJK_FONT_STACK};
-  font-stretch:100%;transform:none;zoom:normal;
+  transform:none;
 }
-.eq-table .head-row{background:#f4f4f4;color:#111}
+.eq-table .head-row{background:#111;color:#fff}
 .eq-table .head-row th{
-  border:1px solid #ccc;
-  font-size:14px;font-weight:700;text-align:center;vertical-align:middle;
+  background:#111;color:#fff;
+  border:1px solid #111;
+  font-size:14px;font-weight:700;
+  text-align:center;vertical-align:middle;
   box-sizing:border-box;
-  padding:10px 8px;
-  line-height:1.4;color:#111;
-  font-stretch:100%;letter-spacing:0;transform:none;zoom:normal;
+  padding:8px 4px;
+  line-height:1.35;letter-spacing:0;transform:none;
+  white-space:normal;
 }
 .eq-table tbody td{
   border:1px solid #ccc;
   vertical-align:middle;font-size:16px;font-weight:500;
   box-sizing:border-box;
-  padding:10px 8px;
+  padding:8px 5px;
   line-height:1.4;color:#111;text-align:center;
-  font-stretch:100%;letter-spacing:0;transform:none;zoom:normal;
-  overflow:visible;
+  letter-spacing:0;transform:none;
+  overflow:visible;white-space:normal;
+  word-break:break-word;overflow-wrap:break-word;
 }
 .eq-table .col-item{
   font-size:18px;font-weight:700;text-align:left;
@@ -187,8 +197,9 @@ body,.quotation-print-page{
 .eq-table .col-cat,.eq-table .col-brand,.eq-table .col-model,
 .eq-table .col-qty,.eq-table .col-unit,.eq-table .col-price,.eq-table .col-sub,
 .eq-table .col-notes{
-  text-align:center;font-weight:700;font-size:16px;
+  text-align:center;font-weight:600;font-size:16px;
 }
+.eq-table .col-qty,.eq-table .col-unit,.eq-table td:first-child{white-space:nowrap}
 .eq-table .col-notes{font-size:13px;font-weight:400}
 .eq-table tr{page-break-inside:avoid;break-inside:avoid}
 
@@ -198,14 +209,17 @@ body,.quotation-print-page{
 .muted{color:#888}
 
 .info-block{
-  display:grid;grid-template-columns:1fr 1fr 1fr;
-  gap:3mm 8mm;
-  padding:1mm 0 1mm;
+  display:flex;flex-direction:column;gap:3.5mm;
+  padding:1mm 0 2mm;
 }
+.info-row{
+  display:grid;grid-template-columns:1fr 1fr 1fr;
+  gap:2.5mm 8mm;
+}
+.info-row.addr-row{grid-template-columns:2fr 1fr}
 .info-item{display:flex;flex-direction:column;gap:1mm;min-width:0}
-.info-item.span2{grid-column:span 2}
-.info-label{font-size:13px;font-weight:500;color:#666;line-height:1.3}
-.info-value{font-size:16px;font-weight:600;color:#111;line-height:1.4;word-break:break-word}
+.info-label{font-size:12px;font-weight:500;color:#888;line-height:1.3}
+.info-value{font-size:15px;font-weight:600;color:#111;line-height:1.4;word-break:break-word}
 
 .notes-totals-row{
   display:flex;
@@ -254,8 +268,8 @@ body,.quotation-print-page{
   padding:2mm 3mm;
   border-top:1.5px solid #111;
 }
-.amt-total .lbl{color:#111;font-size:16px;font-weight:700}
-.amt-total .val{color:#111;font-size:24px;font-weight:700}
+.amt-total .lbl{color:#111;font-size:14px;font-weight:700}
+.amt-total .val{color:#111;font-size:16px;font-weight:700}
 
 .bank-box{
   border-top:1px solid #eee;
@@ -294,17 +308,19 @@ body,.quotation-print-page{
 
 @media print{
   html,body{
-    width:210mm;
+    width:186mm;
+    min-height:277mm;
     margin:0!important;padding:0!important;
     overflow:visible!important;
   }
   .quotation-print-page{
-    width:auto;
-    min-height:calc(297mm - 20mm);
+    width:186mm;
+    min-height:277mm;
     height:auto;
     margin:0;padding:0;
     overflow:visible;
     break-after:auto;page-break-after:auto;
+    transform:none;
   }
   .quotation-signature-section{
     margin-top:auto;
@@ -316,6 +332,25 @@ body,.quotation-print-page{
   .eq-table tr{page-break-inside:avoid;break-inside:avoid}
 }
 ${PRINT_DOC_TYPE_CSS}
+.quotation-print-page,.quotation-print-page *{transform:none!important}
+.quotation-print-page .eq-table .head-row,
+.quotation-print-page .eq-table .head-row th{
+  background:#111!important;color:#fff!important;
+  border-color:#111!important;
+  text-align:center!important;vertical-align:middle!important;
+  font-weight:700!important;font-size:14px!important;
+  white-space:normal!important;
+}
+.quotation-print-page .eq-table .col-cat,
+.quotation-print-page .eq-table .col-brand,
+.quotation-print-page .eq-table .col-model,
+.quotation-print-page .eq-table .col-item{
+  white-space:normal!important;
+}
+.quotation-print-page .amt-total .lbl{font-size:14px!important;font-weight:700!important}
+.quotation-print-page .amt-total .val{font-size:16px!important;font-weight:700!important}
+.quotation-print-page .info-label{font-size:12px!important;font-weight:500!important;color:#888!important}
+.quotation-print-page .info-value{font-size:15px!important;font-weight:600!important}
 </style>
 </head>
 <body>
@@ -350,25 +385,29 @@ ${PRINT_DOC_TYPE_CSS}
     <div class="sec">
       <div class="stitle">客戶資訊</div>
       <div class="info-block">
-        <div class="info-item">
-          <span class="info-label">客戶名稱</span>
-          <span class="info-value">${esc(quote.customerName) || "—"}</span>
+        <div class="info-row">
+          <div class="info-item">
+            <span class="info-label">客戶名稱</span>
+            <span class="info-value">${esc(quote.customerName) || "—"}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">聯絡電話</span>
+            <span class="info-value">${esc(quote.customerPhone) || "—"}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">負責業務</span>
+            <span class="info-value">${esc(quote.salesRepName) || "—"}</span>
+          </div>
         </div>
-        <div class="info-item">
-          <span class="info-label">聯絡電話</span>
-          <span class="info-value">${esc(quote.customerPhone) || "—"}</span>
-        </div>
-        <div class="info-item">
-          <span class="info-label">負責業務</span>
-          <span class="info-value">${esc(quote.salesRepName) || "—"}</span>
-        </div>
-        <div class="info-item span2">
-          <span class="info-label">施工地址</span>
-          <span class="info-value">${esc(quote.address) || "—"}</span>
-        </div>
-        <div class="info-item">
-          <span class="info-label">稅別</span>
-          <span class="info-value">${esc(taxType)}</span>
+        <div class="info-row addr-row">
+          <div class="info-item">
+            <span class="info-label">施工地址</span>
+            <span class="info-value">${esc(quote.address) || "—"}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">稅別</span>
+            <span class="info-value">${esc(taxType)}</span>
+          </div>
         </div>
       </div>
     </div>
@@ -392,7 +431,7 @@ ${PRINT_DOC_TYPE_CSS}
             <div class="box">${esc(quote.description) || "施工方式：\n施工天數：\n注意事項："}</div>
           </div>
           <div style="flex:1;min-width:0">
-            <div class="stitle">備註事項</div>
+            <div class="stitle">備註</div>
             <div class="notes-box">${notesList}</div>
           </div>
         </div>
@@ -421,9 +460,9 @@ ${PRINT_DOC_TYPE_CSS}
 
   <footer class="quotation-signature-section">
     <div class="sig-row">
-      <div class="sig-box">客戶確認簽名<br><span class="sig-date">日期：________</span></div>
-      <div class="sig-box">業務簽名<br><span class="sig-date">日期：________</span></div>
-      <div class="sig-box">公　司　章<br><span class="sig-date">&nbsp;</span></div>
+      <div class="sig-box">客戶簽名</div>
+      <div class="sig-box">業務簽名</div>
+      <div class="sig-box">日期</div>
     </div>
     <div class="pf">
       <div>${COMPANY.name}　${COMPANY.phone}　${COMPANY.address}</div>
