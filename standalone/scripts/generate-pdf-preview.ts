@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { buildQuotationHtml } from "../client/src/components/pdf/templates/QuotationTemplate.ts";
 import { buildWorkOrderHtml } from "../client/src/components/pdf/templates/WorkOrderTemplate.ts";
 import { buildStatementHtml } from "../client/src/components/pdf/templates/StatementTemplate.ts";
+import { displayQuoteItemCategory } from "../client/src/components/pdf/templates/printCategory.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const outDir = join(__dirname, "../public/pdf-samples");
@@ -30,8 +31,11 @@ const demoQuote = {
   notes: "報價單有效期限30日，施工前請支付50%訂金。",
   items: [
     { category: "安裝新機", brand: "聲寶", itemName: "壁掛分離式 變頻冷暖", model: "AU/AM-JF50DC", quantity: 1, unit: "台", unitPrice: 32800, subtotal: 32800, notes: "含基本安裝" },
-    { category: "裝新機", brand: "三菱重工", itemName: "壁掛分離式 3.5kW 超長品項名稱測試自動換行顯示效果", model: "MSZ-AP35VG", quantity: 2, unit: "台", unitPrice: 28500, subtotal: 57000, notes: "含安裝及基本配管" },
-    { category: "配管工程", brand: "—", itemName: "銅管配管 5公尺", model: "", quantity: 1, unit: "式", unitPrice: 8500, subtotal: 8500, notes: "含吸排管" },
+    { category: "追加項目", brand: "三菱重工", itemName: "壁掛分離式 3.5kW 超長品項名稱測試自動換行顯示效果", model: "MSZ-AP35VG", quantity: 2, unit: "台", unitPrice: 28500, subtotal: 57000, notes: "含安裝及基本配管" },
+    { category: "維修", brand: "日立", itemName: "室外機維修清洗", model: "RAS-22", quantity: 1, unit: "式", unitPrice: 2800, subtotal: 2800, notes: "" },
+    { category: "保養", brand: "—", itemName: "年度保養", model: "", quantity: 1, unit: "式", unitPrice: 1800, subtotal: 1800, notes: "" },
+    { category: "其他", brand: "—", itemName: "銅管配管 5公尺", model: "", quantity: 1, unit: "式", unitPrice: 8500, subtotal: 8500, notes: "含吸排管" },
+    { category: "其他", brand: "—", itemName: "現場雜項", model: "", quantity: 1, unit: "式", unitPrice: 500, subtotal: 500, notes: "" },
   ],
 };
 
@@ -73,6 +77,35 @@ writeFileSync(join(outDir, "quotation.html"), quoteHtml);
 writeFileSync(join(outDir, "work-order.html"), workHtml);
 writeFileSync(join(outDir, "statement.html"), stmtHtml);
 
+const cats = [
+  displayQuoteItemCategory({ category: "安裝新機" }),
+  displayQuoteItemCategory({ category: "追加項目" }),
+  displayQuoteItemCategory({ category: "維修" }),
+  displayQuoteItemCategory({ category: "保養" }),
+  displayQuoteItemCategory({ category: "其他", itemName: "銅管配管 5公尺" }),
+  displayQuoteItemCategory({ category: "其他", itemName: "現場雜項" }),
+];
+if (cats.join() !== ["安裝新機", "追加項目", "維修項目", "保養", "材料", "其他"].join()) {
+  throw new Error(`category mapping failed: ${cats.join(" | ")}`);
+}
+for (const bad of ["transform:scale(", "scaleX(", "scaleY(", "font-stretch:condensed", "font-stretch: condensed"]) {
+  if (quoteHtml.includes(bad)) {
+    throw new Error(`quotation HTML contains forbidden ${bad}`);
+  }
+}
+if (/zoom\s*:\s*(?!normal)/.test(quoteHtml.replace(/zoom:normal/g, ""))) {
+  /* zoom:normal is a reset; any other zoom is forbidden */
+}
+if (!quoteHtml.includes("@page{size:A4 portrait;margin:10mm 12mm}")) {
+  throw new Error("missing A4 portrait @page");
+}
+if (quoteHtml.includes("size:A4 landscape") || quoteHtml.includes("orientation:landscape")) {
+  throw new Error("quotation must stay A4 portrait");
+}
+if (!quoteHtml.includes("background:#111") || !quoteHtml.includes("客戶簽名")) {
+  throw new Error("missing black header or signature labels");
+}
+
 const indexHtml = `<!DOCTYPE html>
 <html lang="zh-TW">
 <head>
@@ -81,16 +114,16 @@ const indexHtml = `<!DOCTYPE html>
 <style>
 body{font-family:sans-serif;background:#f0f0f0;margin:0;padding:20px}
 h1{text-align:center;font-size:18px}
-.grid{display:flex;flex-direction:column;gap:24px;max-width:900px;margin:0 auto}
+.grid{display:flex;flex-direction:column;gap:24px;max-width:820px;margin:0 auto}
 .card{background:#fff;border-radius:8px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.08)}
 .card h2{margin:0 0 8px;font-size:14px;color:#333}
-iframe{width:100%;border:1px solid #ddd;background:#fff}
+iframe{width:794px;max-width:100%;border:1px solid #ddd;background:#fff}
 </style>
 </head>
 <body>
 <h1>PDF 版面預覽 — 報價單 / 派工單 / 請款單</h1>
 <div class="grid">
-  <div class="card"><h2>報價單 (A4)</h2><iframe src="quotation.html" height="1120"></iframe></div>
+  <div class="card"><h2>報價單 (A4 直式 210×297mm)</h2><iframe src="quotation.html" height="1123"></iframe></div>
   <div class="card"><h2>派工單 (24×14cm)</h2><iframe src="work-order.html" height="560"></iframe></div>
   <div class="card"><h2>請款單 (A4)</h2><iframe src="statement.html" height="1120"></iframe></div>
 </div>

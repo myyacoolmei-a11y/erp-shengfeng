@@ -154,7 +154,18 @@ export async function generatePdfBlobFromHtml(
       throw new Error("PDF 產生失敗：找不到 .page / .quotation-print-page 列印容器");
     }
     pageEl.dataset.templateType = pageFormat;
-    console.log("PDF capture target:", pageEl.className, pageEl.dataset.templateType);
+    const isQuotation = pageEl.classList.contains("quotation-print-page");
+    const isA4Portrait = pageFormat === "a4";
+    // 報價單：依 A4 直式可印寬 186mm 排版，不要先做橫式再 scale。
+    const captureWidth = isQuotation ? Math.round(186 * 96 / 25.4) : cfg.renderWidth;
+    const pdfOrientation: "portrait" | "landscape" = isQuotation || isA4Portrait ? "portrait" : cfg.orientation;
+    const pdfFormat = isQuotation || isA4Portrait ? "a4" : cfg.format;
+    const pdfMargin = isQuotation ? [10, 12, 10, 12] : cfg.margin;
+    iframe.style.width = `${captureWidth}px`;
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    console.log("PDF capture target:", pageEl.className, pageEl.dataset.templateType, {
+      captureWidth, pdfOrientation, pdfFormat,
+    });
 
     // html2pdf.js deep-clones the element into the main document; CSS from the iframe <head> is lost.
     // Inject fonts + iframe styles into the main document so the clone does not inherit Inter.
@@ -199,33 +210,29 @@ export async function generatePdfBlobFromHtml(
     }
 
     const opt = {
-      margin: cfg.margin,
+      margin: pdfMargin,
       image: { type: "jpeg", quality: 0.98 },
       html2canvas: {
         scale: cfg.scale,
         useCORS: true,
         logging: false,
-        windowWidth: cfg.renderWidth,
+        windowWidth: captureWidth,
         letterRendering: false,
         onclone: (clonedDoc: Document) => {
           const el = clonedDoc.querySelector(".page, .quotation-print-page") as HTMLElement | null;
           if (!el) return;
           el.style.setProperty("font-family", PRINT_CJK_FONT_STACK, "important");
-          el.style.setProperty("font-stretch", "100%", "important");
           el.style.setProperty("transform", "none", "important");
-          el.style.setProperty("zoom", "normal", "important");
           el.querySelectorAll(".eq-table, .eq-table th, .eq-table td, .cp-mat-row, .cp-mat-name, .cp-mat-qty, .cp-mat-no").forEach((node) => {
             const h = node as HTMLElement;
             h.style.setProperty("font-family", PRINT_CJK_FONT_STACK, "important");
-            h.style.setProperty("font-stretch", "100%", "important");
             h.style.setProperty("transform", "none", "important");
-            h.style.setProperty("zoom", "normal", "important");
             h.style.setProperty("letter-spacing", "0", "important");
           });
         },
       },
-      jsPDF: { unit: "mm", format: cfg.format, orientation: cfg.orientation },
-      pagebreak: { mode: ["css", "legacy"], avoid: [".bottom-block", "tr"] },
+      jsPDF: { unit: "mm", format: pdfFormat, orientation: pdfOrientation },
+      pagebreak: { mode: ["css", "legacy"], avoid: [".bottom-block", "tr", ".quotation-signature-section"] },
     };
 
     const worker = html2pdf().set(opt).from(pageEl);

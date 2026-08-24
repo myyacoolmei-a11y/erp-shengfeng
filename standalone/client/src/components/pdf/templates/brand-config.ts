@@ -177,22 +177,18 @@ export function printFontLinksHtml(): string {
 export const PRINT_CJK_METRIC_CSS = `
 .quotation-print-page,.sheet,.page,.cp-mat-block,.eq-table{
   font-family:${PRINT_CJK_FONT_STACK}!important;
-  font-stretch:100%!important;
   font-synthesis:none!important;
   font-variation-settings:normal!important;
   font-optical-sizing:none!important;
   transform:none!important;
-  zoom:normal!important;
 }
 .eq-table,.eq-table th,.eq-table td,
 .cp-mat-header,.cp-mat-row,.cp-mat-no,.cp-mat-name,.cp-mat-qty{
   font-family:${PRINT_CJK_FONT_STACK}!important;
-  font-stretch:100%!important;
   font-synthesis:none!important;
   font-variation-settings:normal!important;
   font-optical-sizing:none!important;
   transform:none!important;
-  zoom:normal!important;
   letter-spacing:0!important;
   word-spacing:normal!important;
   font-kerning:normal!important;
@@ -255,7 +251,6 @@ export const PRINT_DOC_TYPE_CSS = `
 ${PRINT_CJK_FONT_FACE_CSS}
 body{
   font-family:${PRINT_CJK_FONT_STACK}!important;
-  font-stretch:100%!important;
   font-synthesis:none!important;
   font-variation-settings:normal!important;
   font-weight:400;
@@ -287,9 +282,7 @@ ${PRINT_CJK_METRIC_CSS}
   font-weight:700!important;
   line-height:1.3!important;
   font-family:${PRINT_CJK_FONT_STACK}!important;
-  font-stretch:100%!important;
   transform:none!important;
-  zoom:normal!important;
 }
 .eq-title,.stitle-eq{font-size:19px!important}
 .stitle,.sec-title,.bank-title{font-size:16px!important}
