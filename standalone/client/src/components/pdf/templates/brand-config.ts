@@ -131,53 +131,80 @@ tbody tr{min-height:40px}
 `;
 
 /**
- * 報價單／派工單列印字級（僅這兩份單據引用）。
- * 必須接在 PDF_LAYOUT_CSS 之後，才能蓋過共用 9pt 表格規則。
- * 出貨單／對帳單等其他 template 不要引用。
+ * 報價單／派工單列印視覺（僅這兩份單據引用）。
+ * 必須接在各 template 自己的 CSS 之後。出貨單／對帳單不要引用。
+ * 層級：工程設備明細 > 客戶資料 > 其他資訊 > 主標題／金額。
  */
 export const PRINT_DOC_TYPE_CSS = `
-/* ===== 報價單／派工單統一列印字級 ===== */
+@import url("https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap");
 body{
-  font-size:13px!important;
-  line-height:1.4!important;
+  font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif!important;
+  font-weight:400;
+  color:#111!important;
+  background:#fff!important;
+  -webkit-print-color-adjust:exact;print-color-adjust:exact;
 }
-.co-name{font-size:14px!important;font-weight:700;line-height:1.4!important}
-.co-sub,.co-info{font-size:12px!important;line-height:1.4!important}
+.co-name{font-size:15px!important;font-weight:700;line-height:1.4!important;color:#111!important}
+.co-sub,.co-info{font-size:12px!important;font-weight:400;line-height:1.4!important;color:#555!important}
 .doc-label,.wo-label{
-  font-size:22px!important;font-weight:700!important;line-height:1.25!important;
+  font-size:28px!important;font-weight:700!important;line-height:1.2!important;
+  color:#111!important;letter-spacing:2px!important;
 }
-.doc-en{font-size:12px!important;line-height:1.4!important}
-.doc-no,.wo-num{font-size:13px!important;line-height:1.4!important}
-.doc-dates,.wo-meta,.pf,.sig-date{font-size:12px!important;line-height:1.4!important}
-.stitle,.sec-title,.bank-title{font-size:13px!important;font-weight:700!important;line-height:1.4!important}
-.info-grid,.grid{font-size:14px!important;line-height:1.4!important}
-.info-label,.lbl{font-size:12px!important;line-height:1.4!important}
-.val,.info-grid strong{font-size:14px!important;font-weight:700!important;line-height:1.4!important}
-table,tbody td,.eq-table,.eq-table tbody td{
-  font-size:13px!important;line-height:1.4!important;
+.doc-en{font-size:12px!important;font-weight:500;color:#888!important;letter-spacing:2px!important}
+.doc-no,.wo-num{font-size:13px!important;font-weight:600;line-height:1.4!important}
+.doc-dates,.wo-meta,.pf,.sig-date{font-size:12px!important;font-weight:400;line-height:1.4!important;color:#666!important}
+.stitle,.sec-title,.bank-title,.eq-title{
+  color:#111!important;
+  background:transparent!important;
+  border:none!important;
+  padding:0 0 2mm!important;
+  margin:0 0 2.5mm!important;
+  letter-spacing:0!important;
+  display:block!important;
+  width:fit-content;
+  max-width:100%;
+  border-bottom:2.5px solid ${COLORS.primary}!important;
+  font-weight:700!important;
+  line-height:1.3!important;
 }
-.head-row th,.eq-table .head-row th{
-  font-size:13px!important;font-weight:700!important;line-height:1.4!important;
+.eq-title,.stitle-eq{font-size:19px!important}
+.stitle,.sec-title,.bank-title{font-size:16px!important}
+.info-label,.lbl{font-size:13px!important;font-weight:500!important;color:#666!important}
+.info-value,.val,.info-grid strong{font-size:16px!important;font-weight:600!important;color:#111!important;line-height:1.4!important}
+.eq-table .head-row,.head-row{
+  background:#f4f4f4!important;color:#111!important;
 }
-.head-row th,tbody td{
+.eq-table .head-row th,.head-row th{
+  font-size:14px!important;font-weight:700!important;
+  text-align:center!important;vertical-align:middle!important;
+  color:#111!important;
+  border:1px solid #ccc!important;
+  padding:12px 8px!important;
+  line-height:1.4!important;
   min-height:0!important;
-  padding:4px 5px!important;
 }
-.eq-table .head-row th,.eq-table tbody td{
-  padding:4px 3px!important;
+.eq-table tbody td,table tbody td{
+  font-size:16px!important;font-weight:500!important;
+  vertical-align:middle!important;
+  line-height:1.4!important;
+  border:1px solid #ccc!important;
+  padding:12px 8px!important;
   min-height:0!important;
+  color:#111!important;
 }
-.eq-table td.tar,.eq-table .fw7{
-  font-size:15px!important;font-weight:700!important;
+.eq-table .col-item,td.col-item{
+  font-size:18px!important;font-weight:600!important;text-align:left!important;
 }
-.col-qty{font-size:14px!important;font-weight:700!important}
-.box{font-size:14px!important;line-height:1.4!important}
-.notes-box,.remarks-box{font-size:12px!important;line-height:1.4!important}
-.note-line{font-size:12px!important;line-height:1.4!important}
-.small{font-size:12px!important;line-height:1.4!important}
+.eq-table .col-cat,.eq-table .col-brand,.eq-table .col-model,
+.eq-table .col-qty,.eq-table .col-unit,.eq-table .col-price,.eq-table .col-sub{
+  font-size:16px!important;font-weight:600!important;text-align:center!important;
+}
+.amt-r{font-size:13px!important;font-weight:500!important;line-height:1.4!important}
+.amt-r .val{font-size:14px!important;font-weight:600!important}
+.amt-total .lbl{font-size:16px!important;font-weight:700!important;color:#111!important}
+.amt-total .val{font-size:24px!important;font-weight:700!important;color:#111!important}
+.box,.notes-box,.remarks-box{font-size:14px!important;line-height:1.45!important;font-weight:400}
+.note-line{font-size:13px!important;line-height:1.45!important}
 .bank-row{font-size:13px!important;line-height:1.4!important}
-.amt-r{font-size:15px!important;font-weight:700!important;line-height:1.4!important}
-.amt-r .val{font-size:15px!important;font-weight:700!important}
-.amt-total .lbl,.amt-total .val{font-size:16px!important;font-weight:700!important;line-height:1.4!important}
-.sig-box,.sig{font-size:13px!important;line-height:1.4!important}
+.sig-box,.sig{font-size:13px!important;line-height:1.4!important;min-height:14mm!important;padding-bottom:6mm!important}
 `;

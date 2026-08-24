@@ -1,8 +1,9 @@
 // 報價單 Template — A4 Portrait, 正式工程文件風格
 // 獨立版面：修改此檔不影響其他 Template
 
-import { logoUrl, COMPANY, COLORS, esc, fmtMoney, PDF_LAYOUT_CSS, PRINT_DOC_TYPE_CSS } from "./brand-config";
+import { logoUrl, COMPANY, COLORS, esc, fmtMoney, PRINT_DOC_TYPE_CSS } from "./brand-config";
 import { computeQuoteAmounts } from "../quote-amounts";
+import { displayQuoteItemCategory } from "./printCategory";
 
 export function buildQuotationHtml(quote: any, baseOrigin?: string): string {
   // Line items come only from quotation.items (quotes / quote_items).
@@ -25,16 +26,12 @@ export function buildQuotationHtml(quote: any, baseOrigin?: string): string {
     taxType,
   );
 
-  // ── Equipment table: exactly 10 columns, items.map only ────────────────
-  // th / td / colgroup MUST stay in sync. No colspan/rowspan fillers.
-  // Widths MUST sum to exactly 100% (print engines round % and can draw a
-  // ghost right strip if the sum overflows by even 1px).
   const TABLE_HEADERS = [
     "項次",
     "類別",
     "品牌",
-    "品項",
-    "機型",
+    "品項／規格",
+    "型號",
     "數量",
     "單位",
     "單價",
@@ -42,30 +39,31 @@ export function buildQuotationHtml(quote: any, baseOrigin?: string): string {
     "備註",
   ] as const;
   const TABLE_COL_WIDTHS = [
-    "6%",
-    "12%",
+    "5%",
     "10%",
-    "14%",
-    "13%",
+    "10%",
+    "24%",
+    "12%",
     "6%",
     "6%",
-    "12%",
-    "12%",
-    "9%",
+    "10%",
+    "10%",
+    "7%",
   ] as const;
 
   function renderItemRow(item: any, index: number): string {
+    const category = displayQuoteItemCategory(item);
     const cells = [
       `<td class="tac">${index + 1}</td>`,
-      `<td class="tac">${esc(item.category || "")}</td>`,
-      `<td class="tac">${esc(item.brand || "—")}</td>`,
+      `<td class="tac col-cat">${esc(category)}</td>`,
+      `<td class="tac col-brand">${esc(item.brand || "—")}</td>`,
       `<td class="tal col-item">${esc(item.itemName || "")}</td>`,
-      `<td class="tac">${esc(item.model || "—")}</td>`,
-      `<td class="tac">${Number(item.quantity ?? 0)}</td>`,
-      `<td class="tac">${esc(item.unit || "")}</td>`,
-      `<td class="tar">${fmtMoney(Number(item.unitPrice ?? 0))}</td>`,
-      `<td class="tar fw7">${fmtMoney(Number(item.subtotal ?? 0))}</td>`,
-      `<td class="tal small col-notes">${esc(item.notes || "")}</td>`,
+      `<td class="tac col-model">${esc(item.model || "—")}</td>`,
+      `<td class="tac col-qty">${Number(item.quantity ?? 0)}</td>`,
+      `<td class="tac col-unit">${esc(item.unit || "")}</td>`,
+      `<td class="tac col-price">${fmtMoney(Number(item.unitPrice ?? 0))}</td>`,
+      `<td class="tac col-sub">${fmtMoney(Number(item.subtotal ?? 0))}</td>`,
+      `<td class="tac col-notes">${esc(item.notes || "")}</td>`,
     ];
     if (cells.length !== TABLE_HEADERS.length) {
       throw new Error(
@@ -75,7 +73,6 @@ export function buildQuotationHtml(quote: any, baseOrigin?: string): string {
     return `<tr>${cells.join("")}</tr>`;
   }
 
-  // tbody = items only. Never pad blank / fixed-N filler rows.
   const itemRows = items.map((item, index) => renderItemRow(item, index)).join("");
 
   const colgroupHtml = TABLE_COL_WIDTHS.map((w) => `<col style="width:${w}">`).join("");
@@ -95,23 +92,18 @@ export function buildQuotationHtml(quote: any, baseOrigin?: string): string {
 <meta charset="UTF-8">
 <title>報價單 ${quoteNo}</title>
 <style>
-/* ===== Base ===== */
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{margin:0;padding:0}
 body{
-  font-family:'Microsoft JhengHei','\\5fae\\8edf\\6b63\\9ed1\\9ad4',Arial,sans-serif;
-  font-size:13px;line-height:1.4;color:${COLORS.black};background:#fff;
+  font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
+  font-size:14px;font-weight:400;line-height:1.4;color:#111;background:#fff;
   -webkit-print-color-adjust:exact;print-color-adjust:exact;
 }
 
-/* ===== Page setup =====
-   Printable height = 297mm - 2*8mm = 281mm.
-   NEVER use height/min-height: 297mm or 100vh — that overflows @page
-   margins and creates a blank Safari page 2 (subpixel rounding). */
-@page{size:A4 portrait;margin:8mm}
+@page{size:A4 portrait;margin:10mm 12mm}
 .quotation-print-page{
   width:100%;
-  min-height:calc(297mm - 16mm);
+  min-height:calc(297mm - 20mm);
   margin:0;padding:0;
   display:flex;flex-direction:column;
   break-after:auto;page-break-after:auto;
@@ -122,188 +114,174 @@ body{
   break-inside:avoid;page-break-inside:avoid;
 }
 
-/* ===== Logo & Header ===== */
 .hdr{
   display:flex;justify-content:space-between;align-items:flex-start;
-  border-bottom:2.5px solid ${COLORS.black};
-  padding-bottom:4mm;margin-bottom:3mm;
+  border-bottom:1px solid #ddd;
+  padding-bottom:4mm;margin-bottom:5mm;
 }
-.co{display:flex;align-items:center;gap:3mm}
+.co{display:flex;align-items:flex-start;gap:3.5mm}
 .co-logo{
-  width:55px;height:55px;max-width:55px;max-height:55px;
+  width:48px;height:48px;max-width:48px;max-height:48px;
   object-fit:contain;flex-shrink:0;
-  border:1px solid ${COLORS.borderGray};border-radius:3px;
 }
-.co-name{font-size:14px;font-weight:700;letter-spacing:0.5px;line-height:1.4}
-.co-sub{font-size:12px;color:${COLORS.midGray};margin-top:1px;line-height:1.4}
-.co-info{font-size:12px;color:${COLORS.lightGray};margin-top:2px;line-height:1.4}
+.co-name{font-size:15px;font-weight:700;letter-spacing:0.3px;line-height:1.4;color:#111}
+.co-sub{font-size:12px;font-weight:400;color:#666;margin-top:1px;line-height:1.4}
+.co-info{font-size:12px;font-weight:400;color:#666;margin-top:2px;line-height:1.45}
 .doc-r{text-align:right}
-.doc-label{font-size:22px;font-weight:700;color:${COLORS.primary};letter-spacing:4px;line-height:1.25}
-.doc-en{font-size:12px;color:#aaa;letter-spacing:1px;line-height:1.4}
-.doc-no{font-size:13px;font-weight:700;font-family:monospace;margin-top:2px;line-height:1.4}
-.doc-dates{font-size:12px;color:${COLORS.midGray};line-height:1.4;margin-top:1px}
+.doc-label{font-size:28px;font-weight:700;color:#111;letter-spacing:2px;line-height:1.2}
+.doc-en{font-size:12px;font-weight:500;color:#888;letter-spacing:2px;line-height:1.4;margin-top:1px}
+.doc-no{font-size:13px;font-weight:600;margin-top:2mm;line-height:1.4}
+.doc-dates{font-size:12px;font-weight:400;color:#666;line-height:1.45;margin-top:1mm}
 
-/* ===== Section titles ===== */
-.sec{margin-bottom:2.5mm}
+.sec{margin-bottom:5mm}
 .stitle{
-  font-size:13px;font-weight:700;
-  background:${COLORS.black};color:${COLORS.primary};
-  padding:1mm 2.5mm;letter-spacing:2px;margin-bottom:1.5mm;
-  display:inline-block;line-height:1.4;
+  color:#111;font-size:16px;font-weight:700;
+  background:transparent;border:none;
+  padding:0 0 1.5mm;margin:0 0 3mm;
+  display:block;width:fit-content;
+  border-bottom:2.5px solid ${COLORS.primary};
+  letter-spacing:0;line-height:1.3;
+}
+.eq-title{
+  color:#111;font-size:19px;font-weight:700;
+  background:transparent;border:none;
+  padding:0 0 1.5mm;margin:0 0 3mm;
+  display:block;width:fit-content;
+  border-bottom:2.5px solid ${COLORS.primary};
+  letter-spacing:0;line-height:1.3;
 }
 
-/* ===== Equipment table (eq-table) =====
-   Ghost right column on Safari/print is usually % width rounding + cell
-   borders overflowing table-layout:fixed — not an extra <td>.
-   Keep 10 cols, widths sum 100%, box-sizing border-box, clip 1px overflow. */
-.eq-wrap{width:100%;max-width:100%;overflow:hidden}
+.eq-wrap{width:100%;max-width:100%;overflow:visible}
 .eq-table{
   width:100%;max-width:100%;
   border-collapse:collapse;border-spacing:0;
-  table-layout:fixed;font-size:13px;line-height:1.4;
+  table-layout:fixed;font-size:16px;line-height:1.4;
 }
-.eq-table .head-row{background:${COLORS.black};color:${COLORS.primary}}
+.eq-table .head-row{background:#f4f4f4;color:#111}
 .eq-table .head-row th{
-  border:1px solid ${COLORS.black};
-  font-size:13px;font-weight:700;text-align:center;
+  border:1px solid #ccc;
+  font-size:14px;font-weight:700;text-align:center;vertical-align:middle;
   box-sizing:border-box;
-  padding:4px 3px!important;
-  min-height:0!important;height:auto!important;
-  line-height:1.4;
+  padding:12px 8px;
+  line-height:1.4;color:#111;
 }
 .eq-table tbody td{
-  border:1px solid ${COLORS.black};
-  vertical-align:middle;font-size:13px;
+  border:1px solid #ccc;
+  vertical-align:middle;font-size:16px;font-weight:500;
   box-sizing:border-box;
-  padding:4px 3px!important;
-  min-height:0!important;height:auto!important;
-  line-height:1.4;
+  padding:12px 8px;
+  line-height:1.4;color:#111;
 }
-.eq-table .col-notes{padding-left:4px!important;padding-right:4px!important}
+.eq-table .col-item{
+  font-size:18px;font-weight:600;text-align:left;
+  word-wrap:break-word;word-break:break-word;white-space:normal;
+}
+.eq-table .col-cat,.eq-table .col-brand,.eq-table .col-model,
+.eq-table .col-qty,.eq-table .col-unit,.eq-table .col-price,.eq-table .col-sub,
+.eq-table .col-notes{
+  text-align:center;font-weight:600;font-size:16px;
+}
+.eq-table .col-notes{font-size:13px;font-weight:400}
 .eq-table tr{page-break-inside:avoid;break-inside:avoid}
-
-/* legacy unused width helpers kept for other classes below */
-table{
-  width:100%;border-collapse:collapse;
-  table-layout:fixed;font-size:13px;line-height:1.4;
-}
-.head-row{background:${COLORS.black};color:${COLORS.primary}}
-.head-row th{
-  border:1px solid ${COLORS.black};
-  font-size:13px;font-weight:700;text-align:center;
-}
-tbody td{
-  border:1px solid ${COLORS.black};
-  vertical-align:middle;font-size:13px;
-}
-tr{page-break-inside:avoid;break-inside:avoid}
 
 .tac{text-align:center}
 .tar{text-align:right}
 .tal{text-align:left}
-.fw7{font-weight:700}
-.small{font-size:12px}
-.muted{color:${COLORS.midGray}}
+.muted{color:#888}
 
-.col-w6{width:6%}
-.col-w8{width:8%}
-.col-w10{width:10%}
-.col-w12{width:12%}
-
-.info-grid{
+.info-block{
   display:grid;grid-template-columns:1fr 1fr 1fr;
-  gap:1mm 4mm;font-size:14px;margin-bottom:2mm;line-height:1.4;
+  gap:3mm 8mm;
+  padding:1mm 0 1mm;
 }
-.info-grid .full{grid-column:span 2}
-.info-label{font-size:12px;color:${COLORS.lightGray}}
+.info-item{display:flex;flex-direction:column;gap:1mm;min-width:0}
+.info-item.span2{grid-column:span 2}
+.info-label{font-size:13px;font-weight:500;color:#666;line-height:1.3}
+.info-value{font-size:16px;font-weight:600;color:#111;line-height:1.4;word-break:break-word}
 
-/* ===== Notes + Totals side-by-side (no overlap) ===== */
 .notes-totals-row{
   display:flex;
-  gap:4mm;
+  gap:5mm;
   align-items:flex-start;
   margin-top:2mm;
   margin-bottom:4mm;
   page-break-inside:avoid;
   break-inside:avoid;
 }
-.notes-column{
-  flex:1 1 auto;
-  min-width:0;
-}
-.totals-column{
-  flex:0 0 72mm;
-  width:72mm;
-  max-width:72mm;
-}
-.row2{display:flex;gap:3mm}
+.notes-column{flex:1 1 auto;min-width:0}
+.totals-column{flex:0 0 62mm;width:62mm;max-width:62mm}
+.row2{display:flex;gap:4mm}
 .box{
-  flex:1;border:1px solid ${COLORS.borderGray};
-  border-left:3px solid ${COLORS.primary};
-  padding:3mm 4mm;font-size:14px;
-  white-space:pre-wrap;line-height:1.4;
-  color:${COLORS.darkGray};background:#fafafa;
-  min-height:18mm;
+  flex:1;border:1px solid #e5e5e5;
+  padding:2.5mm 3mm;font-size:14px;font-weight:400;
+  white-space:pre-wrap;line-height:1.45;
+  color:#333;background:#fff;
+  min-height:12mm;
 }
 .notes-box{
-  border:1px solid ${COLORS.borderGray};
-  border-left:3px solid ${COLORS.primary};
-  padding:3mm 4mm;font-size:12px;
-  line-height:1.4;min-height:18mm;background:#fafafa;
+  border:1px solid #e5e5e5;
+  padding:2.5mm 3mm;font-size:13px;font-weight:400;
+  line-height:1.45;min-height:12mm;background:#fff;
 }
-.note-line{font-size:12px;line-height:1.4;color:${COLORS.darkGray}}
+.note-line{font-size:13px;line-height:1.45;color:#333}
 
 .amt-box{
   width:100%;
-  border:2px solid ${COLORS.primary};
+  border:1px solid #ddd;
   overflow:hidden;
   background:#fff;
 }
 .amt-r{
   display:flex;justify-content:space-between;align-items:center;
-  border-bottom:1px solid #ebebeb;
-  font-size:15px;font-weight:700;line-height:1.4;
+  border-bottom:1px solid #eee;
+  font-size:13px;font-weight:500;line-height:1.4;
+  padding:1.6mm 3mm;
 }
-.amt-r .lbl{color:${COLORS.lightGray};padding-right:3mm;flex-shrink:0}
-.amt-r .val{font-weight:700;text-align:right;flex-shrink:0;font-size:15px}
+.amt-r .lbl{color:#666;padding-right:3mm;flex-shrink:0;font-weight:500}
+.amt-r .val{font-weight:600;text-align:right;flex-shrink:0;font-size:14px;color:#111}
 .disc-val{color:${COLORS.red}}
 .amt-total{
-  background:${COLORS.black};
-  display:flex;justify-content:space-between;align-items:center;
+  background:#fff;
+  display:flex;justify-content:space-between;align-items:baseline;
+  padding:2mm 3mm;
+  border-top:1.5px solid #111;
 }
-.amt-total .lbl{color:${COLORS.primary};font-size:16px;font-weight:700;letter-spacing:1px}
-.amt-total .val{color:#fff;font-size:16px;font-weight:700;font-family:monospace}
+.amt-total .lbl{color:#111;font-size:16px;font-weight:700}
+.amt-total .val{color:#111;font-size:24px;font-weight:700}
 
 .bank-box{
-  border:1px solid ${COLORS.borderGray};
-  padding:2mm 3mm;
+  border-top:1px solid #eee;
+  padding:3mm 0 1mm;
   margin-bottom:3mm;
 }
 .bank-title{
-  font-size:13px;font-weight:700;
-  background:${COLORS.black};color:${COLORS.primary};
-  padding:1mm 2mm;display:inline-block;margin-bottom:1.5mm;line-height:1.4;
+  color:#111;font-size:14px;font-weight:700;
+  background:transparent;border:none;
+  padding:0 0 1.5mm;margin:0 0 2mm;
+  display:block;width:fit-content;
+  border-bottom:2px solid ${COLORS.primary};
 }
 .bank-row{
-  display:flex;gap:6mm;font-size:13px;
-  color:${COLORS.darkGray};line-height:1.4;flex-wrap:wrap;
+  display:flex;gap:6mm;font-size:13px;font-weight:400;
+  color:#333;line-height:1.4;flex-wrap:wrap;
 }
 .bank-row span{white-space:nowrap}
 
 .sig-row{
-  display:grid;grid-template-columns:1fr 1fr 1fr;gap:6mm;
+  display:grid;grid-template-columns:1fr 1fr 1fr;gap:8mm;
   margin-bottom:3mm;
 }
 .sig-box{
-  text-align:center;border-top:1.5px solid ${COLORS.black};
-  font-size:13px;color:${COLORS.midGray};line-height:1.4;
+  text-align:center;border-top:1px solid #111;
+  font-size:13px;font-weight:500;color:#555;line-height:1.4;
+  padding-top:3mm;padding-bottom:8mm;
 }
-.sig-date{font-size:12px;color:#aaa}
+.sig-date{font-size:12px;font-weight:400;color:#888}
 
 .pf{
   display:flex;justify-content:space-between;align-items:center;
-  font-size:12px;color:${COLORS.lightGray};
-  border-top:1px solid ${COLORS.borderGray};padding-top:1mm;
+  font-size:12px;font-weight:400;color:#888;
+  border-top:1px solid #eee;padding-top:2mm;
 }
 
 @media print{
@@ -314,7 +292,7 @@ tr{page-break-inside:avoid;break-inside:avoid}
   }
   .quotation-print-page{
     width:auto;
-    min-height:calc(297mm - 16mm);
+    min-height:calc(297mm - 20mm);
     height:auto;
     margin:0;padding:0;
     overflow:visible;
@@ -324,14 +302,11 @@ tr{page-break-inside:avoid;break-inside:avoid}
     margin-top:auto;
     break-inside:avoid;page-break-inside:avoid;
   }
-  .quotation-print-page::after{
-    display:none!important;content:none!important;
-  }
   .notes-totals-row,.amt-box,.bank-box,.sig-row,.quotation-signature-section{
     page-break-inside:avoid;break-inside:avoid;
   }
+  .eq-table tr{page-break-inside:avoid;break-inside:avoid}
 }
-${PDF_LAYOUT_CSS}
 ${PRINT_DOC_TYPE_CSS}
 </style>
 </head>
@@ -365,18 +340,33 @@ ${PRINT_DOC_TYPE_CSS}
 
   <main class="quotation-print-content">
     <div class="sec">
-      <div class="stitle">客戶資訊 Client Information</div>
-      <div class="info-grid">
-        <div><span class="info-label">客戶名稱</span> <strong>${esc(quote.customerName) || "—"}</strong></div>
-        <div><span class="info-label">聯絡電話</span> <strong>${esc(quote.customerPhone) || "—"}</strong></div>
-        <div><span class="info-label">負責業務</span> <strong>${esc(quote.salesRepName) || "—"}</strong></div>
-        <div class="full"><span class="info-label">施工地址</span> <strong>${esc(quote.address) || "—"}</strong></div>
-        <div><span class="info-label">稅別</span> <strong>${esc(taxType)}</strong></div>
+      <div class="stitle">客戶資訊</div>
+      <div class="info-block">
+        <div class="info-item">
+          <span class="info-label">客戶名稱</span>
+          <span class="info-value">${esc(quote.customerName) || "—"}</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">聯絡電話</span>
+          <span class="info-value">${esc(quote.customerPhone) || "—"}</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">負責業務</span>
+          <span class="info-value">${esc(quote.salesRepName) || "—"}</span>
+        </div>
+        <div class="info-item span2">
+          <span class="info-label">施工地址</span>
+          <span class="info-value">${esc(quote.address) || "—"}</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">稅別</span>
+          <span class="info-value">${esc(taxType)}</span>
+        </div>
       </div>
     </div>
 
     <div class="sec">
-      <div class="stitle">工程設備明細 Equipment Schedule</div>
+      <div class="eq-title">工程設備明細</div>
       <div class="eq-wrap">
         <table class="eq-table">
           <colgroup>${colgroupHtml}</colgroup>
@@ -390,11 +380,11 @@ ${PRINT_DOC_TYPE_CSS}
       <div class="notes-column">
         <div class="row2">
           <div style="flex:0 0 55%">
-            <div class="stitle">服務內容 Notes &amp; Remarks</div>
+            <div class="stitle">服務內容</div>
             <div class="box">${esc(quote.description) || "施工方式：\n施工天數：\n注意事項："}</div>
           </div>
           <div style="flex:1;min-width:0">
-            <div class="stitle">備註</div>
+            <div class="stitle">備註事項</div>
             <div class="notes-box">${notesList}</div>
           </div>
         </div>
