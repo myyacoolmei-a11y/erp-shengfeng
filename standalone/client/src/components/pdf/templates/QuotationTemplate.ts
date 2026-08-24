@@ -1,7 +1,7 @@
 // 報價單 Template — A4 Portrait, 正式工程文件風格
 // 獨立版面：修改此檔不影響其他 Template
 
-import { logoUrl, COMPANY, COLORS, esc, fmtMoney, PDF_LAYOUT_CSS } from "./brand-config";
+import { logoUrl, COMPANY, COLORS, esc, fmtMoney, PDF_LAYOUT_CSS, PRINT_DOC_TYPE_CSS } from "./brand-config";
 import { computeQuoteAmounts } from "../quote-amounts";
 
 export function buildQuotationHtml(quote: any, baseOrigin?: string): string {
@@ -100,7 +100,7 @@ export function buildQuotationHtml(quote: any, baseOrigin?: string): string {
 html,body{margin:0;padding:0}
 body{
   font-family:'Microsoft JhengHei','\\5fae\\8edf\\6b63\\9ed1\\9ad4',Arial,sans-serif;
-  font-size:10pt;color:${COLORS.black};background:#fff;
+  font-size:13px;line-height:1.4;color:${COLORS.black};background:#fff;
   -webkit-print-color-adjust:exact;print-color-adjust:exact;
 }
 
@@ -134,22 +134,22 @@ body{
   object-fit:contain;flex-shrink:0;
   border:1px solid ${COLORS.borderGray};border-radius:3px;
 }
-.co-name{font-size:13pt;font-weight:700;letter-spacing:0.5px}
-.co-sub{font-size:7.5pt;color:${COLORS.midGray};margin-top:1px}
-.co-info{font-size:7pt;color:${COLORS.lightGray};margin-top:2px;line-height:1.6}
+.co-name{font-size:14px;font-weight:700;letter-spacing:0.5px;line-height:1.4}
+.co-sub{font-size:12px;color:${COLORS.midGray};margin-top:1px;line-height:1.4}
+.co-info{font-size:12px;color:${COLORS.lightGray};margin-top:2px;line-height:1.4}
 .doc-r{text-align:right}
-.doc-label{font-size:16pt;font-weight:700;color:${COLORS.primary};letter-spacing:4px}
-.doc-en{font-size:7pt;color:#aaa;letter-spacing:1px}
-.doc-no{font-size:9pt;font-weight:700;font-family:monospace;margin-top:2px}
-.doc-dates{font-size:7.5pt;color:${COLORS.midGray};line-height:1.6;margin-top:1px}
+.doc-label{font-size:22px;font-weight:700;color:${COLORS.primary};letter-spacing:4px;line-height:1.25}
+.doc-en{font-size:12px;color:#aaa;letter-spacing:1px;line-height:1.4}
+.doc-no{font-size:13px;font-weight:700;font-family:monospace;margin-top:2px;line-height:1.4}
+.doc-dates{font-size:12px;color:${COLORS.midGray};line-height:1.4;margin-top:1px}
 
 /* ===== Section titles ===== */
 .sec{margin-bottom:2.5mm}
 .stitle{
-  font-size:7.5pt;font-weight:700;
+  font-size:13px;font-weight:700;
   background:${COLORS.black};color:${COLORS.primary};
   padding:1mm 2.5mm;letter-spacing:2px;margin-bottom:1.5mm;
-  display:inline-block;
+  display:inline-block;line-height:1.4;
 }
 
 /* ===== Equipment table (eq-table) =====
@@ -160,22 +160,24 @@ body{
 .eq-table{
   width:100%;max-width:100%;
   border-collapse:collapse;border-spacing:0;
-  table-layout:fixed;font-size:9pt;
+  table-layout:fixed;font-size:13px;line-height:1.4;
 }
 .eq-table .head-row{background:${COLORS.black};color:${COLORS.primary}}
 .eq-table .head-row th{
   border:1px solid ${COLORS.black};
-  font-size:8.5pt;font-weight:700;text-align:center;
+  font-size:13px;font-weight:700;text-align:center;
   box-sizing:border-box;
   padding:4px 3px!important;
   min-height:0!important;height:auto!important;
+  line-height:1.4;
 }
 .eq-table tbody td{
   border:1px solid ${COLORS.black};
-  vertical-align:middle;font-size:9pt;
+  vertical-align:middle;font-size:13px;
   box-sizing:border-box;
   padding:4px 3px!important;
   min-height:0!important;height:auto!important;
+  line-height:1.4;
 }
 .eq-table .col-notes{padding-left:4px!important;padding-right:4px!important}
 .eq-table tr{page-break-inside:avoid;break-inside:avoid}
@@ -183,16 +185,16 @@ body{
 /* legacy unused width helpers kept for other classes below */
 table{
   width:100%;border-collapse:collapse;
-  table-layout:fixed;font-size:9pt;
+  table-layout:fixed;font-size:13px;line-height:1.4;
 }
 .head-row{background:${COLORS.black};color:${COLORS.primary}}
 .head-row th{
   border:1px solid ${COLORS.black};
-  font-size:8.5pt;font-weight:700;text-align:center;
+  font-size:13px;font-weight:700;text-align:center;
 }
 tbody td{
   border:1px solid ${COLORS.black};
-  vertical-align:middle;font-size:9pt;
+  vertical-align:middle;font-size:13px;
 }
 tr{page-break-inside:avoid;break-inside:avoid}
 
@@ -200,7 +202,7 @@ tr{page-break-inside:avoid;break-inside:avoid}
 .tar{text-align:right}
 .tal{text-align:left}
 .fw7{font-weight:700}
-.small{font-size:7.5pt}
+.small{font-size:12px}
 .muted{color:${COLORS.midGray}}
 
 .col-w6{width:6%}
@@ -210,10 +212,10 @@ tr{page-break-inside:avoid;break-inside:avoid}
 
 .info-grid{
   display:grid;grid-template-columns:1fr 1fr 1fr;
-  gap:1mm 4mm;font-size:8.5pt;margin-bottom:2mm;
+  gap:1mm 4mm;font-size:14px;margin-bottom:2mm;line-height:1.4;
 }
 .info-grid .full{grid-column:span 2}
-.info-label{font-size:7pt;color:${COLORS.lightGray}}
+.info-label{font-size:12px;color:${COLORS.lightGray}}
 
 /* ===== Notes + Totals side-by-side (no overlap) ===== */
 .notes-totals-row{
@@ -238,18 +240,18 @@ tr{page-break-inside:avoid;break-inside:avoid}
 .box{
   flex:1;border:1px solid ${COLORS.borderGray};
   border-left:3px solid ${COLORS.primary};
-  padding:3mm 4mm;font-size:9pt;
-  white-space:pre-wrap;line-height:1.6;
+  padding:3mm 4mm;font-size:14px;
+  white-space:pre-wrap;line-height:1.4;
   color:${COLORS.darkGray};background:#fafafa;
   min-height:18mm;
 }
 .notes-box{
   border:1px solid ${COLORS.borderGray};
   border-left:3px solid ${COLORS.primary};
-  padding:3mm 4mm;font-size:9pt;
-  line-height:1.6;min-height:18mm;background:#fafafa;
+  padding:3mm 4mm;font-size:12px;
+  line-height:1.4;min-height:18mm;background:#fafafa;
 }
-.note-line{font-size:8.5pt;line-height:1.6;color:${COLORS.darkGray}}
+.note-line{font-size:12px;line-height:1.4;color:${COLORS.darkGray}}
 
 .amt-box{
   width:100%;
@@ -260,17 +262,17 @@ tr{page-break-inside:avoid;break-inside:avoid}
 .amt-r{
   display:flex;justify-content:space-between;align-items:center;
   border-bottom:1px solid #ebebeb;
-  font-size:9pt;
+  font-size:15px;font-weight:700;line-height:1.4;
 }
 .amt-r .lbl{color:${COLORS.lightGray};padding-right:3mm;flex-shrink:0}
-.amt-r .val{font-weight:600;text-align:right;flex-shrink:0}
+.amt-r .val{font-weight:700;text-align:right;flex-shrink:0;font-size:15px}
 .disc-val{color:${COLORS.red}}
 .amt-total{
   background:${COLORS.black};
   display:flex;justify-content:space-between;align-items:center;
 }
-.amt-total .lbl{color:${COLORS.primary};font-size:9pt;font-weight:700;letter-spacing:1px}
-.amt-total .val{color:#fff;font-size:12pt;font-weight:700;font-family:monospace}
+.amt-total .lbl{color:${COLORS.primary};font-size:16px;font-weight:700;letter-spacing:1px}
+.amt-total .val{color:#fff;font-size:16px;font-weight:700;font-family:monospace}
 
 .bank-box{
   border:1px solid ${COLORS.borderGray};
@@ -278,13 +280,13 @@ tr{page-break-inside:avoid;break-inside:avoid}
   margin-bottom:3mm;
 }
 .bank-title{
-  font-size:7pt;font-weight:700;
+  font-size:13px;font-weight:700;
   background:${COLORS.black};color:${COLORS.primary};
-  padding:1mm 2mm;display:inline-block;margin-bottom:1.5mm;
+  padding:1mm 2mm;display:inline-block;margin-bottom:1.5mm;line-height:1.4;
 }
 .bank-row{
-  display:flex;gap:6mm;font-size:8pt;
-  color:${COLORS.darkGray};line-height:1.6;flex-wrap:wrap;
+  display:flex;gap:6mm;font-size:13px;
+  color:${COLORS.darkGray};line-height:1.4;flex-wrap:wrap;
 }
 .bank-row span{white-space:nowrap}
 
@@ -294,12 +296,13 @@ tr{page-break-inside:avoid;break-inside:avoid}
 }
 .sig-box{
   text-align:center;border-top:1.5px solid ${COLORS.black};
-  font-size:8.5pt;color:${COLORS.midGray};
+  font-size:13px;color:${COLORS.midGray};line-height:1.4;
 }
+.sig-date{font-size:12px;color:#aaa}
 
 .pf{
   display:flex;justify-content:space-between;align-items:center;
-  font-size:6.5pt;color:${COLORS.lightGray};
+  font-size:12px;color:${COLORS.lightGray};
   border-top:1px solid ${COLORS.borderGray};padding-top:1mm;
 }
 
@@ -329,6 +332,7 @@ tr{page-break-inside:avoid;break-inside:avoid}
   }
 }
 ${PDF_LAYOUT_CSS}
+${PRINT_DOC_TYPE_CSS}
 </style>
 </head>
 <body>
@@ -419,9 +423,9 @@ ${PDF_LAYOUT_CSS}
 
   <footer class="quotation-signature-section">
     <div class="sig-row">
-      <div class="sig-box">客戶確認簽名<br><span style="font-size:6.5pt;color:#aaa">日期：________</span></div>
-      <div class="sig-box">業務簽名<br><span style="font-size:6.5pt;color:#aaa">日期：________</span></div>
-      <div class="sig-box">公　司　章<br><span style="font-size:6.5pt;color:#aaa">&nbsp;</span></div>
+      <div class="sig-box">客戶確認簽名<br><span class="sig-date">日期：________</span></div>
+      <div class="sig-box">業務簽名<br><span class="sig-date">日期：________</span></div>
+      <div class="sig-box">公　司　章<br><span class="sig-date">&nbsp;</span></div>
     </div>
     <div class="pf">
       <div>${COMPANY.name}　${COMPANY.phone}　${COMPANY.address}</div>

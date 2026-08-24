@@ -2,7 +2,7 @@
 // 獨立版面：修改此檔不影響其他 Template
 // continuous-print：EPSON 點陣機 9.5×5.5in（241.3×139.7mm）單頁極簡黑白版型
 
-import { logoUrl, COMPANY, COLORS, esc, PDF_LAYOUT_CSS } from "./brand-config";
+import { logoUrl, COMPANY, COLORS, esc, PDF_LAYOUT_CSS, PRINT_DOC_TYPE_CSS } from "./brand-config";
 import { stripQuotePricingFromNotes } from "@/lib/quoteToWorkOrder";
 import { CONTINUOUS_PAPER, PRINT_CALIBRATION_DEFAULT, type PrintCalibration } from "@/lib/printPaperConfig";
 
@@ -83,7 +83,7 @@ function buildMaterialRows(equipment: EquipmentRow[]): string {
     <tr>
       <td class="tac">${i + 1}</td>
       <td class="tal col-item">${esc(equipmentSpec(it))}</td>
-      <td class="tac">${it.quantity ?? ""}</td>
+      <td class="tac col-qty">${it.quantity ?? ""}</td>
       <td class="tac">${esc(it.unit || "台")}</td>
       <td class="tal small col-notes">${esc(equipmentRemark(it))}</td>
     </tr>`).join("");
@@ -306,22 +306,22 @@ html,body,.sheet,.page{
 }
 body{
   font-family:"Noto Sans TC","Microsoft JhengHei",Arial,sans-serif;
-  font-size:10.5pt;
-  line-height:1.2;
+  font-size:13px;
+  line-height:1.35;
   font-weight:500;
 }
 .cp-title{
   display:block;
   text-align:center;
-  font-size:15pt;
+  font-size:22px;
   font-weight:900;
   color:#000!important;
   letter-spacing:1.2px;
-  margin:0 0 0.25mm;
+  margin:0 0 0.2mm;
   padding:0;
   border:none;
   background:transparent!important;
-  line-height:1.08;
+  line-height:1.25;
   flex:0 0 auto;
 }
 .cp-grid{
@@ -330,14 +330,14 @@ body{
   column-gap:4mm;
   row-gap:0;
   width:100%;
-  margin:0 0 0.25mm;
-  padding:0 0 0.3mm;
+  margin:0 0 0.2mm;
+  padding:0 0 0.25mm;
   border:none;
   border-bottom:0.3mm solid #000;
   flex:0 0 auto;
 }
 .cp-col{display:block;min-width:0}
-.cp-field{display:flex;gap:1.2mm;align-items:baseline;min-width:0;line-height:1.12;margin:0}
+.cp-field{display:flex;gap:1.2mm;align-items:baseline;min-width:0;line-height:1.35;margin:0}
 /* 技師：保留足夠手寫空間；無資料時空白（不加破折號），僅空值時顯示底線 */
 .cp-field-tech{
   min-height:6mm;
@@ -356,15 +356,17 @@ body{
   width:24mm;
   min-width:24mm;
   max-width:24mm;
-  font-size:10.5pt;font-weight:700;color:#000!important;
+  font-size:13px;font-weight:700;color:#000!important;
   white-space:nowrap;
   letter-spacing:0;
   overflow:visible;
+  line-height:1.35;
 }
 .cp-val{
   flex:1 1 auto;
-  font-size:11pt;font-weight:700;color:#000!important;
+  font-size:14px;font-weight:700;color:#000!important;
   min-width:0;
+  line-height:1.35;
 }
 /* 施工內容：精簡；約 1～2 行手寫補充；底部單條實線與材料分隔 */
 .cp-block{
@@ -381,25 +383,29 @@ body{
 .cp-sec{
   display:block;
   width:100%;
-  font-size:10.5pt;font-weight:700;color:#000!important;
-  margin:0 0 0.15mm;padding:0;
+  font-size:13px;font-weight:700;color:#000!important;
+  margin:0 0 0.12mm;padding:0;
   border:none;background:transparent!important;
-  line-height:1.1;
+  line-height:1.35;
   flex:0 0 auto;
 }
 .cp-text{
   display:block;
   width:100%;
-  font-size:10.5pt;font-weight:500;color:#000!important;
-  margin:0;padding:0;line-height:1.15;
+  font-size:14px;font-weight:500;color:#000!important;
+  margin:0;padding:0;line-height:1.35;
   border:none;background:transparent!important;
   flex:0 0 auto;
 }
+.cp-notes-block .cp-text{
+  font-size:12px;
+  line-height:1.35;
+}
 .cp-write-space{
   flex:0 0 auto;
-  height:3.5mm;
+  height:2.5mm;
   width:100%;
-  margin-top:0.2mm;
+  margin-top:0.15mm;
   border:none;
 }
 /* 材料區：可長高吸收留白，但不縮到小於材料列（避免重疊下方） */
@@ -431,12 +437,12 @@ body{
   overflow:visible;
 }
 .cp-mat-header{
-  font-size:9.5pt;font-weight:700;color:#000!important;
-  padding:0.25mm 0 0.3mm;
+  font-size:13px;font-weight:700;color:#000!important;
+  padding:0.2mm 0 0.25mm;
   margin:0;
   border:none;
   border-bottom:0.18mm dotted #888;
-  line-height:1.12;
+  line-height:1.35;
   flex:0 0 auto;
 }
 .cp-mat-list{
@@ -449,21 +455,21 @@ body{
   flex:0 0 auto;
 }
 .cp-mat-row{
-  font-size:9.5pt;font-weight:500;color:#000!important;
-  padding:0.28mm 0;
+  font-size:13px;font-weight:500;color:#000!important;
+  padding:0.22mm 0;
   margin:0;
   border:none;
   border-bottom:0.15mm dotted #999;
-  line-height:1.15;
-  min-height:3.4mm;
+  line-height:1.35;
+  min-height:4.2mm;
   flex:0 0 auto;
 }
 .cp-mat-row:last-child{
   border-bottom:0.15mm dotted #999;
 }
 .cp-mat-no{text-align:center;font-weight:700}
-.cp-mat-name{text-align:left;min-width:0;padding-right:1.2mm}
-.cp-mat-qty{text-align:center;font-weight:700}
+.cp-mat-name{text-align:left;min-width:0;padding-right:1.2mm;font-size:14px;font-weight:700}
+.cp-mat-qty{text-align:center;font-weight:700;font-size:14px}
 .cp-mat-pad{min-width:0}
 /* 材料下方手寫留白：0/1/2 筆較大；5/8 筆縮小；有餘高時再伸展 */
 .cp-mat-handwrite{
@@ -474,36 +480,42 @@ body{
   border:none;
   min-height:5mm;
 }
-.cp-mat-block[data-mat-count="0"] .cp-mat-handwrite{min-height:26mm}
-.cp-mat-block[data-mat-count="1"] .cp-mat-handwrite{min-height:20mm}
-.cp-mat-block[data-mat-count="2"] .cp-mat-handwrite{min-height:15mm}
-.cp-mat-block[data-mat-count="3"] .cp-mat-handwrite{min-height:10mm}
-.cp-mat-block[data-mat-count="4"] .cp-mat-handwrite{min-height:7mm}
-.cp-mat-block[data-mat-count="5"] .cp-mat-handwrite{min-height:4mm}
-.cp-mat-block[data-mat-count="6"] .cp-mat-handwrite{min-height:3mm}
-.cp-mat-block[data-mat-count="7"] .cp-mat-handwrite{min-height:2.5mm}
-.cp-mat-block[data-mat-count="8"] .cp-mat-handwrite{min-height:2mm}
-/* 多筆材料時略壓材料列高，確保單頁且不重疊 */
+.cp-mat-block[data-mat-count="0"] .cp-mat-handwrite{min-height:20mm}
+.cp-mat-block[data-mat-count="1"] .cp-mat-handwrite{min-height:16mm}
+.cp-mat-block[data-mat-count="2"] .cp-mat-handwrite{min-height:12mm}
+.cp-mat-block[data-mat-count="3"] .cp-mat-handwrite{min-height:8mm}
+.cp-mat-block[data-mat-count="4"] .cp-mat-handwrite{min-height:5mm}
+.cp-mat-block[data-mat-count="5"] .cp-mat-handwrite{min-height:3mm}
+.cp-mat-block[data-mat-count="6"] .cp-mat-handwrite{min-height:2mm}
+.cp-mat-block[data-mat-count="7"] .cp-mat-handwrite{min-height:1.2mm}
+.cp-mat-block[data-mat-count="8"] .cp-mat-handwrite{min-height:0.8mm}
+/* 多筆材料時略壓列高，字級不得小於 12px */
 .cp-mat-block[data-mat-count="5"] .cp-mat-row,
 .cp-mat-block[data-mat-count="6"] .cp-mat-row{
-  padding:0.2mm 0;
-  min-height:3.2mm;
-  line-height:1.12;
+  padding:0.12mm 0;
+  min-height:3.8mm;
+  line-height:1.3;
+  font-size:13px;
 }
 .cp-mat-block[data-mat-count="7"] .cp-mat-row,
 .cp-mat-block[data-mat-count="8"] .cp-mat-row{
-  padding:0.08mm 0;
-  min-height:2.85mm;
-  line-height:1.08;
-  font-size:9pt;
+  padding:0.05mm 0;
+  min-height:3.5mm;
+  line-height:1.3;
+  font-size:12px;
 }
-.cp-mat-block[data-mat-count="8"] .cp-mat-handwrite{min-height:1.5mm}
-/* 8 筆時再壓縮施工手寫與客戶備註最小高，確保單頁 */
-.page:has(.cp-mat-block[data-mat-count="8"]) .cp-write-space{height:2.5mm}
-.page:has(.cp-mat-block[data-mat-count="8"]) .cp-cust-space{min-height:2.8mm}
-.page:has(.cp-mat-block[data-mat-count="8"]) .cp-sig-date{margin-top:1mm}
+.cp-mat-block[data-mat-count="7"] .cp-mat-name,
+.cp-mat-block[data-mat-count="8"] .cp-mat-name,
+.cp-mat-block[data-mat-count="7"] .cp-mat-qty,
+.cp-mat-block[data-mat-count="8"] .cp-mat-qty{
+  font-size:13px;
+}
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-write-space{height:1.2mm}
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-cust-space{min-height:2mm}
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-sig-date{margin-top:0.8mm}
 .page:has(.cp-mat-block[data-mat-count="7"]) .cp-write-space,
-.page:has(.cp-mat-block[data-mat-count="5"]) .cp-write-space{height:3mm}
+.page:has(.cp-mat-block[data-mat-count="6"]) .cp-write-space,
+.page:has(.cp-mat-block[data-mat-count="5"]) .cp-write-space{height:1.8mm}
 /* 備註：僅標題＋內容；緊湊；與工程收費之間不加分隔線，僅留白銜接 */
 .cp-notes-block{
   display:flex;
@@ -539,9 +551,9 @@ body{
   display:flex;
   align-items:center;
   gap:1.4mm;
-  font-size:10pt;font-weight:500;color:#000!important;
-  line-height:1.08;
-  margin:0.2mm 0 0;
+  font-size:15px;font-weight:700;color:#000!important;
+  line-height:1.35;
+  margin:0.15mm 0 0;
 }
 .cp-check{
   box-sizing:border-box;
@@ -588,9 +600,13 @@ body{
   align-items:start;
   flex:0 0 auto;
 }
-.page:has(.cp-mat-block[data-mat-count="8"]) .cp-sigs{padding-top:2mm}
-.page:has(.cp-mat-block[data-mat-count="8"]) .cp-notes-block{padding-bottom:0.35mm}
-.page:has(.cp-mat-block[data-mat-count="8"]) .cp-sig-date{margin-top:0.9mm}
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-sigs{padding-top:1.6mm}
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-notes-block{padding-bottom:0.2mm}
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-sig-date{margin-top:0.8mm}
+.page:has(.cp-mat-block[data-mat-count="7"]) .cp-title,
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-title{font-size:20px;line-height:1.25}
+.page:has(.cp-mat-block[data-mat-count="7"]) .cp-field,
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-field{line-height:1.3}
 .cp-sig{
   box-sizing:border-box;
   min-width:0;
@@ -603,10 +619,10 @@ body{
   overflow:visible;
 }
 .cp-sig-title{
-  font-size:10pt;font-weight:700;
+  font-size:13px;font-weight:700;
   margin:0;padding:0;
   flex:0 0 auto;
-  line-height:1.1;
+  line-height:1.35;
 }
 .cp-sig-space{
   flex:0 0 12mm;
@@ -624,11 +640,11 @@ body{
   flex:0 0 auto;
 }
 .cp-sig-date{
-  font-size:10pt;font-weight:700;
+  font-size:12px;font-weight:700;
   display:block;
   margin-top:1.2mm;
   flex:0 0 auto;
-  line-height:1.1;
+  line-height:1.35;
   border:none;
 }
 .hdr,.co-logo,.pf,.head-row{display:none!important}
@@ -782,7 +798,7 @@ ${buildCompactOverridesCss(mode)}
 *{margin:0;padding:0;box-sizing:border-box}
 body{
   font-family:'Microsoft JhengHei','\\5fae\\8edf\\6b63\\9ed1\\9ad4',Arial,sans-serif;
-  font-size:10pt;color:${COLORS.black};background:#fff;
+  font-size:13px;line-height:1.4;color:${COLORS.black};background:#fff;
   -webkit-print-color-adjust:exact;print-color-adjust:exact;
 }
 
@@ -793,7 +809,7 @@ ${buildPageBoxCss(mode, calibration)}
 .hdr{
   display:flex;justify-content:space-between;align-items:flex-start;
   border-bottom:2px solid ${COLORS.black};
-  padding-bottom:3mm;margin-bottom:3mm;
+  padding-bottom:2mm;margin-bottom:2mm;
   flex-shrink:0;
 }
 .co{display:flex;align-items:center;gap:3mm}
@@ -802,46 +818,46 @@ ${buildPageBoxCss(mode, calibration)}
   object-fit:contain;flex-shrink:0;
   border:1px solid ${COLORS.borderGray};border-radius:3px;
 }
-.co-name{font-size:13pt;font-weight:700}
-.co-sub{font-size:7.5pt;color:${COLORS.midGray}}
+.co-name{font-size:14px;font-weight:700;line-height:1.4}
+.co-sub{font-size:12px;color:${COLORS.midGray};line-height:1.4}
 .wo-right{text-align:right}
-.wo-label{font-size:14pt;font-weight:700;color:${COLORS.primary};letter-spacing:4px}
-.wo-num{font-size:10pt;font-weight:700;font-family:monospace}
-.wo-meta{font-size:8pt;color:${COLORS.midGray};margin-top:1px}
+.wo-label{font-size:22px;font-weight:700;color:${COLORS.primary};letter-spacing:4px;line-height:1.25}
+.wo-num{font-size:13px;font-weight:700;font-family:monospace;line-height:1.4}
+.wo-meta{font-size:12px;color:${COLORS.midGray};margin-top:1px;line-height:1.4}
 
 /* ===== Field grid ===== */
 .grid{
   display:grid;grid-template-columns:1fr 1fr;
-  gap:1.5mm 6mm;margin-bottom:2mm;font-size:9pt;
+  gap:1.5mm 6mm;margin-bottom:2mm;font-size:14px;line-height:1.4;
   flex-shrink:0;
 }
 .field{display:flex;gap:2mm;align-items:baseline}
-.lbl{font-size:7.5pt;color:${COLORS.midGray};min-width:52px;flex-shrink:0}
-.val{font-size:9.5pt;font-weight:600}
+.lbl{font-size:12px;color:${COLORS.midGray};min-width:52px;flex-shrink:0;line-height:1.4}
+.val{font-size:14px;font-weight:700;line-height:1.4}
 .full{grid-column:1/-1}
 
 /* ===== Section titles ===== */
 .sec-title{
-  font-size:7.5pt;font-weight:700;
+  font-size:13px;font-weight:700;
   background:${COLORS.black};color:${COLORS.primary};
   padding:1mm 2.5mm;letter-spacing:2px;margin-bottom:1.5mm;
-  display:inline-block;
+  display:inline-block;line-height:1.4;
 }
-.section{margin-bottom:2mm}
+.section{margin-bottom:1.5mm}
 
 /* ===== Table ===== */
 table{
   width:100%;border-collapse:collapse;
-  table-layout:fixed;font-size:9pt;
+  table-layout:fixed;font-size:13px;line-height:1.4;
 }
 .head-row{background:${COLORS.black};color:${COLORS.primary}}
 .head-row th{
   border:1px solid ${COLORS.black};
-  font-size:8.5pt;font-weight:700;text-align:center;
+  font-size:13px;font-weight:700;text-align:center;line-height:1.4;
 }
 tbody td{
   border:1px solid ${COLORS.black};
-  vertical-align:middle;font-size:9pt;
+  vertical-align:middle;font-size:13px;line-height:1.4;
 }
 tbody tr{page-break-inside:avoid;break-inside:avoid}
 
@@ -849,7 +865,8 @@ tbody tr{page-break-inside:avoid;break-inside:avoid}
 .tac{text-align:center}
 .tar{text-align:right}
 .tal{text-align:left}
-.small{font-size:8.5pt}
+.small{font-size:12px;line-height:1.4}
+.col-qty{font-size:14px;font-weight:700}
 
 /* Column widths */
 .col-w6{width:6%}
@@ -861,33 +878,39 @@ tbody tr{page-break-inside:avoid;break-inside:avoid}
 .box{
   border:1px solid ${COLORS.borderGray};
   border-left:3px solid ${COLORS.primary};
-  padding:3mm 4mm;
-  font-size:9pt;white-space:pre-wrap;
-  line-height:1.6;background:#fafafa;
+  padding:2mm 3mm;
+  font-size:14px;white-space:pre-wrap;
+  line-height:1.4;background:#fafafa;
   page-break-inside:auto;break-inside:auto;
 }
 
 /* ===== Bottom block (signatures + footer) ===== */
 .bottom-block{
-  margin-top:4mm;
+  margin-top:2.5mm;
   flex-shrink:0;
   page-break-inside:avoid;break-inside:avoid;
 }
 .sigs{
-  display:grid;grid-template-columns:repeat(3,1fr);gap:10mm;
-  margin-bottom:3mm;
+  display:grid;grid-template-columns:repeat(3,1fr);gap:8mm;
+  margin-bottom:2mm;
 }
 .sig{
   text-align:center;border-top:1.5px solid ${COLORS.black};
-  font-size:8.5pt;color:${COLORS.midGray};
+  font-size:13px;color:${COLORS.midGray};line-height:1.4;
 }
-.sig-date{font-size:6.5pt;color:#aaa}
+.sig-date{font-size:12px;color:#aaa;line-height:1.4}
 .pf{
   display:flex;justify-content:space-between;align-items:center;
-  font-size:6.5pt;color:${COLORS.lightGray};
+  font-size:12px;color:${COLORS.lightGray};line-height:1.4;
   border-top:1px solid ${COLORS.borderGray};padding-top:1.5mm;
 }
 ${PDF_LAYOUT_CSS}
+${PRINT_DOC_TYPE_CSS}
+/* 240×140mm 橫式：避免共用 A4 簽名／備註最小高度把簽名推出紙外 */
+.box{min-height:8mm!important;padding:2mm 3mm!important}
+.sig,.sig-box{min-height:12mm!important;padding-top:2mm!important;padding-bottom:5mm!important}
+.notes-box,.remarks-box{min-height:8mm!important}
+.head-row th,tbody td{padding:3px 4px!important}
 </style>
 </head>
 <body>

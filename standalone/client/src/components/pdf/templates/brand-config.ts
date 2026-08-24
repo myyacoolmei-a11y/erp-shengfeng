@@ -129,3 +129,55 @@ tbody tr{min-height:40px}
   min-height:18mm;
 }
 `;
+
+/**
+ * 報價單／派工單列印字級（僅這兩份單據引用）。
+ * 必須接在 PDF_LAYOUT_CSS 之後，才能蓋過共用 9pt 表格規則。
+ * 出貨單／對帳單等其他 template 不要引用。
+ */
+export const PRINT_DOC_TYPE_CSS = `
+/* ===== 報價單／派工單統一列印字級 ===== */
+body{
+  font-size:13px!important;
+  line-height:1.4!important;
+}
+.co-name{font-size:14px!important;font-weight:700;line-height:1.4!important}
+.co-sub,.co-info{font-size:12px!important;line-height:1.4!important}
+.doc-label,.wo-label{
+  font-size:22px!important;font-weight:700!important;line-height:1.25!important;
+}
+.doc-en{font-size:12px!important;line-height:1.4!important}
+.doc-no,.wo-num{font-size:13px!important;line-height:1.4!important}
+.doc-dates,.wo-meta,.pf,.sig-date{font-size:12px!important;line-height:1.4!important}
+.stitle,.sec-title,.bank-title{font-size:13px!important;font-weight:700!important;line-height:1.4!important}
+.info-grid,.grid{font-size:14px!important;line-height:1.4!important}
+.info-label,.lbl{font-size:12px!important;line-height:1.4!important}
+.val,.info-grid strong{font-size:14px!important;font-weight:700!important;line-height:1.4!important}
+table,tbody td,.eq-table,.eq-table tbody td{
+  font-size:13px!important;line-height:1.4!important;
+}
+.head-row th,.eq-table .head-row th{
+  font-size:13px!important;font-weight:700!important;line-height:1.4!important;
+}
+.head-row th,tbody td{
+  min-height:0!important;
+  padding:4px 5px!important;
+}
+.eq-table .head-row th,.eq-table tbody td{
+  padding:4px 3px!important;
+  min-height:0!important;
+}
+.eq-table td.tar,.eq-table .fw7{
+  font-size:15px!important;font-weight:700!important;
+}
+.col-qty{font-size:14px!important;font-weight:700!important}
+.box{font-size:14px!important;line-height:1.4!important}
+.notes-box,.remarks-box{font-size:12px!important;line-height:1.4!important}
+.note-line{font-size:12px!important;line-height:1.4!important}
+.small{font-size:12px!important;line-height:1.4!important}
+.bank-row{font-size:13px!important;line-height:1.4!important}
+.amt-r{font-size:15px!important;font-weight:700!important;line-height:1.4!important}
+.amt-r .val{font-size:15px!important;font-weight:700!important}
+.amt-total .lbl,.amt-total .val{font-size:16px!important;font-weight:700!important;line-height:1.4!important}
+.sig-box,.sig{font-size:13px!important;line-height:1.4!important}
+`;
