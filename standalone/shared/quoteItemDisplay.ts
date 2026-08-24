@@ -57,9 +57,7 @@ const KNOWN_AC_BRANDS = [
   "夏普",
 ];
 
-const SERVICE_CATEGORY_RE =
-  /保養|維修|安裝|工程|追加|項目|配管|清洗|抓漏|移機|拆機|冷媒|設備|施工|材料/;
-
+/** 報價表單可選／既有工程類別（完整比對，不用寬鬆關鍵字猜測）。 */
 export const QUOTE_CATEGORY_SUGGESTIONS = [
   "壁掛式保養",
   "維修項目",
@@ -70,6 +68,23 @@ export const QUOTE_CATEGORY_SUGGESTIONS = [
   "保養",
   "材料",
 ] as const;
+
+/** 商品主檔既有分類選項，可能被寫進 quote_items.category。 */
+const PRODUCT_CATEGORY_OPTIONS = [
+  "分離式冷氣",
+  "窗型冷氣",
+  "多聯式空調",
+  "冷暖氣機",
+  "商用空調",
+  "配件",
+  "耗材",
+] as const;
+
+const KNOWN_SERVICE_CATEGORIES = new Set<string>([
+  ...QUOTE_CATEGORY_SUGGESTIONS,
+  ...PRODUCT_CATEGORY_OPTIONS,
+  ...Object.values(CATEGORY_ALIASES),
+]);
 
 export type QuoteItemDisplaySource = {
   category?: string | null;
@@ -102,12 +117,11 @@ export function isKnownAcBrand(value: unknown): boolean {
   return KNOWN_AC_BRANDS.some((brand) => brand.toLowerCase() === lower);
 }
 
-/** 服務／工程分類名稱（不是冷氣品牌）。 */
+/** 服務／工程分類名稱：只認明確清單與別名，不用關鍵字猜測。 */
 export function isServiceCategoryLabel(value: unknown): boolean {
   const text = canonicalizeCategory(trimField(value));
   if (!text || isPlaceholderCategory(text) || isKnownAcBrand(text)) return false;
-  if (CATEGORY_ALIASES[text] || Object.values(CATEGORY_ALIASES).includes(text)) return true;
-  return SERVICE_CATEGORY_RE.test(text);
+  return KNOWN_SERVICE_CATEGORIES.has(text);
 }
 
 function firstRealCategory(...values: unknown[]): string {

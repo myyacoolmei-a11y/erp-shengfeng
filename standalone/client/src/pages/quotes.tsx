@@ -445,18 +445,20 @@ function ItemCard({ item, index, products, onChange, onDelete }: {
         </Button>
       </div>
 
-      <div className="space-y-1">
-        <Label className="text-xs">類別</Label>
-        <Input
-          className="h-8 text-xs"
-          list={`quote-item-category-suggestions-${index}`}
-          value={item.category === "其他" ? "" : item.category}
-          onChange={e => onChange({ ...item, category: e.target.value })}
-          placeholder="例如壁掛式保養、維修項目"
-        />
-        <datalist id={`quote-item-category-suggestions-${index}`}>
-          {QUOTE_CATEGORY_SUGGESTIONS.map((c) => <option key={c} value={c} />)}
-        </datalist>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+        <div className="space-y-1 col-span-2 sm:col-span-1">
+          <Label className="text-xs">類別</Label>
+          <Input
+            className="h-8 text-xs"
+            list={`quote-item-category-suggestions-${index}`}
+            value={item.category === "其他" ? "" : item.category}
+            onChange={e => onChange({ ...item, category: e.target.value })}
+            placeholder="可選或自行輸入"
+          />
+          <datalist id={`quote-item-category-suggestions-${index}`}>
+            {QUOTE_CATEGORY_SUGGESTIONS.map((c) => <option key={c} value={c} />)}
+          </datalist>
+        </div>
       </div>
 
       {item.inputMode === "catalog" ? (
