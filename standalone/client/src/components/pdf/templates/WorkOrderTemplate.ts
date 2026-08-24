@@ -508,14 +508,27 @@ body{
 .cp-mat-block[data-mat-count="8"] .cp-mat-name,
 .cp-mat-block[data-mat-count="7"] .cp-mat-qty,
 .cp-mat-block[data-mat-count="8"] .cp-mat-qty{
-  font-size:13px;
+  font-size:12px;
 }
-.page:has(.cp-mat-block[data-mat-count="8"]) .cp-write-space{height:1.2mm}
-.page:has(.cp-mat-block[data-mat-count="8"]) .cp-cust-space{min-height:2mm}
-.page:has(.cp-mat-block[data-mat-count="8"]) .cp-sig-date{margin-top:0.8mm}
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-write-space{height:0}
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-cust-space{min-height:0}
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-sig-date{margin-top:0.6mm}
 .page:has(.cp-mat-block[data-mat-count="7"]) .cp-write-space,
 .page:has(.cp-mat-block[data-mat-count="6"]) .cp-write-space,
-.page:has(.cp-mat-block[data-mat-count="5"]) .cp-write-space{height:1.8mm}
+.page:has(.cp-mat-block[data-mat-count="5"]) .cp-write-space{height:1.2mm}
+.page:has(.cp-mat-block[data-mat-count="7"]) .cp-val,
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-val{font-size:13px}
+.page:has(.cp-mat-block[data-mat-count="7"]) .cp-field-tech,
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-field-tech,
+.page:has(.cp-mat-block[data-mat-count="7"]) .cp-field-tech .cp-val,
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-field-tech .cp-val{min-height:0}
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-block,
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-notes-block,
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-mat-block{padding-top:0;padding-bottom:0}
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-fee-block{padding:0 0 0.1mm}
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-grid{margin:0;padding-bottom:0.15mm}
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-fee-opt{margin:0;line-height:1.25}
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-mat-handwrite{min-height:0}
 /* 備註：僅標題＋內容；緊湊；與工程收費之間不加分隔線，僅留白銜接 */
 .cp-notes-block{
   display:flex;
@@ -600,13 +613,14 @@ body{
   align-items:start;
   flex:0 0 auto;
 }
-.page:has(.cp-mat-block[data-mat-count="8"]) .cp-sigs{padding-top:1.6mm}
-.page:has(.cp-mat-block[data-mat-count="8"]) .cp-notes-block{padding-bottom:0.2mm}
-.page:has(.cp-mat-block[data-mat-count="8"]) .cp-sig-date{margin-top:0.8mm}
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-sigs{padding-top:0.6mm}
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-notes-block{padding-bottom:0}
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-sig-date{margin-top:0.3mm}
 .page:has(.cp-mat-block[data-mat-count="7"]) .cp-title,
-.page:has(.cp-mat-block[data-mat-count="8"]) .cp-title{font-size:20px;line-height:1.25}
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-title{font-size:20px;line-height:1.25;margin:0}
 .page:has(.cp-mat-block[data-mat-count="7"]) .cp-field,
 .page:has(.cp-mat-block[data-mat-count="8"]) .cp-field{line-height:1.3}
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-mat-row{line-height:1.25;min-height:0}
 .cp-sig{
   box-sizing:border-box;
   min-width:0;
@@ -809,12 +823,12 @@ ${buildPageBoxCss(mode, calibration)}
 .hdr{
   display:flex;justify-content:space-between;align-items:flex-start;
   border-bottom:2px solid ${COLORS.black};
-  padding-bottom:2mm;margin-bottom:2mm;
+  padding-bottom:1.5mm;margin-bottom:1.5mm;
   flex-shrink:0;
 }
 .co{display:flex;align-items:center;gap:3mm}
 .co-logo{
-  width:55px;height:55px;max-width:55px;max-height:55px;
+  width:44px;height:44px;max-width:44px;max-height:44px;
   object-fit:contain;flex-shrink:0;
   border:1px solid ${COLORS.borderGray};border-radius:3px;
 }
@@ -828,7 +842,7 @@ ${buildPageBoxCss(mode, calibration)}
 /* ===== Field grid ===== */
 .grid{
   display:grid;grid-template-columns:1fr 1fr;
-  gap:1.5mm 6mm;margin-bottom:2mm;font-size:14px;line-height:1.4;
+  gap:0.5mm 5mm;margin-bottom:1mm;font-size:14px;line-height:1.35;
   flex-shrink:0;
 }
 .field{display:flex;gap:2mm;align-items:baseline}
@@ -840,10 +854,10 @@ ${buildPageBoxCss(mode, calibration)}
 .sec-title{
   font-size:13px;font-weight:700;
   background:${COLORS.black};color:${COLORS.primary};
-  padding:1mm 2.5mm;letter-spacing:2px;margin-bottom:1.5mm;
-  display:inline-block;line-height:1.4;
+  padding:0.6mm 2mm;letter-spacing:2px;margin-bottom:1mm;
+  display:inline-block;line-height:1.35;
 }
-.section{margin-bottom:1.5mm}
+.section{margin-bottom:1mm;flex:0 0 auto}
 
 /* ===== Table ===== */
 table{
@@ -878,21 +892,21 @@ tbody tr{page-break-inside:avoid;break-inside:avoid}
 .box{
   border:1px solid ${COLORS.borderGray};
   border-left:3px solid ${COLORS.primary};
-  padding:2mm 3mm;
+  padding:1.2mm 2.5mm;
   font-size:14px;white-space:pre-wrap;
-  line-height:1.4;background:#fafafa;
+  line-height:1.35;background:#fafafa;
   page-break-inside:auto;break-inside:auto;
 }
 
 /* ===== Bottom block (signatures + footer) ===== */
 .bottom-block{
-  margin-top:2.5mm;
+  margin-top:auto;
   flex-shrink:0;
   page-break-inside:avoid;break-inside:avoid;
 }
 .sigs{
-  display:grid;grid-template-columns:repeat(3,1fr);gap:8mm;
-  margin-bottom:2mm;
+  display:grid;grid-template-columns:repeat(3,1fr);gap:6mm;
+  margin-bottom:1.5mm;
 }
 .sig{
   text-align:center;border-top:1.5px solid ${COLORS.black};
@@ -907,15 +921,37 @@ tbody tr{page-break-inside:avoid;break-inside:avoid}
 ${PDF_LAYOUT_CSS}
 ${PRINT_DOC_TYPE_CSS}
 /* 240×140mm 橫式：避免共用 A4 簽名／備註最小高度把簽名推出紙外 */
-.box{min-height:8mm!important;padding:2mm 3mm!important}
-.sig,.sig-box{min-height:12mm!important;padding-top:2mm!important;padding-bottom:5mm!important}
-.notes-box,.remarks-box{min-height:8mm!important}
+.box{min-height:0!important;padding:1.2mm 2.5mm!important}
+.sig,.sig-box{min-height:12mm!important;padding-top:1.2mm!important;padding-bottom:2.5mm!important}
+.grid,.val,.lbl{line-height:1.35!important}
+.notes-box,.remarks-box{min-height:0!important}
 .head-row th,tbody td{padding:3px 4px!important}
+.section-flex-notes .box{font-size:12px!important;line-height:1.4!important}
+.page[data-mat-count="6"] .val,
+.page[data-mat-count="7"] .val,
+.page[data-mat-count="8"] .val{font-size:13px!important}
+.page[data-mat-count="6"] .grid,
+.page[data-mat-count="7"] .grid,
+.page[data-mat-count="8"] .grid{gap:0.8mm 5mm;margin-bottom:1mm}
+.page[data-mat-count="7"] .box,
+.page[data-mat-count="8"] .box{min-height:0!important;padding:1mm 2mm!important}
+.page[data-mat-count="7"] .head-row th,
+.page[data-mat-count="7"] tbody td{padding:2px 3px!important}
+.page[data-mat-count="8"] tbody td,
+.page[data-mat-count="8"] .col-item{font-size:12px!important;line-height:1.3!important}
+.page[data-mat-count="8"] .col-qty{font-size:13px!important}
+.page[data-mat-count="8"] .head-row th, .page[data-mat-count="8"] tbody td{padding:1px 3px!important}
+.page[data-mat-count="7"] .sig,
+.page[data-mat-count="8"] .sig{min-height:12mm!important;padding-bottom:3mm!important}
+.page[data-mat-count="7"] .hdr,
+.page[data-mat-count="8"] .hdr{padding-bottom:1.5mm!important;margin-bottom:1.5mm!important}
+.page[data-mat-count="7"] .section,
+.page[data-mat-count="8"] .section{margin-bottom:1mm}
 </style>
 </head>
 <body>
 <div class="sheet">
-<div class="page">
+<div class="page" data-mat-count="${equipment.length}">
   <div class="hdr">
     <div class="co">
       <img src="${logoUrl()}" class="co-logo" alt="">
