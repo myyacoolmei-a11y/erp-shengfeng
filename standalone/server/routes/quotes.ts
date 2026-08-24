@@ -6,6 +6,7 @@ import { requireFeature } from "../lib/auth";
 import { syncQuoteDispatchBatch, syncQuoteDispatchStatus } from "../lib/quoteWorkflow";
 import { normalizeQuoteStatus } from "../lib/quoteStatus";
 import { resolveQuoteItemsForSave } from "../lib/productCatalog";
+import { normalizeQuoteItemCategoryBrand } from "../../shared/quoteItemDisplay";
 import { signQuoteShareToken } from "../lib/quoteShareToken";
 import {
   QUOTE_DOCUMENT_SELECT,
@@ -25,20 +26,23 @@ const serializeQuote = serializeQuoteDocument;
 const QUOTE_SELECT = QUOTE_DOCUMENT_SELECT;
 
 async function buildItemsInsert(itemInputs: any[], quoteId: number) {
-  return itemInputs.map((item: any, idx: number) => ({
-    quoteId,
-    productId: item.productId ?? null,
-    category: item.category ?? "其他",
-    itemName: item.itemName ?? "",
-    brand: item.brand || null,
-    model: item.model || null,
-    quantity: String(item.quantity ?? 1),
-    unit: item.unit ?? "台",
-    unitPrice: String(item.unitPrice ?? 0),
-    subtotal: String((item.quantity ?? 1) * (item.unitPrice ?? 0)),
-    notes: item.notes || null,
-    sortOrder: item.sortOrder ?? idx,
-  }));
+  return itemInputs.map((item: any, idx: number) => {
+    const { category, brand } = normalizeQuoteItemCategoryBrand(item);
+    return {
+      quoteId,
+      productId: item.productId ?? null,
+      category,
+      itemName: item.itemName ?? "",
+      brand: brand || null,
+      model: item.model || null,
+      quantity: String(item.quantity ?? 1),
+      unit: item.unit ?? "台",
+      unitPrice: String(item.unitPrice ?? 0),
+      subtotal: String((item.quantity ?? 1) * (item.unitPrice ?? 0)),
+      notes: item.notes || null,
+      sortOrder: item.sortOrder ?? idx,
+    };
+  });
 }
 
 router.get("/quotes", async (req, res): Promise<void> => {

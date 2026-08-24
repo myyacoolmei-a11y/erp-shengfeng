@@ -5,7 +5,7 @@
 import { logoUrl, COMPANY, COLORS, esc, PRINT_DOC_TYPE_CSS, PRINT_CJK_FONT_STACK, PRINT_CJK_METRIC_CSS, printFontLinksHtml } from "./brand-config";
 import { stripQuotePricingFromNotes } from "@/lib/quoteToWorkOrder";
 import { CONTINUOUS_PAPER, PRINT_CALIBRATION_DEFAULT, type PrintCalibration } from "@/lib/printPaperConfig";
-import { displayQuoteItemCategory } from "./printCategory";
+import { displayQuoteItemCategory, displayQuoteItemBrand } from "./printCategory";
 
 interface EquipmentRow {
   brand?: string | null;
@@ -47,7 +47,8 @@ function resolveEquipmentItems(order: Record<string, unknown>): EquipmentRow[] {
 }
 
 function equipmentName(it: EquipmentRow): string {
-  const parts = [it.brand, it.itemName || it.model].filter(Boolean);
+  const brand = displayQuoteItemBrand(it);
+  const parts = [brand === "—" ? "" : brand, it.itemName || it.model].filter(Boolean);
   return parts.join(" ").trim() || "—";
 }
 
@@ -83,7 +84,8 @@ function buildMaterialRows(equipment: EquipmentRow[]): string {
   }
 
   return equipment.map((it, i) => {
-    const spec = [it.brand, it.itemName || it.model].filter(Boolean).join(" ").trim() || "—";
+    const brand = displayQuoteItemBrand(it);
+    const spec = [brand === "—" ? "" : brand, it.itemName || it.model].filter(Boolean).join(" ").trim() || "—";
     const model = it.itemName && it.model && it.model !== it.itemName ? it.model : (it.itemName ? (it.model || "—") : "—");
     return `
     <tr>

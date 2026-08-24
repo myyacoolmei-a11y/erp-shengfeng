@@ -48,6 +48,12 @@ import { PENDING_DISPATCH_BADGE, PENDING_DISPATCH_FILTER_ACTIVE } from "@/lib/di
 import { VoiceAssistantButton } from "@/components/voice-assistant/VoiceAssistantDialog";
 import { applyVoiceToQuoteForm } from "@/lib/voice/applyVoiceToQuote";
 import type { VoiceAssistantApplyPayload } from "@/components/voice-assistant/types";
+import {
+  displayQuoteItemBrand,
+  displayQuoteItemCategory,
+  normalizeQuoteItemCategoryBrand,
+  QUOTE_CATEGORY_SUGGESTIONS,
+} from "../../../shared/quoteItemDisplay";
 
 const AUTH_TOKEN_KEY = "erp_auth_token";
 
@@ -267,19 +273,22 @@ function formToApi(f: QuoteForm) {
     customerPhone: f.customerPhone || undefined,
     taxType: f.taxType,
     ...(f.salesRepId > 0 ? { salesRepId: f.salesRepId } : {}),
-    items: f.items.map((item, idx) => ({
-      productId: item.productId ?? undefined,
-      category: item.category || "其他",
-      itemName: item.itemName,
-      brand: item.brand || undefined,
-      model: item.model || undefined,
-      quantity: item.quantity,
-      unit: item.unit,
-      unitPrice: item.unitPrice,
-      notes: item.notes || undefined,
-      addToCatalog: item.inputMode === "manual" && !item.productId ? item.addToCatalog : undefined,
-      sortOrder: idx,
-    })),
+    items: f.items.map((item, idx) => {
+      const { category, brand } = normalizeQuoteItemCategoryBrand(item);
+      return {
+        productId: item.productId ?? undefined,
+        category,
+        itemName: item.itemName,
+        brand: brand || undefined,
+        model: item.model || undefined,
+        quantity: item.quantity,
+        unit: item.unit,
+        unitPrice: item.unitPrice,
+        notes: item.notes || undefined,
+        addToCatalog: item.inputMode === "manual" && !item.productId ? item.addToCatalog : undefined,
+        sortOrder: idx,
+      };
+    }),
   };
 }
 
@@ -301,7 +310,7 @@ function quoteToForm(q: any): QuoteForm {
       productId: item.productId ?? null,
       inputMode: item.productId != null ? "catalog" as const : "manual" as const,
       addToCatalog: false,
-      category: item.category ?? "其他",
+      category: item.category && item.category !== "其他" ? item.category : "",
       itemName: item.itemName ?? "",
       brand: item.brand ?? "",
       model: item.model ?? "",
@@ -393,14 +402,18 @@ function ItemCard({ item, index, products, onChange, onDelete }: {
     const found = productOptions.find((p: any) => p.id === productId);
     if (!found) return;
     const price = found.retailPrice != null ? parseFloat(found.retailPrice) : 0;
+    const mapped = normalizeQuoteItemCategoryBrand({
+      category: found.category ?? "",
+      brand: found.brand ?? "",
+    });
     onChange({
       ...item,
       inputMode: "catalog",
       productId: found.id,
       addToCatalog: false,
-      category: found.category ?? "其他",
+      category: mapped.category === "其他" ? "" : mapped.category,
       itemName: found.name ?? "",
-      brand: found.brand ?? "",
+      brand: mapped.brand,
       model: found.model ?? "",
       unit: found.unit ?? "台",
       unitPrice: isNaN(price) ? 0 : price,
@@ -432,6 +445,20 @@ function ItemCard({ item, index, products, onChange, onDelete }: {
         </Button>
       </div>
 
+      <div className="space-y-1">
+        <Label className="text-xs">類別</Label>
+        <Input
+          className="h-8 text-xs"
+          list={`quote-item-category-suggestions-${index}`}
+          value={item.category === "其他" ? "" : item.category}
+          onChange={e => onChange({ ...item, category: e.target.value })}
+          placeholder="例如壁掛式保養、維修項目"
+        />
+        <datalist id={`quote-item-category-suggestions-${index}`}>
+          {QUOTE_CATEGORY_SUGGESTIONS.map((c) => <option key={c} value={c} />)}
+        </datalist>
+      </div>
+
       {item.inputMode === "catalog" ? (
         <div className="space-y-2">
           <div className="space-y-1">
@@ -444,8 +471,9 @@ function ItemCard({ item, index, products, onChange, onDelete }: {
             />
           </div>
           {item.productId != null ? (
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs bg-muted/30 rounded-md p-2">
-              <div><span className="text-muted-foreground">品牌</span><p className="font-medium">{item.brand || "—"}</p></div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs bg-muted/30 rounded-md p-2">
+              <div><span className="text-muted-foreground">類別</span><p className="font-medium">{displayQuoteItemCategory(item)}</p></div>
+              <div><span className="text-muted-foreground">品牌</span><p className="font-medium">{displayQuoteItemBrand(item)}</p></div>
               <div><span className="text-muted-foreground">品項</span><p className="font-medium">{item.itemName || "—"}</p></div>
               <div><span className="text-muted-foreground">型號</span><p className="font-medium">{item.model || "—"}</p></div>
               <div><span className="text-muted-foreground">單位</span><p className="font-medium">{item.unit || "—"}</p></div>
@@ -480,7 +508,7 @@ function ItemCard({ item, index, products, onChange, onDelete }: {
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             <div className="space-y-1">
               <Label className="text-xs">品牌</Label>
-              <Input className="h-8 text-xs" value={item.brand} onChange={e => onChange({ ...item, brand: e.target.value })} placeholder="品牌" />
+              <Input className="h-8 text-xs" value={item.brand} onChange={e => onChange({ ...item, brand: e.target.value })} placeholder="大金、日立… 沒有可留空" />
             </div>
             <div className="space-y-1 sm:col-span-2">
               <Label className="text-xs">品項 *</Label>
@@ -1311,7 +1339,7 @@ export default function QuotesPage() {
                       <ul className="list-disc pl-4 mt-1">
                         {(convertItem.items as any[]).map((it: any, i: number) => (
                           <li key={i}>
-                            {it.category} / {it.brand || "—"} / {it.itemName || it.model || "—"}
+                            {displayQuoteItemCategory(it)} / {displayQuoteItemBrand(it)} / {it.itemName || it.model || "—"}
                             {it.model && it.itemName && it.model !== it.itemName ? `（${it.model}）` : ""}
                             {" "}×{it.quantity}{it.unit}
                             {it.notes ? ` — ${it.notes}` : ""}

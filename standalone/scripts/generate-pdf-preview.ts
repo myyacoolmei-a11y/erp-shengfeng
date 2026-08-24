@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { buildQuotationHtml } from "../client/src/components/pdf/templates/QuotationTemplate.ts";
 import { buildWorkOrderHtml } from "../client/src/components/pdf/templates/WorkOrderTemplate.ts";
 import { buildStatementHtml } from "../client/src/components/pdf/templates/StatementTemplate.ts";
-import { displayQuoteItemCategory } from "../client/src/components/pdf/templates/printCategory.ts";
+import { displayQuoteItemCategory, displayQuoteItemBrand } from "../client/src/components/pdf/templates/printCategory.ts";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const outDir = join(__dirname, "../public/pdf-samples");
@@ -82,11 +82,22 @@ const cats = [
   displayQuoteItemCategory({ category: "追加項目" }),
   displayQuoteItemCategory({ category: "維修" }),
   displayQuoteItemCategory({ category: "保養" }),
-  displayQuoteItemCategory({ category: "其他", itemName: "銅管配管 5公尺" }),
+  displayQuoteItemCategory({ category: "其他", brand: "壁掛式保養", itemName: "S1" }),
+  displayQuoteItemCategory({ category: "其他", brand: "維修項目", itemName: "冷媒填充＋抓漏" }),
   displayQuoteItemCategory({ category: "其他", itemName: "現場雜項" }),
 ];
-if (cats.join() !== ["安裝新機", "追加項目", "維修項目", "保養", "材料", "其他"].join()) {
+if (cats.join() !== ["安裝新機", "追加項目", "維修項目", "保養", "壁掛式保養", "維修項目", "—"].join()) {
   throw new Error(`category mapping failed: ${cats.join(" | ")}`);
+}
+const serviceRows = [
+  { category: "其他", brand: "壁掛式保養", itemName: "S1" },
+  { category: "其他", brand: "維修項目", itemName: "冷媒填充＋抓漏" },
+];
+if (displayQuoteItemBrand(serviceRows[0]) !== "—" || displayQuoteItemBrand(serviceRows[1]) !== "—") {
+  throw new Error("service labels must not print as brand");
+}
+if (displayQuoteItemBrand({ brand: "大金" }) !== "大金") {
+  throw new Error("real AC brand should print as brand");
 }
 for (const bad of ["transform:scale(", "scaleX(", "scaleY(", "font-stretch:condensed", "font-stretch: condensed"]) {
   if (quoteHtml.includes(bad)) {

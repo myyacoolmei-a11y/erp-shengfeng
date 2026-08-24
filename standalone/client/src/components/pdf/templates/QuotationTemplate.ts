@@ -3,7 +3,7 @@
 
 import { logoUrl, COMPANY, COLORS, esc, fmtMoney, PRINT_DOC_TYPE_CSS, PRINT_CJK_FONT_STACK, printFontLinksHtml } from "./brand-config";
 import { computeQuoteAmounts } from "../quote-amounts";
-import { displayQuoteItemCategory } from "./printCategory";
+import { displayQuoteItemCategory, displayQuoteItemBrand } from "./printCategory";
 
 export function buildQuotationHtml(quote: any, baseOrigin?: string): string {
   // Line items come only from quotation.items (quotes / quote_items).
@@ -54,10 +54,11 @@ export function buildQuotationHtml(quote: any, baseOrigin?: string): string {
 
   function renderItemRow(item: any, index: number): string {
     const category = displayQuoteItemCategory(item);
+    const brand = displayQuoteItemBrand(item);
     const cells = [
       `<td class="tac">${index + 1}</td>`,
       `<td class="tac col-cat">${esc(category)}</td>`,
-      `<td class="tac col-brand">${esc(item.brand || "—")}</td>`,
+      `<td class="tac col-brand">${esc(brand)}</td>`,
       `<td class="tal col-item">${esc(item.itemName || "")}</td>`,
       `<td class="tac col-model">${esc(item.model || "—")}</td>`,
       `<td class="tac col-qty">${Number(item.quantity ?? 0)}</td>`,
