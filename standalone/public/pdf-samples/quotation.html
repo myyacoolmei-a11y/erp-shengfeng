@@ -3,224 +3,416 @@
 <head>
 <meta charset="UTF-8">
 <title>報價單 Q-20250704-0042</title>
+<style data-print-cjk-font>
+@font-face{
+  font-family:"Noto Sans TC";font-style:normal;font-weight:400;font-stretch:100%;font-display:block;
+  src:local("Microsoft JhengHei"),local("Microsoft JhengHei UI"),local("PingFang TC"),local("Noto Sans CJK TC");
+}
+@font-face{
+  font-family:"Noto Sans TC";font-style:normal;font-weight:700;font-stretch:100%;font-display:block;
+  src:local("Microsoft JhengHei Bold"),local("Microsoft JhengHei"),local("PingFang TC"),local("Noto Sans CJK TC Bold"),local("Noto Sans CJK TC");
+}
+@font-face{
+  font-family:"Noto Sans TC";font-style:normal;font-weight:400;font-stretch:100%;font-display:block;
+  src:url("../fonts/NotoSansTC-latin-400.woff2") format("woff2");
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+20AC,U+2122,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face{
+  font-family:"Noto Sans TC";font-style:normal;font-weight:700;font-stretch:100%;font-display:block;
+  src:url("../fonts/NotoSansTC-latin-700.woff2") format("woff2");
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+20AC,U+2122,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face{
+  font-family:"Noto Sans TC";font-style:normal;font-weight:400;font-stretch:100%;font-display:block;
+  src:url("../fonts/NotoSansTC-TC-400.woff2") format("woff2");
+  unicode-range:U+3000-303F,U+3400-4DBF,U+4E00-9FFF,U+F900-FAFF,U+FF00-FFEF;
+}
+@font-face{
+  font-family:"Noto Sans TC";font-style:normal;font-weight:700;font-stretch:100%;font-display:block;
+  src:url("../fonts/NotoSansTC-TC-700.woff2") format("woff2");
+  unicode-range:U+3000-303F,U+3400-4DBF,U+4E00-9FFF,U+F900-FAFF,U+FF00-FFEF;
+}
+</style>
 <style>
-/* ===== Base ===== */
 *{margin:0;padding:0;box-sizing:border-box}
-body{
-  font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;
-  font-size:10pt;color:#111111;background:#fff;
+html,body{margin:0;padding:0}
+body,.quotation-print-page{
+  font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
+  font-stretch:100%;font-synthesis:none;font-variation-settings:normal;
+  font-size:14px;font-weight:400;line-height:1.4;color:#111;background:#fff;
+  transform:none;zoom:normal;
+  -webkit-print-color-adjust:exact;print-color-adjust:exact;
 }
 
-/* ===== Page setup ===== */
-@page{size:A4 portrait;margin:12mm}
-.page{
-  width:186mm;min-height:273mm;
-  padding:0;
-  position:relative;
+@page{size:A4 portrait;margin:10mm 12mm}
+.quotation-print-page{
+  width:100%;
+  min-height:calc(297mm - 20mm);
+  margin:0;padding:0;
+  display:flex;flex-direction:column;
+  break-after:auto;page-break-after:auto;
+}
+.quotation-print-content{flex:0 0 auto}
+.quotation-signature-section{
+  margin-top:auto;
+  break-inside:avoid;page-break-inside:avoid;
 }
 
-/* ===== Logo & Header ===== */
 .hdr{
   display:flex;justify-content:space-between;align-items:flex-start;
-  border-bottom:2.5px solid #111111;
-  padding-bottom:4mm;margin-bottom:3mm;
+  border-bottom:1px solid #ddd;
+  padding-bottom:4mm;margin-bottom:5mm;
 }
-.co{display:flex;align-items:center;gap:3mm}
+.co{display:flex;align-items:flex-start;gap:3.5mm}
 .co-logo{
-  width:55px;height:55px;max-width:55px;max-height:55px;
+  width:48px;height:48px;max-width:48px;max-height:48px;
   object-fit:contain;flex-shrink:0;
-  border:1px solid #e0e0e0;border-radius:3px;
 }
-.co-name{font-size:13pt;font-weight:700;letter-spacing:0.5px}
-.co-sub{font-size:7.5pt;color:#555555;margin-top:1px}
-.co-info{font-size:7pt;color:#888888;margin-top:2px;line-height:1.6}
+.co-name{font-size:15px;font-weight:700;letter-spacing:0.3px;line-height:1.4;color:#111}
+.co-sub{font-size:12px;font-weight:400;color:#666;margin-top:1px;line-height:1.4}
+.co-info{font-size:12px;font-weight:400;color:#666;margin-top:2px;line-height:1.45}
 .doc-r{text-align:right}
-.doc-label{font-size:16pt;font-weight:700;color:#9ACD32;letter-spacing:4px}
-.doc-en{font-size:7pt;color:#aaa;letter-spacing:1px}
-.doc-no{font-size:9pt;font-weight:700;font-family:monospace;margin-top:2px}
-.doc-dates{font-size:7.5pt;color:#555555;line-height:1.6;margin-top:1px}
+.doc-label{font-size:28px;font-weight:700;color:#111;letter-spacing:2px;line-height:1.2}
+.doc-en{font-size:12px;font-weight:500;color:#888;letter-spacing:2px;line-height:1.4;margin-top:1px}
+.doc-no{font-size:13px;font-weight:600;margin-top:2mm;line-height:1.4}
+.doc-dates{font-size:12px;font-weight:400;color:#666;line-height:1.45;margin-top:1mm}
 
-/* ===== Section titles ===== */
-.sec{margin-bottom:2.5mm}
+.sec{margin-bottom:5mm}
 .stitle{
-  font-size:7.5pt;font-weight:700;
-  background:#111111;color:#9ACD32;
-  padding:1mm 2.5mm;letter-spacing:2px;margin-bottom:1.5mm;
-  display:inline-block;
+  color:#111;font-size:16px;font-weight:700;
+  background:transparent;border:none;
+  padding:0 0 1.5mm;margin:0 0 3mm;
+  display:block;width:fit-content;
+  border-bottom:2.5px solid #9ACD32;
+  letter-spacing:0;line-height:1.3;
+}
+.eq-title{
+  color:#111;font-size:19px;font-weight:700;
+  background:transparent;border:none;
+  padding:0 0 1.5mm;margin:0 0 3mm;
+  display:block;width:fit-content;
+  border-bottom:2.5px solid #9ACD32;
+  letter-spacing:0;line-height:1.3;
 }
 
-/* ===== Table ===== */
-table{
-  width:100%;border-collapse:collapse;
-  table-layout:fixed;font-size:9pt;
+.eq-wrap{width:100%;max-width:100%;overflow:visible}
+.eq-table{
+  width:100%;max-width:100%;
+  border-collapse:collapse;border-spacing:0;
+  table-layout:fixed;font-size:16px;line-height:1.4;
+  font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
+  font-stretch:100%;transform:none;zoom:normal;
 }
-.head-row{background:#111111;color:#9ACD32}
-.head-row th{
-  border:1px solid #111111;
-  font-size:8.5pt;font-weight:700;text-align:center;
+.eq-table .head-row{background:#f4f4f4;color:#111}
+.eq-table .head-row th{
+  border:1px solid #ccc;
+  font-size:14px;font-weight:700;text-align:center;vertical-align:middle;
+  box-sizing:border-box;
+  padding:10px 8px;
+  line-height:1.4;color:#111;
+  font-stretch:100%;letter-spacing:0;transform:none;zoom:normal;
 }
-tbody td{
-  border:1px solid #111111;
-  vertical-align:middle;font-size:9pt;
+.eq-table tbody td{
+  border:1px solid #ccc;
+  vertical-align:middle;font-size:16px;font-weight:500;
+  box-sizing:border-box;
+  padding:10px 8px;
+  line-height:1.4;color:#111;text-align:center;
+  font-stretch:100%;letter-spacing:0;transform:none;zoom:normal;
+  overflow:visible;
 }
-tr{page-break-inside:avoid;break-inside:avoid}
+.eq-table .col-item{
+  font-size:18px;font-weight:700;text-align:left;
+  word-wrap:break-word;word-break:break-word;white-space:normal;
+}
+.eq-table .col-cat,.eq-table .col-brand,.eq-table .col-model,
+.eq-table .col-qty,.eq-table .col-unit,.eq-table .col-price,.eq-table .col-sub,
+.eq-table .col-notes{
+  text-align:center;font-weight:700;font-size:16px;
+}
+.eq-table .col-notes{font-size:13px;font-weight:400}
+.eq-table tr{page-break-inside:avoid;break-inside:avoid}
 
-/* Text align helpers */
 .tac{text-align:center}
 .tar{text-align:right}
 .tal{text-align:left}
-.fw7{font-weight:700}
-.small{font-size:7.5pt}
-.muted{color:#555555}
+.muted{color:#888}
 
-/* Column widths */
-.col-w6{width:6%}
-.col-w8{width:8%}
-.col-w10{width:10%}
-.col-w12{width:12%}
-.col-w14{width:14%}
-
-/* ===== Info grid ===== */
-.info-grid{
+.info-block{
   display:grid;grid-template-columns:1fr 1fr 1fr;
-  gap:1mm 4mm;font-size:8.5pt;margin-bottom:2mm;
+  gap:3mm 8mm;
+  padding:1mm 0 1mm;
 }
-.info-grid .full{grid-column:span 2}
-.info-label{font-size:7pt;color:#888888}
+.info-item{display:flex;flex-direction:column;gap:1mm;min-width:0}
+.info-item.span2{grid-column:span 2}
+.info-label{font-size:13px;font-weight:500;color:#666;line-height:1.3}
+.info-value{font-size:16px;font-weight:600;color:#111;line-height:1.4;word-break:break-word}
 
-/* ===== Service & Notes ===== */
-.row2{display:flex;gap:3mm;margin-bottom:2mm}
+.notes-totals-row{
+  display:flex;
+  gap:5mm;
+  align-items:flex-start;
+  margin-top:2mm;
+  margin-bottom:4mm;
+  page-break-inside:avoid;
+  break-inside:avoid;
+}
+.notes-column{flex:1 1 auto;min-width:0}
+.totals-column{flex:0 0 62mm;width:62mm;max-width:62mm}
+.row2{display:flex;gap:4mm}
 .box{
-  flex:1;border:1px solid #e0e0e0;
-  border-left:3px solid #9ACD32;
-  padding:3mm 4mm;font-size:9pt;
-  white-space:pre-wrap;line-height:1.6;
-  color:#333333;background:#fafafa;
-  min-height:18mm;
+  flex:1;border:1px solid #e5e5e5;
+  padding:2.5mm 3mm;font-size:14px;font-weight:400;
+  white-space:pre-wrap;line-height:1.45;
+  color:#333;background:#fff;
+  min-height:12mm;
 }
-.note-line{font-size:8.5pt;line-height:1.6;color:#333333}
+.notes-box{
+  border:1px solid #e5e5e5;
+  padding:2.5mm 3mm;font-size:13px;font-weight:400;
+  line-height:1.45;min-height:12mm;background:#fff;
+}
+.note-line{font-size:13px;line-height:1.45;color:#333}
 
-/* ===== Amount box ===== */
 .amt-box{
-  position:absolute;bottom:58mm;right:0;width:72mm;
-  border:2px solid #9ACD32;overflow:hidden;
+  width:100%;
+  border:1px solid #ddd;
+  overflow:hidden;
+  background:#fff;
 }
 .amt-r{
   display:flex;justify-content:space-between;align-items:center;
-  border-bottom:1px solid #ebebeb;
-  font-size:9pt;
+  border-bottom:1px solid #eee;
+  font-size:13px;font-weight:500;line-height:1.4;
+  padding:1.6mm 3mm;
 }
-.amt-r .lbl{color:#888888;padding-right:3mm}
-.amt-r .val{font-weight:600;text-align:right}
+.amt-r .lbl{color:#666;padding-right:3mm;flex-shrink:0;font-weight:500}
+.amt-r .val{font-weight:600;text-align:right;flex-shrink:0;font-size:14px;color:#111}
+.disc-val{color:#dc2626}
 .amt-total{
-  background:#111111;
-  display:flex;justify-content:space-between;align-items:center;
+  background:#fff;
+  display:flex;justify-content:space-between;align-items:baseline;
+  padding:2mm 3mm;
+  border-top:1.5px solid #111;
 }
-.amt-total .lbl{color:#9ACD32;font-size:9pt;font-weight:700;letter-spacing:1px}
-.amt-total .val{color:#fff;font-size:12pt;font-weight:700;font-family:monospace}
+.amt-total .lbl{color:#111;font-size:16px;font-weight:700}
+.amt-total .val{color:#111;font-size:24px;font-weight:700}
 
-/* ===== Bank info ===== */
 .bank-box{
-  position:absolute;bottom:36mm;left:0;right:80mm;
-  border:1px solid #e0e0e0;padding:2mm 3mm;
+  border-top:1px solid #eee;
+  padding:3mm 0 1mm;
+  margin-bottom:3mm;
 }
 .bank-title{
-  font-size:7pt;font-weight:700;
-  background:#111111;color:#9ACD32;
-  padding:1mm 2mm;display:inline-block;margin-bottom:1.5mm;
+  color:#111;font-size:14px;font-weight:700;
+  background:transparent;border:none;
+  padding:0 0 1.5mm;margin:0 0 2mm;
+  display:block;width:fit-content;
+  border-bottom:2px solid #9ACD32;
 }
 .bank-row{
-  display:flex;gap:6mm;font-size:8pt;
-  color:#333333;line-height:1.6;flex-wrap:wrap;
+  display:flex;gap:6mm;font-size:13px;font-weight:400;
+  color:#333;line-height:1.4;flex-wrap:wrap;
 }
 .bank-row span{white-space:nowrap}
 
-/* ===== Signature ===== */
 .sig-row{
-  position:absolute;bottom:12mm;left:0;right:0;
-  display:grid;grid-template-columns:1fr 1fr 1fr;gap:6mm;
+  display:grid;grid-template-columns:1fr 1fr 1fr;gap:8mm;
+  margin-bottom:3mm;
 }
 .sig-box{
-  text-align:center;border-top:1.5px solid #111111;
-  font-size:8.5pt;color:#555555;
+  text-align:center;border-top:1px solid #111;
+  font-size:13px;font-weight:500;color:#555;line-height:1.4;
+  padding-top:3mm;padding-bottom:8mm;
 }
+.sig-date{font-size:12px;font-weight:400;color:#888}
 
-/* ===== Footer ===== */
 .pf{
-  position:absolute;bottom:2mm;left:0;right:0;
   display:flex;justify-content:space-between;align-items:center;
-  font-size:6.5pt;color:#888888;
-  border-top:1px solid #e0e0e0;padding-top:1mm;
+  font-size:12px;font-weight:400;color:#888;
+  border-top:1px solid #eee;padding-top:2mm;
 }
 
-/* ===== Shared PDF readability ===== */
-body{line-height:1.55}
-table{font-size:9pt;line-height:1.55}
-.head-row th{
-  padding:6px 8px;
-  min-height:40px;
-  line-height:1.55;
-  vertical-align:middle;
+@media print{
+  html,body{
+    width:210mm;
+    margin:0!important;padding:0!important;
+    overflow:visible!important;
+  }
+  .quotation-print-page{
+    width:auto;
+    min-height:calc(297mm - 20mm);
+    height:auto;
+    margin:0;padding:0;
+    overflow:visible;
+    break-after:auto;page-break-after:auto;
+  }
+  .quotation-signature-section{
+    margin-top:auto;
+    break-inside:avoid;page-break-inside:avoid;
+  }
+  .notes-totals-row,.amt-box,.bank-box,.sig-row,.quotation-signature-section{
+    page-break-inside:avoid;break-inside:avoid;
+  }
+  .eq-table tr{page-break-inside:avoid;break-inside:avoid}
 }
-tbody td{
-  padding:6px 8px;
-  min-height:40px;
-  line-height:1.55;
-  vertical-align:middle;
+
+
+@font-face{
+  font-family:"Noto Sans TC";font-style:normal;font-weight:400;font-stretch:100%;font-display:block;
+  src:local("Microsoft JhengHei"),local("Microsoft JhengHei UI"),local("PingFang TC"),local("Noto Sans CJK TC");
 }
-tbody tr{min-height:40px}
-.col-item{
-  word-wrap:break-word;
-  word-break:break-word;
+@font-face{
+  font-family:"Noto Sans TC";font-style:normal;font-weight:700;font-stretch:100%;font-display:block;
+  src:local("Microsoft JhengHei Bold"),local("Microsoft JhengHei"),local("PingFang TC"),local("Noto Sans CJK TC Bold"),local("Noto Sans CJK TC");
+}
+@font-face{
+  font-family:"Noto Sans TC";font-style:normal;font-weight:400;font-stretch:100%;font-display:block;
+  src:url("../fonts/NotoSansTC-latin-400.woff2") format("woff2");
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+20AC,U+2122,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face{
+  font-family:"Noto Sans TC";font-style:normal;font-weight:700;font-stretch:100%;font-display:block;
+  src:url("../fonts/NotoSansTC-latin-700.woff2") format("woff2");
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+20AC,U+2122,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face{
+  font-family:"Noto Sans TC";font-style:normal;font-weight:400;font-stretch:100%;font-display:block;
+  src:url("../fonts/NotoSansTC-TC-400.woff2") format("woff2");
+  unicode-range:U+3000-303F,U+3400-4DBF,U+4E00-9FFF,U+F900-FAFF,U+FF00-FFEF;
+}
+@font-face{
+  font-family:"Noto Sans TC";font-style:normal;font-weight:700;font-stretch:100%;font-display:block;
+  src:url("../fonts/NotoSansTC-TC-700.woff2") format("woff2");
+  unicode-range:U+3000-303F,U+3400-4DBF,U+4E00-9FFF,U+F900-FAFF,U+FF00-FFEF;
+}
+
+body{
+  font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif!important;
+  font-stretch:100%!important;
+  font-synthesis:none!important;
+  font-variation-settings:normal!important;
+  font-weight:400;
+  color:#111!important;
+  background:#fff!important;
+  -webkit-print-color-adjust:exact;print-color-adjust:exact;
+}
+
+.quotation-print-page,.sheet,.page,.cp-mat-block,.eq-table{
+  font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif!important;
+  font-stretch:100%!important;
+  font-synthesis:none!important;
+  font-variation-settings:normal!important;
+  font-optical-sizing:none!important;
+  transform:none!important;
+  zoom:normal!important;
+}
+.eq-table,.eq-table th,.eq-table td,
+.cp-mat-header,.cp-mat-row,.cp-mat-no,.cp-mat-name,.cp-mat-qty{
+  font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif!important;
+  font-stretch:100%!important;
+  font-synthesis:none!important;
+  font-variation-settings:normal!important;
+  font-optical-sizing:none!important;
+  transform:none!important;
+  zoom:normal!important;
+  letter-spacing:0!important;
+  word-spacing:normal!important;
+  font-kerning:normal!important;
+}
+.eq-table{
+  table-layout:fixed;
+  width:100%;
+  border-collapse:collapse;
+}
+.eq-table th,.eq-table td{
+  vertical-align:middle!important;
+  overflow:visible!important;
   white-space:normal;
+  word-break:break-word;
+  overflow-wrap:break-word;
+  line-height:1.4!important;
+  border:1px solid #ccc!important;
+  color:#111!important;
 }
-.col-notes{
-  padding-left:10px!important;
-  padding-right:10px!important;
+.eq-table .head-row{background:#f4f4f4!important;color:#111!important}
+.eq-table .head-row th{
+  font-size:14px!important;
+  font-weight:700!important;
+  text-align:center!important;
+  padding:10px 6px!important;
+  min-height:0!important;
+  white-space:nowrap!important;
 }
-.notes-box,.remarks-box{
-  border:1px solid #e0e0e0;
-  padding:3mm 4mm;
-  font-size:9pt;
-  line-height:1.6;
-  min-height:18mm;
-  background:#fafafa;
+.eq-table tbody td{
+  font-size:16px!important;
+  font-weight:400!important;
+  text-align:center!important;
+  padding:10px 8px!important;
+  min-height:0!important;
 }
-.note-line{
-  font-size:8.5pt;
-  line-height:1.6;
-  padding:1px 0;
-  color:#333333;
+.eq-table .col-item,td.col-item{
+  font-size:18px!important;
+  font-weight:700!important;
+  text-align:left!important;
+  padding:10px 10px!important;
 }
-.amt-r{
-  padding:2.5mm 5mm!important;
+.eq-table .col-cat,.eq-table .col-brand,.eq-table .col-model,
+.eq-table .col-qty,.eq-table .col-unit,.eq-table .col-price,.eq-table .col-sub{
+  font-size:16px!important;
+  font-weight:700!important;
+  text-align:center!important;
 }
-.amt-r .val{
-  text-align:right;
-  min-width:28mm;
-  padding-left:4mm;
-  font-variant-numeric:tabular-nums;
+.eq-table .col-cat,.eq-table .col-brand{white-space:nowrap}
+.eq-table .col-qty,.eq-table .col-unit{white-space:nowrap}
+.eq-table .col-model{overflow-wrap:anywhere}
+.eq-table .col-notes{font-size:13px!important;font-weight:400!important;text-align:center!important}
+
+.co-name{font-size:15px!important;font-weight:700;line-height:1.4!important;color:#111!important}
+.co-sub,.co-info{font-size:12px!important;font-weight:400;line-height:1.4!important;color:#555!important}
+.doc-label,.wo-label{
+  font-size:28px!important;font-weight:700!important;line-height:1.2!important;
+  color:#111!important;letter-spacing:2px!important;
 }
-.amt-total{
-  padding:3mm 5mm!important;
+.doc-en{font-size:12px!important;font-weight:500;color:#888!important;letter-spacing:2px!important}
+.doc-no,.wo-num{font-size:13px!important;font-weight:600;line-height:1.4!important}
+.doc-dates,.wo-meta,.pf,.sig-date{font-size:12px!important;font-weight:400;line-height:1.4!important;color:#666!important}
+.stitle,.sec-title,.bank-title,.eq-title{
+  color:#111!important;
+  background:transparent!important;
+  border:none!important;
+  padding:0 0 2mm!important;
+  margin:0 0 2.5mm!important;
+  letter-spacing:0!important;
+  display:block!important;
+  width:fit-content;
+  max-width:100%;
+  border-bottom:2.5px solid #9ACD32!important;
+  font-weight:700!important;
+  line-height:1.3!important;
+  font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif!important;
+  font-stretch:100%!important;
+  transform:none!important;
+  zoom:normal!important;
 }
-.amt-total .val{
-  text-align:right;
-  padding-left:4mm;
-  font-variant-numeric:tabular-nums;
-}
-.sig-box,.sig{
-  padding-top:3mm;
-  padding-bottom:10mm;
-  min-height:18mm;
-}
+.eq-title,.stitle-eq{font-size:19px!important}
+.stitle,.sec-title,.bank-title{font-size:16px!important}
+.info-label,.lbl{font-size:13px!important;font-weight:500!important;color:#666!important}
+.info-value,.val,.info-grid strong{font-size:16px!important;font-weight:600!important;color:#111!important;line-height:1.4!important}
+.amt-r{font-size:13px!important;font-weight:500!important;line-height:1.4!important}
+.amt-r .val{font-size:14px!important;font-weight:600!important}
+.amt-total .lbl{font-size:16px!important;font-weight:700!important;color:#111!important}
+.amt-total .val{font-size:24px!important;font-weight:700!important;color:#111!important}
+.box,.notes-box,.remarks-box{font-size:14px!important;line-height:1.45!important;font-weight:400}
+.note-line{font-size:13px!important;line-height:1.45!important}
+.bank-row{font-size:13px!important;line-height:1.4!important}
+.sig-box,.sig{font-size:13px!important;line-height:1.4!important;min-height:14mm!important;padding-bottom:6mm!important}
 
 </style>
 </head>
 <body>
-<div class="page">
-  <!-- Header -->
-  <div class="hdr">
+<div class="quotation-print-page">
+  <header class="hdr">
     <div class="co">
       <img src="../logo.png" class="co-logo" alt="">
       <div>
@@ -241,141 +433,97 @@ tbody tr{min-height:40px}
         狀態：待確認<br>
         報價日期：2025/7/4<br>
         有效期限：2025/8/3<br>
-        列印：2026/7/7
+        列印：2026/8/24
       </div>
     </div>
-  </div>
+  </header>
 
-  <!-- Client Info -->
-  <div class="sec">
-    <div class="stitle">客戶資訊 Client Information</div>
-    <div class="info-grid">
-      <div><span class="info-label">客戶名稱</span> <strong>王大明</strong></div>
-      <div><span class="info-label">聯絡電話</span> <strong>0912-345-678</strong></div>
-      <div><span class="info-label">負責業務</span> <strong>洪宇風</strong></div>
-      <div class="full"><span class="info-label">施工地址</span> <strong>彰化縣花壇鄉花南路168號</strong></div>
-      <div><span class="info-label">稅別</span> <strong>未稅</strong></div>
+  <main class="quotation-print-content">
+    <div class="sec">
+      <div class="stitle">客戶資訊</div>
+      <div class="info-block">
+        <div class="info-item">
+          <span class="info-label">客戶名稱</span>
+          <span class="info-value">王大明</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">聯絡電話</span>
+          <span class="info-value">0912-345-678</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">負責業務</span>
+          <span class="info-value">洪宇風</span>
+        </div>
+        <div class="info-item span2">
+          <span class="info-label">施工地址</span>
+          <span class="info-value">彰化縣花壇鄉花南路168號</span>
+        </div>
+        <div class="info-item">
+          <span class="info-label">稅別</span>
+          <span class="info-value">未稅</span>
+        </div>
+      </div>
     </div>
-  </div>
 
-  <!-- Equipment Schedule -->
-  <div class="sec">
-    <div class="stitle">工程設備明細 Equipment Schedule</div>
-    <table>
-      <colgroup>
-        <col style="width:5%">
-        <col style="width:9%">
-        <col style="width:9%">
-        <col style="width:22%">
-        <col style="width:12%">
-        <col style="width:6%">
-        <col style="width:5%">
-        <col style="width:11%">
-        <col style="width:11%">
-        <col style="width:10%">
-      </colgroup>
-      <thead>
-        <tr class="head-row">
-          <th>項次</th>
-          <th>類別</th>
-          <th>品牌</th>
-          <th>品項</th>
-          <th>機型</th>
-          <th>數量</th>
-          <th>單位</th>
-          <th>單價</th>
-          <th>小計</th>
-          <th>備註</th>
-        </tr>
-      </thead>
-      <tbody>
-      <tr>
-        <td class="tac">1</td>
-        <td class="tac">裝新機</td>
-        <td class="tac">三菱重工</td>
-        <td class="tal col-item">壁掛分離式 3.5kW 超長品項名稱測試自動換行顯示效果</td>
-        <td class="tac">SRK35</td>
-        <td class="tac">2</td>
-        <td class="tac">台</td>
-        <td class="tar">NT$ 28,500</td>
-        <td class="tar fw7">NT$ 57,000</td>
-        <td class="tal small col-notes">含安裝及基本配管</td>
-      </tr>
-      <tr>
-        <td class="tac">2</td>
-        <td class="tac">裝新機</td>
-        <td class="tac">三菱重工</td>
-        <td class="tal col-item">壁掛分離式 2.2kW</td>
-        <td class="tac">SRK22</td>
-        <td class="tac">1</td>
-        <td class="tac">台</td>
-        <td class="tar">NT$ 22,000</td>
-        <td class="tar fw7">NT$ 22,000</td>
-        <td class="tal small col-notes"></td>
-      </tr>
-      <tr>
-        <td class="tac">3</td>
-        <td class="tac">配管工程</td>
-        <td class="tac">—</td>
-        <td class="tal col-item">銅管配管 5公尺</td>
-        <td class="tac">—</td>
-        <td class="tac">1</td>
-        <td class="tac">式</td>
-        <td class="tar">NT$ 8,500</td>
-        <td class="tar fw7">NT$ 8,500</td>
-        <td class="tal small col-notes">含吸排管</td>
-      </tr>
-      </tbody>
-    </table>
-  </div>
+    <div class="sec">
+      <div class="eq-title">工程設備明細</div>
+      <div class="eq-wrap">
+        <table class="eq-table">
+          <colgroup><col style="width:5%"><col style="width:12%"><col style="width:8%"><col style="width:20%"><col style="width:14%"><col style="width:7%"><col style="width:8%"><col style="width:10%"><col style="width:10%"><col style="width:6%"></colgroup>
+          <thead><tr class="head-row"><th>項次</th><th>類別</th><th>品牌</th><th>品項／規格</th><th>型號</th><th>數量</th><th>單位</th><th>單價</th><th>小計</th><th>備註</th></tr></thead>
+          <tbody><tr><td class="tac">1</td><td class="tac col-cat">安裝新機</td><td class="tac col-brand">聲寶</td><td class="tal col-item">壁掛分離式 變頻冷暖</td><td class="tac col-model">AU/AM-JF50DC</td><td class="tac col-qty">1</td><td class="tac col-unit">台</td><td class="tac col-price">NT$ 32,800</td><td class="tac col-sub">NT$ 32,800</td><td class="tac col-notes">含基本安裝</td></tr><tr><td class="tac">2</td><td class="tac col-cat">安裝新機</td><td class="tac col-brand">三菱重工</td><td class="tal col-item">壁掛分離式 3.5kW 超長品項名稱測試自動換行顯示效果</td><td class="tac col-model">MSZ-AP35VG</td><td class="tac col-qty">2</td><td class="tac col-unit">台</td><td class="tac col-price">NT$ 28,500</td><td class="tac col-sub">NT$ 57,000</td><td class="tac col-notes">含安裝及基本配管</td></tr><tr><td class="tac">3</td><td class="tac col-cat">材料</td><td class="tac col-brand">—</td><td class="tal col-item">銅管配管 5公尺</td><td class="tac col-model">—</td><td class="tac col-qty">1</td><td class="tac col-unit">式</td><td class="tac col-price">NT$ 8,500</td><td class="tac col-sub">NT$ 8,500</td><td class="tac col-notes">含吸排管</td></tr></tbody>
+        </table>
+      </div>
+    </div>
 
-  <!-- Notes & Service -->
-  <div class="row2">
-    <div style="flex:0 0 55%">
-      <div class="stitle">服務內容 Notes &amp; Remarks</div>
-      <div class="box">施工方式：壁掛分離式
+    <div class="notes-totals-row">
+      <div class="notes-column">
+        <div class="row2">
+          <div style="flex:0 0 55%">
+            <div class="stitle">服務內容</div>
+            <div class="box">施工方式：壁掛分離式
 施工天數：1天
 注意事項：施工前需清空場地</div>
-    </div>
-    <div style="flex:1">
-      <div class="stitle">備註</div>
-      <div class="notes-box">
-        <div class="note-line">報價單有效期限30日，施工前請支付50%訂金。</div>
+          </div>
+          <div style="flex:1;min-width:0">
+            <div class="stitle">備註事項</div>
+            <div class="notes-box"><div class="note-line">報價單有效期限30日，施工前請支付50%訂金。</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="totals-column">
+        <div class="stitle">金額總計</div>
+        <div class="amt-box">
+          <div class="amt-r"><span class="lbl">項目小計</span><span class="val">NT$ 98,300</span></div>
+          <div class="amt-r"><span class="lbl">折扣</span><span class="val">NT$ 0</span></div>
+          <div class="amt-r"><span class="lbl">未稅小計</span><span class="val">NT$ 98,300</span></div>
+          <div class="amt-r"><span class="lbl">稅額 5%</span><span class="val">NT$ 4,915</span></div>
+          <div class="amt-total"><span class="lbl">含稅總計</span><span class="val">NT$ 103,215</span></div>
+        </div>
       </div>
     </div>
-  </div>
 
-  <!-- Amount Summary -->
-  <div class="amt-box">
-    <div class="amt-r"><span class="lbl">項目小計</span><span class="val">NT$ 87,500</span></div>
-    
-    <div class="amt-r"><span class="lbl">未稅小計</span><span class="val">NT$ 87,500</span></div>
-    <div class="amt-r"><span class="lbl">稅額 5%</span><span class="val">NT$ 0</span></div>
-    <div class="amt-total"><span class="lbl">含稅總計</span><span class="val">NT$ 87,500</span></div>
-  </div>
-
-  <!-- Bank Info -->
-  <div class="bank-box">
-    <div class="bank-title">匯款資訊</div>
-    <div class="bank-row">
-      <span><strong>銀行代碼：</strong>013</span>
-      <span><strong>帳號：</strong>047035012164</span>
-      <span><strong>戶名：</strong>晟風工程行 洪宇風</span>
+    <div class="bank-box">
+      <div class="bank-title">匯款資訊</div>
+      <div class="bank-row">
+        <span><strong>銀行代碼：</strong>013</span>
+        <span><strong>帳號：</strong>047035012164</span>
+        <span><strong>戶名：</strong>晟風工程行 洪宇風</span>
+      </div>
     </div>
-  </div>
+  </main>
 
-  <!-- Signature -->
-  <div class="sig-row">
-    <div class="sig-box">客戶確認簽名<br><span style="font-size:6.5pt;color:#aaa">日期：________</span></div>
-    <div class="sig-box">業務簽名<br><span style="font-size:6.5pt;color:#aaa">日期：________</span></div>
-    <div class="sig-box">公　司　章<br><span style="font-size:6.5pt;color:#aaa">&nbsp;</span></div>
-  </div>
-
-  <!-- Footer -->
-  <div class="pf">
-    <div>晟風工程有限公司　Tel：0955-980-798　彰化縣花壇鄉花南路212號</div>
-    <div>列印：2026/7/7</div>
-  </div>
+  <footer class="quotation-signature-section">
+    <div class="sig-row">
+      <div class="sig-box">客戶確認簽名<br><span class="sig-date">日期：________</span></div>
+      <div class="sig-box">業務簽名<br><span class="sig-date">日期：________</span></div>
+      <div class="sig-box">公　司　章<br><span class="sig-date">&nbsp;</span></div>
+    </div>
+    <div class="pf">
+      <div>晟風工程有限公司　Tel：0955-980-798　彰化縣花壇鄉花南路212號</div>
+      <div>列印：2026/8/24</div>
+    </div>
+  </footer>
 </div>
 </body>
 </html>
