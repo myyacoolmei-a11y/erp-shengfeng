@@ -351,23 +351,60 @@ export async function handlePdfAction(options: {
   }
 }
 
-/** Open HTML in a new print window and trigger browser print dialog */
+/** Open HTML in a new window and print after the document has actually loaded. */
 export function openPrintWindow(html: string, _title: string) {
   const w = window.open("", "_blank");
   if (!w) {
     toast({ title: "無法開啟列印視窗", description: "請檢查彈出視窗設定", variant: "destructive" });
     return;
   }
-  w.document.open();
-  w.document.write(html);
-  w.document.close();
-  w.focus();
+
+  let printed = false;
   const attemptPrint = () => {
+    if (printed) return;
+    printed = true;
     try {
+      w.focus();
       w.print();
     } catch (_) {}
   };
-  setTimeout(attemptPrint, 500);
+
+  const waitForAssetsThenPrint = () => {
+    const doc = w.document;
+    const images = Array.from(doc.images ?? []);
+    const pending = images.filter((img) => !img.complete);
+    const afterImages = () => {
+      const fonts = doc.fonts;
+      if (fonts?.ready) {
+        fonts.ready.then(attemptPrint, attemptPrint);
+      } else {
+        attemptPrint();
+      }
+    };
+    if (pending.length === 0) {
+      afterImages();
+      return;
+    }
+    let left = pending.length;
+    const oneDone = () => {
+      left -= 1;
+      if (left <= 0) afterImages();
+    };
+    pending.forEach((img) => {
+      img.addEventListener("load", oneDone, { once: true });
+      img.addEventListener("error", oneDone, { once: true });
+    });
+  };
+
+  w.document.open();
+  w.document.write(html);
+  w.document.close();
+
+  if (w.document.readyState === "complete") {
+    waitForAssetsThenPrint();
+  } else {
+    w.addEventListener("load", waitForAssetsThenPrint, { once: true });
+  }
 }
 
 // Helper reference for toast inside openPrintWindow (will be injected by caller)

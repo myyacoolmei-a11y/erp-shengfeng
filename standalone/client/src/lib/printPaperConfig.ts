@@ -64,6 +64,74 @@ export const PRINT_CALIBRATION_DEFAULT: PrintCalibration = {
   offsetYMm: 0,
 };
 
+/** 與派工單 continuous-print 相同的點陣半張紙盒（9.5×5.5in）。 */
+export function continuousPrintPageBoxCss(calibration: PrintCalibration = PRINT_CALIBRATION_DEFAULT): string {
+  const {
+    WIDTH_MM, HEIGHT_MM,
+    MARGIN_LEFT_MM, MARGIN_RIGHT_MM,
+    MARGIN_TOP_MM, MARGIN_BOTTOM_MM,
+  } = CONTINUOUS_PAPER;
+  const offsetXMm = Number.isFinite(calibration?.offsetXMm) ? calibration.offsetXMm : 0;
+  const offsetYMm = Number.isFinite(calibration?.offsetYMm) ? calibration.offsetYMm : 0;
+  const padTop = MARGIN_TOP_MM + offsetYMm;
+  const padRight = Math.max(0, MARGIN_RIGHT_MM - offsetXMm);
+  const padBottom = Math.max(0, MARGIN_BOTTOM_MM - offsetYMm);
+  const padLeft = Math.max(0, MARGIN_LEFT_MM + offsetXMm);
+
+  return `
+/* EPSON 點陣機連續紙半張：${WIDTH_MM}mm × ${HEIGHT_MM}mm（9.5×5.5in）
+   @page size:auto;margin:0 — 與已可列印的派工單相同，方向由列印對話框 9.5×5.5 紙張決定。 */
+@page{size:auto;margin:0}
+html,body{
+  box-sizing:border-box;
+  width:${WIDTH_MM}mm;
+  height:${HEIGHT_MM}mm;
+  max-width:${WIDTH_MM}mm;
+  max-height:${HEIGHT_MM}mm;
+  margin:0;padding:0;
+  background:#fff;
+  transform:none;
+  zoom:normal;
+}
+.sheet{
+  box-sizing:border-box;
+  width:${WIDTH_MM}mm;
+  height:${HEIGHT_MM}mm;
+  max-width:${WIDTH_MM}mm;
+  max-height:${HEIGHT_MM}mm;
+  padding:${padTop}mm ${padRight}mm ${padBottom}mm ${padLeft}mm;
+  break-inside:avoid;
+  page-break-inside:avoid;
+  page-break-after:avoid;
+  page-break-before:avoid;
+  break-after:avoid;
+  break-before:avoid;
+  position:static;
+  overflow:visible;
+  transform:none;
+  zoom:normal;
+}
+.page{
+  box-sizing:border-box;
+  display:flex;
+  flex-direction:column;
+  align-items:stretch;
+  justify-content:flex-start;
+  width:100%;
+  max-width:100%;
+  height:100%;
+  min-height:100%;
+  max-height:100%;
+  margin:0;padding:0;
+  position:static;
+  overflow:visible;
+  break-inside:avoid;
+  page-break-inside:avoid;
+  transform:none;
+  zoom:normal;
+}`;
+}
+
 const PRINT_CALIBRATION_STORAGE_KEY = "erp_wo_print_calibration";
 
 function isFiniteNumber(v: unknown): v is number {

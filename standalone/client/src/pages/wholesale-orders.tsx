@@ -24,6 +24,7 @@ import { useAuth } from "@/contexts/auth-context";
 import { PdfPreviewDialog } from "@/components/pdf/pdf-preview-dialog";
 import { handlePdfAction, isMobileDevice, openPrintWindow } from "@/components/pdf/pdf-service";
 import { buildDeliveryHtml } from "@/components/pdf/templates/DeliveryTemplate";
+import { loadPrintCalibration } from "@/lib/printPaperConfig";
 
 const ORDER_STATUSES = ["備貨中", "已出貨"];
 const STATUS_COLORS: Record<string, string> = {
@@ -66,27 +67,36 @@ function emptyForm(): OForm {
   };
 }
 
-/** 列表 API 刻意不帶 items；列印／分享前改抓單筆完整訂單（含商品明細）。 */
-async function loadOrderForPrint(order: any): Promise<any> {
-  if (!order?.id) return order;
-  const hasItems = Array.isArray(order.items) && order.items.length > 0;
-  if (hasItems) return order;
-  try {
-    return await getWholesaleOrder(order.id);
-  } catch {
-    return order;
-  }
+/** 列表 API 刻意不帶 items；列印前一律抓單筆完整訂單（含商品明細與客戶聯絡）。 */
+async function loadOrderForPrint(order: any, customers?: any[]): Promise<any> {
+  if (!order?.id) throw new Error("找不到出貨單");
+  const full = await getWholesaleOrder(order.id);
+  if (!full) throw new Error("找不到出貨單");
+  const cust = (customers ?? []).find((c: any) => c.id === full.customerId);
+  return {
+    ...full,
+    customerName: full.customerName || cust?.companyName || "",
+    customerPhone: full.customerPhone || cust?.mobile || cust?.telephone || "",
+    customerAddress: full.customerAddress || cust?.address || "",
+  };
 }
 
 async function printOrder(
   order: any,
   setPdfPreview: (v: { url: string; filename: string } | null) => void,
   toast: any,
+  customers?: any[],
 ) {
-  const full = await loadOrderForPrint(order);
+  let full: any;
+  try {
+    full = await loadOrderForPrint(order, customers);
+  } catch {
+    toast({ title: "無法載入出貨單", description: "請稍後再試", variant: "destructive" });
+    return;
+  }
   const orderNo = full.orderNumber || `WO-${String(full.id).padStart(4, "0")}`;
-  const html = buildDeliveryHtml(full);
   if (isMobileDevice()) {
+    const html = buildDeliveryHtml(full);
     await handlePdfAction({
       html,
       docNo: orderNo,
@@ -98,6 +108,10 @@ async function printOrder(
       pageFormat: "custom-240x140-landscape",
     });
   } else {
+    const html = buildDeliveryHtml(full, {
+      mode: "continuous-print",
+      calibration: loadPrintCalibration(),
+    });
     openPrintWindow(html, `晟風工程出貨單 — ${orderNo}`);
   }
 }
@@ -106,8 +120,15 @@ async function shareOrderViaLine(
   order: any,
   setPdfPreview: (v: { url: string; filename: string } | null) => void,
   toast: any,
+  customers?: any[],
 ) {
-  const full = await loadOrderForPrint(order);
+  let full: any;
+  try {
+    full = await loadOrderForPrint(order, customers);
+  } catch {
+    toast({ title: "無法載入出貨單", description: "請稍後再試", variant: "destructive" });
+    return;
+  }
   const orderNo = full.orderNumber || `WO-${String(full.id).padStart(4, "0")}`;
   const html = buildDeliveryHtml(full);
   await handlePdfAction({
@@ -293,8 +314,8 @@ export default function WholesaleOrders() {
                         <CreditCard className="h-3 w-3" />應收款
                       </Button>
                       <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-destructive hover:text-destructive" onClick={() => setDeleteId(o.id)}><Trash2 className="h-3 w-3" />刪除</Button>
-                      <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" title="列印出貨單" onClick={() => printOrder(o, setPdfPreview, toast)}><Printer className="h-3 w-3" />列印</Button>
-                      <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-green-600 hover:text-green-700" title="LINE 分享出貨單" onClick={() => shareOrderViaLine(o, setPdfPreview, toast)}><Share2 className="h-3 w-3" />LINE</Button>
+                      <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" title="列印出貨單" onClick={() => printOrder(o, setPdfPreview, toast, customers)}><Printer className="h-3 w-3" />列印</Button>
+                      <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-green-600 hover:text-green-700" title="LINE 分享出貨單" onClick={() => shareOrderViaLine(o, setPdfPreview, toast, customers)}><Share2 className="h-3 w-3" />LINE</Button>
                     </div>
                   )}
                 </div>
