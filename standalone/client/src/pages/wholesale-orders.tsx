@@ -494,14 +494,14 @@ export default function WholesaleOrders() {
           <div className="space-y-2 mt-2">
             {!receivables || receivables.length === 0 ? (
               <p className="text-sm text-muted-foreground text-center py-6">
-                尚無應收款紀錄。<br />將訂單狀態更新為「已確認」後會自動產生應收款。
+                尚無應收款紀錄。<br />將訂單狀態更新為「已出貨」後會自動產生應收款。
               </p>
             ) : receivables.map((r: any) => (
               <div key={r.id} className="border rounded-lg p-3 space-y-1">
                 <div className="flex justify-between items-center">
                   <span className="font-medium text-sm">{r.orderNumber}</span>
-                  <Badge variant={r.paymentStatus === "已收款" ? "default" : r.paymentStatus === "部分收款" ? "secondary" : "outline"}>
-                    {r.paymentStatus}
+                  <Badge variant={r.paymentStatus === "已收款" || r.paymentStatus === "已收清" ? "default" : r.paymentStatus === "部分收款" ? "secondary" : "outline"}>
+                    {r.paymentStatus === "已收款" ? "已收清" : r.paymentStatus}
                   </Badge>
                 </div>
                 <div className="text-sm text-muted-foreground flex flex-wrap gap-x-4">
