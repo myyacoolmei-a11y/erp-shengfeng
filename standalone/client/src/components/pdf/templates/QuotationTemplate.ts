@@ -38,25 +38,25 @@ export function buildQuotationHtml(quote: any, baseOrigin?: string): string {
     "小計",
     "備註",
   ] as const;
-  /* A4 直式有效寬度約 186mm：品項／規格、型號優先；項次／數量／單位縮窄。 */
+  /* A4 186mm：短欄讓寬；型號 17% 讓 FI/FU-101HSG 盡量單行；備註 7.5% 讓「客廳」單行。 */
   const TABLE_COL_WIDTHS = [
-    "4%",
+    "3.5%",
     "11%",
     "8%",
-    "26%",
+    "21%",
     "17%",
     "4.5%",
     "4.5%",
-    "10%",
-    "10%",
-    "5%",
+    "11.5%",
+    "11.5%",
+    "7.5%",
   ] as const;
 
   function renderItemRow(item: any, index: number): string {
     const category = displayQuoteItemCategory(item);
     const brand = displayQuoteItemBrand(item);
     const cells = [
-      `<td class="tac">${index + 1}</td>`,
+      `<td class="tac col-no">${index + 1}</td>`,
       `<td class="tac col-cat">${esc(category)}</td>`,
       `<td class="tac col-brand">${esc(brand)}</td>`,
       `<td class="tal col-item">${esc(item.itemName || "")}</td>`,
@@ -77,8 +77,22 @@ export function buildQuotationHtml(quote: any, baseOrigin?: string): string {
 
   const itemRows = items.map((item, index) => renderItemRow(item, index)).join("");
 
+  const TH_CLASSES = [
+    "col-no",
+    "col-cat",
+    "col-brand",
+    "col-item",
+    "col-model",
+    "col-qty",
+    "col-unit",
+    "col-price",
+    "col-sub",
+    "col-notes",
+  ] as const;
   const colgroupHtml = TABLE_COL_WIDTHS.map((w) => `<col style="width:${w}">`).join("");
-  const theadHtml = TABLE_HEADERS.map((label) => `<th>${label}</th>`).join("");
+  const theadHtml = TABLE_HEADERS.map(
+    (label, i) => `<th class="${TH_CLASSES[i]}">${label}</th>`,
+  ).join("");
 
   const notesList = (quote.notes ?? "").split(/\n/).filter((l: string) => l.trim()).slice(0, 3)
     .map((l: string) => `<div class="note-line">${esc(l)}</div>`).join("")
@@ -128,7 +142,7 @@ body,.quotation-print-page{
 .hdr{
   display:flex;justify-content:space-between;align-items:flex-start;
   border-bottom:1px solid #ddd;
-  padding-bottom:4mm;margin-bottom:5mm;
+  padding-bottom:3mm;margin-bottom:3.5mm;
 }
 .co{display:flex;align-items:flex-start;gap:3.5mm}
 .co-logo{
@@ -144,11 +158,11 @@ body,.quotation-print-page{
 .doc-no{font-size:13px;font-weight:600;margin-top:2mm;line-height:1.4}
 .doc-dates{font-size:12px;font-weight:400;color:#666;line-height:1.45;margin-top:1mm}
 
-.sec{margin-bottom:5mm}
+.sec{margin-bottom:3.5mm}
 .stitle{
   color:#111;font-size:16px;font-weight:700;
   background:transparent;border:none;
-  padding:0 0 1.5mm;margin:0 0 3mm;
+  padding:0 0 1mm;margin:0 0 2mm;
   display:block;width:fit-content;
   border-bottom:2.5px solid ${COLORS.primary};
   letter-spacing:0;line-height:1.3;
@@ -156,7 +170,7 @@ body,.quotation-print-page{
 .eq-title{
   color:#111;font-size:19px;font-weight:700;
   background:transparent;border:none;
-  padding:0 0 1.5mm;margin:0 0 3mm;
+  padding:0 0 1mm;margin:0 0 2mm;
   display:block;width:fit-content;
   border-bottom:2.5px solid ${COLORS.primary};
   letter-spacing:0;line-height:1.3;
@@ -166,7 +180,7 @@ body,.quotation-print-page{
 .eq-table{
   width:100%;max-width:100%;
   border-collapse:collapse;border-spacing:0;
-  table-layout:fixed;font-size:16px;line-height:1.4;
+  table-layout:fixed;font-size:15px;line-height:1.3;
   font-family:${PRINT_CJK_FONT_STACK};
   transform:none;
 }
@@ -174,35 +188,53 @@ body,.quotation-print-page{
 .eq-table .head-row th{
   background:#111;color:#fff;
   border:1px solid #111;
-  font-size:14px;font-weight:700;
+  font-size:13px;font-weight:700;
   text-align:center;vertical-align:middle;
   box-sizing:border-box;
-  padding:8px 4px;
-  line-height:1.35;letter-spacing:0;transform:none;
-  white-space:normal;
+  padding:3px 2px;
+  height:auto;min-height:0;
+  line-height:1.25;letter-spacing:0;transform:none;
+  white-space:nowrap;
 }
 .eq-table tbody td{
   border:1px solid #ccc;
-  vertical-align:middle;font-size:16px;font-weight:500;
+  vertical-align:middle;font-size:15px;font-weight:500;
   box-sizing:border-box;
-  padding:8px 5px;
-  line-height:1.4;color:#111;text-align:center;
+  padding:3.5px 3px;
+  height:auto;min-height:0;
+  line-height:1.3;color:#111;text-align:center;
   letter-spacing:0;transform:none;
   overflow:visible;white-space:normal;
-  word-break:break-word;overflow-wrap:break-word;
+  word-break:normal;overflow-wrap:break-word;
+}
+.eq-table .col-no,.eq-table .col-qty,.eq-table .col-unit,
+.eq-table .col-price,.eq-table .col-sub,.eq-table .col-brand{
+  white-space:nowrap;word-break:keep-all;overflow-wrap:normal;
 }
 .eq-table .col-item{
-  font-size:18px;font-weight:700;text-align:left;
-  word-wrap:break-word;word-break:break-word;white-space:normal;
+  font-size:16px;font-weight:700;text-align:left;
+  word-break:normal;overflow-wrap:break-word;white-space:normal;
 }
-.eq-table .col-cat,.eq-table .col-brand,.eq-table .col-model,
-.eq-table .col-qty,.eq-table .col-unit,.eq-table .col-price,.eq-table .col-sub,
+.eq-table .col-cat{
+  word-break:keep-all;overflow-wrap:break-word;white-space:normal;
+  text-align:center;font-weight:600;font-size:15px;
+}
+.eq-table .col-brand,.eq-table .col-model,
+.eq-table .col-qty,.eq-table .col-unit,.eq-table .col-price,.eq-table .col-sub{
+  text-align:center;font-weight:600;font-size:15px;
+}
+.eq-table .col-model{
+  word-break:break-word;overflow-wrap:break-word;white-space:normal;
+  font-variant-ligatures:none;
+}
+.eq-table .col-price,.eq-table .col-sub{
+  font-size:13px;font-variant-numeric:tabular-nums;
+}
 .eq-table .col-notes{
-  text-align:center;font-weight:600;font-size:16px;
+  font-size:13px;font-weight:400;text-align:center;
+  word-break:keep-all;overflow-wrap:break-word;white-space:normal;
 }
-.eq-table .col-qty,.eq-table .col-unit,.eq-table td:first-child{white-space:nowrap}
-.eq-table .col-notes{font-size:13px;font-weight:400}
-.eq-table tr{page-break-inside:avoid;break-inside:avoid}
+.eq-table tr{page-break-inside:avoid;break-inside:avoid;height:auto}
 
 .tac{text-align:center}
 .tar{text-align:right}
@@ -334,19 +366,82 @@ body,.quotation-print-page{
 }
 ${PRINT_DOC_TYPE_CSS}
 .quotation-print-page,.quotation-print-page *{transform:none!important}
+.quotation-print-page .eq-table{
+  table-layout:fixed!important;
+  width:100%!important;
+  font-size:15px!important;
+  line-height:1.3!important;
+}
 .quotation-print-page .eq-table .head-row,
 .quotation-print-page .eq-table .head-row th{
   background:#111!important;color:#fff!important;
   border-color:#111!important;
   text-align:center!important;vertical-align:middle!important;
-  font-weight:700!important;font-size:14px!important;
-  white-space:normal!important;
+  font-weight:700!important;font-size:13px!important;
+  white-space:nowrap!important;
+  padding:3px 2px!important;
+  height:auto!important;min-height:0!important;
+  line-height:1.25!important;
+  word-break:keep-all!important;
+  overflow-wrap:normal!important;
 }
-.quotation-print-page .eq-table .col-cat,
+.quotation-print-page .eq-table tbody td{
+  padding:3.5px 3px!important;
+  font-size:15px!important;
+  line-height:1.3!important;
+  height:auto!important;min-height:0!important;
+  vertical-align:middle!important;
+  word-break:normal!important;
+  overflow-wrap:break-word!important;
+}
+.quotation-print-page .eq-table .col-no,
+.quotation-print-page .eq-table .col-qty,
+.quotation-print-page .eq-table .col-unit,
 .quotation-print-page .eq-table .col-brand,
-.quotation-print-page .eq-table .col-model,
+.quotation-print-page .eq-table .col-price,
+.quotation-print-page .eq-table .col-sub{
+  white-space:nowrap!important;
+  word-break:keep-all!important;
+  overflow-wrap:normal!important;
+}
+.quotation-print-page .eq-table .col-cat{
+  white-space:normal!important;
+  word-break:keep-all!important;
+  overflow-wrap:break-word!important;
+  font-size:15px!important;font-weight:600!important;
+  text-align:center!important;
+}
+.quotation-print-page .eq-table .col-brand{
+  font-size:15px!important;font-weight:600!important;
+  text-align:center!important;
+}
 .quotation-print-page .eq-table .col-item{
   white-space:normal!important;
+  word-break:normal!important;
+  overflow-wrap:break-word!important;
+  font-size:16px!important;font-weight:700!important;
+  text-align:left!important;
+  padding:3.5px 4px!important;
+}
+.quotation-print-page .eq-table .col-model{
+  white-space:normal!important;
+  word-break:break-word!important;
+  overflow-wrap:break-word!important;
+  font-size:15px!important;font-weight:600!important;
+  text-align:center!important;
+}
+.quotation-print-page .eq-table .col-price,
+.quotation-print-page .eq-table .col-sub{
+  font-size:13px!important;
+  font-variant-numeric:tabular-nums;
+}
+.quotation-print-page .eq-table .col-notes{
+  white-space:normal!important;
+  word-break:keep-all!important;
+  overflow-wrap:break-word!important;
+  font-size:13px!important;font-weight:400!important;
+  text-align:center!important;
+  padding:3.5px 3px!important;
 }
 .quotation-print-page .amt-total .lbl{font-size:14px!important;font-weight:700!important}
 .quotation-print-page .amt-total .val{font-size:16px!important;font-weight:700!important}
