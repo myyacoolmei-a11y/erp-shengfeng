@@ -104,7 +104,7 @@ html,body{
 body,.quotation-print-page{
   font-family:${PRINT_CJK_FONT_STACK};
   font-synthesis:none;font-variation-settings:normal;
-  font-size:14px;font-weight:400;line-height:1.4;color:#111;background:#fff;
+  font-size:13px;font-weight:400;line-height:1.45;color:#111;background:#fff;
   transform:none;
   -webkit-print-color-adjust:exact;print-color-adjust:exact;
 }
@@ -135,38 +135,34 @@ body,.quotation-print-page{
   width:48px;height:48px;max-width:48px;max-height:48px;
   object-fit:contain;flex-shrink:0;
 }
-.co-name{font-size:15px;font-weight:700;letter-spacing:0.3px;line-height:1.4;color:#111}
-.co-sub{font-size:12px;font-weight:400;color:#666;margin-top:1px;line-height:1.4}
-.co-info{font-size:12px;font-weight:400;color:#666;margin-top:2px;line-height:1.45}
+.co-name{font-size:14px;font-weight:400;letter-spacing:0.2px;line-height:1.45;color:#111}
+.co-sub{font-size:11px;font-weight:400;color:#666;margin-top:1px;line-height:1.45}
+.co-info{font-size:11px;font-weight:400;color:#666;margin-top:2px;line-height:1.45}
 .doc-r{text-align:right}
 .doc-label{font-size:28px;font-weight:700;color:#111;letter-spacing:2px;line-height:1.2}
-.doc-en{font-size:12px;font-weight:500;color:#888;letter-spacing:2px;line-height:1.4;margin-top:1px}
-.doc-no{font-size:13px;font-weight:600;margin-top:2mm;line-height:1.4}
-.doc-dates{font-size:12px;font-weight:400;color:#666;line-height:1.45;margin-top:1mm}
+.doc-en{font-size:11px;font-weight:400;color:#888;letter-spacing:2px;line-height:1.45;margin-top:1px}
+.doc-no{font-size:13px;font-weight:400;margin-top:2mm;line-height:1.45}
+.doc-dates{font-size:11px;font-weight:400;color:#666;line-height:1.45;margin-top:1mm}
 
 .sec{margin-bottom:5mm}
-.stitle{
-  color:#111;font-size:16px;font-weight:700;
+.stitle,.eq-title,.bank-title{
+  color:#111;font-size:14px;font-weight:400;
   background:transparent;border:none;
-  padding:0 0 1.5mm;margin:0 0 3mm;
+  padding:0 0 1.2mm;margin:0 0 2.5mm;
   display:block;width:fit-content;
-  border-bottom:2.5px solid ${COLORS.primary};
-  letter-spacing:0;line-height:1.3;
+  border-bottom:none;
+  letter-spacing:0.4px;line-height:1.4;
 }
-.eq-title{
-  color:#111;font-size:19px;font-weight:700;
-  background:transparent;border:none;
-  padding:0 0 1.5mm;margin:0 0 3mm;
-  display:block;width:fit-content;
-  border-bottom:2.5px solid ${COLORS.primary};
-  letter-spacing:0;line-height:1.3;
+.stitle::after,.eq-title::after,.bank-title::after{
+  content:"";display:block;width:14mm;height:1.5px;
+  background:${COLORS.primary};margin-top:1.2mm;
 }
 
 .eq-wrap{width:100%;max-width:100%;overflow:visible}
 .eq-table{
   width:100%;max-width:100%;
   border-collapse:collapse;border-spacing:0;
-  table-layout:fixed;font-size:16px;line-height:1.4;
+  table-layout:fixed;font-size:13px;line-height:1.4;
   font-family:${PRINT_CJK_FONT_STACK};
   transform:none;
 }
@@ -174,31 +170,31 @@ body,.quotation-print-page{
 .eq-table .head-row th{
   background:#111;color:#fff;
   border:1px solid #111;
-  font-size:14px;font-weight:700;
+  font-size:12px;font-weight:400;
   text-align:center;vertical-align:middle;
   box-sizing:border-box;
-  padding:8px 4px;
+  padding:6px 3px;
   line-height:1.35;letter-spacing:0;transform:none;
   white-space:normal;
 }
 .eq-table tbody td{
   border:1px solid #ccc;
-  vertical-align:middle;font-size:16px;font-weight:500;
+  vertical-align:middle;font-size:13px;font-weight:400;
   box-sizing:border-box;
-  padding:8px 5px;
+  padding:7px 5px;
   line-height:1.4;color:#111;text-align:center;
   letter-spacing:0;transform:none;
   overflow:visible;white-space:normal;
   word-break:break-word;overflow-wrap:break-word;
 }
 .eq-table .col-item{
-  font-size:18px;font-weight:700;text-align:left;
+  font-size:13px;font-weight:400;text-align:left;color:#111;
   word-wrap:break-word;word-break:break-word;white-space:normal;
 }
 .eq-table .col-cat,.eq-table .col-brand,.eq-table .col-model,
 .eq-table .col-qty,.eq-table .col-unit,.eq-table .col-price,.eq-table .col-sub,
 .eq-table .col-notes{
-  text-align:center;font-weight:600;font-size:16px;
+  text-align:center;font-weight:400;font-size:13px;color:#222;
 }
 .eq-table .col-qty,.eq-table .col-unit,.eq-table td:first-child{white-space:nowrap}
 .eq-table .col-notes{font-size:13px;font-weight:400}
@@ -219,8 +215,8 @@ body,.quotation-print-page{
 }
 .info-row.addr-row{grid-template-columns:2fr 1fr}
 .info-item{display:flex;flex-direction:column;gap:1mm;min-width:0}
-.info-label{font-size:12px;font-weight:500;color:#888;line-height:1.3}
-.info-value{font-size:15px;font-weight:600;color:#111;line-height:1.4;word-break:break-word}
+.info-label{font-size:11px;font-weight:400;color:#888;line-height:1.3}
+.info-value{font-size:13px;font-weight:400;color:#111;line-height:1.45;word-break:break-word}
 
 .notes-totals-row{
   display:flex;
@@ -236,7 +232,7 @@ body,.quotation-print-page{
 .row2{display:flex;gap:4mm}
 .box{
   flex:1;border:1px solid #e5e5e5;
-  padding:2.5mm 3mm;font-size:14px;font-weight:400;
+  padding:2.5mm 3mm;font-size:13px;font-weight:400;
   white-space:pre-wrap;line-height:1.45;
   color:#333;background:#fff;
   min-height:12mm;
@@ -246,7 +242,7 @@ body,.quotation-print-page{
   padding:2.5mm 3mm;font-size:13px;font-weight:400;
   line-height:1.45;min-height:12mm;background:#fff;
 }
-.note-line{font-size:13px;line-height:1.45;color:#333}
+.note-line{font-size:13px;font-weight:400;line-height:1.45;color:#333}
 
 .amt-box{
   width:100%;
@@ -257,38 +253,32 @@ body,.quotation-print-page{
 .amt-r{
   display:flex;justify-content:space-between;align-items:center;
   border-bottom:1px solid #eee;
-  font-size:13px;font-weight:500;line-height:1.4;
+  font-size:13px;font-weight:400;line-height:1.45;
   padding:1.6mm 3mm;
 }
-.amt-r .lbl{color:#666;padding-right:3mm;flex-shrink:0;font-weight:500}
-.amt-r .val{font-weight:600;text-align:right;flex-shrink:0;font-size:14px;color:#111}
+.amt-r .lbl{color:#666;padding-right:3mm;flex-shrink:0;font-weight:400}
+.amt-r .val{font-weight:400;text-align:right;flex-shrink:0;font-size:13px;color:#111}
 .disc-val{color:${COLORS.red}}
 .amt-total{
   background:#fff;
   display:flex;justify-content:space-between;align-items:baseline;
-  padding:2mm 3mm;
-  border-top:1.5px solid #111;
+  padding:2.2mm 3mm;
+  border-top:1px solid #111;
 }
-.amt-total .lbl{color:#111;font-size:14px;font-weight:700}
-.amt-total .val{color:#111;font-size:16px;font-weight:700}
+.amt-total .lbl{color:#111;font-size:13px;font-weight:400}
+.amt-total .val{color:#111;font-size:15px;font-weight:700}
 
 .bank-box{
   border-top:1px solid #eee;
   padding:3mm 0 1mm;
   margin-bottom:3mm;
 }
-.bank-title{
-  color:#111;font-size:14px;font-weight:700;
-  background:transparent;border:none;
-  padding:0 0 1.5mm;margin:0 0 2mm;
-  display:block;width:fit-content;
-  border-bottom:2px solid ${COLORS.primary};
-}
 .bank-row{
   display:flex;gap:6mm;font-size:13px;font-weight:400;
-  color:#333;line-height:1.4;flex-wrap:wrap;
+  color:#333;line-height:1.45;flex-wrap:wrap;
 }
 .bank-row span{white-space:nowrap}
+.bank-row strong{font-weight:400}
 
 .sig-row{
   display:grid;grid-template-columns:1fr 1fr 1fr;gap:8mm;
@@ -296,14 +286,14 @@ body,.quotation-print-page{
 }
 .sig-box{
   text-align:center;border-top:1px solid #111;
-  font-size:13px;font-weight:500;color:#555;line-height:1.4;
+  font-size:12px;font-weight:400;color:#555;line-height:1.45;
   padding-top:3mm;padding-bottom:8mm;
 }
-.sig-date{font-size:12px;font-weight:400;color:#888}
+.sig-date{font-size:11px;font-weight:400;color:#888}
 
 .pf{
   display:flex;justify-content:space-between;align-items:center;
-  font-size:12px;font-weight:400;color:#888;
+  font-size:11px;font-weight:400;color:#888;
   border-top:1px solid #eee;padding-top:2mm;
 }
 
@@ -333,14 +323,66 @@ body,.quotation-print-page{
   .eq-table tr{page-break-inside:avoid;break-inside:avoid}
 }
 ${PRINT_DOC_TYPE_CSS}
+/* 報價單三層字級（覆寫共用 PRINT_DOC_TYPE_CSS，不影響派工單）
+   1. 主標題 28px/700  2. 區塊標題 14px/400  3. 正文／表格 13px/400
+   700 僅用於「報價單」與含稅總計金額 */
 .quotation-print-page,.quotation-print-page *{transform:none!important}
+.quotation-print-page{font-size:13px!important;font-weight:400!important;line-height:1.45!important}
+.quotation-print-page .co-name{font-size:14px!important;font-weight:400!important}
+.quotation-print-page .co-sub,.quotation-print-page .co-info,
+.quotation-print-page .doc-en,.quotation-print-page .doc-dates,
+.quotation-print-page .pf,.quotation-print-page .sig-date{
+  font-size:11px!important;font-weight:400!important;
+}
+.quotation-print-page .doc-label{
+  font-size:28px!important;font-weight:700!important;line-height:1.2!important;
+}
+.quotation-print-page .doc-no,.quotation-print-page .info-value,
+.quotation-print-page .box,.quotation-print-page .notes-box,
+.quotation-print-page .note-line,.quotation-print-page .bank-row,
+.quotation-print-page .amt-r,.quotation-print-page .amt-r .lbl,
+.quotation-print-page .amt-r .val{
+  font-size:13px!important;font-weight:400!important;
+}
+.quotation-print-page .info-label{font-size:11px!important;font-weight:400!important;color:#888!important}
+.quotation-print-page .stitle,
+.quotation-print-page .eq-title,
+.quotation-print-page .bank-title{
+  font-size:14px!important;font-weight:400!important;line-height:1.4!important;
+  letter-spacing:0.4px!important;
+  border:none!important;border-bottom:none!important;
+  padding:0 0 1.2mm!important;margin:0 0 2.5mm!important;
+  background:transparent!important;width:fit-content;
+}
+.quotation-print-page .eq-table{font-size:13px!important}
 .quotation-print-page .eq-table .head-row,
 .quotation-print-page .eq-table .head-row th{
   background:#111!important;color:#fff!important;
   border-color:#111!important;
   text-align:center!important;vertical-align:middle!important;
-  font-weight:700!important;font-size:14px!important;
-  white-space:normal!important;
+  font-weight:400!important;font-size:12px!important;
+  line-height:1.35!important;padding:6px 3px!important;
+  white-space:normal!important;min-height:0!important;
+}
+.quotation-print-page .eq-table tbody td{
+  font-size:13px!important;font-weight:400!important;
+  text-align:center!important;vertical-align:middle!important;
+  line-height:1.4!important;padding:7px 5px!important;
+  min-height:0!important;color:#333!important;
+}
+.quotation-print-page .eq-table .col-item{
+  font-size:13px!important;font-weight:400!important;
+  text-align:left!important;padding:7px 6px!important;color:#111!important;
+}
+.quotation-print-page .eq-table .col-cat,
+.quotation-print-page .eq-table .col-brand,
+.quotation-print-page .eq-table .col-model,
+.quotation-print-page .eq-table .col-qty,
+.quotation-print-page .eq-table .col-unit,
+.quotation-print-page .eq-table .col-price,
+.quotation-print-page .eq-table .col-sub,
+.quotation-print-page .eq-table .col-notes{
+  font-size:13px!important;font-weight:400!important;text-align:center!important;
 }
 .quotation-print-page .eq-table .col-cat,
 .quotation-print-page .eq-table .col-brand,
@@ -348,10 +390,10 @@ ${PRINT_DOC_TYPE_CSS}
 .quotation-print-page .eq-table .col-item{
   white-space:normal!important;
 }
-.quotation-print-page .amt-total .lbl{font-size:14px!important;font-weight:700!important}
-.quotation-print-page .amt-total .val{font-size:16px!important;font-weight:700!important}
-.quotation-print-page .info-label{font-size:12px!important;font-weight:500!important;color:#888!important}
-.quotation-print-page .info-value{font-size:15px!important;font-weight:600!important}
+.quotation-print-page .amt-total .lbl{font-size:13px!important;font-weight:400!important}
+.quotation-print-page .amt-total .val{font-size:15px!important;font-weight:700!important}
+.quotation-print-page .sig-box{font-size:12px!important;font-weight:400!important}
+.quotation-print-page .bank-row strong{font-weight:400!important}
 </style>
 </head>
 <body>
