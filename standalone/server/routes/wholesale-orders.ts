@@ -5,6 +5,12 @@ import {
 } from "@workspace/db";
 import { z } from "zod/v4";
 import { requireFeature } from "../lib/auth";
+import {
+  deriveWholesalePaymentStatus,
+  parseMoney,
+  remainingAmount,
+} from "../../shared/wholesalePaymentMath.ts";
+import { sumPaymentsForOrderIds } from "../lib/wholesale/wholesalePaymentService.ts";
 
 const router: IRouter = Router();
 router.use("/wholesale/orders", requireFeature("wholesale"));
@@ -115,7 +121,18 @@ router.get("/wholesale/orders", async (req, res): Promise<void> => {
   const rows = await db.select().from(wholesaleOrdersTable)
     .where(conditions.length ? and(...conditions) : undefined)
     .orderBy(desc(wholesaleOrdersTable.createdAt));
-  res.json(rows.map((r) => ({ ...r, items: [] })));
+  const receivedMap = await sumPaymentsForOrderIds(rows.map((r) => r.id));
+  res.json(rows.map((r) => {
+    const totalAmount = parseMoney(r.total);
+    const receivedAmount = receivedMap.get(r.id) ?? 0;
+    return {
+      ...r,
+      items: [],
+      receivedAmount,
+      outstandingAmount: remainingAmount(totalAmount, receivedAmount),
+      paymentStatus: deriveWholesalePaymentStatus(receivedAmount, totalAmount),
+    };
+  }));
 });
 
 router.post("/wholesale/orders", async (req, res): Promise<void> => {

@@ -81,6 +81,14 @@ function serializePayment(row: {
   };
 }
 
+// GET /wholesale/settlements/payments?orderId=
+router.get("/wholesale/settlements/payments", async (req, res): Promise<void> => {
+  const orderId = typeof req.query.orderId === "string" ? parseInt(req.query.orderId, 10) : NaN;
+  if (isNaN(orderId)) { res.status(400).json({ error: "需要 orderId" }); return; }
+  const rows = await listPaymentsForOrderIds([orderId]);
+  res.json(rows.map(serializePayment));
+});
+
 // POST /wholesale/settlements/payments
 router.post("/wholesale/settlements/payments", async (req, res): Promise<void> => {
   if (!req.user) { res.status(401).json({ error: "未登入" }); return; }

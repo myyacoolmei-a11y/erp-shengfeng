@@ -2,11 +2,11 @@ import { useState, useEffect } from "react";
 import {
   useListWholesaleOrders, useCreateWholesaleOrder, useUpdateWholesaleOrder,
   useDeleteWholesaleOrder, useGetWholesaleOrder,
-  useListWholesaleCustomers, useListWholesaleProducts, useListWholesaleReceivables,
-  getListWholesaleOrdersQueryKey, getListWholesaleReceivablesQueryKey,
+  useListWholesaleCustomers, useListWholesaleProducts,
+  getListWholesaleOrdersQueryKey,
   getGetWholesaleOrderQueryKey, getWholesaleOrder,
 } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -25,6 +25,18 @@ import { PdfPreviewDialog } from "@/components/pdf/pdf-preview-dialog";
 import { handlePdfAction, isMobileDevice, openPrintWindow } from "@/components/pdf/pdf-service";
 import { buildDeliveryHtml } from "@/components/pdf/templates/DeliveryTemplate";
 import { loadPrintCalibration } from "@/lib/printPaperConfig";
+import {
+  createWholesalePayment,
+  deleteWholesalePaymentRecord,
+  listWholesalePaymentsByOrder,
+} from "@/lib/wholesalePaymentsApi";
+import {
+  WHOLESALE_PAYMENT_METHODS,
+  deriveWholesalePaymentStatus,
+  normalizeWholesalePaymentStatus,
+  parseMoney,
+  remainingAmount,
+} from "../../../shared/wholesalePaymentMath.ts";
 
 const ORDER_STATUSES = ["備貨中", "已出貨"];
 const STATUS_COLORS: Record<string, string> = {
@@ -177,6 +189,26 @@ function fmtMoneyStr(s: string | null | undefined) {
   const n = parseFloat(s);
   return isNaN(n) ? "—" : `NT$ ${Math.round(n).toLocaleString()}`;
 }
+function todayStr() {
+  return new Date().toISOString().split("T")[0];
+}
+
+const PAY_STATUS_CLASS: Record<string, string> = {
+  "未收款": "bg-red-100 text-red-700",
+  "部分收款": "bg-amber-100 text-amber-700",
+  "已收清": "bg-green-100 text-green-700",
+};
+
+function receivableButtonLabel(order: any): string {
+  if (order.status !== "已出貨") return "應收款";
+  const total = parseMoney(order.total);
+  const received = parseMoney(order.receivedAmount);
+  const outstanding = remainingAmount(total, received);
+  const status = normalizeWholesalePaymentStatus(order.paymentStatus) || deriveWholesalePaymentStatus(received, total);
+  if (status === "已收清") return "已收清";
+  if (status === "部分收款") return `待收 ${fmtMoney(outstanding)}`;
+  return `應收 ${fmtMoney(total)}`;
+}
 
 export default function WholesaleOrders() {
   const { toast } = useToast();
@@ -192,6 +224,12 @@ export default function WholesaleOrders() {
   const [receivableOrderId, setReceivableOrderId] = useState<number | null>(null);
   const [pdfPreview, setPdfPreview] = useState<{ url: string; filename: string } | null>(null);
   const [form, setForm] = useState<OForm>(emptyForm());
+  const [payAmount, setPayAmount] = useState("");
+  const [payDate, setPayDate] = useState(todayStr());
+  const [payMethod, setPayMethod] = useState("現金");
+  const [payNote, setPayNote] = useState("");
+  const [paying, setPaying] = useState(false);
+  const [deletingPaymentId, setDeletingPaymentId] = useState<number | null>(null);
 
   const { data: orders, isLoading } = useListWholesaleOrders({
     ...(search ? { search } : {}),
@@ -203,23 +241,24 @@ export default function WholesaleOrders() {
     { query: { enabled: !!editId, queryKey: getGetWholesaleOrderQueryKey(editId ?? 0) } }
   );
 
-  const { data: receivables } = useListWholesaleReceivables(
-    receivableOrderId ? { orderId: receivableOrderId } : {},
-    { query: { enabled: !!receivableOrderId, queryKey: getListWholesaleReceivablesQueryKey(receivableOrderId ? { orderId: receivableOrderId } : {}) } }
-  );
-
   const { data: customers } = useListWholesaleCustomers({});
   const { data: products } = useListWholesaleProducts({ forSelection: "true" });
+  const { data: orderPayments = [], isPending: paymentsPending, refetch: refetchOrderPayments } = useQuery({
+    queryKey: ["wholesale-order-payments", receivableOrderId],
+    queryFn: () => listWholesalePaymentsByOrder(receivableOrderId!),
+    enabled: !!receivableOrderId,
+  });
+
+  const receivableOrder = (orders ?? []).find((o: any) => o.id === receivableOrderId) ?? null;
 
   useEffect(() => {
     if (editData && editId) setForm(fromData(editData));
   }, [editData, editId]);
 
   const invOrders = () => qc.invalidateQueries({ queryKey: getListWholesaleOrdersQueryKey() });
-  const invReceivables = () => qc.invalidateQueries({ queryKey: getListWholesaleReceivablesQueryKey() });
 
   const createMut = useCreateWholesaleOrder({ mutation: { onSuccess: () => { invOrders(); close_(); toast({ title: "批發訂單已建立" }); } } });
-  const updateMut = useUpdateWholesaleOrder({ mutation: { onSuccess: () => { invOrders(); invReceivables(); close_(); toast({ title: "已更新" }); } } });
+  const updateMut = useUpdateWholesaleOrder({ mutation: { onSuccess: () => { invOrders(); close_(); toast({ title: "已更新" }); } } });
   const deleteMut = useDeleteWholesaleOrder({ mutation: { onSuccess: () => { invOrders(); setDeleteId(null); toast({ title: "已刪除" }); } } });
 
   function close_() { setShowDialog(false); setEditId(null); setForm(emptyForm()); }
@@ -246,6 +285,80 @@ export default function WholesaleOrders() {
     };
     if (editId) updateMut.mutate({ id: editId, data: payload });
     else createMut.mutate({ data: payload });
+  }
+
+  function openReceivable(order: any) {
+    setReceivableOrderId(order.id);
+    const outstanding = remainingAmount(parseMoney(order.total), parseMoney(order.receivedAmount));
+    setPayAmount(outstanding > 0 ? String(outstanding) : "");
+    setPayDate(todayStr());
+    setPayMethod("現金");
+    setPayNote("");
+  }
+
+  const recTotal = parseMoney(receivableOrder?.total);
+  const recReceived = paymentsPending
+    ? parseMoney(receivableOrder?.receivedAmount)
+    : orderPayments.reduce((sum, p) => sum + parseMoney(p.amount), 0);
+  const recOutstanding = remainingAmount(recTotal, recReceived);
+  const recStatus = deriveWholesalePaymentStatus(recReceived, recTotal);
+
+  async function refreshReceivableView() {
+    await Promise.all([
+      invOrders(),
+      receivableOrderId ? refetchOrderPayments() : Promise.resolve(),
+    ]);
+  }
+
+  async function submitOrderPayment() {
+    if (!receivableOrder) return;
+    if (receivableOrder.status !== "已出貨") {
+      toast({ title: "請先將訂單狀態改為「已出貨」", variant: "destructive" });
+      return;
+    }
+    if (!receivableOrder.customerId) {
+      toast({ title: "此出貨單沒有客戶，無法登記收款", variant: "destructive" });
+      return;
+    }
+    const amount = parseMoney(payAmount);
+    if (!(amount > 0)) {
+      toast({ title: "請輸入本次收款金額", variant: "destructive" });
+      return;
+    }
+    setPaying(true);
+    try {
+      await createWholesalePayment({
+        customerId: receivableOrder.customerId,
+        orderId: receivableOrder.id,
+        amount,
+        paymentDate: payDate,
+        paymentMethod: payMethod,
+        note: payNote.trim() || undefined,
+      });
+      toast({ title: "已登記收款" });
+      const nextOutstanding = remainingAmount(recTotal, recReceived + amount);
+      setPayAmount(nextOutstanding > 0 ? String(nextOutstanding) : "");
+      setPayNote("");
+      setPayDate(todayStr());
+      await refreshReceivableView();
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : "登記收款失敗", variant: "destructive" });
+    } finally {
+      setPaying(false);
+    }
+  }
+
+  async function removeOrderPayment(id: number) {
+    setDeletingPaymentId(id);
+    try {
+      await deleteWholesalePaymentRecord(id);
+      toast({ title: "已刪除收款紀錄" });
+      await refreshReceivableView();
+    } catch (err) {
+      toast({ title: err instanceof Error ? err.message : "刪除失敗", variant: "destructive" });
+    } finally {
+      setDeletingPaymentId(null);
+    }
   }
 
   const subtotal = computedSubtotal(form.items);
@@ -309,9 +422,19 @@ export default function WholesaleOrders() {
                   {canWrite && (
                     <div className="flex flex-col gap-1 shrink-0">
                       <Button variant="outline" size="sm" className="h-7 gap-1 text-xs" onClick={() => openEdit(o.id)}><Pencil className="h-3 w-3" />編輯</Button>
-                      <Button variant="outline" size="sm" className="h-7 gap-1 text-xs text-blue-600 border-blue-200 hover:bg-blue-50"
-                        onClick={() => setReceivableOrderId(o.id)}>
-                        <CreditCard className="h-3 w-3" />應收款
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className={`h-7 gap-1 text-xs ${
+                          o.status === "已出貨" && normalizeWholesalePaymentStatus(o.paymentStatus) === "已收清"
+                            ? "text-green-700 border-green-200 hover:bg-green-50"
+                            : o.status === "已出貨" && normalizeWholesalePaymentStatus(o.paymentStatus) === "部分收款"
+                              ? "text-amber-700 border-amber-200 hover:bg-amber-50"
+                              : "text-blue-600 border-blue-200 hover:bg-blue-50"
+                        }`}
+                        onClick={() => openReceivable(o)}
+                      >
+                        <CreditCard className="h-3 w-3" />{receivableButtonLabel(o)}
                       </Button>
                       <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-destructive hover:text-destructive" onClick={() => setDeleteId(o.id)}><Trash2 className="h-3 w-3" />刪除</Button>
                       <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" title="列印出貨單" onClick={() => printOrder(o, setPdfPreview, toast, customers)}><Printer className="h-3 w-3" />列印</Button>
@@ -487,31 +610,114 @@ export default function WholesaleOrders() {
         </DialogContent>
       </Dialog>
 
-      {/* Receivable viewer */}
+      {/* Receivable + payment */}
       <Dialog open={receivableOrderId !== null} onOpenChange={open => !open && setReceivableOrderId(null)}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader><DialogTitle>應收款明細</DialogTitle></DialogHeader>
-          <div className="space-y-2 mt-2">
-            {!receivables || receivables.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-6">
-                尚無應收款紀錄。<br />將訂單狀態更新為「已出貨」後會自動產生應收款。
-              </p>
-            ) : receivables.map((r: any) => (
-              <div key={r.id} className="border rounded-lg p-3 space-y-1">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>應收款明細{receivableOrder?.orderNumber ? ` — ${receivableOrder.orderNumber}` : ""}</DialogTitle>
+          </DialogHeader>
+          {!receivableOrder ? (
+            <p className="text-sm text-muted-foreground text-center py-6">找不到出貨單</p>
+          ) : receivableOrder.status !== "已出貨" ? (
+            <p className="text-sm text-muted-foreground text-center py-6">
+              尚無應收款。<br />將訂單狀態更新為「已出貨」後即可直接在此登記收款。
+            </p>
+          ) : (
+            <div className="space-y-4">
+              <div className="border rounded-lg p-3 space-y-2">
                 <div className="flex justify-between items-center">
-                  <span className="font-medium text-sm">{r.orderNumber}</span>
-                  <Badge variant={r.paymentStatus === "已收款" || r.paymentStatus === "已收清" ? "default" : r.paymentStatus === "部分收款" ? "secondary" : "outline"}>
-                    {r.paymentStatus === "已收款" ? "已收清" : r.paymentStatus}
-                  </Badge>
+                  <span className="font-medium text-sm">{receivableOrder.customerName || "（未指定客戶）"}</span>
+                  <Badge className={PAY_STATUS_CLASS[recStatus]}>{recStatus}</Badge>
                 </div>
-                <div className="text-sm text-muted-foreground flex flex-wrap gap-x-4">
-                  <span>總金額：NT$ {parseFloat(r.totalAmount).toLocaleString()}</span>
-                  <span>已收：NT$ {parseFloat(r.receivedAmount).toLocaleString()}</span>
+                <div className="grid grid-cols-3 gap-2 text-sm">
+                  <div>
+                    <p className="text-xs text-muted-foreground">總金額</p>
+                    <p className="font-medium">{fmtMoney(recTotal)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">已收金額</p>
+                    <p className="font-medium text-green-700">{fmtMoney(recReceived)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">待收金額</p>
+                    <p className="font-medium text-red-600">{fmtMoney(recOutstanding)}</p>
+                  </div>
                 </div>
-                {r.dueDate && <div className="text-xs text-muted-foreground">到期日：{r.dueDate}</div>}
               </div>
-            ))}
-          </div>
+
+              {recOutstanding > 0 && (
+                <div className="space-y-3 border rounded-lg p-3">
+                  <p className="text-sm font-medium">登記收款</p>
+                  <div className="space-y-1">
+                    <Label>本次收款金額</Label>
+                    <Input type="number" min="0" step="1" value={payAmount} onChange={e => setPayAmount(e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>收款日期</Label>
+                    <Input type="date" value={payDate} onChange={e => setPayDate(e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label>收款方式</Label>
+                    <Select value={payMethod} onValueChange={setPayMethod}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {WHOLESALE_PAYMENT_METHODS.map(method => (
+                          <SelectItem key={method} value={method}>{method}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label>備註</Label>
+                    <Textarea value={payNote} onChange={e => setPayNote(e.target.value)} placeholder="選填" />
+                  </div>
+                  <Button className="w-full" onClick={submitOrderPayment} disabled={paying}>
+                    {paying ? "處理中…" : "確認收款"}
+                  </Button>
+                </div>
+              )}
+
+              <div>
+                <h3 className="text-sm font-medium mb-2">收款紀錄</h3>
+                {orderPayments.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">尚未登記收款</p>
+                ) : (
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-xs text-muted-foreground border-b">
+                        <th className="py-1 pr-2">日期</th>
+                        <th className="py-1 pr-2 text-right">金額</th>
+                        <th className="py-1 pr-2">方式</th>
+                        <th className="py-1 pr-2">備註</th>
+                        <th className="py-1 text-right">刪除</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {orderPayments.map(payment => (
+                        <tr key={payment.id} className="border-b">
+                          <td className="py-1.5 pr-2">{(payment.paymentDate ?? "").replace(/-/g, "/")}</td>
+                          <td className="py-1.5 pr-2 text-right">{fmtMoney(parseMoney(payment.amount))}</td>
+                          <td className="py-1.5 pr-2">{payment.paymentMethod ?? "—"}</td>
+                          <td className="py-1.5 pr-2">{payment.note ?? "—"}</td>
+                          <td className="py-1.5 text-right">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-red-600"
+                              disabled={deletingPaymentId === payment.id}
+                              onClick={() => void removeOrderPayment(payment.id)}
+                            >
+                              刪除
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setReceivableOrderId(null)}>關閉</Button>
           </DialogFooter>

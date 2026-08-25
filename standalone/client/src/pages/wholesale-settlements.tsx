@@ -473,7 +473,7 @@ export default function WholesaleSettlements() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold">批發月結 / 應收</h1>
-          <p className="text-sm text-muted-foreground">依日期區間統計已出貨訂單，並登記實際收款</p>
+          <p className="text-sm text-muted-foreground">全部客戶應收總覽。單筆收款請在出貨單按「應收款」直接登記。</p>
         </div>
       </div>
 

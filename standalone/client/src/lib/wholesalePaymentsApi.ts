@@ -36,6 +36,12 @@ export type WholesalePaymentRecordDto = {
   updatedAt: string;
 };
 
+export async function listWholesalePaymentsByOrder(orderId: number): Promise<WholesalePaymentRecordDto[]> {
+  const res = await authFetch(`/api/wholesale/settlements/payments?orderId=${orderId}`);
+  if (!res.ok) throw new Error(await readError(res, "無法載入收款紀錄"));
+  return res.json() as Promise<WholesalePaymentRecordDto[]>;
+}
+
 export async function createWholesalePayment(body: {
   customerId: number;
   orderId?: number;
