@@ -34,6 +34,9 @@ import {
   advanceSubsidyPipeline,
   unmarkSubsidyApplied,
 } from "../lib/workOrders/adminWorkbenchService.ts";
+import {
+  isSubsidyRequired,
+} from "../../shared/subsidyEligibility.ts";
 import { subsidyPublicUploadPath } from "../lib/subsidy/subsidyPublicHtml.ts";
 
 const router: IRouter = Router();
@@ -60,8 +63,11 @@ function enrichReceivableSubsidy(
   row: Record<string, unknown>,
   sub: typeof subsidyApplicationsTable.$inferSelect | null | undefined,
   docs: Array<typeof customerDocumentsTable.$inferSelect>,
+  woProjectType?: string | null,
 ) {
+  const projectType = (woProjectType ?? row.projectType) as string | null | undefined;
   const subsidyType = (sub?.subsidyType ?? null) as SubsidyType | null;
+  const subsidyRequired = isSubsidyRequired({ projectType, subsidyType });
   const assistedProgram = (sub?.assistedProgram ?? null) as AssistedProgram | null;
   const pipeline = (sub?.pipelineStatus ?? null) as SubsidyPipelineStatus | null;
   const invoiceKind = normalizeSubsidyInvoiceKind(sub?.invoiceKind ?? null);
@@ -86,18 +92,43 @@ function enrichReceivableSubsidy(
   const legacy = displayStatus === "applied" ? "已申請補助" : "未申請補助";
 
   const uploadUrl =
+    subsidyRequired &&
     sub?.uploadLinkToken != null &&
     sub.uploadLinkToken !== "" &&
     subsidyType === "company_assisted"
       ? subsidyPublicUploadPath(sub.uploadLinkToken)
       : null;
 
-  return {
-    ...fmt(row),
+  const base = {
+    ...fmt({ ...row, projectType }),
+    subsidyRequired,
     subsidyStatus: displayStatus === "applied" ? "已申請補助" : (row.subsidyStatus as string) || legacy,
     subsidyType,
     assistedProgram,
     subsidyPipelineStatus: pipeline,
+  };
+
+  if (!subsidyRequired) {
+    return {
+      ...base,
+      subsidyDisplayStatus: null,
+      subsidyDisplayLabel: null,
+      subsidyDisplayColor: null,
+      missingDocs: [],
+      missingDocLabels: [],
+      uploadedDocCount: 0,
+      appliedAt: null,
+      needsManualReview: false,
+      aiTips: [],
+      canMarkSubsidyApplied: false,
+      uploadUrl: null,
+      uploadLinkToken: null,
+      customerDocuments: [],
+    };
+  }
+
+  return {
+    ...base,
     subsidyDisplayStatus: displayStatus,
     subsidyDisplayLabel,
     subsidyDisplayColor: SUBSIDY_DISPLAY_COLORS[displayStatus],
@@ -123,6 +154,16 @@ function enrichReceivableSubsidy(
       uploadedAt: d.uploadedAt?.toISOString() ?? null,
     })),
   };
+}
+
+async function workOrderProjectTypeMap(workOrderIds: number[]) {
+  const ids = [...new Set(workOrderIds.filter((id): id is number => id != null))];
+  if (ids.length === 0) return new Map<number, string | null>();
+  const rows = await db
+    .select({ id: workOrdersTable.id, projectType: workOrdersTable.projectType })
+    .from(workOrdersTable)
+    .where(inArray(workOrdersTable.id, ids));
+  return new Map(rows.map((r) => [r.id, r.projectType]));
 }
 
 const REC_SELECT = {
@@ -208,6 +249,8 @@ router.get("/receivables", async (req, res): Promise<void> => {
     docsBySub.set(d.subsidyApplicationId, arr);
   }
 
+  const woTypeById = await workOrderProjectTypeMap(woIds);
+
   res.json(
     rows.map((r) => {
       const sub = r.workOrderId != null ? subByWo.get(r.workOrderId) : undefined;
@@ -215,6 +258,7 @@ router.get("/receivables", async (req, res): Promise<void> => {
         r as Record<string, unknown>,
         sub,
         sub ? docsBySub.get(sub.id) ?? [] : [],
+        r.workOrderId != null ? woTypeById.get(r.workOrderId) : undefined,
       );
     }),
   );
@@ -252,10 +296,14 @@ router.post("/receivables", async (req, res): Promise<void> => {
   }
 
   let customerId = parsed.data.customerId;
+  let projectType = parsed.data.projectType;
 
   if (parsed.data.workOrderId) {
     const [wo] = await db
-      .select({ customerId: workOrdersTable.customerId })
+      .select({
+        customerId: workOrdersTable.customerId,
+        projectType: workOrdersTable.projectType,
+      })
       .from(workOrdersTable)
       .where(eq(workOrdersTable.id, parsed.data.workOrderId));
 
@@ -265,6 +313,7 @@ router.post("/receivables", async (req, res): Promise<void> => {
     }
 
     customerId = wo.customerId;
+    projectType = wo.projectType ?? projectType;
 
     const existing = await db
       .select({ id: receivablesTable.id })
@@ -279,6 +328,7 @@ router.post("/receivables", async (req, res): Promise<void> => {
   const data = {
     ...parsed.data,
     customerId,
+    projectType,
     totalAmount: String(parsed.data.totalAmount),
     receivedAmount: "0",
     paymentStatus: "未收款",
@@ -316,7 +366,10 @@ router.get("/receivables/:id", async (req, res): Promise<void> => {
         .from(customerDocumentsTable)
         .where(eq(customerDocumentsTable.subsidyApplicationId, sub.id))
     : [];
-  res.json(enrichReceivableSubsidy(row as Record<string, unknown>, sub, docs));
+  const woType = row.workOrderId != null
+    ? (await workOrderProjectTypeMap([row.workOrderId])).get(row.workOrderId)
+    : undefined;
+  res.json(enrichReceivableSubsidy(row as Record<string, unknown>, sub, docs, woType));
 });
 
 router.patch("/receivables/:id", async (req, res): Promise<void> => {
@@ -386,7 +439,10 @@ router.patch("/receivables/:id", async (req, res): Promise<void> => {
         .where(eq(customerDocumentsTable.subsidyApplicationId, sub.id))
     : [];
 
-  res.json(enrichReceivableSubsidy(updated as Record<string, unknown>, sub, docs));
+  const woType = updated.workOrderId != null
+    ? (await workOrderProjectTypeMap([updated.workOrderId])).get(updated.workOrderId)
+    : undefined;
+  res.json(enrichReceivableSubsidy(updated as Record<string, unknown>, sub, docs, woType));
 });
 
 router.post("/receivables/:id/payment", async (req, res): Promise<void> => {

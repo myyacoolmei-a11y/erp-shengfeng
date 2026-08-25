@@ -11,6 +11,8 @@ export type AdminWorkbenchItem = {
   workOrderNumber?: string | null;
   /** 案件名稱（派工單 title） */
   title?: string | null;
+  projectType?: string | null;
+  subsidyRequired?: boolean;
   customerId?: number | null;
   customerName?: string | null;
   installAddress?: string | null;
@@ -101,6 +103,8 @@ export type AdminWorkbenchData = {
 export type AdminCaseDetail = {
   workOrderId: number;
   workOrderNumber?: string | null;
+  projectType?: string | null;
+  subsidyRequired?: boolean;
   customerName?: string | null;
   mobilePhone?: string | null;
   telephone?: string | null;

@@ -50,9 +50,8 @@ const INVOICE_COLORS: Record<string, string> = {
   "待確認": "bg-blue-100 text-blue-700",
 };
 
-type SubsidyStatus = "未申請補助" | "已申請補助";
-
 type ReceivableSubsidyFields = {
+  subsidyRequired?: boolean;
   subsidyStatus?: string | null;
   subsidyType?: string | null;
   subsidyDisplayStatus?: string | null;
@@ -94,140 +93,6 @@ function subsidyShareText(item: ReceivableSubsidyFields & { customerName?: strin
     lines.push("請點此上傳（無需登入）：", url);
   }
   return lines.join("\n");
-}
-
-function SubsidyStatusButton({
-  item,
-  disabled,
-  onToggle,
-  onViewIncomplete,
-}: {
-  item: ReceivableSubsidyFields;
-  disabled?: boolean;
-  onToggle: (next: SubsidyStatus) => void;
-  onViewIncomplete?: () => void;
-}) {
-  const display = item.subsidyDisplayStatus;
-  const type = item.subsidyType;
-  if (!type || display === "no_record") {
-    return (
-      <Badge className="h-7 text-xs px-2 font-normal bg-gray-50 text-gray-500 border-0">
-        尚無補助紀錄
-      </Badge>
-    );
-  }
-  if (type === "pending_confirmation" || display === "pending_confirmation") {
-    return (
-      <Badge className="h-7 text-xs px-2 font-normal bg-gray-100 text-gray-600 border-0">
-        待確認補助方式
-      </Badge>
-    );
-  }
-  if (type === "not_needed" || display === "not_needed") {
-    return (
-      <Badge className="h-7 text-xs px-2 font-normal bg-gray-100 text-gray-600 border-0">
-        不需申請
-      </Badge>
-    );
-  }
-  if (type === "customer_self_apply" || display === "customer_self_apply") {
-    return (
-      <Badge className="h-7 text-xs px-2 font-normal bg-slate-100 text-slate-700 border-0">
-        客戶自行申請
-      </Badge>
-    );
-  }
-  if (type === "none" || display === "not_applicable") {
-    return (
-      <Badge className="h-7 text-xs px-2 font-normal bg-gray-100 text-gray-600 border-0">
-        尚無補助紀錄
-      </Badge>
-    );
-  }
-
-  if (display === "applied") {
-    return (
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        disabled={disabled}
-        className="h-7 text-xs px-2 text-emerald-900 border-emerald-400 bg-emerald-100 hover:bg-emerald-200"
-        onClick={() => {
-          if (window.confirm("是否取消補助完成／重新開啟？附件將保留。")) {
-            onToggle("未申請補助");
-          }
-        }}
-        title={
-          item.appliedAt
-            ? `完成：${new Date(item.appliedAt).toLocaleString("zh-TW")}`
-            : "補助已完成"
-        }
-      >
-        補助已完成
-        {item.appliedAt ? ` · ${new Date(item.appliedAt).toLocaleDateString("zh-TW")}` : ""}
-      </Button>
-    );
-  }
-
-  if (display === "docs_complete") {
-    return (
-      <Button
-        type="button"
-        size="sm"
-        variant="outline"
-        disabled={disabled}
-        className="h-7 text-xs px-2 text-green-800 border-green-400 bg-green-50 hover:bg-green-100"
-        onClick={() => {
-          if (
-            window.confirm("確定此案件已完成補助申請？確認後將同步更新行政首頁。")
-          ) {
-            onToggle("已申請補助");
-          }
-        }}
-      >
-        補助資料完整
-      </Button>
-    );
-  }
-
-  const incompleteLabel =
-    display === "awaiting_manual_review"
-      ? "等待人工確認"
-      : display === "docs_incomplete"
-        ? "補助資料不完整"
-        : item.subsidyDisplayLabel || "補助申請中";
-
-  const colorClass =
-    display === "awaiting_manual_review"
-      ? "text-yellow-800 border-yellow-400 bg-yellow-50 hover:bg-yellow-100"
-      : display === "docs_incomplete"
-        ? "text-orange-800 border-orange-400 bg-orange-50 hover:bg-orange-100"
-        : display === "awaiting_upload"
-          ? "text-blue-700 border-blue-300 bg-blue-50 hover:bg-blue-100"
-          : "text-muted-foreground border-border hover:bg-muted";
-
-  return (
-    <Button
-      type="button"
-      size="sm"
-      variant="outline"
-      disabled={disabled}
-      className={`h-7 text-xs px-2 ${colorClass}`}
-      onClick={() => {
-        const miss =
-          (item.missingDocLabels?.length ?? 0) > 0
-            ? `\n缺少：${item.missingDocLabels!.join("、")}`
-            : "";
-        window.alert(
-          `${incompleteLabel}${miss}\n\n請至行政工作台「未收款／待結案」查看客戶上傳資料。不可直接標記完成。`,
-        );
-        onViewIncomplete?.();
-      }}
-    >
-      {incompleteLabel}
-    </Button>
-  );
 }
 
 function fmtAmt(n: number) {
@@ -542,9 +407,11 @@ export default function Receivables() {
                         <Badge className={`text-xs px-1.5 py-0 ${INVOICE_COLORS[item.invoiceStatus] ?? "bg-gray-100 text-gray-600"}`}>
                           發票：{item.invoiceStatus}
                         </Badge>
-                        <Badge className={`text-xs px-1.5 py-0 border-0 ${subColor}`}>
-                          補助：{sub.subsidyDisplayLabel ?? "—"}
-                        </Badge>
+                        {sub.subsidyRequired && (
+                          <Badge className={`text-xs px-1.5 py-0 border-0 ${subColor}`}>
+                            補助：{sub.subsidyDisplayLabel ?? "等待客戶上傳"}
+                          </Badge>
+                        )}
                       </div>
                       {item.projectName && <p className="text-xs text-muted-foreground mb-1">{item.projectName}{item.projectType ? ` · ${item.projectType}` : ""}</p>}
                       <div className="grid grid-cols-3 gap-x-3 gap-y-0.5 text-xs mt-1">
@@ -579,16 +446,7 @@ export default function Receivables() {
                         <FileText className="h-3 w-3 mr-1" />發票
                       </Button>
                     )}
-                    <Button size="sm" variant="outline" className="h-7 text-xs px-2 text-emerald-700 border-emerald-300 hover:bg-emerald-50" onClick={() => setLineModal(item)}>
-                      <Bell className="h-3 w-3 mr-1" />LINE 提醒
-                    </Button>
-                    <SubsidyStatusButton
-                      item={sub}
-                      disabled={!canWrite || updateMutation.isPending}
-                      onToggle={(next) => updateMutation.mutate({ id: item.id, data: { subsidyStatus: next } })}
-                      onViewIncomplete={() => setSubsidyDocsItem(sub)}
-                    />
-                    {sub.subsidyType === "company_assisted" && (
+                    {sub.subsidyRequired && (
                       <>
                         <Button
                           size="sm"
@@ -596,44 +454,25 @@ export default function Receivables() {
                           className="h-7 text-xs px-2"
                           onClick={() => setSubsidyDocsItem(sub)}
                         >
-                          查看補助資料
+                          補助資料
                           {(sub.uploadedDocCount ?? 0) > 0 ? `（${sub.uploadedDocCount}）` : ""}
                         </Button>
-                        {sub.uploadUrl && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-7 text-xs px-2"
-                            onClick={() => {
-                              const url = absoluteUploadUrl(sub.uploadUrl);
-                              if (!url) return;
-                              void navigator.clipboard.writeText(url).then(
-                                () => toast({ title: "已複製上傳網址" }),
-                                () => toast({ title: "複製失敗", variant: "destructive" }),
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs px-2 text-emerald-700 border-emerald-300 hover:bg-emerald-50"
+                          onClick={() => {
+                            const text = subsidyShareText(sub);
+                            const win = openLineShareText(text);
+                            if (!win) {
+                              void navigator.clipboard.writeText(text).then(() =>
+                                toast({ title: "已複製分享內容", description: "請貼到 LINE" }),
                               );
-                            }}
-                          >
-                            <Copy className="h-3 w-3 mr-1" />複製上傳網址
-                          </Button>
-                        )}
-                        {sub.uploadUrl && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="h-7 text-xs px-2"
-                            onClick={() => {
-                              const text = subsidyShareText(sub);
-                              const win = openLineShareText(text);
-                              if (!win) {
-                                void navigator.clipboard.writeText(text).then(() =>
-                                  toast({ title: "已複製分享內容", description: "請貼到 LINE" }),
-                                );
-                              }
-                            }}
-                          >
-                            LINE 傳送上傳網址
-                          </Button>
-                        )}
+                            }
+                          }}
+                        >
+                          <Bell className="h-3 w-3 mr-1" />LINE 提醒
+                        </Button>
                       </>
                     )}
                     {canWrite && (
@@ -683,7 +522,14 @@ export default function Receivables() {
             <div className="grid grid-cols-2 gap-2">
               <div className="space-y-1">
                 <Label>工程類別</Label>
-                <Input value={form.projectType} onChange={e => setForm(f => ({ ...f, projectType: e.target.value }))} placeholder="例：新裝" />
+                <Input
+                  value={form.projectType}
+                  onChange={e => setForm(f => ({ ...f, projectType: e.target.value }))}
+                  placeholder="例：新裝"
+                  readOnly={!!editItem?.workOrderId}
+                  className={editItem?.workOrderId ? "bg-muted" : undefined}
+                  title={editItem?.workOrderId ? "工程類別以派工單為準" : undefined}
+                />
               </div>
               <div className="space-y-1">
                 <Label>完工日期</Label>
@@ -901,6 +747,12 @@ export default function Receivables() {
               <Badge className={`border-0 ${subsidyDocsItem.subsidyDisplayColor ?? "bg-gray-100 text-gray-600"}`}>
                 {subsidyDocsItem.subsidyDisplayLabel ?? "—"}
               </Badge>
+              {absoluteUploadUrl(subsidyDocsItem.uploadUrl) && (
+                <p className="text-xs break-all">
+                  <span className="text-muted-foreground">客戶上傳網址：</span>
+                  {absoluteUploadUrl(subsidyDocsItem.uploadUrl)}
+                </p>
+              )}
               {(subsidyDocsItem.missingDocLabels?.length ?? 0) > 0 && (
                 <p className="text-xs text-orange-800">缺少：{subsidyDocsItem.missingDocLabels!.join("、")}</p>
               )}

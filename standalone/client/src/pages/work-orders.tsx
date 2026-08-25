@@ -438,9 +438,11 @@ function WorkOrderSubsidyPanel({ order }: { order: any }) {
     (detail.receivableId != null ||
       !!detail.invoiceKind ||
       !!detail.subsidyCompleted ||
+      !!detail.subsidyRequired ||
       docs.length > 0);
   if (!canViewAdmin || !hasAdminInfo) return null;
 
+  const showSubsidy = !!detail?.subsidyRequired && order.projectType !== "保養";
   const subsidyDone = !!detail!.subsidyCompleted;
   const requiredDocs = detail!.requiredDocs ?? [];
   const buyerFields = detail!.buyerFields ?? [];
@@ -452,7 +454,7 @@ function WorkOrderSubsidyPanel({ order }: { order: any }) {
   return (
     <div className="rounded-lg border bg-muted/20 p-3 space-y-3 text-sm">
       <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-        行政／補助資訊
+        {showSubsidy ? "行政／補助資訊" : "行政資訊"}
       </p>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-xs">
@@ -463,7 +465,7 @@ function WorkOrderSubsidyPanel({ order }: { order: any }) {
             <span className="text-muted-foreground">地址：</span>{order.installAddress}
           </p>
         )}
-        {detail?.invoiceKindLabel && (
+        {detail?.invoiceKindLabel && showSubsidy && (
           <p><span className="text-muted-foreground">發票類型：</span>{detail.invoiceKindLabel}</p>
         )}
         {detail?.invoiceKind !== "triple" && detail?.invoiceTitle && (
@@ -480,6 +482,8 @@ function WorkOrderSubsidyPanel({ order }: { order: any }) {
         </div>
       )}
 
+      {showSubsidy && (
+        <>
       <div className="text-xs space-y-1">
         <p>
           <span className="text-muted-foreground">補助狀態：</span>
@@ -676,6 +680,8 @@ function WorkOrderSubsidyPanel({ order }: { order: any }) {
         >
           取消補助完成
         </Button>
+      )}
+        </>
       )}
 
       {filesOpen && (

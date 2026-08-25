@@ -23,6 +23,7 @@ import {
 import { SubsidyFilesDialog } from "@/components/subsidy/SubsidyFilesDialog";
 import { SubsidyAcceptanceDialog } from "@/components/subsidy/SubsidyAcceptanceDialog";
 import { downloadSubsidyCaseZip } from "@/lib/subsidyFilesApi";
+import { isMaintenanceProjectType } from "../../../shared/subsidyEligibility.ts";
 
 function money(v?: string | null) {
   const n = parseFloat(String(v ?? "0"));
@@ -129,7 +130,10 @@ function ItemShell({
           )}
           {/* 主標題已是地址時：只再顯示單號，避免重複地址 */}
           {titleIsAddress && <p className="text-muted-foreground text-xs">{woNo}</p>}
-          <p className="text-xs mt-0.5">工程師／師傅：{item.engineerName ?? "—"}</p>
+          <p className="text-xs mt-0.5">
+            工程師／師傅：{item.engineerName ?? "—"}
+            {item.projectType ? ` · ${item.projectType}` : ""}
+          </p>
         </div>
         {showViewCase && (
           <Button asChild size="sm" variant="outline" className="h-9">
@@ -379,6 +383,8 @@ export default function AdminWorkbench() {
 
   function renderOpenCard(item: AdminWorkbenchItem) {
     const phone = item.mobilePhone || item.telephone;
+    const isMaintenance = isMaintenanceProjectType(item.projectType);
+    const showSubsidy = !!item.subsidyRequired;
     const subsidyDone = item.subsidyPipelineStatus === "applied";
     const uploadUrl = absoluteUploadUrl(item);
     const hasUploadLink = !!uploadUrl;
@@ -418,23 +424,27 @@ export default function AdminWorkbench() {
           </p>
         )}
 
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          <span className="text-muted-foreground">補助狀態：</span>
-          <SubsidyBadge item={item} />
-        </div>
-        {!subsidyDone && missing.length > 0 && (
-          <p className="text-xs text-orange-800">
-            尚缺：{missing.join("、")}（可按「查看案件」逐項檢視客戶補助資料）
-          </p>
-        )}
-        {!subsidyDone && item.invoiceKind && uploadedCount > 0 && missing.length === 0 && (
-          <p className="text-xs text-green-700">補助資料已齊，確認送件後請標記補助完成</p>
-        )}
-        {isPaid && !subsidyDone && (
-          <p className="text-xs text-amber-800 font-medium">等待補助完成</p>
+        {showSubsidy && (
+          <>
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <span className="text-muted-foreground">補助狀態：</span>
+              <SubsidyBadge item={item} />
+            </div>
+            {!subsidyDone && missing.length > 0 && (
+              <p className="text-xs text-orange-800">
+                尚缺：{missing.join("、")}（可按「查看案件」逐項檢視客戶補助資料）
+              </p>
+            )}
+            {!subsidyDone && item.invoiceKind && uploadedCount > 0 && missing.length === 0 && (
+              <p className="text-xs text-green-700">補助資料已齊，確認送件後請標記補助完成</p>
+            )}
+            {isPaid && !subsidyDone && (
+              <p className="text-xs text-amber-800 font-medium">等待補助完成</p>
+            )}
+          </>
         )}
 
-        {/* 發票類型 */}
+        {!isMaintenance && (
         <div className="space-y-1">
           <p className="text-xs font-medium">發票類型</p>
           <div className="flex flex-wrap gap-2">
@@ -467,8 +477,10 @@ export default function AdminWorkbench() {
             </p>
           )}
         </div>
+        )}
 
-        {/* 補助附件：查看與整包下載 */}
+        {showSubsidy && (
+        <>
         <div className="flex flex-wrap gap-2">
           <Button
             size="sm"
@@ -504,7 +516,6 @@ export default function AdminWorkbench() {
           )}
         </div>
 
-        {/* 補助操作 — 選好發票類型後才出現 */}
         {canOperate && !subsidyDone && (
           <div className="flex flex-wrap gap-2">
             <Button
@@ -548,6 +559,8 @@ export default function AdminWorkbench() {
             </Button>
           </div>
         )}
+        </>
+        )}
 
         {/* 收款操作 */}
         <div className="flex flex-wrap gap-2">
@@ -589,17 +602,22 @@ export default function AdminWorkbench() {
   }
 
   function renderClosedCard(item: AdminWorkbenchItem) {
+    const showSubsidy = !!item.subsidyRequired;
     return (
       <ItemShell key={`closed-${item.workOrderId}`} item={item} showViewCase={false}>
         <AmountSummary item={item} />
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          <span className="text-muted-foreground">補助狀態：</span>
-          <SubsidyBadge item={item} />
-        </div>
+        {showSubsidy && (
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="text-muted-foreground">補助狀態：</span>
+            <SubsidyBadge item={item} />
+          </div>
+        )}
         <div className="flex flex-wrap gap-2">
           <Button asChild size="sm" variant="outline" className="h-10 sm:h-9">
             <Link href={caseHref(item.workOrderId)}>查看案件</Link>
           </Button>
+          {showSubsidy && (
+            <>
           <Button
             size="sm"
             variant="outline"
@@ -632,6 +650,8 @@ export default function AdminWorkbench() {
               </>
             )}
           </Button>
+            </>
+          )}
           {canOperate && (
             <Button
               size="sm"

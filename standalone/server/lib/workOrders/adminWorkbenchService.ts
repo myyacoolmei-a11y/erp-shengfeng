@@ -49,6 +49,10 @@ import {
   type SubsidyDisplayStatus,
 } from "../../../shared/subsidyDocs.ts";
 import {
+  isMaintenanceProjectType,
+  isSubsidyRequired,
+} from "../../../shared/subsidyEligibility.ts";
+import {
   mergeMetaAfterCheck,
   runSubsidyCompletenessCheck,
 } from "../subsidy/subsidyCheckService.ts";
@@ -139,6 +143,12 @@ async function ensureReceivable(
     .limit(1);
 
   if (existingRecv) {
+    if ((existingRecv.projectType ?? "") !== (wo.projectType ?? "")) {
+      await db
+        .update(receivablesTable)
+        .set({ projectType: wo.projectType, updatedAt: new Date() })
+        .where(eq(receivablesTable.id, existingRecv.id));
+    }
     return { receivableId: existingRecv.id, created: false };
   }
 
@@ -194,15 +204,8 @@ async function ensureReceivable(
 /**
  * Idempotent subsidy-center ensure after construction complete.
  *
- * ALWAYS creates a row when missing — NEVER gated by needsSubsidy /
- * company_assisted / adminNeedsSubsidy / pipeline / subsidyType.
- *
- * Handling method defaults to subsidy_type = pending_confirmation.
- * (pipeline_status stays at link_not_sent placeholder until admin chooses
- * company_assisted; it is NOT used as the "待確認" flag.)
- *
- * If row already exists: reuse as-is — never reset type / pipeline / token /
- * attachments / assisted_program.
+ * 保養案件直接標為不需申請。其他類別若尚無紀錄，預設 pending_confirmation
+ *（新裝不自動等於一定要補助，需行政實際設定 company_assisted）。
  */
 export async function ensureSubsidyApplication(
   workOrderId: number,
@@ -212,6 +215,14 @@ export async function ensureSubsidyApplication(
   subsidy: typeof subsidyApplicationsTable.$inferSelect;
   created: boolean;
 }> {
+  const [wo] = await db
+    .select({ projectType: workOrdersTable.projectType })
+    .from(workOrdersTable)
+    .where(eq(workOrdersTable.id, workOrderId))
+    .limit(1);
+  const maintenance = isMaintenanceProjectType(wo?.projectType);
+  const defaultType: SubsidyType = maintenance ? "not_needed" : "pending_confirmation";
+
   const [existing] = await db
     .select()
     .from(subsidyApplicationsTable)
@@ -219,6 +230,22 @@ export async function ensureSubsidyApplication(
     .limit(1);
 
   if (existing) {
+    if (maintenance && existing.subsidyType !== "not_needed") {
+      const [updated] = await db
+        .update(subsidyApplicationsTable)
+        .set({
+          subsidyType: "not_needed",
+          assistedProgram: null,
+          updatedAt: new Date(),
+        })
+        .where(eq(subsidyApplicationsTable.id, existing.id))
+        .returning();
+      await db
+        .update(workOrdersTable)
+        .set({ adminNeedsSubsidy: false, updatedAt: new Date() })
+        .where(eq(workOrdersTable.id, workOrderId));
+      return { subsidy: updated ?? existing, created: false };
+    }
     if (customerId != null && existing.customerId == null) {
       const [updated] = await db
         .update(subsidyApplicationsTable)
@@ -236,23 +263,32 @@ export async function ensureSubsidyApplication(
       .values({
         workOrderId,
         customerId,
-        subsidyType: "pending_confirmation",
+        subsidyType: defaultType,
         assistedProgram: null,
-        // Placeholder until company_assisted is chosen; display uses subsidy_type.
         pipelineStatus: "link_not_sent",
         uploadLinkToken: null,
       })
       .returning();
 
+    if (maintenance) {
+      await db
+        .update(workOrdersTable)
+        .set({ adminNeedsSubsidy: false, updatedAt: new Date() })
+        .where(eq(workOrdersTable.id, workOrderId));
+    }
+
     if (user) {
       await writeAuditLog({
-        action: "admin_workflow.auto_subsidy_pending_confirmation",
+        action: maintenance
+          ? "admin_workflow.subsidy_not_applicable_maintenance"
+          : "admin_workflow.auto_subsidy_pending_confirmation",
         entityType: "work_order",
         entityId: workOrderId,
         user,
         metadata: {
           subsidyApplicationId: created.id,
-          subsidyType: "pending_confirmation",
+          subsidyType: defaultType,
+          projectType: wo?.projectType ?? null,
         },
       });
     }
@@ -351,26 +387,79 @@ export async function handoffToAdminWorkbench(
 }
 
 /**
- * 補助是否擋住結案 — 只看 pipeline_status。
- * 每個案件預設都走補助流程；僅舊案件明確標為不需申請／客戶自行申請時視為無補助。
+ * 派工工程類型變更後：同步應收 snapshot，並依目前類別重判補助 workflow。
+ * 以 work_orders.project_type 為單一資料來源。
+ */
+export async function syncWorkOrderCategoryWorkflow(
+  workOrderId: number,
+  user: JwtPayload,
+  previousProjectType?: string | null,
+): Promise<void> {
+  const [wo] = await db.select().from(workOrdersTable).where(eq(workOrdersTable.id, workOrderId)).limit(1);
+  if (!wo) return;
+
+  await db
+    .update(receivablesTable)
+    .set({ projectType: wo.projectType, updatedAt: new Date() })
+    .where(eq(receivablesTable.workOrderId, workOrderId));
+
+  if (isMaintenanceProjectType(wo.projectType)) {
+    await ensureSubsidyApplication(workOrderId, wo.customerId, user);
+    await db
+      .update(workOrdersTable)
+      .set({ adminNeedsSubsidy: false, updatedAt: new Date() })
+      .where(eq(workOrdersTable.id, workOrderId));
+    await writeAuditLog({
+      action: "admin_workflow.category_sync_maintenance",
+      entityType: "work_order",
+      entityId: workOrderId,
+      user,
+      reason: "派工類別改為保養，補助不適用",
+      metadata: {
+        previousProjectType: previousProjectType ?? null,
+        projectType: wo.projectType,
+      },
+    });
+    await tryAutoCloseIfReady(workOrderId, user, "派工類別改為保養，條件齊全自動結案");
+    return;
+  }
+
+  if (isMaintenanceProjectType(previousProjectType)) {
+    const [sub] = await db
+      .select()
+      .from(subsidyApplicationsTable)
+      .where(eq(subsidyApplicationsTable.workOrderId, workOrderId))
+      .limit(1);
+    if (sub?.pipelineStatus === "applied") return;
+    if (!sub || sub.subsidyType === "not_needed") {
+      await setSubsidyType(
+        workOrderId,
+        user,
+        "pending_confirmation",
+        "派工類別改為非保養，重新判斷是否需要補助",
+      );
+    }
+  }
+
+  await tryAutoCloseIfReady(workOrderId, user, "派工類別變更後條件齊全，自動結案");
+}
+
+/**
+ * 補助是否擋住結案。
+ * 保養不適用補助；新裝只有實際設定為公司協助申請時才卡住。
  */
 function subsidyBlocksClose(
+  projectType: string | null | undefined,
   subsidyType: SubsidyType | null,
   pipeline: SubsidyPipelineStatus | null,
 ): boolean {
+  if (!isSubsidyRequired({ projectType, subsidyType })) return false;
   if (pipeline === "applied") return false;
-  if (!subsidyType) return false;
-  if (
-    subsidyType === "not_needed" ||
-    subsidyType === "customer_self_apply" ||
-    subsidyType === "none"
-  ) {
-    return false;
-  }
   return true;
 }
 
 function canCloseCase(input: {
+  projectType?: string | null;
   engineeringConfirmed: boolean;
   hasReceivable: boolean;
   isPaid: boolean;
@@ -381,13 +470,14 @@ function canCloseCase(input: {
   if (!input.engineeringConfirmed) blockers.push("工程資料尚未確認");
   if (!input.hasReceivable) blockers.push("尚未建立應收帳款");
   if (!input.isPaid) blockers.push("尚未收款完成");
-  if (subsidyBlocksClose(input.subsidyType, input.subsidyPipeline)) {
+  if (subsidyBlocksClose(input.projectType, input.subsidyType, input.subsidyPipeline)) {
     blockers.push("等待補助完成");
   }
   return { canClose: blockers.length === 0, blockers };
 }
 
 function buildCardStatuses(opts: {
+  projectType?: string | null;
   engineeringConfirmed: boolean;
   recv: typeof receivablesTable.$inferSelect | null;
   subsidyType: SubsidyType | null;
@@ -413,6 +503,7 @@ function buildCardStatuses(opts: {
   }
 
   const closeCheck = canCloseCase({
+    projectType: opts.projectType,
     engineeringConfirmed: opts.engineeringConfirmed,
     hasReceivable: !!opts.recv,
     isPaid: recvStatus === "paid",
@@ -425,6 +516,11 @@ function buildCardStatuses(opts: {
     engineeringStatusLabel: engineeringStatusLabel(eng),
     receivableStatus: recvStatus,
     receivableStatusLabel: receivableStatusLabel(recvStatus),
+    projectType: opts.projectType ?? null,
+    subsidyRequired: isSubsidyRequired({
+      projectType: opts.projectType,
+      subsidyType: opts.subsidyType,
+    }),
     subsidyType: opts.subsidyType,
     subsidyPipelineStatus: opts.subsidyPipeline,
     canClose: closeCheck.canClose,
@@ -606,6 +702,7 @@ export async function getAdminWorkbench(user?: JwtPayload) {
     const engConfirmed = !!r.wo.adminConfirmedAt;
 
     const card = buildCardStatuses({
+      projectType: r.wo.projectType,
       engineeringConfirmed: engConfirmed,
       recv,
       subsidyType,
@@ -660,7 +757,9 @@ export async function getAdminWorkbench(user?: JwtPayload) {
         .filter((t) => t > 0)
         .sort((a, b) => b - a)[0] ?? null;
     const uploadUrl =
-      sub?.uploadLinkToken != null && sub.uploadLinkToken !== ""
+      isSubsidyRequired({ projectType: r.wo.projectType, subsidyType }) &&
+      sub?.uploadLinkToken != null &&
+      sub.uploadLinkToken !== ""
         ? subsidyPublicUploadPath(sub.uploadLinkToken)
         : null;
 
@@ -716,11 +815,12 @@ export async function getAdminWorkbench(user?: JwtPayload) {
       subsidyCompleted: subsidyPipeline === "applied",
       missingBuyerLabels,
       canMarkApplied:
+        isSubsidyRequired({ projectType: r.wo.projectType, subsidyType }) &&
         subsidyPipeline !== "applied" &&
         ((displayStatus === "docs_complete" && missingBuyerLabels.length === 0) ||
           !!subsidyMeta.manualConfirmedAt),
       manualConfirmedAt: subsidyMeta.manualConfirmedAt ?? null,
-      canCloseReady: !subsidyBlocksClose(subsidyType, subsidyPipeline),
+      canCloseReady: !subsidyBlocksClose(r.wo.projectType, subsidyType, subsidyPipeline),
       customerDocuments: subsidyDocs.slice(0, 40).map((d) => ({
         id: d.id,
         docType: d.docType,
@@ -931,7 +1031,11 @@ export async function getCaseDetail(workOrderId: number) {
   ];
   const manualConfirmedAt = subsidyMeta.manualConfirmedAt ?? null;
   const docsComplete = !!invoiceKind && missingLabels.length === 0;
-  const subsidyCompleted = subsidyPipeline === "applied";
+  const subsidyRequired = isSubsidyRequired({
+    projectType: wo.projectType,
+    subsidyType,
+  });
+  const subsidyCompleted = subsidyRequired && subsidyPipeline === "applied";
   // 三聯式缺公司資料時不可顯示為「已齊」
   const effectiveDisplayStatus =
     displayStatus === "docs_complete" && missingLabels.length > 0
@@ -941,6 +1045,8 @@ export async function getCaseDetail(workOrderId: number) {
   return {
     workOrderId: wo.id,
     workOrderNumber: wo.workOrderNumber,
+    projectType: wo.projectType,
+    subsidyRequired,
     customerName: wo.customerName,
     mobilePhone: wo.mobilePhone,
     telephone: wo.telephone,
@@ -952,48 +1058,55 @@ export async function getCaseDetail(workOrderId: number) {
     receivedAmount: moneyStr(received),
     unpaidAmount: moneyStr(Math.max(0, total - received)),
     paymentStatus: recv?.paymentStatus ?? null,
-    invoiceKind,
-    invoiceKindLabel: invoiceKind ? SUBSIDY_INVOICE_KIND_LABELS[invoiceKind] : null,
-    subsidyPipelineStatus: subsidyPipeline,
-    subsidyStatusLabel: subsidyCombinedStatusLabel({
-      displayStatus: effectiveDisplayStatus,
-      pipeline: subsidyPipeline,
-    }),
+    invoiceKind: subsidyRequired ? invoiceKind : null,
+    invoiceKindLabel:
+      subsidyRequired && invoiceKind ? SUBSIDY_INVOICE_KIND_LABELS[invoiceKind] : null,
+    subsidyPipelineStatus: subsidyRequired ? subsidyPipeline : null,
+    subsidyStatusLabel: subsidyRequired
+      ? subsidyCombinedStatusLabel({
+          displayStatus: effectiveDisplayStatus,
+          pipeline: subsidyPipeline,
+        })
+      : null,
     subsidyCompleted,
-    appliedAt: sub?.appliedAt?.toISOString() ?? null,
+    appliedAt: subsidyRequired ? sub?.appliedAt?.toISOString() ?? null : null,
     uploadUrl:
-      sub?.uploadLinkToken != null && sub.uploadLinkToken !== ""
+      subsidyRequired &&
+      sub?.uploadLinkToken != null &&
+      sub.uploadLinkToken !== ""
         ? subsidyPublicUploadPath(sub.uploadLinkToken)
         : null,
-    missingDocLabels: missingDocs.map(
-      (t) => SUBSIDY_DOC_TYPE_LABELS[t as SubsidyDocType] ?? t,
-    ),
-    requiredDocs,
-    buyerFields,
-    missingLabels,
-    docsComplete,
+    missingDocLabels: subsidyRequired
+      ? missingDocs.map((t) => SUBSIDY_DOC_TYPE_LABELS[t as SubsidyDocType] ?? t)
+      : [],
+    requiredDocs: subsidyRequired ? requiredDocs : [],
+    buyerFields: subsidyRequired ? buyerFields : [],
+    missingLabels: subsidyRequired ? missingLabels : [],
+    docsComplete: subsidyRequired && docsComplete,
     manualConfirmedAt,
-    canMarkApplied: !subsidyCompleted && (docsComplete || !!manualConfirmedAt),
-    uploadedDocCount: subsidyDocs.length,
+    canMarkApplied: subsidyRequired && !subsidyCompleted && (docsComplete || !!manualConfirmedAt),
+    uploadedDocCount: subsidyRequired ? subsidyDocs.length : 0,
     lastUploadAt:
       subsidyDocs
         .map((d) => d.uploadedAt ?? d.createdAt)
         .filter((d): d is Date => !!d)
         .sort((a, b) => b.getTime() - a.getTime())[0]
         ?.toISOString() ?? null,
-    aiTips: subsidyMeta.aiTips ?? [],
-    customerDocuments: subsidyDocs.slice(0, 40).map((d) => ({
-      id: d.id,
-      docType: d.docType,
-      docTypeLabel:
-        d.docType && d.docType in SUBSIDY_DOC_TYPE_LABELS
-          ? SUBSIDY_DOC_TYPE_LABELS[d.docType as SubsidyDocType]
-          : d.docType,
-      fileName: d.fileName,
-      fileUrl: d.fileUrl,
-      status: d.status,
-      uploadedAt: d.uploadedAt?.toISOString() ?? null,
-    })),
+    aiTips: subsidyRequired ? subsidyMeta.aiTips ?? [] : [],
+    customerDocuments: subsidyRequired
+      ? subsidyDocs.slice(0, 40).map((d) => ({
+          id: d.id,
+          docType: d.docType,
+          docTypeLabel:
+            d.docType && d.docType in SUBSIDY_DOC_TYPE_LABELS
+              ? SUBSIDY_DOC_TYPE_LABELS[d.docType as SubsidyDocType]
+              : d.docType,
+          fileName: d.fileName,
+          fileUrl: d.fileUrl,
+          status: d.status,
+          uploadedAt: d.uploadedAt?.toISOString() ?? null,
+        }))
+      : [],
   };
 }
 
@@ -1148,6 +1261,7 @@ export async function markBilled(
     const [updated] = await db
       .update(receivablesTable)
       .set({
+        projectType: wo.projectType,
         totalAmount: moneyStr(finalAmount),
         expectedPaymentDate:
           input.expectedPaymentDate !== undefined
@@ -1266,6 +1380,10 @@ export async function setSubsidyType(
   const [wo] = await db.select().from(workOrdersTable).where(eq(workOrdersTable.id, workOrderId)).limit(1);
   if (!wo) throw new Error("找不到派工單");
 
+  if (isMaintenanceProjectType(wo.projectType) && subsidyType !== "not_needed") {
+    throw new Error("保養案件不適用補助流程");
+  }
+
   if (subsidyType === "none") {
     throw new Error("請選擇：不需要申請／客戶自行申請／公司協助（新機或舊換新）");
   }
@@ -1347,11 +1465,17 @@ export async function setSubsidyInvoiceKind(
   if (!kind) throw new Error("請選擇二聯式或三聯式");
 
   const [wo] = await db
-    .select({ customerId: workOrdersTable.customerId })
+    .select({
+      customerId: workOrdersTable.customerId,
+      projectType: workOrdersTable.projectType,
+    })
     .from(workOrdersTable)
     .where(eq(workOrdersTable.id, workOrderId))
     .limit(1);
   if (!wo) throw new Error("找不到派工單");
+  if (isMaintenanceProjectType(wo.projectType)) {
+    throw new Error("保養案件不適用補助流程");
+  }
 
   const { subsidy: sub } = await ensureSubsidyApplication(
     workOrderId,
@@ -1882,6 +2006,7 @@ export async function tryAutoCloseIfReady(
     (recv.paymentStatus === "已收款" || (total > 0 && received >= total - 0.001));
 
   const check = canCloseCase({
+    projectType: wo.projectType,
     engineeringConfirmed: !!wo.adminConfirmedAt,
     hasReceivable: !!recv,
     isPaid,
@@ -2122,6 +2247,7 @@ export async function completeClose(
     (recv.paymentStatus === "已收款" || (total > 0 && received >= total - 0.001));
 
   const check = canCloseCase({
+    projectType: wo.projectType,
     engineeringConfirmed: !!wo.adminConfirmedAt,
     hasReceivable: !!recv,
     isPaid,
