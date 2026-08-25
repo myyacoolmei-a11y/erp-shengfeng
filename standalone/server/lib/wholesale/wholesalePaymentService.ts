@@ -1,6 +1,7 @@
 import { and, asc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import {
   db,
+  usersTable,
   wholesaleOrdersTable,
   wholesalePaymentRecordsTable,
   wholesaleReceivablesTable,
@@ -55,19 +56,35 @@ export async function sumPaymentsForOrderIds(orderIds: number[]): Promise<Map<nu
   return map;
 }
 
+const paymentSelect = {
+  id: wholesalePaymentRecordsTable.id,
+  wholesaleCustomerId: wholesalePaymentRecordsTable.wholesaleCustomerId,
+  wholesaleOrderId: wholesalePaymentRecordsTable.wholesaleOrderId,
+  amount: wholesalePaymentRecordsTable.amount,
+  paymentDate: wholesalePaymentRecordsTable.paymentDate,
+  paymentMethod: wholesalePaymentRecordsTable.paymentMethod,
+  note: wholesalePaymentRecordsTable.note,
+  createdBy: wholesalePaymentRecordsTable.createdBy,
+  createdByName: usersTable.displayName,
+  createdAt: wholesalePaymentRecordsTable.createdAt,
+  updatedAt: wholesalePaymentRecordsTable.updatedAt,
+};
+
 export async function listPaymentsForOrderIds(orderIds: number[]) {
   if (orderIds.length === 0) return [];
   return db
-    .select()
+    .select(paymentSelect)
     .from(wholesalePaymentRecordsTable)
+    .leftJoin(usersTable, eq(wholesalePaymentRecordsTable.createdBy, usersTable.id))
     .where(inArray(wholesalePaymentRecordsTable.wholesaleOrderId, orderIds))
     .orderBy(asc(wholesalePaymentRecordsTable.paymentDate), asc(wholesalePaymentRecordsTable.id));
 }
 
 export async function listPaymentsForCustomer(customerId: number) {
   return db
-    .select()
+    .select(paymentSelect)
     .from(wholesalePaymentRecordsTable)
+    .leftJoin(usersTable, eq(wholesalePaymentRecordsTable.createdBy, usersTable.id))
     .where(eq(wholesalePaymentRecordsTable.wholesaleCustomerId, customerId))
     .orderBy(asc(wholesalePaymentRecordsTable.paymentDate), asc(wholesalePaymentRecordsTable.id));
 }

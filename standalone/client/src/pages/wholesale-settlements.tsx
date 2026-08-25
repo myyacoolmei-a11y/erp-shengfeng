@@ -608,7 +608,7 @@ export default function WholesaleSettlements() {
                         <div className="flex flex-wrap gap-3 mt-1 text-sm">
                           <span>出貨金額 {fmtMoney(total)}</span>
                           <span>已收金額 {fmtMoney(received)}</span>
-                          <span>未收金額 <span className="text-red-600">{fmtMoney(outstanding)}</span></span>
+                          <span>待收金額 <span className="text-red-600">{fmtMoney(outstanding)}</span></span>
                         </div>
                       </div>
                       <Button
@@ -669,7 +669,8 @@ export default function WholesaleSettlements() {
                           <th className="py-2 pr-3 text-right">收款金額</th>
                           <th className="py-2 pr-3">方式</th>
                           <th className="py-2 pr-3">備註</th>
-                          <th className="py-2 text-right">操作</th>
+                          <th className="py-2 pr-3">建立人</th>
+                          <th className="py-2 text-right">刪除</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -679,6 +680,7 @@ export default function WholesaleSettlements() {
                             <td className="py-2 pr-3 text-right">{fmtMoney(payment.amount)}</td>
                             <td className="py-2 pr-3">{payment.paymentMethod ?? "—"}</td>
                             <td className="py-2 pr-3">{payment.note ?? "—"}</td>
+                            <td className="py-2 pr-3">{payment.createdByName ?? "—"}</td>
                             <td className="py-2 text-right">
                               <Button
                                 variant="ghost"
@@ -725,14 +727,17 @@ export default function WholesaleSettlements() {
           </DialogHeader>
           <div className="space-y-3">
             <div>
-              <Label>本期應收金額</Label>
+              <Label>本期應收</Label>
               <Input value={fmtMoney(payTarget?.totalAmount)} readOnly className="bg-muted" />
             </div>
             <div>
-              <Label>已收金額</Label>
+              <Label>目前已收</Label>
               <Input value={fmtMoney(payTarget?.receivedAmount)} readOnly className="bg-muted" />
             </div>
-            <p className="text-xs text-muted-foreground">未收 {fmtMoney(payOutstanding)}</p>
+            <div>
+              <Label>目前待收</Label>
+              <Input value={fmtMoney(payOutstanding)} readOnly className="bg-muted" />
+            </div>
             <div>
               <Label>本次收款金額</Label>
               <Input

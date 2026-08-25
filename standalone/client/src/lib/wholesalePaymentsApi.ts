@@ -31,6 +31,7 @@ export type WholesalePaymentRecordDto = {
   paymentMethod: string | null;
   note: string | null;
   createdBy: number | null;
+  createdByName?: string | null;
   createdAt: string;
   updatedAt: string;
 };

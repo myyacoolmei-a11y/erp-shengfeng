@@ -62,9 +62,10 @@ function serializePayment(row: {
   paymentMethod: string | null;
   note: string | null;
   createdBy: number | null;
+  createdByName?: string | null;
   createdAt: Date;
   updatedAt: Date;
-}) {
+}, createdByNameFallback?: string | null) {
   return {
     id: row.id,
     wholesaleCustomerId: row.wholesaleCustomerId,
@@ -74,6 +75,7 @@ function serializePayment(row: {
     paymentMethod: row.paymentMethod,
     note: row.note,
     createdBy: row.createdBy,
+    createdByName: row.createdByName ?? createdByNameFallback ?? null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -90,7 +92,8 @@ router.post("/wholesale/settlements/payments", async (req, res): Promise<void> =
       note: parsed.data.note ?? undefined,
       user: req.user,
     });
-    res.status(201).json(rows.map(serializePayment));
+    const createdByName = req.user.displayName || req.user.username;
+    res.status(201).json(rows.map((row) => serializePayment(row, createdByName)));
   } catch (err) {
     if (handlePaymentError(res, err)) return;
     throw err;
