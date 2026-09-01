@@ -4,10 +4,11 @@ import { db, quotesTable, customersTable, employeesTable, quoteItemsTable } from
 import { CreateQuoteBody, UpdateQuoteBody } from "@workspace/api-zod";
 import { requireFeature } from "../lib/auth";
 import { syncQuoteDispatchBatch, syncQuoteDispatchStatus } from "../lib/quoteWorkflow";
-import { normalizeQuoteStatus } from "../lib/quoteStatus";
+import { QUOTE_STATUS_PENDING } from "../lib/quoteStatus";
 import { resolveQuoteItemsForSave } from "../lib/productCatalog";
 import { normalizeQuoteItemCategoryBrand } from "../../shared/quoteItemDisplay";
 import { signQuoteShareToken } from "../lib/quoteShareToken";
+import { winQuoteAndCreateWorkOrder, markQuoteLost } from "../lib/quoteWinDispatch";
 import {
   QUOTE_DOCUMENT_SELECT,
   serializeQuoteItem,
@@ -105,11 +106,12 @@ router.post("/quotes", async (req, res): Promise<void> => {
 
   const data: any = {
     ...quoteFields,
-    status: normalizeQuoteStatus(quoteFields.status),
     amount: String(amount),
     discountAmount: discountAmount >= 0 ? String(discountAmount) : "0",
     finalAmount: String(finalAmount),
     dispatchStatus: "未派工",
+    lostReason: null,
+    status: QUOTE_STATUS_PENDING,
   };
 
   const [quote] = await db.insert(quotesTable).values(data).returning();
@@ -149,7 +151,7 @@ router.patch("/quotes/:id", async (req, res): Promise<void> => {
   const parsed = UpdateQuoteBody.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
 
-  const { items: itemInputs, dispatchStatus: _ignoredDispatch, ...quoteFields } = parsed.data as any;
+  const { items: itemInputs, dispatchStatus: _ignoredDispatch, status: _ignoredStatus, ...quoteFields } = parsed.data as any;
 
   const data: Record<string, unknown> = { ...quoteFields };
   if (quoteFields.amount != null) data["amount"] = String(quoteFields.amount);
@@ -158,7 +160,6 @@ router.patch("/quotes/:id", async (req, res): Promise<void> => {
     data["discountAmount"] = String(d);
   }
   if (quoteFields.finalAmount != null) data["finalAmount"] = String(quoteFields.finalAmount);
-  if (quoteFields.status != null) data["status"] = normalizeQuoteStatus(quoteFields.status);
 
   if (itemInputs !== undefined) {
     const itemArr: any[] = Array.isArray(itemInputs) ? itemInputs : [];
@@ -248,6 +249,58 @@ router.post("/quotes/:id/share-link", async (req, res): Promise<void> => {
       message: err?.message || "建立分享連結失敗",
     });
   }
+});
+
+/**
+ * One-shot: mark quote won AND create the linked work order.
+ * POST /api/quotes/:id/win-and-dispatch
+ */
+router.post("/quotes/:id/win-and-dispatch", async (req, res): Promise<void> => {
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const id = parseInt(raw, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+
+  const result = await winQuoteAndCreateWorkOrder(id);
+  if (!result.ok) {
+    res.status(result.status).json({
+      error: result.error,
+      workOrderId: result.workOrderId ?? null,
+      workOrderNumber: result.workOrderNumber ?? null,
+    });
+    return;
+  }
+
+  res.status(result.created ? 201 : 200).json(result);
+});
+
+/**
+ * Mark quote as 未成交 (lost deal) without creating a work order.
+ * POST /api/quotes/:id/mark-lost
+ */
+router.post("/quotes/:id/mark-lost", async (req, res): Promise<void> => {
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const id = parseInt(raw, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+
+  const body = (req.body ?? {}) as { reason?: string; detail?: string };
+  const result = await markQuoteLost(id, body.reason, body.detail);
+  if (!result.ok) {
+    res.status(result.status).json({
+      error: result.error,
+      workOrderId: result.workOrderId ?? null,
+      workOrderNumber: result.workOrderNumber ?? null,
+    });
+    return;
+  }
+
+  const quote = await loadQuoteDocument(id);
+  res.json({ ok: true, quote });
 });
 
 export default router;

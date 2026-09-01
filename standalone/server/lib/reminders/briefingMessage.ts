@@ -88,7 +88,7 @@ export function buildPersonalizedMorningBriefingMessage(
   }
 
   if (includeQuotes) {
-    lines.push("③ 報價追蹤（已送出・未成交・未取消・未派工）");
+    lines.push("③ 報價追蹤（客戶確認中・尚未派工）");
     if (data.quoteFollowUps.length === 0) {
       lines.push("（本項無待處理案件）");
     } else {
@@ -168,7 +168,7 @@ export function buildMorningBriefingMessage(data: {
   }
 
   lines.push("", "────────────", "");
-  lines.push("③ 報價追蹤（已送出・未成交・未取消・未派工）");
+  lines.push("③ 報價追蹤（客戶確認中・尚未派工）");
 
   if (data.quoteFollowUps.length === 0) {
     lines.push("（本項無待處理案件）");

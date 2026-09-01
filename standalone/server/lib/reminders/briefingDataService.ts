@@ -1,4 +1,4 @@
-import { and, eq, ne, notInArray, sql } from "drizzle-orm";
+import { and, eq, ne, notInArray, inArray, sql } from "drizzle-orm";
 import {
   db,
   receivablesTable,
@@ -116,7 +116,12 @@ export async function fetchPendingDispatchQuotes(): Promise<PendingDispatchItem[
       createdAt: quotesTable.createdAt,
     })
     .from(quotesTable)
-    .where(and(ne(quotesTable.status, "草稿"), ne(quotesTable.status, "已拒絕"), ne(quotesTable.status, "已取消")));
+    .where(and(
+      ne(quotesTable.status, "未成交"),
+      ne(quotesTable.status, "已拒絕"),
+      ne(quotesTable.status, "已取消"),
+      ne(quotesTable.status, "草稿"),
+    ));
 
   const quoteIds = rows.map(r => r.id);
   const woMap = await loadLatestWorkOrdersByQuoteIds(quoteIds);
@@ -161,8 +166,8 @@ export async function fetchQuoteFollowUps(): Promise<QuoteFollowUpItem[]> {
     .from(quotesTable)
     .where(
       linkedQuoteIds.length > 0
-        ? and(eq(quotesTable.status, "已送出"), notInArray(quotesTable.id, linkedQuoteIds))
-        : eq(quotesTable.status, "已送出"),
+        ? and(inArray(quotesTable.status, ["客戶確認中", "已送出", "草稿"]), notInArray(quotesTable.id, linkedQuoteIds))
+        : inArray(quotesTable.status, ["客戶確認中", "已送出", "草稿"]),
     );
 
   return rows

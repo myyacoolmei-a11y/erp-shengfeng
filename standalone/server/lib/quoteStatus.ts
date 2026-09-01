@@ -1,17 +1,22 @@
 /** Quote lifecycle status helpers (ERP quotes, not wholesale). */
 
-export const QUOTE_STATUSES = ["草稿", "已送出", "已成交", "已拒絕"] as const;
+export {
+  QUOTE_STATUS_PENDING,
+  QUOTE_STATUS_WON,
+  QUOTE_STATUS_LOST,
+  QUOTE_STATUSES,
+  QUOTE_LIST_TABS,
+  QUOTE_LOST_REASONS,
+  normalizeQuoteStatus,
+  isQuoteWon,
+  isQuoteLost,
+  isQuotePending,
+  quoteStatusLabel,
+  quoteListTab,
+  formatLostReason,
+} from "../../shared/quoteStatus";
 
-export function normalizeQuoteStatus(status: string | null | undefined): string {
-  if (status === "已接受") return "已成交";
-  if (status === "已完成") return "已成交";
-  return status ?? "草稿";
-}
-
-export function isQuoteWon(status: string | null | undefined): boolean {
-  const s = status ?? "";
-  return s === "已成交" || s === "已接受";
-}
+export type { QuoteLifecycleStatus, QuoteListTab, QuoteLostReason } from "../../shared/quoteStatus";
 
 export function formatQuoteNumber(id: number, createdAt: unknown): string {
   const d = createdAt instanceof Date ? createdAt : createdAt ? new Date(String(createdAt)) : new Date();

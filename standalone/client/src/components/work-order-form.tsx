@@ -774,6 +774,9 @@ export function WorkOrderFormFields({
         <div className="space-y-1">
           <Label>施工日期</Label>
           <Input type="date" value={form.scheduledDate} onChange={e => setForm(f => ({ ...f, scheduledDate: e.target.value }))} />
+          {!form.scheduledDate && (
+            <p className="text-xs text-amber-700">目前：待安排</p>
+          )}
         </div>
         <div className="space-y-1">
           <Label>施工時間</Label>

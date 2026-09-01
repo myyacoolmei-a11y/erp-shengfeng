@@ -395,7 +395,7 @@ export default function AiAssistantPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2"><FileText className="h-5 w-5" />AI 報價追蹤</CardTitle>
                 <CardDescription>
-                  已送出、未成交、未取消、未派工的報價單，納入每日 09:00 晨報第三區塊推播。
+                  客戶確認中、尚未派工的報價單，納入每日 09:00 晨報第三區塊推播。
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">

@@ -264,7 +264,7 @@ async function shareWorkOrderViaLine(
     `客戶：${order.customerName || "—"}`,
     order.title ? `工程：${order.title}` : "",
     order.installAddress ? `地址：${order.installAddress}` : "",
-    order.scheduledDate ? `預定施工：${order.scheduledDate}${order.scheduledTime ? ` ${order.scheduledTime}` : ""}` : "",
+    order.scheduledDate ? `預定施工：${order.scheduledDate}${order.scheduledTime ? ` ${order.scheduledTime}` : ""}` : "預定施工：待安排",
   ]
     .filter(Boolean)
     .join("\n");
@@ -829,9 +829,10 @@ export default function WorkOrders() {
   const expandParam = parseInt(urlParams.get("expand") ?? "0", 10) || null;
   const openParam = parseInt(urlParams.get("open") ?? "0", 10) || null;
   const highlightParam = parseInt(urlParams.get("highlight") ?? "0", 10) || null;
-  const focusId = highlightParam || openParam || expandParam;
+  const editParam = parseInt(urlParams.get("edit") ?? "0", 10) || null;
+  const focusId = highlightParam || openParam || expandParam || editParam;
 
-  const [statusFilter, setStatusFilter] = useState<AdminFilterTab>("待施工");
+  const [statusFilter, setStatusFilter] = useState<AdminFilterTab>(editParam ? "待派工" : "待施工");
   const [listSearch, setListSearch] = useState("");
   const [engineerFilter, setEngineerFilter] = useState<EngineerFilter>("進行中");
   const [showCreate, setShowCreate] = useState(false);
@@ -1127,6 +1128,19 @@ export default function WorkOrders() {
     setEditItem(o);
   }
 
+  const openedEditRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!editParam || !orders) return;
+    if (openedEditRef.current === editParam) return;
+    const found = (orders as any[]).find(o => o.id === editParam);
+    if (!found) return;
+    openedEditRef.current = editParam;
+    openEdit(found);
+    setHighlightId(editParam);
+    setExpandedId(editParam);
+    if (!found.scheduledDate) setStatusFilter("待派工");
+  }, [editParam, orders]);
+
   function handleSubmit(e: React.FormEvent, mode: "create" | "edit") {
     e.preventDefault();
     if (!hasWorkOrderCustomer(form)) {
@@ -1370,9 +1384,11 @@ export default function WorkOrders() {
                       <p className="text-xs text-muted-foreground mt-0.5">{o.installAddress}</p>
                     )}
                     <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
-                      {o.scheduledDate && (
+                      {o.scheduledDate ? (
                         <span>施工：{o.scheduledDate}{o.scheduledTime ? ` ${o.scheduledTime}` : ""}</span>
-                      )}
+                      ) : statusLabel !== "已完成" && statusLabel !== "已結案" ? (
+                        <span className="text-amber-700 font-medium">施工日期：待安排</span>
+                      ) : null}
                       {techDisplay !== "—" && <span>技師：{techDisplay}</span>}
                       {o.completedDate && <span className="text-green-600">完成：{o.completedDate}</span>}
                     </div>

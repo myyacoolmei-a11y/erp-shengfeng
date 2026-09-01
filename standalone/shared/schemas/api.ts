@@ -736,7 +736,7 @@ export const CreateQuoteBody = zod.object({
   "amount": zod.number().optional(),
   "discountAmount": zod.number().min(0).optional(),
   "finalAmount": zod.number().optional(),
-  "status": zod.string(),
+  "status": zod.string().optional(),
   "notes": zod.string().optional(),
   "address": zod.string().optional(),
   "customerPhone": zod.string().optional(),

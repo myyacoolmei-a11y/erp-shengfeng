@@ -30,6 +30,7 @@ import { ensureSubsidyInvoiceKindMigration } from "./lib/migrations/ensureSubsid
 import { ensureSubsidyAcceptanceMigration } from "./lib/migrations/ensureSubsidyAcceptanceMigration";
 import { ensureWholesalePaymentRecordsMigration } from "./lib/migrations/ensureWholesalePaymentRecordsMigration";
 import { ensureWorkOrderCategorySubsidySyncMigration } from "./lib/migrations/ensureWorkOrderCategorySubsidySyncMigration";
+import { ensureQuoteWinDispatchMigration } from "./lib/migrations/ensureQuoteWinDispatchMigration";
 import { startReminderScheduler } from "./lib/reminders/scheduler.ts";
 
 const rawPort = process.env["PORT"];
@@ -96,5 +97,6 @@ app.listen(port, async (err) => {
   await ensureSubsidyAcceptanceMigration();
   await ensureWholesalePaymentRecordsMigration();
   await ensureWorkOrderCategorySubsidySyncMigration();
+  await ensureQuoteWinDispatchMigration();
   startReminderScheduler();
 });

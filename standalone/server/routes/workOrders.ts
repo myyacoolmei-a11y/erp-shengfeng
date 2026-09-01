@@ -11,8 +11,8 @@ import {
 } from "@workspace/db";
 import { CreateWorkOrderBody, UpdateWorkOrderBody, CreateProgressBody } from "@workspace/api-zod";
 import { requireRoleOrFeature, effectiveRoles } from "../lib/auth";
-import { syncQuoteDispatchStatus } from "../lib/quoteWorkflow";
-import { formatQuoteNumber } from "../lib/quoteStatus";
+import { syncQuoteDispatchStatus, loadLatestWorkOrdersByQuoteIds } from "../lib/quoteWorkflow";
+import { formatQuoteNumber, QUOTE_STATUS_WON } from "../lib/quoteStatus";
 import { loadQuoteDocument } from "../lib/quoteDocument";
 import { stripQuotePricingFromNotes } from "../../shared/workOrderNotes.ts";
 import {
@@ -110,6 +110,7 @@ function serializeEquipmentItem(item: typeof workOrderEquipmentItemsTable.$infer
     model: item.model ?? null,
     quantity: item.quantity ?? null,
     unit: item.unit ?? null,
+    unitPrice: item.unitPrice != null ? parseFloat(item.unitPrice as string) : null,
     notes: item.notes ?? null,
     indoorUnits: item.indoorUnits ?? null,
     outdoorUnits: item.outdoorUnits ?? null,
@@ -234,7 +235,7 @@ async function buildEquipmentInsert(itemInputs: any[], workOrderId: number) {
     outdoorUnits: item.outdoorUnits ?? null,
     floor: item.floor || null,
     sortOrder: item.sortOrder ?? idx,
-    // unitPrice intentionally not persisted from client — pricing belongs on quotes only
+    // Client POST/PATCH: pricing belongs on quotes. Quote-win API writes unitPrice itself.
     unitPrice: null,
   }));
 }
@@ -390,6 +391,20 @@ router.post("/work-orders", async (req, res): Promise<void> => {
 
   const { equipmentItems: itemInputs = [], ...orderFields } = parsed.data as any;
   if (orderFields.customerId === 0) orderFields.customerId = null;
+
+  if (orderFields.quoteId) {
+    const existingMap = await loadLatestWorkOrdersByQuoteIds([orderFields.quoteId]);
+    const existing = existingMap.get(orderFields.quoteId);
+    if (existing) {
+      res.status(409).json({
+        error: "此報價單已有派工單，不可重複建立",
+        workOrderId: existing.id,
+        workOrderNumber: existing.workOrderNumber,
+      });
+      return;
+    }
+  }
+
   const hasEquipment = Array.isArray(itemInputs) && itemInputs.length > 0;
 
   const [order] = await db
@@ -416,6 +431,10 @@ router.post("/work-orders", async (req, res): Promise<void> => {
   }
 
   if (updated.quoteId) {
+    await db.update(quotesTable).set({
+      status: QUOTE_STATUS_WON,
+      lostReason: null,
+    }).where(eq(quotesTable.id, updated.quoteId));
     await syncQuoteDispatchStatus(updated.quoteId);
   }
 
