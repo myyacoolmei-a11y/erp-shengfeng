@@ -138,6 +138,12 @@ ${quoteEqColWidthCss(".quotation-print-page .eq-table")}
   padding:6px 5px!important;
   line-height:1.35!important;
 }
+.quotation-print-page .eq-table .head-row th.col-no,
+.quotation-print-page .eq-table .head-row th.col-qty,
+.quotation-print-page .eq-table .head-row th.col-unit{
+  white-space:nowrap!important;
+  padding:6px 2px!important;
+}
 .quotation-print-page .eq-table tbody td{
   font-size:15px!important;
   line-height:1.35!important;
