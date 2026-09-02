@@ -4,6 +4,7 @@
 
 import html2pdfFactory from "html2pdf.js";
 import { PRINT_CJK_FONT_STACK, PRINT_CJK_FONT_FACE_CSS } from "@/components/pdf/templates/brand-config";
+import { QUOTE_EQ_COL_WIDTHS } from "@/components/pdf/templates/QuotationTemplate";
 
 export interface PdfBlobResult {
   blob: Blob;
@@ -25,68 +26,119 @@ function resolveHtml2Pdf(): any {
   return typeof mod === "function" ? mod : mod?.default ?? mod;
 }
 
-/** html2canvas clone: keep quotation equipment rows auto-height so wrapped CJK does not overlap. */
+/** html2canvas clone: lock quotation equipment columns so wrapped CJK cannot bleed. */
 function applyQuotationEqTableCloneFixes(clonedDoc: Document) {
   const root = clonedDoc.querySelector(".quotation-print-page");
   if (!root) return;
 
   const style = clonedDoc.createElement("style");
   style.setAttribute("data-quote-eq-flow", "1");
+  const colRules = QUOTE_EQ_COL_WIDTHS.map((w, i) => {
+    const n = i + 1;
+    return `.quotation-print-page .eq-table col:nth-child(${n}),.quotation-print-page .eq-table th:nth-child(${n}),.quotation-print-page .eq-table td:nth-child(${n}){width:${w}!important;max-width:${w}!important;min-width:0!important}`;
+  }).join("");
   style.textContent = `
-.quotation-print-page .eq-table,
+.quotation-print-page .eq-table{
+  table-layout:fixed!important;
+  width:100%!important;
+  max-width:100%!important;
+  border-collapse:collapse!important;
+}
+${colRules}
 .quotation-print-page .eq-table tr,
 .quotation-print-page .eq-table th,
 .quotation-print-page .eq-table td,
 .quotation-print-page .eq-table .cell-text{
   height:auto!important;
   max-height:none!important;
-  min-height:unset!important;
+  min-height:0!important;
   position:static!important;
   transform:none!important;
-  top:auto!important;
-  left:auto!important;
-  overflow:visible!important;
-  line-height:1.4!important;
   box-sizing:border-box!important;
+  overflow:hidden!important;
+  line-height:1.35!important;
 }
-.quotation-print-page .eq-table td,
-.quotation-print-page .eq-table .cell-text{
+.quotation-print-page .eq-table th,
+.quotation-print-page .eq-table td{
   white-space:normal!important;
   overflow-wrap:anywhere!important;
   word-break:break-word!important;
   vertical-align:middle!important;
+  padding:6px 5px!important;
 }
 .quotation-print-page .eq-table .cell-text{
   display:block!important;
   width:100%!important;
+  max-width:100%!important;
+  padding:0!important;
+}
+.quotation-print-page .eq-table .col-price,
+.quotation-print-page .eq-table .col-sub,
+.quotation-print-page .eq-table .col-qty,
+.quotation-print-page .eq-table .col-unit,
+.quotation-print-page .eq-table .col-no,
+.quotation-print-page .eq-table .col-price .cell-text,
+.quotation-print-page .eq-table .col-sub .cell-text,
+.quotation-print-page .eq-table .col-qty .cell-text,
+.quotation-print-page .eq-table .col-unit .cell-text,
+.quotation-print-page .eq-table .col-no .cell-text{
+  white-space:nowrap!important;
 }
 `;
   clonedDoc.head.appendChild(style);
+
+  const table = root.querySelector(".eq-table") as HTMLTableElement | null;
+  if (table) {
+    table.style.setProperty("table-layout", "fixed", "important");
+    table.style.setProperty("width", "100%", "important");
+    table.style.setProperty("max-width", "100%", "important");
+    table.querySelectorAll("col").forEach((node, i) => {
+      const w = QUOTE_EQ_COL_WIDTHS[i];
+      if (!w) return;
+      const col = node as HTMLElement;
+      col.style.setProperty("width", w, "important");
+    });
+    table.querySelectorAll("tr").forEach((tr) => {
+      [...tr.children].forEach((cell, i) => {
+        const w = QUOTE_EQ_COL_WIDTHS[i];
+        if (!w) return;
+        const h = cell as HTMLElement;
+        h.style.setProperty("width", w, "important");
+        h.style.setProperty("max-width", w, "important");
+        h.style.setProperty("min-width", "0", "important");
+        h.style.setProperty("box-sizing", "border-box", "important");
+        h.style.setProperty("overflow", "hidden", "important");
+      });
+    });
+  }
 
   root.querySelectorAll(".eq-table, .eq-table tr, .eq-table th, .eq-table td, .eq-table .cell-text").forEach((node) => {
     const h = node as HTMLElement;
     h.style.setProperty("height", "auto", "important");
     h.style.setProperty("max-height", "none", "important");
-    h.style.setProperty("min-height", "unset", "important");
+    h.style.setProperty("min-height", "0", "important");
     h.style.setProperty("position", "static", "important");
     h.style.setProperty("transform", "none", "important");
-    h.style.setProperty("top", "auto", "important");
-    h.style.setProperty("left", "auto", "important");
-    h.style.setProperty("line-height", "1.4", "important");
+    h.style.setProperty("line-height", "1.35", "important");
     h.style.setProperty("box-sizing", "border-box", "important");
-    h.style.setProperty("overflow", "visible", "important");
+    h.style.setProperty("overflow", "hidden", "important");
   });
-  root.querySelectorAll(".eq-table td, .eq-table .cell-text").forEach((node) => {
+  root.querySelectorAll(".eq-table td, .eq-table th").forEach((node) => {
     const h = node as HTMLElement;
-    h.style.setProperty("white-space", "normal", "important");
-    h.style.setProperty("overflow-wrap", "anywhere", "important");
-    h.style.setProperty("word-break", "break-word", "important");
+    const nowrap = h.classList.contains("col-price") || h.classList.contains("col-sub")
+      || h.classList.contains("col-qty") || h.classList.contains("col-unit") || h.classList.contains("col-no");
+    h.style.setProperty("white-space", nowrap ? "nowrap" : "normal", "important");
+    h.style.setProperty("overflow-wrap", nowrap ? "normal" : "anywhere", "important");
+    h.style.setProperty("word-break", nowrap ? "keep-all" : "break-word", "important");
     h.style.setProperty("vertical-align", "middle", "important");
+    h.style.setProperty("padding", "6px 5px", "important");
   });
   root.querySelectorAll(".eq-table .cell-text").forEach((node) => {
     const h = node as HTMLElement;
     h.style.setProperty("display", "block", "important");
     h.style.setProperty("width", "100%", "important");
+    h.style.setProperty("max-width", "100%", "important");
+    h.style.setProperty("padding", "0", "important");
   });
 }
 

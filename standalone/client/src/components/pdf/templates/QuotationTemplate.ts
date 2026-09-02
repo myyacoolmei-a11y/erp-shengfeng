@@ -5,6 +5,27 @@ import { logoUrl, COMPANY, COLORS, esc, fmtMoney, PRINT_DOC_TYPE_CSS, PRINT_CJK_
 import { computeQuoteAmounts } from "../quote-amounts";
 import { displayQuoteItemCategory, displayQuoteItemBrand } from "./printCategory";
 
+/** A4 直式工程設備明細：固定欄寬，避免 PDF 依內容重分配。 */
+export const QUOTE_EQ_COL_WIDTHS = [
+  "4%",
+  "10%",
+  "7%",
+  "22%",
+  "16%",
+  "5%",
+  "5%",
+  "10%",
+  "10%",
+  "11%",
+] as const;
+
+function quoteEqColWidthCss(prefix: string): string {
+  return QUOTE_EQ_COL_WIDTHS.map((w, i) => {
+    const n = i + 1;
+    return `${prefix} col:nth-child(${n}),${prefix} th:nth-child(${n}),${prefix} td:nth-child(${n}){width:${w}!important;max-width:${w}!important;min-width:0!important}`;
+  }).join("\n");
+}
+
 export function buildQuotationHtml(quote: any, baseOrigin?: string): string {
   // Line items come only from quotation.items (quotes / quote_items).
   // Never fall back to work-order equipmentItems or other dispatch fields.
@@ -38,19 +59,8 @@ export function buildQuotationHtml(quote: any, baseOrigin?: string): string {
     "小計",
     "備註",
   ] as const;
-  /* A4 186mm：品項／規格優先加寬；超出可印寬時先縮項次／品牌／數量／單位。 */
-  const TABLE_COL_WIDTHS = [
-    "3%",
-    "12%",
-    "7%",
-    "25%",
-    "16%",
-    "4%",
-    "4%",
-    "10%",
-    "10%",
-    "9%",
-  ] as const;
+  /* A4 186mm 固定欄寬（第二組）：品項／型號／備註優先，品牌縮窄。 */
+  const TABLE_COL_WIDTHS = QUOTE_EQ_COL_WIDTHS;
 
   function fieldText(raw: unknown): string {
     return String(raw ?? "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
@@ -73,148 +83,133 @@ export function buildQuotationHtml(quote: any, baseOrigin?: string): string {
   }
 
   const EQ_TABLE_FLOW_CSS = `
+.quotation-print-page .eq-wrap{
+  width:100%!important;
+  max-width:100%!important;
+  overflow:hidden!important;
+}
 .quotation-print-page .eq-table{
   table-layout:fixed!important;
   width:100%!important;
+  max-width:100%!important;
   height:auto!important;
   max-height:none!important;
-  font-size:15px!important;
-  line-height:1.4!important;
   border-collapse:collapse!important;
+  border-spacing:0!important;
+  font-size:15px!important;
+  line-height:1.35!important;
   transform:none!important;
 }
+${quoteEqColWidthCss(".quotation-print-page .eq-table")}
 .quotation-print-page .eq-table tr,
 .quotation-print-page .eq-table thead tr,
 .quotation-print-page .eq-table tbody tr{
   height:auto!important;
   max-height:none!important;
-  min-height:unset!important;
+  min-height:0!important;
 }
 .quotation-print-page .eq-table th,
 .quotation-print-page .eq-table td{
-  height:auto!important;
-  max-height:none!important;
-  min-height:unset!important;
-  vertical-align:middle!important;
   box-sizing:border-box!important;
+  height:auto!important;
+  min-height:0!important;
+  max-height:none!important;
+  padding:6px 5px!important;
+  vertical-align:middle!important;
+  white-space:normal!important;
+  word-break:break-word!important;
+  overflow-wrap:anywhere!important;
+  line-height:1.35!important;
+  overflow:hidden!important;
   position:static!important;
   transform:none!important;
   top:auto!important;
   left:auto!important;
-  overflow:visible!important;
-  white-space:normal!important;
-  overflow-wrap:anywhere!important;
-  word-break:break-word!important;
-  line-height:1.4!important;
 }
 .quotation-print-page .eq-table .head-row,
 .quotation-print-page .eq-table .head-row th{
   background:#111!important;color:#fff!important;
   border-color:#111!important;
-  text-align:center!important;vertical-align:middle!important;
+  text-align:center!important;
   font-weight:700!important;font-size:13px!important;
-  white-space:nowrap!important;
-  padding:4px 3px!important;
-  height:auto!important;max-height:none!important;min-height:unset!important;
-  line-height:1.4!important;
-  word-break:keep-all!important;
-  overflow-wrap:normal!important;
-  position:static!important;transform:none!important;
-}
-.quotation-print-page .eq-table tbody td{
-  padding:1.8mm 1.2mm!important;
-  font-size:15px!important;
-  line-height:1.4!important;
-  height:auto!important;max-height:none!important;min-height:unset!important;
-  vertical-align:middle!important;
-  box-sizing:border-box!important;
   white-space:normal!important;
   word-break:break-word!important;
   overflow-wrap:anywhere!important;
-  position:static!important;transform:none!important;
+  padding:6px 5px!important;
+  line-height:1.35!important;
+}
+.quotation-print-page .eq-table tbody td{
+  font-size:15px!important;
+  line-height:1.35!important;
 }
 .quotation-print-page .eq-table tbody td .cell-text{
   display:block!important;
   width:100%!important;
-  height:auto!important;max-height:none!important;min-height:unset!important;
-  position:static!important;transform:none!important;
-  top:auto!important;left:auto!important;
-  white-space:normal!important;
+  max-width:100%!important;
+  box-sizing:border-box!important;
+  height:auto!important;
+  min-height:0!important;
+  max-height:none!important;
+  padding:0!important;
+  position:static!important;
+  transform:none!important;
+  white-space:inherit!important;
   overflow-wrap:anywhere!important;
   word-break:break-word!important;
-  line-height:1.4!important;
-  overflow:visible!important;
+  line-height:1.35!important;
+  overflow:hidden!important;
 }
 .quotation-print-page .eq-table .col-no,
 .quotation-print-page .eq-table .col-qty,
 .quotation-print-page .eq-table .col-unit,
-.quotation-print-page .eq-table .col-price,
-.quotation-print-page .eq-table .col-sub,
 .quotation-print-page .eq-table .col-no .cell-text,
 .quotation-print-page .eq-table .col-qty .cell-text,
-.quotation-print-page .eq-table .col-unit .cell-text,
-.quotation-print-page .eq-table .col-price .cell-text,
-.quotation-print-page .eq-table .col-sub .cell-text{
+.quotation-print-page .eq-table .col-unit .cell-text{
   white-space:nowrap!important;
+  text-align:center!important;
   word-break:keep-all!important;
   overflow-wrap:normal!important;
 }
 .quotation-print-page .eq-table .col-cat,
 .quotation-print-page .eq-table .col-cat .cell-text{
-  white-space:normal!important;
-  word-break:break-word!important;
-  overflow-wrap:anywhere!important;
   font-size:15px!important;font-weight:600!important;
   text-align:center!important;
 }
 .quotation-print-page .eq-table .col-brand,
 .quotation-print-page .eq-table .col-brand .cell-text{
-  white-space:normal!important;
-  word-break:break-word!important;
-  overflow-wrap:anywhere!important;
   font-size:15px!important;font-weight:600!important;
   text-align:center!important;
+  white-space:normal!important;
 }
 .quotation-print-page .eq-table .col-item,
 .quotation-print-page .eq-table .col-item .cell-text{
-  white-space:normal!important;
-  word-break:break-word!important;
-  overflow-wrap:anywhere!important;
   font-size:16px!important;font-weight:700!important;
   text-align:left!important;
-  padding:1.8mm 1.6mm!important;
+  white-space:normal!important;
 }
-.quotation-print-page .eq-table .col-item .cell-text{padding:0!important}
 .quotation-print-page .eq-table .col-model,
 .quotation-print-page .eq-table .col-model .cell-text{
-  white-space:normal!important;
-  word-break:break-word!important;
-  overflow-wrap:anywhere!important;
   font-size:15px!important;font-weight:600!important;
   text-align:center!important;
+  white-space:normal!important;
 }
 .quotation-print-page .eq-table tbody td.col-price,
-.quotation-print-page .eq-table tbody td.col-sub{
-  font-size:13px!important;
-  font-weight:600!important;
-  font-variant-numeric:tabular-nums;
-  padding:1.8mm 0.6mm!important;
-  overflow:hidden!important;
-}
+.quotation-print-page .eq-table tbody td.col-sub,
 .quotation-print-page .eq-table .col-price .cell-text,
 .quotation-print-page .eq-table .col-sub .cell-text{
-  font-size:13px!important;
+  white-space:nowrap!important;
+  word-break:keep-all!important;
+  overflow-wrap:normal!important;
+  font-size:15px!important;
   font-weight:600!important;
   font-variant-numeric:tabular-nums;
-  padding:0!important;
+  text-align:center!important;
 }
 .quotation-print-page .eq-table .col-notes,
 .quotation-print-page .eq-table .col-notes .cell-text{
-  white-space:normal!important;
-  word-break:break-word!important;
-  overflow-wrap:anywhere!important;
   font-size:13px!important;font-weight:400!important;
   text-align:center!important;
+  white-space:normal!important;
 }
 .quotation-print-page .amt-total .lbl{font-size:14px!important;font-weight:700!important}
 .quotation-print-page .amt-total .val{font-size:16px!important;font-weight:700!important}
@@ -353,11 +348,11 @@ body,.quotation-print-page{
   letter-spacing:0;line-height:1.3;
 }
 
-.eq-wrap{width:100%;max-width:100%;overflow:visible}
+.eq-wrap{width:100%;max-width:100%;overflow:hidden}
 .eq-table{
   width:100%;max-width:100%;
   border-collapse:collapse;border-spacing:0;
-  table-layout:fixed;font-size:15px;line-height:1.4;
+  table-layout:fixed;font-size:15px;line-height:1.35;
   font-family:${PRINT_CJK_FONT_STACK};
   transform:none;height:auto;
 }
@@ -368,28 +363,29 @@ body,.quotation-print-page{
   font-size:13px;font-weight:700;
   text-align:center;vertical-align:middle;
   box-sizing:border-box;
-  padding:4px 3px;
-  height:auto;max-height:none;min-height:unset;
-  line-height:1.4;letter-spacing:0;transform:none;
-  white-space:nowrap;position:static;
+  padding:6px 5px;
+  height:auto;max-height:none;min-height:0;
+  line-height:1.35;letter-spacing:0;transform:none;
+  white-space:normal;overflow:hidden;position:static;
+  word-break:break-word;overflow-wrap:anywhere;
 }
 .eq-table tbody td{
   border:1px solid #ccc;
   vertical-align:middle;font-size:15px;font-weight:500;
   box-sizing:border-box;
-  padding:2mm 1.4mm;
-  height:auto;max-height:none;min-height:unset;
-  line-height:1.4;color:#111;text-align:center;
+  padding:6px 5px;
+  height:auto;max-height:none;min-height:0;
+  line-height:1.35;color:#111;text-align:center;
   letter-spacing:0;transform:none;position:static;
-  overflow:visible;white-space:normal;
+  overflow:hidden;white-space:normal;
   word-break:break-word;overflow-wrap:anywhere;
 }
 .eq-table tbody td .cell-text{
-  display:block;width:100%;
-  height:auto;max-height:none;min-height:unset;
+  display:block;width:100%;max-width:100%;
+  height:auto;max-height:none;min-height:0;
   position:static;transform:none;top:auto;left:auto;
-  white-space:normal;overflow-wrap:anywhere;word-break:break-word;
-  line-height:1.4;overflow:visible;
+  white-space:inherit;overflow-wrap:anywhere;word-break:break-word;
+  line-height:1.35;overflow:hidden;box-sizing:border-box;
 }
 .eq-table .col-item,.eq-table .col-item .cell-text{
   font-size:16px;font-weight:700;text-align:left;
@@ -406,13 +402,13 @@ body,.quotation-print-page{
 }
 .eq-table .col-model .cell-text{font-variant-ligatures:none}
 .eq-table .col-price .cell-text,.eq-table .col-sub .cell-text{
-  font-size:13px;font-variant-numeric:tabular-nums;
+  font-size:15px;font-variant-numeric:tabular-nums;white-space:nowrap;
 }
 .eq-table .col-notes,.eq-table .col-notes .cell-text{
   font-size:13px;font-weight:400;text-align:center;
 }
 .eq-table tr,.eq-table tbody tr{
-  height:auto;max-height:none;min-height:unset;
+  height:auto;max-height:none;min-height:0;
   page-break-inside:avoid;break-inside:avoid;
 }
 

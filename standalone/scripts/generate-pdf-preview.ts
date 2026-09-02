@@ -30,12 +30,12 @@ const demoQuote = {
   description: "施工方式：壁掛分離式\n施工天數：1天\n注意事項：施工前需清空場地",
   notes: "報價單有效期限30日，施工前請支付50%訂金。",
   items: [
-    { category: "安裝新機", brand: "聲寶", itemName: "移機銅管基本安裝服務", model: "—", quantity: 1, unit: "式", unitPrice: 2800, subtotal: 2800, notes: "十品項" },
-    { category: "安裝新機", brand: "聲寶", itemName: "壁掛分離式變頻冷暖超長品項名稱測試自動換行顯示效果", model: "AU/AM-JF50DC", quantity: 1, unit: "台", unitPrice: 32800, subtotal: 32800, notes: "含基本安裝" },
+    { category: "保養", brand: "—", itemName: "吊隱式保養", model: "", quantity: 2, unit: "台", unitPrice: 1800, subtotal: 3600, notes: "" },
+    { category: "安裝新機", brand: "冰點", itemName: "冰點冷氣變頻\n1級吊隱式", model: "HFC-80", quantity: 1, unit: "台", unitPrice: 32800, subtotal: 32800, notes: "" },
+    { category: "安裝新機", brand: "聲寶", itemName: "壁掛冷氣保養服務", model: "A1", quantity: 1, unit: "式", unitPrice: 2800, subtotal: 2800, notes: "八字品項" },
+    { category: "安裝新機", brand: "聲寶", itemName: "壁掛分離式變頻冷暖超長品項名稱測試自動換", model: "AU/AM-JF50DC", quantity: 1, unit: "台", unitPrice: 32800, subtotal: 32800, notes: "含基本安裝" },
     { category: "追加項目", brand: "三菱重工", itemName: "壁掛分離式變頻冷暖超長品項名稱測試自動換行顯示效果含基本安裝與銅管配管工程服務項", model: "MSZ-AP35VG-LONG20MDL", quantity: 2, unit: "台", unitPrice: 28500, subtotal: 57000, notes: "本項含五米銅管電線訊號線基本安裝工資及高空作業補助，施工前請確認現場管線路徑與電源位置保留施工空間。" },
     { category: "其他", brand: "—", itemName: "移機2/4銅管基本安裝服務\n含5米銅管、電線訊號", model: "", quantity: 1, unit: "式", unitPrice: 3500, subtotal: 3500, notes: "含5米銅管、電線訊號" },
-    { category: "維修", brand: "日立", itemName: "室外機維修清洗", model: "RAS-22", quantity: 1, unit: "式", unitPrice: 2800, subtotal: 2800, notes: "" },
-    { category: "保養", brand: "—", itemName: "年度保養", model: "", quantity: 1, unit: "式", unitPrice: 1800, subtotal: 1800, notes: "" },
   ],
 };
 
@@ -125,8 +125,16 @@ if (!quoteHtml.includes("overflow-wrap:anywhere") || !quoteHtml.includes("word-b
 if (quoteHtml.includes("padding:3.5px 3px!important")) {
   throw new Error("quotation eq-table must not use compact 3.5px cell padding");
 }
-if (!quoteHtml.includes("width:25%")) {
-  throw new Error("品項／規格 column must be 25%");
+if (!quoteHtml.includes("width:22%")) {
+  throw new Error("品項／規格 column must be 22%");
+}
+if (!quoteHtml.includes("width:4%") || !quoteHtml.includes("width:11%")) {
+  throw new Error("項次 4% / 備註 11% fixed columns missing");
+}
+const colgroup = quoteHtml.match(/<colgroup>([\s\S]*?)<\/colgroup>/)?.[1] ?? "";
+const colWidths = [...colgroup.matchAll(/width:(\d+%)/g)].map((m) => m[1]);
+if (colWidths.join() !== ["4%", "10%", "7%", "22%", "16%", "5%", "5%", "10%", "10%", "11%"].join()) {
+  throw new Error(`colgroup widths drifted: ${colWidths.join(" ")}`);
 }
 {
   const body = quoteHtml.match(/<tbody>([\s\S]*?)<\/tbody>/)?.[1] ?? "";
