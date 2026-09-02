@@ -3,15 +3,14 @@
 
 import { logoUrl, COMPANY, COLORS, esc, fmtMoney, PRINT_DOC_TYPE_CSS, PRINT_CJK_FONT_STACK, printFontLinksHtml } from "./brand-config";
 import { computeQuoteAmounts } from "../quote-amounts";
-import { displayQuoteItemCategory, displayQuoteItemBrand } from "./printCategory";
+import { displayQuoteItemCategory } from "./printCategory";
 
-/** A4 直式工程設備明細：固定欄寬，避免 PDF 依內容重分配。 */
+/** A4 直式工程設備明細：無品牌欄，品項／規格最寬。 */
 export const QUOTE_EQ_COL_WIDTHS = [
   "4%",
   "10%",
-  "7%",
-  "22%",
-  "16%",
+  "28%",
+  "17%",
   "5%",
   "5%",
   "10%",
@@ -50,7 +49,6 @@ export function buildQuotationHtml(quote: any, baseOrigin?: string): string {
   const TABLE_HEADERS = [
     "項次",
     "類別",
-    "品牌",
     "品項／規格",
     "型號",
     "數量",
@@ -59,7 +57,7 @@ export function buildQuotationHtml(quote: any, baseOrigin?: string): string {
     "小計",
     "備註",
   ] as const;
-  /* A4 186mm 固定欄寬（第二組）：品項／型號／備註優先，品牌縮窄。 */
+  /* A4 186mm 固定 9 欄：無品牌，品項／規格 28%。 */
   const TABLE_COL_WIDTHS = QUOTE_EQ_COL_WIDTHS;
 
   function fieldText(raw: unknown): string {
@@ -83,6 +81,29 @@ export function buildQuotationHtml(quote: any, baseOrigin?: string): string {
   }
 
   const EQ_TABLE_FLOW_CSS = `
+@font-face{
+  font-family:"Noto Sans TC";font-style:normal;font-weight:500;font-stretch:100%;font-display:block;
+  src:url("/fonts/NotoSansTC-latin-400.woff2") format("woff2");
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+20AC,U+2122,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face{
+  font-family:"Noto Sans TC";font-style:normal;font-weight:600;font-stretch:100%;font-display:block;
+  src:url("/fonts/NotoSansTC-latin-400.woff2") format("woff2");
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+20AC,U+2122,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face{
+  font-family:"Noto Sans TC";font-style:normal;font-weight:500;font-stretch:100%;font-display:block;
+  src:url("/fonts/NotoSansTC-TC-400.woff2") format("woff2");
+  unicode-range:U+3000-303F,U+3400-4DBF,U+4E00-9FFF,U+F900-FAFF,U+FF00-FFEF;
+}
+@font-face{
+  font-family:"Noto Sans TC";font-style:normal;font-weight:600;font-stretch:100%;font-display:block;
+  src:url("/fonts/NotoSansTC-TC-400.woff2") format("woff2");
+  unicode-range:U+3000-303F,U+3400-4DBF,U+4E00-9FFF,U+F900-FAFF,U+FF00-FFEF;
+}
+.quotation-print-page .eq-table{
+  font-family:${PRINT_CJK_FONT_STACK}!important;
+}
 .quotation-print-page .eq-wrap{
   width:100%!important;
   max-width:100%!important;
@@ -96,7 +117,8 @@ export function buildQuotationHtml(quote: any, baseOrigin?: string): string {
   max-height:none!important;
   border-collapse:collapse!important;
   border-spacing:0!important;
-  font-size:15px!important;
+  font-size:11px!important;
+  font-weight:500!important;
   line-height:1.35!important;
   transform:none!important;
 }
@@ -114,7 +136,7 @@ ${quoteEqColWidthCss(".quotation-print-page .eq-table")}
   height:auto!important;
   min-height:0!important;
   max-height:none!important;
-  padding:6px 5px!important;
+  padding:7px 6px!important;
   vertical-align:middle!important;
   white-space:normal!important;
   word-break:break-word!important;
@@ -125,27 +147,30 @@ ${quoteEqColWidthCss(".quotation-print-page .eq-table")}
   transform:none!important;
   top:auto!important;
   left:auto!important;
+  font-weight:500!important;
+  font-size:11px!important;
 }
 .quotation-print-page .eq-table .head-row,
 .quotation-print-page .eq-table .head-row th{
   background:#111!important;color:#fff!important;
   border-color:#111!important;
   text-align:center!important;
-  font-weight:700!important;font-size:13px!important;
+  font-weight:600!important;font-size:11px!important;
   white-space:normal!important;
   word-break:break-word!important;
   overflow-wrap:anywhere!important;
-  padding:6px 5px!important;
+  padding:7px 6px!important;
   line-height:1.35!important;
 }
 .quotation-print-page .eq-table .head-row th.col-no,
 .quotation-print-page .eq-table .head-row th.col-qty,
 .quotation-print-page .eq-table .head-row th.col-unit{
   white-space:nowrap!important;
-  padding:6px 2px!important;
+  padding:7px 2px!important;
 }
 .quotation-print-page .eq-table tbody td{
-  font-size:15px!important;
+  font-size:11px!important;
+  font-weight:500!important;
   line-height:1.35!important;
 }
 .quotation-print-page .eq-table tbody td .cell-text{
@@ -164,6 +189,7 @@ ${quoteEqColWidthCss(".quotation-print-page .eq-table")}
   word-break:break-word!important;
   line-height:1.35!important;
   overflow:hidden!important;
+  font-weight:inherit!important;
 }
 .quotation-print-page .eq-table .col-no,
 .quotation-print-page .eq-table .col-qty,
@@ -175,27 +201,22 @@ ${quoteEqColWidthCss(".quotation-print-page .eq-table")}
   text-align:center!important;
   word-break:keep-all!important;
   overflow-wrap:normal!important;
+  font-weight:500!important;
 }
 .quotation-print-page .eq-table .col-cat,
 .quotation-print-page .eq-table .col-cat .cell-text{
-  font-size:15px!important;font-weight:600!important;
+  font-size:11px!important;font-weight:500!important;
   text-align:center!important;
-}
-.quotation-print-page .eq-table .col-brand,
-.quotation-print-page .eq-table .col-brand .cell-text{
-  font-size:15px!important;font-weight:600!important;
-  text-align:center!important;
-  white-space:normal!important;
 }
 .quotation-print-page .eq-table .col-item,
 .quotation-print-page .eq-table .col-item .cell-text{
-  font-size:16px!important;font-weight:700!important;
+  font-size:11px!important;font-weight:500!important;
   text-align:left!important;
   white-space:normal!important;
 }
 .quotation-print-page .eq-table .col-model,
 .quotation-print-page .eq-table .col-model .cell-text{
-  font-size:15px!important;font-weight:600!important;
+  font-size:11px!important;font-weight:500!important;
   text-align:center!important;
   white-space:normal!important;
 }
@@ -206,21 +227,21 @@ ${quoteEqColWidthCss(".quotation-print-page .eq-table")}
   white-space:nowrap!important;
   word-break:keep-all!important;
   overflow-wrap:normal!important;
-  font-size:15px!important;
+  font-size:10.5px!important;
   font-weight:600!important;
   font-variant-numeric:tabular-nums;
   text-align:center!important;
 }
 .quotation-print-page .eq-table .col-notes,
 .quotation-print-page .eq-table .col-notes .cell-text{
-  font-size:13px!important;font-weight:400!important;
+  font-size:10px!important;font-weight:500!important;
   text-align:center!important;
   white-space:normal!important;
 }
-.quotation-print-page .amt-total .lbl{font-size:14px!important;font-weight:700!important}
-.quotation-print-page .amt-total .val{font-size:16px!important;font-weight:700!important}
+.quotation-print-page .amt-total .lbl{font-size:14px!important;font-weight:600!important}
+.quotation-print-page .amt-total .val{font-size:16px!important;font-weight:600!important}
 .quotation-print-page .info-label{font-size:12px!important;font-weight:500!important;color:#888!important}
-.quotation-print-page .info-value{font-size:15px!important;font-weight:600!important}
+.quotation-print-page .info-value{font-size:15px!important;font-weight:500!important}
 `;
 
   function td(className: string, inner: string): string {
@@ -229,14 +250,12 @@ ${quoteEqColWidthCss(".quotation-print-page .eq-table")}
 
   function renderItemRow(item: any, index: number): string {
     const category = displayQuoteItemCategory(item);
-    const brand = displayQuoteItemBrand(item);
     const itemName = cellText(item.itemName || "");
     const model = cellText(item.model) || "—";
     const notes = cellText(notesIfNotDuplicated(item.itemName, item.notes));
     const cells = [
       td("tac col-no", String(index + 1)),
       td("tac col-cat", cellText(category)),
-      td("tac col-brand", cellText(brand)),
       td("tal col-item", itemName),
       td("tac col-model", model),
       td("tac col-qty", String(Number(item.quantity ?? 0))),
@@ -258,7 +277,6 @@ ${quoteEqColWidthCss(".quotation-print-page .eq-table")}
   const TH_CLASSES = [
     "col-no",
     "col-cat",
-    "col-brand",
     "col-item",
     "col-model",
     "col-qty",
@@ -358,7 +376,7 @@ body,.quotation-print-page{
 .eq-table{
   width:100%;max-width:100%;
   border-collapse:collapse;border-spacing:0;
-  table-layout:fixed;font-size:15px;line-height:1.35;
+  table-layout:fixed;font-size:11px;font-weight:500;line-height:1.35;
   font-family:${PRINT_CJK_FONT_STACK};
   transform:none;height:auto;
 }
@@ -366,10 +384,10 @@ body,.quotation-print-page{
 .eq-table .head-row th{
   background:#111;color:#fff;
   border:1px solid #111;
-  font-size:13px;font-weight:700;
+  font-size:11px;font-weight:600;
   text-align:center;vertical-align:middle;
   box-sizing:border-box;
-  padding:6px 5px;
+  padding:7px 6px;
   height:auto;max-height:none;min-height:0;
   line-height:1.35;letter-spacing:0;transform:none;
   white-space:normal;overflow:hidden;position:static;
@@ -377,9 +395,9 @@ body,.quotation-print-page{
 }
 .eq-table tbody td{
   border:1px solid #ccc;
-  vertical-align:middle;font-size:15px;font-weight:500;
+  vertical-align:middle;font-size:11px;font-weight:500;
   box-sizing:border-box;
-  padding:6px 5px;
+  padding:7px 6px;
   height:auto;max-height:none;min-height:0;
   line-height:1.35;color:#111;text-align:center;
   letter-spacing:0;transform:none;position:static;
@@ -394,24 +412,24 @@ body,.quotation-print-page{
   line-height:1.35;overflow:hidden;box-sizing:border-box;
 }
 .eq-table .col-item,.eq-table .col-item .cell-text{
-  font-size:16px;font-weight:700;text-align:left;
+  font-size:11px;font-weight:500;text-align:left;
 }
 .eq-table .col-cat,.eq-table .col-cat .cell-text{
-  text-align:center;font-weight:600;font-size:15px;
+  text-align:center;font-weight:500;font-size:11px;
 }
-.eq-table .col-brand,.eq-table .col-model,
+.eq-table .col-model,
 .eq-table .col-qty,.eq-table .col-unit,.eq-table .col-price,.eq-table .col-sub,
-.eq-table .col-brand .cell-text,.eq-table .col-model .cell-text,
+.eq-table .col-model .cell-text,
 .eq-table .col-qty .cell-text,.eq-table .col-unit .cell-text,
 .eq-table .col-price .cell-text,.eq-table .col-sub .cell-text{
-  text-align:center;font-weight:600;font-size:15px;
+  text-align:center;font-weight:500;font-size:11px;
 }
 .eq-table .col-model .cell-text{font-variant-ligatures:none}
 .eq-table .col-price .cell-text,.eq-table .col-sub .cell-text{
-  font-size:15px;font-variant-numeric:tabular-nums;white-space:nowrap;
+  font-size:10.5px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap;
 }
 .eq-table .col-notes,.eq-table .col-notes .cell-text{
-  font-size:13px;font-weight:400;text-align:center;
+  font-size:10px;font-weight:500;text-align:center;
 }
 .eq-table tr,.eq-table tbody tr{
   height:auto;max-height:none;min-height:0;

@@ -64,7 +64,7 @@ ${colRules}
   overflow-wrap:anywhere!important;
   word-break:break-word!important;
   vertical-align:middle!important;
-  padding:6px 5px!important;
+  padding:7px 6px!important;
 }
 .quotation-print-page .eq-table .cell-text{
   display:block!important;
@@ -127,11 +127,16 @@ ${colRules}
     const h = node as HTMLElement;
     const nowrap = h.classList.contains("col-price") || h.classList.contains("col-sub")
       || h.classList.contains("col-qty") || h.classList.contains("col-unit") || h.classList.contains("col-no");
+    const isHead = h.tagName === "TH";
+    const isMoney = h.classList.contains("col-price") || h.classList.contains("col-sub");
     h.style.setProperty("white-space", nowrap ? "nowrap" : "normal", "important");
     h.style.setProperty("overflow-wrap", nowrap ? "normal" : "anywhere", "important");
     h.style.setProperty("word-break", nowrap ? "keep-all" : "break-word", "important");
     h.style.setProperty("vertical-align", "middle", "important");
-    h.style.setProperty("padding", "6px 5px", "important");
+    h.style.setProperty("padding", "7px 6px", "important");
+    h.style.setProperty("font-weight", isHead || isMoney ? "600" : "500", "important");
+    h.style.setProperty("font-size", isMoney ? "10.5px" : "11px", "important");
+    h.style.setProperty("line-height", "1.35", "important");
   });
   root.querySelectorAll(".eq-table .cell-text").forEach((node) => {
     const h = node as HTMLElement;

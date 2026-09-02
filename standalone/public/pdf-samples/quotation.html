@@ -105,7 +105,7 @@ body,.quotation-print-page{
 .eq-table{
   width:100%;max-width:100%;
   border-collapse:collapse;border-spacing:0;
-  table-layout:fixed;font-size:15px;line-height:1.35;
+  table-layout:fixed;font-size:11px;font-weight:500;line-height:1.35;
   font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
   transform:none;height:auto;
 }
@@ -113,10 +113,10 @@ body,.quotation-print-page{
 .eq-table .head-row th{
   background:#111;color:#fff;
   border:1px solid #111;
-  font-size:13px;font-weight:700;
+  font-size:11px;font-weight:600;
   text-align:center;vertical-align:middle;
   box-sizing:border-box;
-  padding:6px 5px;
+  padding:7px 6px;
   height:auto;max-height:none;min-height:0;
   line-height:1.35;letter-spacing:0;transform:none;
   white-space:normal;overflow:hidden;position:static;
@@ -124,9 +124,9 @@ body,.quotation-print-page{
 }
 .eq-table tbody td{
   border:1px solid #ccc;
-  vertical-align:middle;font-size:15px;font-weight:500;
+  vertical-align:middle;font-size:11px;font-weight:500;
   box-sizing:border-box;
-  padding:6px 5px;
+  padding:7px 6px;
   height:auto;max-height:none;min-height:0;
   line-height:1.35;color:#111;text-align:center;
   letter-spacing:0;transform:none;position:static;
@@ -141,24 +141,24 @@ body,.quotation-print-page{
   line-height:1.35;overflow:hidden;box-sizing:border-box;
 }
 .eq-table .col-item,.eq-table .col-item .cell-text{
-  font-size:16px;font-weight:700;text-align:left;
+  font-size:11px;font-weight:500;text-align:left;
 }
 .eq-table .col-cat,.eq-table .col-cat .cell-text{
-  text-align:center;font-weight:600;font-size:15px;
+  text-align:center;font-weight:500;font-size:11px;
 }
-.eq-table .col-brand,.eq-table .col-model,
+.eq-table .col-model,
 .eq-table .col-qty,.eq-table .col-unit,.eq-table .col-price,.eq-table .col-sub,
-.eq-table .col-brand .cell-text,.eq-table .col-model .cell-text,
+.eq-table .col-model .cell-text,
 .eq-table .col-qty .cell-text,.eq-table .col-unit .cell-text,
 .eq-table .col-price .cell-text,.eq-table .col-sub .cell-text{
-  text-align:center;font-weight:600;font-size:15px;
+  text-align:center;font-weight:500;font-size:11px;
 }
 .eq-table .col-model .cell-text{font-variant-ligatures:none}
 .eq-table .col-price .cell-text,.eq-table .col-sub .cell-text{
-  font-size:15px;font-variant-numeric:tabular-nums;white-space:nowrap;
+  font-size:10.5px;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap;
 }
 .eq-table .col-notes,.eq-table .col-notes .cell-text{
-  font-size:13px;font-weight:400;text-align:center;
+  font-size:10px;font-weight:500;text-align:center;
 }
 .eq-table tr,.eq-table tbody tr{
   height:auto;max-height:none;min-height:0;
@@ -298,6 +298,29 @@ body,.quotation-print-page{
     page-break-inside:avoid;break-inside:avoid;
   }
 
+@font-face{
+  font-family:"Noto Sans TC";font-style:normal;font-weight:500;font-stretch:100%;font-display:block;
+  src:url("../fonts/NotoSansTC-latin-400.woff2") format("woff2");
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+20AC,U+2122,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face{
+  font-family:"Noto Sans TC";font-style:normal;font-weight:600;font-stretch:100%;font-display:block;
+  src:url("../fonts/NotoSansTC-latin-400.woff2") format("woff2");
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+20AC,U+2122,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face{
+  font-family:"Noto Sans TC";font-style:normal;font-weight:500;font-stretch:100%;font-display:block;
+  src:url("../fonts/NotoSansTC-TC-400.woff2") format("woff2");
+  unicode-range:U+3000-303F,U+3400-4DBF,U+4E00-9FFF,U+F900-FAFF,U+FF00-FFEF;
+}
+@font-face{
+  font-family:"Noto Sans TC";font-style:normal;font-weight:600;font-stretch:100%;font-display:block;
+  src:url("../fonts/NotoSansTC-TC-400.woff2") format("woff2");
+  unicode-range:U+3000-303F,U+3400-4DBF,U+4E00-9FFF,U+F900-FAFF,U+FF00-FFEF;
+}
+.quotation-print-page .eq-table{
+  font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif!important;
+}
 .quotation-print-page .eq-wrap{
   width:100%!important;
   max-width:100%!important;
@@ -311,20 +334,20 @@ body,.quotation-print-page{
   max-height:none!important;
   border-collapse:collapse!important;
   border-spacing:0!important;
-  font-size:15px!important;
+  font-size:11px!important;
+  font-weight:500!important;
   line-height:1.35!important;
   transform:none!important;
 }
 .quotation-print-page .eq-table col:nth-child(1),.quotation-print-page .eq-table th:nth-child(1),.quotation-print-page .eq-table td:nth-child(1){width:4%!important;max-width:4%!important;min-width:0!important}
 .quotation-print-page .eq-table col:nth-child(2),.quotation-print-page .eq-table th:nth-child(2),.quotation-print-page .eq-table td:nth-child(2){width:10%!important;max-width:10%!important;min-width:0!important}
-.quotation-print-page .eq-table col:nth-child(3),.quotation-print-page .eq-table th:nth-child(3),.quotation-print-page .eq-table td:nth-child(3){width:7%!important;max-width:7%!important;min-width:0!important}
-.quotation-print-page .eq-table col:nth-child(4),.quotation-print-page .eq-table th:nth-child(4),.quotation-print-page .eq-table td:nth-child(4){width:22%!important;max-width:22%!important;min-width:0!important}
-.quotation-print-page .eq-table col:nth-child(5),.quotation-print-page .eq-table th:nth-child(5),.quotation-print-page .eq-table td:nth-child(5){width:16%!important;max-width:16%!important;min-width:0!important}
+.quotation-print-page .eq-table col:nth-child(3),.quotation-print-page .eq-table th:nth-child(3),.quotation-print-page .eq-table td:nth-child(3){width:28%!important;max-width:28%!important;min-width:0!important}
+.quotation-print-page .eq-table col:nth-child(4),.quotation-print-page .eq-table th:nth-child(4),.quotation-print-page .eq-table td:nth-child(4){width:17%!important;max-width:17%!important;min-width:0!important}
+.quotation-print-page .eq-table col:nth-child(5),.quotation-print-page .eq-table th:nth-child(5),.quotation-print-page .eq-table td:nth-child(5){width:5%!important;max-width:5%!important;min-width:0!important}
 .quotation-print-page .eq-table col:nth-child(6),.quotation-print-page .eq-table th:nth-child(6),.quotation-print-page .eq-table td:nth-child(6){width:5%!important;max-width:5%!important;min-width:0!important}
-.quotation-print-page .eq-table col:nth-child(7),.quotation-print-page .eq-table th:nth-child(7),.quotation-print-page .eq-table td:nth-child(7){width:5%!important;max-width:5%!important;min-width:0!important}
+.quotation-print-page .eq-table col:nth-child(7),.quotation-print-page .eq-table th:nth-child(7),.quotation-print-page .eq-table td:nth-child(7){width:10%!important;max-width:10%!important;min-width:0!important}
 .quotation-print-page .eq-table col:nth-child(8),.quotation-print-page .eq-table th:nth-child(8),.quotation-print-page .eq-table td:nth-child(8){width:10%!important;max-width:10%!important;min-width:0!important}
-.quotation-print-page .eq-table col:nth-child(9),.quotation-print-page .eq-table th:nth-child(9),.quotation-print-page .eq-table td:nth-child(9){width:10%!important;max-width:10%!important;min-width:0!important}
-.quotation-print-page .eq-table col:nth-child(10),.quotation-print-page .eq-table th:nth-child(10),.quotation-print-page .eq-table td:nth-child(10){width:11%!important;max-width:11%!important;min-width:0!important}
+.quotation-print-page .eq-table col:nth-child(9),.quotation-print-page .eq-table th:nth-child(9),.quotation-print-page .eq-table td:nth-child(9){width:11%!important;max-width:11%!important;min-width:0!important}
 .quotation-print-page .eq-table tr,
 .quotation-print-page .eq-table thead tr,
 .quotation-print-page .eq-table tbody tr{
@@ -338,7 +361,7 @@ body,.quotation-print-page{
   height:auto!important;
   min-height:0!important;
   max-height:none!important;
-  padding:6px 5px!important;
+  padding:7px 6px!important;
   vertical-align:middle!important;
   white-space:normal!important;
   word-break:break-word!important;
@@ -349,27 +372,30 @@ body,.quotation-print-page{
   transform:none!important;
   top:auto!important;
   left:auto!important;
+  font-weight:500!important;
+  font-size:11px!important;
 }
 .quotation-print-page .eq-table .head-row,
 .quotation-print-page .eq-table .head-row th{
   background:#111!important;color:#fff!important;
   border-color:#111!important;
   text-align:center!important;
-  font-weight:700!important;font-size:13px!important;
+  font-weight:600!important;font-size:11px!important;
   white-space:normal!important;
   word-break:break-word!important;
   overflow-wrap:anywhere!important;
-  padding:6px 5px!important;
+  padding:7px 6px!important;
   line-height:1.35!important;
 }
 .quotation-print-page .eq-table .head-row th.col-no,
 .quotation-print-page .eq-table .head-row th.col-qty,
 .quotation-print-page .eq-table .head-row th.col-unit{
   white-space:nowrap!important;
-  padding:6px 2px!important;
+  padding:7px 2px!important;
 }
 .quotation-print-page .eq-table tbody td{
-  font-size:15px!important;
+  font-size:11px!important;
+  font-weight:500!important;
   line-height:1.35!important;
 }
 .quotation-print-page .eq-table tbody td .cell-text{
@@ -388,6 +414,7 @@ body,.quotation-print-page{
   word-break:break-word!important;
   line-height:1.35!important;
   overflow:hidden!important;
+  font-weight:inherit!important;
 }
 .quotation-print-page .eq-table .col-no,
 .quotation-print-page .eq-table .col-qty,
@@ -399,27 +426,22 @@ body,.quotation-print-page{
   text-align:center!important;
   word-break:keep-all!important;
   overflow-wrap:normal!important;
+  font-weight:500!important;
 }
 .quotation-print-page .eq-table .col-cat,
 .quotation-print-page .eq-table .col-cat .cell-text{
-  font-size:15px!important;font-weight:600!important;
+  font-size:11px!important;font-weight:500!important;
   text-align:center!important;
-}
-.quotation-print-page .eq-table .col-brand,
-.quotation-print-page .eq-table .col-brand .cell-text{
-  font-size:15px!important;font-weight:600!important;
-  text-align:center!important;
-  white-space:normal!important;
 }
 .quotation-print-page .eq-table .col-item,
 .quotation-print-page .eq-table .col-item .cell-text{
-  font-size:16px!important;font-weight:700!important;
+  font-size:11px!important;font-weight:500!important;
   text-align:left!important;
   white-space:normal!important;
 }
 .quotation-print-page .eq-table .col-model,
 .quotation-print-page .eq-table .col-model .cell-text{
-  font-size:15px!important;font-weight:600!important;
+  font-size:11px!important;font-weight:500!important;
   text-align:center!important;
   white-space:normal!important;
 }
@@ -430,21 +452,21 @@ body,.quotation-print-page{
   white-space:nowrap!important;
   word-break:keep-all!important;
   overflow-wrap:normal!important;
-  font-size:15px!important;
+  font-size:10.5px!important;
   font-weight:600!important;
   font-variant-numeric:tabular-nums;
   text-align:center!important;
 }
 .quotation-print-page .eq-table .col-notes,
 .quotation-print-page .eq-table .col-notes .cell-text{
-  font-size:13px!important;font-weight:400!important;
+  font-size:10px!important;font-weight:500!important;
   text-align:center!important;
   white-space:normal!important;
 }
-.quotation-print-page .amt-total .lbl{font-size:14px!important;font-weight:700!important}
-.quotation-print-page .amt-total .val{font-size:16px!important;font-weight:700!important}
+.quotation-print-page .amt-total .lbl{font-size:14px!important;font-weight:600!important}
+.quotation-print-page .amt-total .val{font-size:16px!important;font-weight:600!important}
 .quotation-print-page .info-label{font-size:12px!important;font-weight:500!important;color:#888!important}
-.quotation-print-page .info-value{font-size:15px!important;font-weight:600!important}
+.quotation-print-page .info-value{font-size:15px!important;font-weight:500!important}
 
 }
 
@@ -594,6 +616,29 @@ body{
 
 .quotation-print-page,.quotation-print-page *{transform:none!important}
 
+@font-face{
+  font-family:"Noto Sans TC";font-style:normal;font-weight:500;font-stretch:100%;font-display:block;
+  src:url("../fonts/NotoSansTC-latin-400.woff2") format("woff2");
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+20AC,U+2122,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face{
+  font-family:"Noto Sans TC";font-style:normal;font-weight:600;font-stretch:100%;font-display:block;
+  src:url("../fonts/NotoSansTC-latin-400.woff2") format("woff2");
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+20AC,U+2122,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face{
+  font-family:"Noto Sans TC";font-style:normal;font-weight:500;font-stretch:100%;font-display:block;
+  src:url("../fonts/NotoSansTC-TC-400.woff2") format("woff2");
+  unicode-range:U+3000-303F,U+3400-4DBF,U+4E00-9FFF,U+F900-FAFF,U+FF00-FFEF;
+}
+@font-face{
+  font-family:"Noto Sans TC";font-style:normal;font-weight:600;font-stretch:100%;font-display:block;
+  src:url("../fonts/NotoSansTC-TC-400.woff2") format("woff2");
+  unicode-range:U+3000-303F,U+3400-4DBF,U+4E00-9FFF,U+F900-FAFF,U+FF00-FFEF;
+}
+.quotation-print-page .eq-table{
+  font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif!important;
+}
 .quotation-print-page .eq-wrap{
   width:100%!important;
   max-width:100%!important;
@@ -607,20 +652,20 @@ body{
   max-height:none!important;
   border-collapse:collapse!important;
   border-spacing:0!important;
-  font-size:15px!important;
+  font-size:11px!important;
+  font-weight:500!important;
   line-height:1.35!important;
   transform:none!important;
 }
 .quotation-print-page .eq-table col:nth-child(1),.quotation-print-page .eq-table th:nth-child(1),.quotation-print-page .eq-table td:nth-child(1){width:4%!important;max-width:4%!important;min-width:0!important}
 .quotation-print-page .eq-table col:nth-child(2),.quotation-print-page .eq-table th:nth-child(2),.quotation-print-page .eq-table td:nth-child(2){width:10%!important;max-width:10%!important;min-width:0!important}
-.quotation-print-page .eq-table col:nth-child(3),.quotation-print-page .eq-table th:nth-child(3),.quotation-print-page .eq-table td:nth-child(3){width:7%!important;max-width:7%!important;min-width:0!important}
-.quotation-print-page .eq-table col:nth-child(4),.quotation-print-page .eq-table th:nth-child(4),.quotation-print-page .eq-table td:nth-child(4){width:22%!important;max-width:22%!important;min-width:0!important}
-.quotation-print-page .eq-table col:nth-child(5),.quotation-print-page .eq-table th:nth-child(5),.quotation-print-page .eq-table td:nth-child(5){width:16%!important;max-width:16%!important;min-width:0!important}
+.quotation-print-page .eq-table col:nth-child(3),.quotation-print-page .eq-table th:nth-child(3),.quotation-print-page .eq-table td:nth-child(3){width:28%!important;max-width:28%!important;min-width:0!important}
+.quotation-print-page .eq-table col:nth-child(4),.quotation-print-page .eq-table th:nth-child(4),.quotation-print-page .eq-table td:nth-child(4){width:17%!important;max-width:17%!important;min-width:0!important}
+.quotation-print-page .eq-table col:nth-child(5),.quotation-print-page .eq-table th:nth-child(5),.quotation-print-page .eq-table td:nth-child(5){width:5%!important;max-width:5%!important;min-width:0!important}
 .quotation-print-page .eq-table col:nth-child(6),.quotation-print-page .eq-table th:nth-child(6),.quotation-print-page .eq-table td:nth-child(6){width:5%!important;max-width:5%!important;min-width:0!important}
-.quotation-print-page .eq-table col:nth-child(7),.quotation-print-page .eq-table th:nth-child(7),.quotation-print-page .eq-table td:nth-child(7){width:5%!important;max-width:5%!important;min-width:0!important}
+.quotation-print-page .eq-table col:nth-child(7),.quotation-print-page .eq-table th:nth-child(7),.quotation-print-page .eq-table td:nth-child(7){width:10%!important;max-width:10%!important;min-width:0!important}
 .quotation-print-page .eq-table col:nth-child(8),.quotation-print-page .eq-table th:nth-child(8),.quotation-print-page .eq-table td:nth-child(8){width:10%!important;max-width:10%!important;min-width:0!important}
-.quotation-print-page .eq-table col:nth-child(9),.quotation-print-page .eq-table th:nth-child(9),.quotation-print-page .eq-table td:nth-child(9){width:10%!important;max-width:10%!important;min-width:0!important}
-.quotation-print-page .eq-table col:nth-child(10),.quotation-print-page .eq-table th:nth-child(10),.quotation-print-page .eq-table td:nth-child(10){width:11%!important;max-width:11%!important;min-width:0!important}
+.quotation-print-page .eq-table col:nth-child(9),.quotation-print-page .eq-table th:nth-child(9),.quotation-print-page .eq-table td:nth-child(9){width:11%!important;max-width:11%!important;min-width:0!important}
 .quotation-print-page .eq-table tr,
 .quotation-print-page .eq-table thead tr,
 .quotation-print-page .eq-table tbody tr{
@@ -634,7 +679,7 @@ body{
   height:auto!important;
   min-height:0!important;
   max-height:none!important;
-  padding:6px 5px!important;
+  padding:7px 6px!important;
   vertical-align:middle!important;
   white-space:normal!important;
   word-break:break-word!important;
@@ -645,27 +690,30 @@ body{
   transform:none!important;
   top:auto!important;
   left:auto!important;
+  font-weight:500!important;
+  font-size:11px!important;
 }
 .quotation-print-page .eq-table .head-row,
 .quotation-print-page .eq-table .head-row th{
   background:#111!important;color:#fff!important;
   border-color:#111!important;
   text-align:center!important;
-  font-weight:700!important;font-size:13px!important;
+  font-weight:600!important;font-size:11px!important;
   white-space:normal!important;
   word-break:break-word!important;
   overflow-wrap:anywhere!important;
-  padding:6px 5px!important;
+  padding:7px 6px!important;
   line-height:1.35!important;
 }
 .quotation-print-page .eq-table .head-row th.col-no,
 .quotation-print-page .eq-table .head-row th.col-qty,
 .quotation-print-page .eq-table .head-row th.col-unit{
   white-space:nowrap!important;
-  padding:6px 2px!important;
+  padding:7px 2px!important;
 }
 .quotation-print-page .eq-table tbody td{
-  font-size:15px!important;
+  font-size:11px!important;
+  font-weight:500!important;
   line-height:1.35!important;
 }
 .quotation-print-page .eq-table tbody td .cell-text{
@@ -684,6 +732,7 @@ body{
   word-break:break-word!important;
   line-height:1.35!important;
   overflow:hidden!important;
+  font-weight:inherit!important;
 }
 .quotation-print-page .eq-table .col-no,
 .quotation-print-page .eq-table .col-qty,
@@ -695,27 +744,22 @@ body{
   text-align:center!important;
   word-break:keep-all!important;
   overflow-wrap:normal!important;
+  font-weight:500!important;
 }
 .quotation-print-page .eq-table .col-cat,
 .quotation-print-page .eq-table .col-cat .cell-text{
-  font-size:15px!important;font-weight:600!important;
+  font-size:11px!important;font-weight:500!important;
   text-align:center!important;
-}
-.quotation-print-page .eq-table .col-brand,
-.quotation-print-page .eq-table .col-brand .cell-text{
-  font-size:15px!important;font-weight:600!important;
-  text-align:center!important;
-  white-space:normal!important;
 }
 .quotation-print-page .eq-table .col-item,
 .quotation-print-page .eq-table .col-item .cell-text{
-  font-size:16px!important;font-weight:700!important;
+  font-size:11px!important;font-weight:500!important;
   text-align:left!important;
   white-space:normal!important;
 }
 .quotation-print-page .eq-table .col-model,
 .quotation-print-page .eq-table .col-model .cell-text{
-  font-size:15px!important;font-weight:600!important;
+  font-size:11px!important;font-weight:500!important;
   text-align:center!important;
   white-space:normal!important;
 }
@@ -726,24 +770,47 @@ body{
   white-space:nowrap!important;
   word-break:keep-all!important;
   overflow-wrap:normal!important;
-  font-size:15px!important;
+  font-size:10.5px!important;
   font-weight:600!important;
   font-variant-numeric:tabular-nums;
   text-align:center!important;
 }
 .quotation-print-page .eq-table .col-notes,
 .quotation-print-page .eq-table .col-notes .cell-text{
-  font-size:13px!important;font-weight:400!important;
+  font-size:10px!important;font-weight:500!important;
   text-align:center!important;
   white-space:normal!important;
 }
-.quotation-print-page .amt-total .lbl{font-size:14px!important;font-weight:700!important}
-.quotation-print-page .amt-total .val{font-size:16px!important;font-weight:700!important}
+.quotation-print-page .amt-total .lbl{font-size:14px!important;font-weight:600!important}
+.quotation-print-page .amt-total .val{font-size:16px!important;font-weight:600!important}
 .quotation-print-page .info-label{font-size:12px!important;font-weight:500!important;color:#888!important}
-.quotation-print-page .info-value{font-size:15px!important;font-weight:600!important}
+.quotation-print-page .info-value{font-size:15px!important;font-weight:500!important}
 
 @media print{
 
+@font-face{
+  font-family:"Noto Sans TC";font-style:normal;font-weight:500;font-stretch:100%;font-display:block;
+  src:url("../fonts/NotoSansTC-latin-400.woff2") format("woff2");
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+20AC,U+2122,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face{
+  font-family:"Noto Sans TC";font-style:normal;font-weight:600;font-stretch:100%;font-display:block;
+  src:url("../fonts/NotoSansTC-latin-400.woff2") format("woff2");
+  unicode-range:U+0000-00FF,U+0131,U+0152-0153,U+02BB-02BC,U+02C6,U+02DA,U+02DC,U+2000-206F,U+20AC,U+2122,U+2212,U+2215,U+FEFF,U+FFFD;
+}
+@font-face{
+  font-family:"Noto Sans TC";font-style:normal;font-weight:500;font-stretch:100%;font-display:block;
+  src:url("../fonts/NotoSansTC-TC-400.woff2") format("woff2");
+  unicode-range:U+3000-303F,U+3400-4DBF,U+4E00-9FFF,U+F900-FAFF,U+FF00-FFEF;
+}
+@font-face{
+  font-family:"Noto Sans TC";font-style:normal;font-weight:600;font-stretch:100%;font-display:block;
+  src:url("../fonts/NotoSansTC-TC-400.woff2") format("woff2");
+  unicode-range:U+3000-303F,U+3400-4DBF,U+4E00-9FFF,U+F900-FAFF,U+FF00-FFEF;
+}
+.quotation-print-page .eq-table{
+  font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif!important;
+}
 .quotation-print-page .eq-wrap{
   width:100%!important;
   max-width:100%!important;
@@ -757,20 +824,20 @@ body{
   max-height:none!important;
   border-collapse:collapse!important;
   border-spacing:0!important;
-  font-size:15px!important;
+  font-size:11px!important;
+  font-weight:500!important;
   line-height:1.35!important;
   transform:none!important;
 }
 .quotation-print-page .eq-table col:nth-child(1),.quotation-print-page .eq-table th:nth-child(1),.quotation-print-page .eq-table td:nth-child(1){width:4%!important;max-width:4%!important;min-width:0!important}
 .quotation-print-page .eq-table col:nth-child(2),.quotation-print-page .eq-table th:nth-child(2),.quotation-print-page .eq-table td:nth-child(2){width:10%!important;max-width:10%!important;min-width:0!important}
-.quotation-print-page .eq-table col:nth-child(3),.quotation-print-page .eq-table th:nth-child(3),.quotation-print-page .eq-table td:nth-child(3){width:7%!important;max-width:7%!important;min-width:0!important}
-.quotation-print-page .eq-table col:nth-child(4),.quotation-print-page .eq-table th:nth-child(4),.quotation-print-page .eq-table td:nth-child(4){width:22%!important;max-width:22%!important;min-width:0!important}
-.quotation-print-page .eq-table col:nth-child(5),.quotation-print-page .eq-table th:nth-child(5),.quotation-print-page .eq-table td:nth-child(5){width:16%!important;max-width:16%!important;min-width:0!important}
+.quotation-print-page .eq-table col:nth-child(3),.quotation-print-page .eq-table th:nth-child(3),.quotation-print-page .eq-table td:nth-child(3){width:28%!important;max-width:28%!important;min-width:0!important}
+.quotation-print-page .eq-table col:nth-child(4),.quotation-print-page .eq-table th:nth-child(4),.quotation-print-page .eq-table td:nth-child(4){width:17%!important;max-width:17%!important;min-width:0!important}
+.quotation-print-page .eq-table col:nth-child(5),.quotation-print-page .eq-table th:nth-child(5),.quotation-print-page .eq-table td:nth-child(5){width:5%!important;max-width:5%!important;min-width:0!important}
 .quotation-print-page .eq-table col:nth-child(6),.quotation-print-page .eq-table th:nth-child(6),.quotation-print-page .eq-table td:nth-child(6){width:5%!important;max-width:5%!important;min-width:0!important}
-.quotation-print-page .eq-table col:nth-child(7),.quotation-print-page .eq-table th:nth-child(7),.quotation-print-page .eq-table td:nth-child(7){width:5%!important;max-width:5%!important;min-width:0!important}
+.quotation-print-page .eq-table col:nth-child(7),.quotation-print-page .eq-table th:nth-child(7),.quotation-print-page .eq-table td:nth-child(7){width:10%!important;max-width:10%!important;min-width:0!important}
 .quotation-print-page .eq-table col:nth-child(8),.quotation-print-page .eq-table th:nth-child(8),.quotation-print-page .eq-table td:nth-child(8){width:10%!important;max-width:10%!important;min-width:0!important}
-.quotation-print-page .eq-table col:nth-child(9),.quotation-print-page .eq-table th:nth-child(9),.quotation-print-page .eq-table td:nth-child(9){width:10%!important;max-width:10%!important;min-width:0!important}
-.quotation-print-page .eq-table col:nth-child(10),.quotation-print-page .eq-table th:nth-child(10),.quotation-print-page .eq-table td:nth-child(10){width:11%!important;max-width:11%!important;min-width:0!important}
+.quotation-print-page .eq-table col:nth-child(9),.quotation-print-page .eq-table th:nth-child(9),.quotation-print-page .eq-table td:nth-child(9){width:11%!important;max-width:11%!important;min-width:0!important}
 .quotation-print-page .eq-table tr,
 .quotation-print-page .eq-table thead tr,
 .quotation-print-page .eq-table tbody tr{
@@ -784,7 +851,7 @@ body{
   height:auto!important;
   min-height:0!important;
   max-height:none!important;
-  padding:6px 5px!important;
+  padding:7px 6px!important;
   vertical-align:middle!important;
   white-space:normal!important;
   word-break:break-word!important;
@@ -795,27 +862,30 @@ body{
   transform:none!important;
   top:auto!important;
   left:auto!important;
+  font-weight:500!important;
+  font-size:11px!important;
 }
 .quotation-print-page .eq-table .head-row,
 .quotation-print-page .eq-table .head-row th{
   background:#111!important;color:#fff!important;
   border-color:#111!important;
   text-align:center!important;
-  font-weight:700!important;font-size:13px!important;
+  font-weight:600!important;font-size:11px!important;
   white-space:normal!important;
   word-break:break-word!important;
   overflow-wrap:anywhere!important;
-  padding:6px 5px!important;
+  padding:7px 6px!important;
   line-height:1.35!important;
 }
 .quotation-print-page .eq-table .head-row th.col-no,
 .quotation-print-page .eq-table .head-row th.col-qty,
 .quotation-print-page .eq-table .head-row th.col-unit{
   white-space:nowrap!important;
-  padding:6px 2px!important;
+  padding:7px 2px!important;
 }
 .quotation-print-page .eq-table tbody td{
-  font-size:15px!important;
+  font-size:11px!important;
+  font-weight:500!important;
   line-height:1.35!important;
 }
 .quotation-print-page .eq-table tbody td .cell-text{
@@ -834,6 +904,7 @@ body{
   word-break:break-word!important;
   line-height:1.35!important;
   overflow:hidden!important;
+  font-weight:inherit!important;
 }
 .quotation-print-page .eq-table .col-no,
 .quotation-print-page .eq-table .col-qty,
@@ -845,27 +916,22 @@ body{
   text-align:center!important;
   word-break:keep-all!important;
   overflow-wrap:normal!important;
+  font-weight:500!important;
 }
 .quotation-print-page .eq-table .col-cat,
 .quotation-print-page .eq-table .col-cat .cell-text{
-  font-size:15px!important;font-weight:600!important;
+  font-size:11px!important;font-weight:500!important;
   text-align:center!important;
-}
-.quotation-print-page .eq-table .col-brand,
-.quotation-print-page .eq-table .col-brand .cell-text{
-  font-size:15px!important;font-weight:600!important;
-  text-align:center!important;
-  white-space:normal!important;
 }
 .quotation-print-page .eq-table .col-item,
 .quotation-print-page .eq-table .col-item .cell-text{
-  font-size:16px!important;font-weight:700!important;
+  font-size:11px!important;font-weight:500!important;
   text-align:left!important;
   white-space:normal!important;
 }
 .quotation-print-page .eq-table .col-model,
 .quotation-print-page .eq-table .col-model .cell-text{
-  font-size:15px!important;font-weight:600!important;
+  font-size:11px!important;font-weight:500!important;
   text-align:center!important;
   white-space:normal!important;
 }
@@ -876,21 +942,21 @@ body{
   white-space:nowrap!important;
   word-break:keep-all!important;
   overflow-wrap:normal!important;
-  font-size:15px!important;
+  font-size:10.5px!important;
   font-weight:600!important;
   font-variant-numeric:tabular-nums;
   text-align:center!important;
 }
 .quotation-print-page .eq-table .col-notes,
 .quotation-print-page .eq-table .col-notes .cell-text{
-  font-size:13px!important;font-weight:400!important;
+  font-size:10px!important;font-weight:500!important;
   text-align:center!important;
   white-space:normal!important;
 }
-.quotation-print-page .amt-total .lbl{font-size:14px!important;font-weight:700!important}
-.quotation-print-page .amt-total .val{font-size:16px!important;font-weight:700!important}
+.quotation-print-page .amt-total .lbl{font-size:14px!important;font-weight:600!important}
+.quotation-print-page .amt-total .val{font-size:16px!important;font-weight:600!important}
 .quotation-print-page .info-label{font-size:12px!important;font-weight:500!important;color:#888!important}
-.quotation-print-page .info-value{font-size:15px!important;font-weight:600!important}
+.quotation-print-page .info-value{font-size:15px!important;font-weight:500!important}
 
 }</style>
 </head>
@@ -957,9 +1023,9 @@ body{
       <div class="eq-title">工程設備明細</div>
       <div class="eq-wrap">
         <table class="eq-table">
-          <colgroup><col style="width:4%"><col style="width:10%"><col style="width:7%"><col style="width:22%"><col style="width:16%"><col style="width:5%"><col style="width:5%"><col style="width:10%"><col style="width:10%"><col style="width:11%"></colgroup>
-          <thead><tr class="head-row"><th class="col-no">項次</th><th class="col-cat">類別</th><th class="col-brand">品牌</th><th class="col-item">品項／規格</th><th class="col-model">型號</th><th class="col-qty">數量</th><th class="col-unit">單位</th><th class="col-price">單價</th><th class="col-sub">小計</th><th class="col-notes">備註</th></tr></thead>
-          <tbody><tr><td class="tac col-no"><div class="cell-text">1</div></td><td class="tac col-cat"><div class="cell-text">保養</div></td><td class="tac col-brand"><div class="cell-text">—</div></td><td class="tal col-item"><div class="cell-text">吊隱式保養</div></td><td class="tac col-model"><div class="cell-text">—</div></td><td class="tac col-qty"><div class="cell-text">2</div></td><td class="tac col-unit"><div class="cell-text">台</div></td><td class="tac col-price"><div class="cell-text">NT$ 1,800</div></td><td class="tac col-sub"><div class="cell-text">NT$ 3,600</div></td><td class="tac col-notes"><div class="cell-text"></div></td></tr><tr><td class="tac col-no"><div class="cell-text">2</div></td><td class="tac col-cat"><div class="cell-text">安裝新機</div></td><td class="tac col-brand"><div class="cell-text">冰點</div></td><td class="tal col-item"><div class="cell-text">冰點冷氣變頻<br>1級吊隱式</div></td><td class="tac col-model"><div class="cell-text">HFC-80</div></td><td class="tac col-qty"><div class="cell-text">1</div></td><td class="tac col-unit"><div class="cell-text">台</div></td><td class="tac col-price"><div class="cell-text">NT$ 32,800</div></td><td class="tac col-sub"><div class="cell-text">NT$ 32,800</div></td><td class="tac col-notes"><div class="cell-text"></div></td></tr><tr><td class="tac col-no"><div class="cell-text">3</div></td><td class="tac col-cat"><div class="cell-text">安裝新機</div></td><td class="tac col-brand"><div class="cell-text">聲寶</div></td><td class="tal col-item"><div class="cell-text">壁掛冷氣保養服務</div></td><td class="tac col-model"><div class="cell-text">A1</div></td><td class="tac col-qty"><div class="cell-text">1</div></td><td class="tac col-unit"><div class="cell-text">式</div></td><td class="tac col-price"><div class="cell-text">NT$ 2,800</div></td><td class="tac col-sub"><div class="cell-text">NT$ 2,800</div></td><td class="tac col-notes"><div class="cell-text">八字品項</div></td></tr><tr><td class="tac col-no"><div class="cell-text">4</div></td><td class="tac col-cat"><div class="cell-text">安裝新機</div></td><td class="tac col-brand"><div class="cell-text">聲寶</div></td><td class="tal col-item"><div class="cell-text">壁掛分離式變頻冷暖超長品項名稱測試自動換</div></td><td class="tac col-model"><div class="cell-text">AU/AM-JF50DC</div></td><td class="tac col-qty"><div class="cell-text">1</div></td><td class="tac col-unit"><div class="cell-text">台</div></td><td class="tac col-price"><div class="cell-text">NT$ 32,800</div></td><td class="tac col-sub"><div class="cell-text">NT$ 32,800</div></td><td class="tac col-notes"><div class="cell-text">含基本安裝</div></td></tr><tr><td class="tac col-no"><div class="cell-text">5</div></td><td class="tac col-cat"><div class="cell-text">追加項目</div></td><td class="tac col-brand"><div class="cell-text">三菱重工</div></td><td class="tal col-item"><div class="cell-text">壁掛分離式變頻冷暖超長品項名稱測試自動換行顯示效果含基本安裝與銅管配管工程服務項</div></td><td class="tac col-model"><div class="cell-text">MSZ-AP35VG-LONG20MDL</div></td><td class="tac col-qty"><div class="cell-text">2</div></td><td class="tac col-unit"><div class="cell-text">台</div></td><td class="tac col-price"><div class="cell-text">NT$ 28,500</div></td><td class="tac col-sub"><div class="cell-text">NT$ 57,000</div></td><td class="tac col-notes"><div class="cell-text">本項含五米銅管電線訊號線基本安裝工資及高空作業補助，施工前請確認現場管線路徑與電源位置保留施工空間。</div></td></tr><tr><td class="tac col-no"><div class="cell-text">6</div></td><td class="tac col-cat"><div class="cell-text">—</div></td><td class="tac col-brand"><div class="cell-text">—</div></td><td class="tal col-item"><div class="cell-text">移機2/4銅管基本安裝服務<br>含5米銅管、電線訊號</div></td><td class="tac col-model"><div class="cell-text">—</div></td><td class="tac col-qty"><div class="cell-text">1</div></td><td class="tac col-unit"><div class="cell-text">式</div></td><td class="tac col-price"><div class="cell-text">NT$ 3,500</div></td><td class="tac col-sub"><div class="cell-text">NT$ 3,500</div></td><td class="tac col-notes"><div class="cell-text"></div></td></tr></tbody>
+          <colgroup><col style="width:4%"><col style="width:10%"><col style="width:28%"><col style="width:17%"><col style="width:5%"><col style="width:5%"><col style="width:10%"><col style="width:10%"><col style="width:11%"></colgroup>
+          <thead><tr class="head-row"><th class="col-no">項次</th><th class="col-cat">類別</th><th class="col-item">品項／規格</th><th class="col-model">型號</th><th class="col-qty">數量</th><th class="col-unit">單位</th><th class="col-price">單價</th><th class="col-sub">小計</th><th class="col-notes">備註</th></tr></thead>
+          <tbody><tr><td class="tac col-no"><div class="cell-text">1</div></td><td class="tac col-cat"><div class="cell-text">保養</div></td><td class="tal col-item"><div class="cell-text">吊隱式保養</div></td><td class="tac col-model"><div class="cell-text">—</div></td><td class="tac col-qty"><div class="cell-text">2</div></td><td class="tac col-unit"><div class="cell-text">台</div></td><td class="tac col-price"><div class="cell-text">NT$ 1,800</div></td><td class="tac col-sub"><div class="cell-text">NT$ 3,600</div></td><td class="tac col-notes"><div class="cell-text"></div></td></tr><tr><td class="tac col-no"><div class="cell-text">2</div></td><td class="tac col-cat"><div class="cell-text">安裝新機</div></td><td class="tal col-item"><div class="cell-text">冰點冷氣變頻1級吊隱式</div></td><td class="tac col-model"><div class="cell-text">HFC-80</div></td><td class="tac col-qty"><div class="cell-text">1</div></td><td class="tac col-unit"><div class="cell-text">台</div></td><td class="tac col-price"><div class="cell-text">NT$ 32,800</div></td><td class="tac col-sub"><div class="cell-text">NT$ 32,800</div></td><td class="tac col-notes"><div class="cell-text"></div></td></tr><tr><td class="tac col-no"><div class="cell-text">3</div></td><td class="tac col-cat"><div class="cell-text">安裝新機</div></td><td class="tal col-item"><div class="cell-text">壁掛冷氣保養服務</div></td><td class="tac col-model"><div class="cell-text">A1</div></td><td class="tac col-qty"><div class="cell-text">1</div></td><td class="tac col-unit"><div class="cell-text">式</div></td><td class="tac col-price"><div class="cell-text">NT$ 2,800</div></td><td class="tac col-sub"><div class="cell-text">NT$ 2,800</div></td><td class="tac col-notes"><div class="cell-text">八字品項</div></td></tr><tr><td class="tac col-no"><div class="cell-text">4</div></td><td class="tac col-cat"><div class="cell-text">安裝新機</div></td><td class="tal col-item"><div class="cell-text">壁掛分離式變頻冷暖超長品項名稱測試自動換</div></td><td class="tac col-model"><div class="cell-text">AU/AM-JF50DC</div></td><td class="tac col-qty"><div class="cell-text">1</div></td><td class="tac col-unit"><div class="cell-text">台</div></td><td class="tac col-price"><div class="cell-text">NT$ 32,800</div></td><td class="tac col-sub"><div class="cell-text">NT$ 32,800</div></td><td class="tac col-notes"><div class="cell-text">含基本安裝</div></td></tr><tr><td class="tac col-no"><div class="cell-text">5</div></td><td class="tac col-cat"><div class="cell-text">追加項目</div></td><td class="tal col-item"><div class="cell-text">壁掛分離式變頻冷暖超長品項名稱測試自動換行顯示效果含基本安裝與銅管配管工程服務項</div></td><td class="tac col-model"><div class="cell-text">MSZ-AP35VG-LONG20MDL</div></td><td class="tac col-qty"><div class="cell-text">2</div></td><td class="tac col-unit"><div class="cell-text">台</div></td><td class="tac col-price"><div class="cell-text">NT$ 28,500</div></td><td class="tac col-sub"><div class="cell-text">NT$ 57,000</div></td><td class="tac col-notes"><div class="cell-text">本項含五米銅管電線訊號線基本安裝工資及高空作業補助，施工前請確認現場管線路徑與電源位置保留施工空間。</div></td></tr><tr><td class="tac col-no"><div class="cell-text">6</div></td><td class="tac col-cat"><div class="cell-text">—</div></td><td class="tal col-item"><div class="cell-text">移機2/4銅管基本安裝服務<br>含5米銅管、電線訊號</div></td><td class="tac col-model"><div class="cell-text">—</div></td><td class="tac col-qty"><div class="cell-text">1</div></td><td class="tac col-unit"><div class="cell-text">式</div></td><td class="tac col-price"><div class="cell-text">NT$ 3,500</div></td><td class="tac col-sub"><div class="cell-text">NT$ 3,500</div></td><td class="tac col-notes"><div class="cell-text"></div></td></tr></tbody>
         </table>
       </div>
     </div>

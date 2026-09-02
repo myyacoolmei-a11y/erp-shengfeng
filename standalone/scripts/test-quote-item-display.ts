@@ -21,7 +21,7 @@ function assert(cond: unknown, msg: string) {
 
 (globalThis as any).window = { location: { origin: "" } };
 
-function tableRows(html: string): Array<{ cat: string; brand: string; item: string }> {
+function tableRows(html: string): Array<{ cat: string; item: string }> {
   const body = html.match(/<tbody>([\s\S]*?)<\/tbody>/)?.[1] ?? "";
   return [...body.matchAll(/<tr>([\s\S]*?)<\/tr>/g)].map((m) => {
     const cell = (cls: string) => {
@@ -33,7 +33,7 @@ function tableRows(html: string): Array<{ cat: string; brand: string; item: stri
         .replace(/<[^>]+>/g, "")
         .trim();
     };
-    return { cat: cell("col-cat"), brand: cell("col-brand"), item: cell("col-item") };
+    return { cat: cell("col-cat"), item: cell("col-item") };
   });
 }
 
@@ -81,14 +81,16 @@ const mixedHtml = buildQuotationHtml({
 });
 const rows = tableRows(mixedHtml);
 assert(rows.length === 5, `expected 5 rows, got ${rows.length}`);
-assert(rows[0].cat === "壁掛式保養" && rows[0].brand === "—" && rows[0].item === "S1", `row1 ${JSON.stringify(rows[0])}`);
-assert(rows[1].cat === "維修項目" && rows[1].brand === "—" && rows[1].item === "冷媒填充＋抓漏", `row2 ${JSON.stringify(rows[1])}`);
-assert(rows[2].cat === "冷氣設備" && rows[2].brand === "大金" && rows[2].item === "壁掛分離式", `row3 ${JSON.stringify(rows[2])}`);
-assert(rows[3].cat === "安裝新機" && rows[3].brand === "日立" && rows[3].item === "室外機", `row4 ${JSON.stringify(rows[3])}`);
-assert(rows[4].cat === "—" && rows[4].brand === "—", `row5 empty-other ${JSON.stringify(rows[4])}`);
+assert(rows[0].cat === "壁掛式保養" && rows[0].item === "S1", `row1 ${JSON.stringify(rows[0])}`);
+assert(rows[1].cat === "維修項目" && rows[1].item === "冷媒填充＋抓漏", `row2 ${JSON.stringify(rows[1])}`);
+assert(rows[2].cat === "冷氣設備" && rows[2].item === "壁掛分離式", `row3 ${JSON.stringify(rows[2])}`);
+assert(rows[3].cat === "安裝新機" && rows[3].item === "室外機", `row4 ${JSON.stringify(rows[3])}`);
+assert(rows[4].cat === "—" && rows[4].item === "現場雜項", `row5 empty-other ${JSON.stringify(rows[4])}`);
 assert(rows.every((r) => r.cat !== ""), "category cells must not be empty");
 assert(rows.every((r) => r.cat !== "其他"), "must not print 其他");
 assert(!mixedHtml.includes(">其他<"), "PDF must not print 其他 as a cell");
+assert(!/<t[hd][^>]*col-brand/.test(mixedHtml) && !/<th[^>]*>品牌<\/th>/.test(mixedHtml), "quotation table must not print 品牌 column");
+assert(!mixedHtml.includes("大金") && !mixedHtml.includes("日立"), "equipment brands must not print as a table column");
 
 const quotesSrc = readFileSync(
   join(dirname(fileURLToPath(import.meta.url)), "../client/src/pages/quotes.tsx"),
@@ -102,5 +104,5 @@ if (process.exitCode) {
   console.error("quote item display tests failed");
 } else {
   console.log("quote item display tests passed");
-  console.log(rows.map((r, i) => `${i + 1}. 類別=${r.cat} 品牌=${r.brand} 品項=${r.item}`).join("\n"));
+  console.log(rows.map((r, i) => `${i + 1}. 類別=${r.cat} 品項=${r.item}`).join("\n"));
 }

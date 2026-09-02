@@ -31,7 +31,7 @@ const demoQuote = {
   notes: "報價單有效期限30日，施工前請支付50%訂金。",
   items: [
     { category: "保養", brand: "—", itemName: "吊隱式保養", model: "", quantity: 2, unit: "台", unitPrice: 1800, subtotal: 3600, notes: "" },
-    { category: "安裝新機", brand: "冰點", itemName: "冰點冷氣變頻\n1級吊隱式", model: "HFC-80", quantity: 1, unit: "台", unitPrice: 32800, subtotal: 32800, notes: "" },
+    { category: "安裝新機", brand: "冰點", itemName: "冰點冷氣變頻1級吊隱式", model: "HFC-80", quantity: 1, unit: "台", unitPrice: 32800, subtotal: 32800, notes: "" },
     { category: "安裝新機", brand: "聲寶", itemName: "壁掛冷氣保養服務", model: "A1", quantity: 1, unit: "式", unitPrice: 2800, subtotal: 2800, notes: "八字品項" },
     { category: "安裝新機", brand: "聲寶", itemName: "壁掛分離式變頻冷暖超長品項名稱測試自動換", model: "AU/AM-JF50DC", quantity: 1, unit: "台", unitPrice: 32800, subtotal: 32800, notes: "含基本安裝" },
     { category: "追加項目", brand: "三菱重工", itemName: "壁掛分離式變頻冷暖超長品項名稱測試自動換行顯示效果含基本安裝與銅管配管工程服務項", model: "MSZ-AP35VG-LONG20MDL", quantity: 2, unit: "台", unitPrice: 28500, subtotal: 57000, notes: "本項含五米銅管電線訊號線基本安裝工資及高空作業補助，施工前請確認現場管線路徑與電源位置保留施工空間。" },
@@ -125,15 +125,18 @@ if (!quoteHtml.includes("overflow-wrap:anywhere") || !quoteHtml.includes("word-b
 if (quoteHtml.includes("padding:3.5px 3px!important")) {
   throw new Error("quotation eq-table must not use compact 3.5px cell padding");
 }
-if (!quoteHtml.includes("width:22%")) {
-  throw new Error("品項／規格 column must be 22%");
+if (/<th[^>]*>品牌<\/th>/.test(quoteHtml) || /<t[hd][^>]*col-brand/.test(quoteHtml)) {
+  throw new Error("quotation equipment table must not include 品牌 column");
+}
+if (!quoteHtml.includes("width:28%")) {
+  throw new Error("品項／規格 column must be 28%");
 }
 if (!quoteHtml.includes("width:4%") || !quoteHtml.includes("width:11%")) {
   throw new Error("項次 4% / 備註 11% fixed columns missing");
 }
 const colgroup = quoteHtml.match(/<colgroup>([\s\S]*?)<\/colgroup>/)?.[1] ?? "";
-const colWidths = [...colgroup.matchAll(/width:(\d+%)/g)].map((m) => m[1]);
-if (colWidths.join() !== ["4%", "10%", "7%", "22%", "16%", "5%", "5%", "10%", "10%", "11%"].join()) {
+const colWidths = [...colgroup.matchAll(/width:(\d+\.?\d*%)/g)].map((m) => m[1]);
+if (colWidths.join() !== ["4%", "10%", "28%", "17%", "5%", "5%", "10%", "10%", "11%"].join()) {
   throw new Error(`colgroup widths drifted: ${colWidths.join(" ")}`);
 }
 {

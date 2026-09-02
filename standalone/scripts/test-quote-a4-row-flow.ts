@@ -31,7 +31,7 @@ const html = buildQuotationHtml({
   taxType: "未稅",
   items: [
     { category: "保養", brand: "—", itemName: "吊隱式保養", model: "", quantity: 2, unit: "台", unitPrice: 1, subtotal: 2, notes: "" },
-    { category: "安裝新機", brand: "冰點", itemName: "冰點冷氣變頻\n1級吊隱式", model: "HFC-80", quantity: 1, unit: "台", unitPrice: 1, subtotal: 1, notes: "" },
+    { category: "安裝新機", brand: "冰點", itemName: "冰點冷氣變頻1級吊隱式", model: "HFC-80", quantity: 1, unit: "台", unitPrice: 1, subtotal: 1, notes: "" },
     { category: "安裝新機", brand: "聲寶", itemName: name8, model: "A1", quantity: 1, unit: "式", unitPrice: 1, subtotal: 1, notes: "短備註" },
     { category: "安裝新機", brand: "聲寶", itemName: name20, model: "A2", quantity: 1, unit: "台", unitPrice: 1, subtotal: 1, notes: "含基本安裝" },
     { category: "追加項目", brand: "三菱重工", itemName: name40, model: model20, quantity: 1, unit: "台", unitPrice: 1, subtotal: 1, notes: notes50 },
@@ -60,11 +60,11 @@ function cell(row: string, cls: string): string {
 
 assert(cell(rows[0], "col-cat") === "保養", "保養 category");
 assert(cell(rows[0], "col-item").includes("吊隱式保養"), "吊隱式保養 stays in 品項");
-assert(cell(rows[0], "col-brand") === "—", "brand dash");
+assert(!/<t[hd][^>]*col-brand/.test(html), "brand column removed");
+assert(!/<th[^>]*>品牌<\/th>/.test(html), "no 品牌 header");
 assert(cell(rows[0], "col-qty") === "2", "qty 2");
 assert(cell(rows[0], "col-unit") === "台", "unit 台");
-assert(cell(rows[1], "col-item").includes("冰點冷氣變頻"), "bingdian line 1");
-assert(cell(rows[1], "col-item").includes("1級吊隱式"), "bingdian line 2");
+assert(cell(rows[1], "col-item").includes("冰點冷氣變頻1級吊隱式"), "bingdian wraps as one field");
 assert(cell(rows[2], "col-item").includes(name8), "8-char item");
 assert(cell(rows[3], "col-item").includes(name20), "20-char item");
 assert(cell(rows[4], "col-item").includes(name40), "40-char item");
@@ -90,18 +90,20 @@ assert(html.includes("@media print"), "print CSS present");
 assert(!html.includes("position:absolute"), "no absolute positioning");
 assert(!html.includes("transform:scale"), "no transform scale");
 assert(!html.includes("padding:3.5px 3px!important"), "no compact 3.5px padding override");
-assert(html.includes("width:22%"), "品項 column 22%");
+assert(html.includes("width:28%"), "品項 column 28%");
 assert(html.includes("width:4%"), "項次 4%");
 assert(html.includes("width:11%"), "備註 11%");
 assert(html.includes("table-layout:fixed"), "table-layout fixed");
+assert(html.includes("font-weight:500"), "medium table weight");
+assert(!/quotation-print-page \.eq-table[\s\S]{0,400}font-weight:700/.test(html), "eq-table must not use 700");
 const colgroup = html.match(/<colgroup>([\s\S]*?)<\/colgroup>/)?.[1] ?? "";
-const colWidths = [...colgroup.matchAll(/width:(\d+%)/g)].map((m) => m[1]);
+const colWidths = [...colgroup.matchAll(/width:(\d+\.?\d*%)/g)].map((m) => m[1]);
 assert(
-  colWidths.join() === ["4%", "10%", "7%", "22%", "16%", "5%", "5%", "10%", "10%", "11%"].join(),
+  colWidths.join() === ["4%", "10%", "28%", "17%", "5%", "5%", "10%", "10%", "11%"].join(),
   `colgroup ${colWidths.join(" ")}`,
 );
-assert((html.match(/td:nth-child\(4\)\{width:22%!important/g) || []).length >= 1, "nth-child locks 品項 22%");
-assert(!html.includes("@media print") || html.includes("td:nth-child(4){width:22%!important"), "print uses same col widths");
+assert((html.match(/td:nth-child\(3\)\{width:28%!important/g) || []).length >= 1, "nth-child locks 品項 28%");
+assert(html.includes("td:nth-child(3){width:28%!important"), "print uses same col widths");
 
 if (process.exitCode) {
   console.error("quote A4 row-flow tests failed");
