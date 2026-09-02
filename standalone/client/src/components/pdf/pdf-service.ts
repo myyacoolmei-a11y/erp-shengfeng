@@ -65,6 +65,24 @@ ${colRules}
   word-break:break-word!important;
   vertical-align:middle!important;
   padding:7px 6px!important;
+  font-weight:500!important;
+  font-size:11px!important;
+  line-height:1.35!important;
+}
+.quotation-print-page .eq-table .head-row th{
+  font-weight:600!important;
+}
+.quotation-print-page .eq-table .col-notes,
+.quotation-print-page .eq-table .col-notes .cell-text{
+  font-size:10px!important;
+  font-weight:500!important;
+}
+.quotation-print-page .eq-table .col-price,
+.quotation-print-page .eq-table .col-sub,
+.quotation-print-page .eq-table .col-price .cell-text,
+.quotation-print-page .eq-table .col-sub .cell-text{
+  font-size:10.5px!important;
+  font-weight:600!important;
 }
 .quotation-print-page .eq-table .cell-text{
   display:block!important;
