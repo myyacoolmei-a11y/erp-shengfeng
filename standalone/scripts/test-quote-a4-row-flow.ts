@@ -80,8 +80,8 @@ assert(!yijiNotes.includes("含5米銅管、電線訊號"), "do not reprint spec
 assert(!yijiItem.includes(name40), "must not concatenate other items into 品項");
 
 assert(html.includes("white-space:normal"), "white-space normal");
-assert(html.includes("overflow-wrap:anywhere"), "overflow-wrap anywhere");
-assert(html.includes("word-break:break-word"), "word-break break-word");
+assert(html.includes("overflow-wrap:break-word"), "overflow-wrap break-word");
+assert(html.includes("word-break:normal"), "word-break normal");
 assert(html.includes("height:auto"), "height auto");
 assert(html.includes("min-height:0"), "min-height 0");
 assert(html.includes("vertical-align:middle"), "vertical-align middle");
@@ -95,6 +95,12 @@ assert(html.includes("width:4%"), "項次 4%");
 assert(html.includes("width:11%"), "備註 11%");
 assert(html.includes("table-layout:fixed"), "table-layout fixed");
 assert(html.includes("font-weight:500"), "medium table weight");
+assert(html.includes("line-height:1.4"), "line-height 1.4");
+assert(html.includes("overflow:visible"), "cells must not clip");
+assert(!html.includes("font-size:10.5px"), "do not shrink unit price below 11px");
+assert(!html.includes("font-size:8px"), "do not use 8px table type");
+assert(!/\.eq-table tbody td\{[^}]*overflow:hidden/.test(html), "td must not overflow:hidden");
+assert(!/\.eq-table tbody td \.cell-text\{[^}]*overflow:hidden/.test(html), "cell-text must not overflow:hidden");
 assert(!/quotation-print-page \.eq-table[\s\S]{0,400}font-weight:700/.test(html), "eq-table must not use 700");
 const colgroup = html.match(/<colgroup>([\s\S]*?)<\/colgroup>/)?.[1] ?? "";
 const colWidths = [...colgroup.matchAll(/width:(\d+\.?\d*%)/g)].map((m) => m[1]);
@@ -104,6 +110,24 @@ assert(
 );
 assert((html.match(/td:nth-child\(3\)\{width:28%!important/g) || []).length >= 1, "nth-child locks 品項 28%");
 assert(html.includes("td:nth-child(3){width:28%!important"), "print uses same col widths");
+
+const html98 = buildQuotationHtml({
+  id: 98,
+  createdAt: "2026-09-02",
+  customerName: "現場核對",
+  taxType: "未稅",
+  items: [
+    { category: "安裝新機", brand: "冰點", itemName: "冰點冷氣變頻1級吊隱式", model: "FD/FU-73CSG", quantity: 1, unit: "台", unitPrice: 1, subtotal: 1, notes: "" },
+    { category: "追加項目", brand: "佳友", itemName: "2/4管徑銅管超出追加", model: "佳友", quantity: 1, unit: "式", unitPrice: 1, subtotal: 1, notes: "" },
+    { category: "保養", brand: "—", itemName: "吊隱式保養", model: "", quantity: 1, unit: "台", unitPrice: 1, subtotal: 1, notes: "" },
+    { category: "追加項目", brand: "靜岡", itemName: "靜岡排水器", model: "", quantity: 1, unit: "台", unitPrice: 1, subtotal: 1, notes: "" },
+  ],
+});
+assert(html98.includes("Q-20260902-0098"), "quote number Q-20260902-0098");
+for (const text of ["安裝新機", "冰點冷氣變頻1級吊隱式", "FD/FU-73CSG", "追加項目", "2/4管徑銅管超出追加", "佳友", "保養", "吊隱式保養", "靜岡排水器"]) {
+  assert(html98.includes(text), `0098 missing ${text}`);
+}
+assert(!/<th[^>]*>品牌<\/th>/.test(html98), "0098 no brand header");
 
 if (process.exitCode) {
   console.error("quote A4 row-flow tests failed");

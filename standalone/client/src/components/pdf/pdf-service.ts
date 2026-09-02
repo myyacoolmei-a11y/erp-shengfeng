@@ -26,7 +26,7 @@ function resolveHtml2Pdf(): any {
   return typeof mod === "function" ? mod : mod?.default ?? mod;
 }
 
-/** html2canvas clone: lock quotation equipment columns so wrapped CJK cannot bleed. */
+/** html2canvas clone: keep quotation columns, never clip CJK with overflow:hidden. */
 function applyQuotationEqTableCloneFixes(clonedDoc: Document) {
   const root = clonedDoc.querySelector(".quotation-print-page");
   if (!root) return;
@@ -38,11 +38,21 @@ function applyQuotationEqTableCloneFixes(clonedDoc: Document) {
     return `.quotation-print-page .eq-table col:nth-child(${n}),.quotation-print-page .eq-table th:nth-child(${n}),.quotation-print-page .eq-table td:nth-child(${n}){width:${w}!important;max-width:${w}!important;min-width:0!important}`;
   }).join("");
   style.textContent = `
+.quotation-print-page,.quotation-print-page .eq-wrap,.quotation-print-page .eq-table{
+  overflow:visible!important;
+  height:auto!important;
+  max-height:none!important;
+  transform:none!important;
+  zoom:normal!important;
+}
 .quotation-print-page .eq-table{
   table-layout:fixed!important;
   width:100%!important;
   max-width:100%!important;
   border-collapse:collapse!important;
+  font-size:11px!important;
+  font-weight:500!important;
+  line-height:1.4!important;
 }
 ${colRules}
 .quotation-print-page .eq-table tr,
@@ -55,34 +65,35 @@ ${colRules}
   position:static!important;
   transform:none!important;
   box-sizing:border-box!important;
-  overflow:hidden!important;
-  line-height:1.35!important;
+  overflow:visible!important;
+  line-height:1.4!important;
 }
 .quotation-print-page .eq-table th,
 .quotation-print-page .eq-table td{
   white-space:normal!important;
-  overflow-wrap:anywhere!important;
-  word-break:break-word!important;
+  overflow-wrap:break-word!important;
+  word-break:normal!important;
   vertical-align:middle!important;
   padding:7px 6px!important;
   font-weight:500!important;
   font-size:11px!important;
-  line-height:1.35!important;
+  line-height:1.4!important;
 }
 .quotation-print-page .eq-table .head-row th{
   font-weight:600!important;
+  font-size:11px!important;
 }
 .quotation-print-page .eq-table .col-notes,
 .quotation-print-page .eq-table .col-notes .cell-text{
   font-size:10px!important;
   font-weight:500!important;
 }
-.quotation-print-page .eq-table .col-price,
-.quotation-print-page .eq-table .col-sub,
-.quotation-print-page .eq-table .col-price .cell-text,
-.quotation-print-page .eq-table .col-sub .cell-text{
-  font-size:10.5px!important;
-  font-weight:600!important;
+.quotation-print-page .eq-table .col-item,
+.quotation-print-page .eq-table .col-item .cell-text,
+.quotation-print-page .eq-table .col-model,
+.quotation-print-page .eq-table .col-model .cell-text{
+  font-size:11px!important;
+  font-weight:500!important;
 }
 .quotation-print-page .eq-table .cell-text{
   display:block!important;
@@ -101,6 +112,8 @@ ${colRules}
 .quotation-print-page .eq-table .col-unit .cell-text,
 .quotation-print-page .eq-table .col-no .cell-text{
   white-space:nowrap!important;
+  font-size:11px!important;
+  font-weight:500!important;
 }
 `;
   clonedDoc.head.appendChild(style);
@@ -110,6 +123,7 @@ ${colRules}
     table.style.setProperty("table-layout", "fixed", "important");
     table.style.setProperty("width", "100%", "important");
     table.style.setProperty("max-width", "100%", "important");
+    table.style.setProperty("overflow", "visible", "important");
     table.querySelectorAll("col").forEach((node, i) => {
       const w = QUOTE_EQ_COL_WIDTHS[i];
       if (!w) return;
@@ -125,7 +139,7 @@ ${colRules}
         h.style.setProperty("max-width", w, "important");
         h.style.setProperty("min-width", "0", "important");
         h.style.setProperty("box-sizing", "border-box", "important");
-        h.style.setProperty("overflow", "hidden", "important");
+        h.style.setProperty("overflow", "visible", "important");
       });
     });
   }
@@ -137,24 +151,24 @@ ${colRules}
     h.style.setProperty("min-height", "0", "important");
     h.style.setProperty("position", "static", "important");
     h.style.setProperty("transform", "none", "important");
-    h.style.setProperty("line-height", "1.35", "important");
+    h.style.setProperty("line-height", "1.4", "important");
     h.style.setProperty("box-sizing", "border-box", "important");
-    h.style.setProperty("overflow", "hidden", "important");
+    h.style.setProperty("overflow", "visible", "important");
   });
   root.querySelectorAll(".eq-table td, .eq-table th").forEach((node) => {
     const h = node as HTMLElement;
     const nowrap = h.classList.contains("col-price") || h.classList.contains("col-sub")
       || h.classList.contains("col-qty") || h.classList.contains("col-unit") || h.classList.contains("col-no");
     const isHead = h.tagName === "TH";
-    const isMoney = h.classList.contains("col-price") || h.classList.contains("col-sub");
+    const isNotes = h.classList.contains("col-notes");
     h.style.setProperty("white-space", nowrap ? "nowrap" : "normal", "important");
-    h.style.setProperty("overflow-wrap", nowrap ? "normal" : "anywhere", "important");
-    h.style.setProperty("word-break", nowrap ? "keep-all" : "break-word", "important");
+    h.style.setProperty("overflow-wrap", nowrap ? "normal" : "break-word", "important");
+    h.style.setProperty("word-break", nowrap ? "keep-all" : "normal", "important");
     h.style.setProperty("vertical-align", "middle", "important");
     h.style.setProperty("padding", "7px 6px", "important");
-    h.style.setProperty("font-weight", isHead || isMoney ? "600" : "500", "important");
-    h.style.setProperty("font-size", isMoney ? "10.5px" : "11px", "important");
-    h.style.setProperty("line-height", "1.35", "important");
+    h.style.setProperty("font-weight", isHead ? "600" : "500", "important");
+    h.style.setProperty("font-size", isNotes ? "10px" : "11px", "important");
+    h.style.setProperty("line-height", "1.4", "important");
   });
   root.querySelectorAll(".eq-table .cell-text").forEach((node) => {
     const h = node as HTMLElement;
@@ -162,6 +176,23 @@ ${colRules}
     h.style.setProperty("width", "100%", "important");
     h.style.setProperty("max-width", "100%", "important");
     h.style.setProperty("padding", "0", "important");
+    h.style.setProperty("overflow", "visible", "important");
+  });
+}
+
+function unclipHtml2PdfOverlay() {
+  document.querySelectorAll(".html2pdf__overlay").forEach((node) => {
+    const h = node as HTMLElement;
+    h.style.setProperty("overflow", "visible", "important");
+    h.style.setProperty("height", "auto", "important");
+    h.style.setProperty("max-height", "none", "important");
+    h.style.setProperty("bottom", "auto", "important");
+  });
+  document.querySelectorAll(".html2pdf__container").forEach((node) => {
+    const h = node as HTMLElement;
+    h.style.setProperty("overflow", "visible", "important");
+    h.style.setProperty("height", "auto", "important");
+    h.style.setProperty("max-height", "none", "important");
   });
 }
 
@@ -260,7 +291,9 @@ export async function generatePdfBlobFromHtml(
     try {
       await Promise.all([
         doc.fonts.load('400 16px "Noto Sans TC"'),
+        doc.fonts.load('500 11px "Noto Sans TC"'),
         doc.fonts.load('500 16px "Noto Sans TC"'),
+        doc.fonts.load('600 11px "Noto Sans TC"'),
         doc.fonts.load('700 14px "Noto Sans TC"'),
         doc.fonts.load('700 18px "Noto Sans TC"'),
       ]);
@@ -302,9 +335,20 @@ export async function generatePdfBlobFromHtml(
     const pdfFormat = isQuotation || isA4Portrait ? "a4" : cfg.format;
     const pdfMargin = isQuotation ? [10, 12, 10, 12] : cfg.margin;
     iframe.style.width = `${captureWidth}px`;
+    if (isQuotation) {
+      iframe.style.overflow = "visible";
+      pageEl.style.setProperty("overflow", "visible", "important");
+      pageEl.style.setProperty("height", "auto", "important");
+      pageEl.style.setProperty("max-height", "none", "important");
+      pageEl.style.setProperty("transform", "none", "important");
+    }
     await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const captureHeight = Math.max(pageEl.scrollHeight, pageEl.offsetHeight, body.scrollHeight, 1200);
+    if (isQuotation) {
+      iframe.style.height = `${captureHeight + 80}px`;
+    }
     console.log("PDF capture target:", pageEl.className, pageEl.dataset.templateType, {
-      captureWidth, pdfOrientation, pdfFormat,
+      captureWidth, captureHeight, pdfOrientation, pdfFormat,
     });
 
     // html2pdf.js deep-clones the element into the main document; CSS from the iframe <head> is lost.
@@ -317,6 +361,8 @@ export async function generatePdfBlobFromHtml(
     try {
       await Promise.all([
         document.fonts.load('400 16px "Noto Sans TC"'),
+        document.fonts.load('500 11px "Noto Sans TC"'),
+        document.fonts.load('600 11px "Noto Sans TC"'),
         document.fonts.load('700 14px "Noto Sans TC"'),
         document.fonts.load('700 18px "Noto Sans TC"'),
       ]);
@@ -357,12 +403,23 @@ export async function generatePdfBlobFromHtml(
         useCORS: true,
         logging: false,
         windowWidth: captureWidth,
+        ...(isQuotation ? {
+          windowHeight: captureHeight + 80,
+          scrollX: 0,
+          scrollY: 0,
+        } : {}),
         letterRendering: false,
         onclone: (clonedDoc: Document) => {
+          if (isQuotation) unclipHtml2PdfOverlay();
           const el = clonedDoc.querySelector(".page, .quotation-print-page") as HTMLElement | null;
           if (!el) return;
           el.style.setProperty("font-family", PRINT_CJK_FONT_STACK, "important");
           el.style.setProperty("transform", "none", "important");
+          if (isQuotation) {
+            el.style.setProperty("overflow", "visible", "important");
+            el.style.setProperty("height", "auto", "important");
+            el.style.setProperty("max-height", "none", "important");
+          }
           el.querySelectorAll(".eq-table, .eq-table th, .eq-table td, .cp-mat-row, .cp-mat-name, .cp-mat-qty, .cp-mat-no").forEach((node) => {
             const h = node as HTMLElement;
             h.style.setProperty("font-family", PRINT_CJK_FONT_STACK, "important");

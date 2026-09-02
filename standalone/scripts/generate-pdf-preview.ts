@@ -39,6 +39,26 @@ const demoQuote = {
   ],
 };
 
+const quote0098 = {
+  id: 98,
+  createdAt: "2026-09-02",
+  status: "待確認",
+  taxType: "未稅",
+  customerName: "現場核對",
+  customerPhone: "09xx",
+  salesRepName: "",
+  address: "",
+  title: "Q-20260902-0098",
+  description: "",
+  notes: "報價單有效期限30日，施工前請支付50%訂金。",
+  items: [
+    { category: "安裝新機", brand: "冰點", itemName: "冰點冷氣變頻1級吊隱式", model: "FD/FU-73CSG", quantity: 1, unit: "台", unitPrice: 1, subtotal: 1, notes: "" },
+    { category: "追加項目", brand: "佳友", itemName: "2/4管徑銅管超出追加", model: "佳友", quantity: 1, unit: "式", unitPrice: 1, subtotal: 1, notes: "" },
+    { category: "保養", brand: "—", itemName: "吊隱式保養", model: "", quantity: 1, unit: "台", unitPrice: 1, subtotal: 1, notes: "" },
+    { category: "追加項目", brand: "靜岡", itemName: "靜岡排水器", model: "", quantity: 1, unit: "台", unitPrice: 1, subtotal: 1, notes: "" },
+  ],
+};
+
 const demoWorkOrder = {
   id: 567,
   workOrderNumber: "WO-20250704-0567",
@@ -68,12 +88,16 @@ const demoStatementItems = [
 const quoteHtml = buildQuotationHtml(demoQuote)
   .replace(/src="\/logo.png"/g, 'src="../logo.png"')
   .replace(/url\("\/fonts\//g, 'url("../fonts/');
+const quote0098Html = buildQuotationHtml(quote0098)
+  .replace(/src="\/logo.png"/g, 'src="../logo.png"')
+  .replace(/url\("\/fonts\//g, 'url("../fonts/');
 const workHtml = buildWorkOrderHtml(demoWorkOrder)
   .replace(/src="\/logo.png"/g, 'src="../logo.png"')
   .replace(/url\("\/fonts\//g, 'url("../fonts/');
 const stmtHtml = buildStatementHtml("林記冷氣行", "2025-06-01", "2025-06-30", demoStatementItems, 55400, 0, 0, 55400, 0, 55400).replace(/src="\/logo.png"/g, 'src="../logo.png"');
 
 writeFileSync(join(outDir, "quotation.html"), quoteHtml);
+writeFileSync(join(outDir, "quotation-0098.html"), quote0098Html);
 writeFileSync(join(outDir, "work-order.html"), workHtml);
 writeFileSync(join(outDir, "statement.html"), stmtHtml);
 
@@ -119,8 +143,11 @@ if (!quoteHtml.includes("background:#111") || !quoteHtml.includes("客戶簽名"
 if (!quoteHtml.includes('class="cell-text"')) {
   throw new Error("quotation cells must wrap text in .cell-text so rows can grow");
 }
-if (!quoteHtml.includes("overflow-wrap:anywhere") || !quoteHtml.includes("word-break:break-word")) {
-  throw new Error("quotation table must wrap with overflow-wrap:anywhere and word-break:break-word");
+if (!quoteHtml.includes("overflow-wrap:break-word") || !quoteHtml.includes("word-break:normal")) {
+  throw new Error("quotation table must wrap with overflow-wrap:break-word and word-break:normal");
+}
+if (/\.eq-table tbody td\{[^}]*overflow:hidden/.test(quoteHtml) || quoteHtml.includes("font-size:10.5px")) {
+  throw new Error("quotation eq-table must not clip cells or shrink type to 10.5px");
 }
 if (quoteHtml.includes("padding:3.5px 3px!important")) {
   throw new Error("quotation eq-table must not use compact 3.5px cell padding");
@@ -183,5 +210,13 @@ iframe{width:794px;max-width:100%;border:1px solid #ddd;background:#fff}
 </body>
 </html>`;
 
+for (const required of ["冰點冷氣變頻1級吊隱式", "FD/FU-73CSG", "2/4管徑銅管超出追加", "佳友", "吊隱式保養", "靜岡排水器", "Q-20260902-0098"]) {
+  if (!quote0098Html.includes(required)) {
+    throw new Error(`Q-20260902-0098 HTML missing ${required}`);
+  }
+}
+if (/<th[^>]*>品牌<\/th>/.test(quote0098Html) || /<t[hd][^>]*col-brand/.test(quote0098Html)) {
+  throw new Error("Q-20260902-0098 must not include 品牌 column");
+}
 writeFileSync(join(outDir, "index.html"), indexHtml);
 console.log("Generated:", outDir);
