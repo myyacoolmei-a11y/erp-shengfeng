@@ -81,7 +81,7 @@ assert(html.includes("@media print"), "print CSS present");
 assert(!html.includes("position:absolute"), "no absolute positioning");
 assert(!html.includes("transform:scale"), "no transform scale");
 assert(!html.includes("padding:3.5px 3px!important"), "no compact 3.5px padding override");
-assert(html.includes("width:26%"), "品項 column 26%");
+assert(html.includes("width:25%"), "品項 column 25%");
 assert(html.includes("width:3%"), "項次 shrunk to 3%");
 assert(html.includes("width:7%"), "品牌 shrunk to 7%");
 

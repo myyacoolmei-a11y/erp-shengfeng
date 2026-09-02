@@ -125,8 +125,8 @@ if (!quoteHtml.includes("overflow-wrap:anywhere") || !quoteHtml.includes("word-b
 if (quoteHtml.includes("padding:3.5px 3px!important")) {
   throw new Error("quotation eq-table must not use compact 3.5px cell padding");
 }
-if (!quoteHtml.includes("width:26%")) {
-  throw new Error("品項／規格 column must be widened to 26%");
+if (!quoteHtml.includes("width:25%")) {
+  throw new Error("品項／規格 column must be 25%");
 }
 {
   const body = quoteHtml.match(/<tbody>([\s\S]*?)<\/tbody>/)?.[1] ?? "";

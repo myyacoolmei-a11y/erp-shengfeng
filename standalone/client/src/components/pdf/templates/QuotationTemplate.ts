@@ -43,13 +43,13 @@ export function buildQuotationHtml(quote: any, baseOrigin?: string): string {
     "3%",
     "12%",
     "7%",
-    "26%",
+    "25%",
     "16%",
     "4%",
     "4%",
-    "9%",
-    "9%",
     "10%",
+    "10%",
+    "9%",
   ] as const;
 
   function fieldText(raw: unknown): string {
@@ -193,12 +193,20 @@ export function buildQuotationHtml(quote: any, baseOrigin?: string): string {
   font-size:15px!important;font-weight:600!important;
   text-align:center!important;
 }
-.quotation-print-page .eq-table .col-price,
-.quotation-print-page .eq-table .col-sub,
+.quotation-print-page .eq-table tbody td.col-price,
+.quotation-print-page .eq-table tbody td.col-sub{
+  font-size:13px!important;
+  font-weight:600!important;
+  font-variant-numeric:tabular-nums;
+  padding:1.8mm 0.6mm!important;
+  overflow:hidden!important;
+}
 .quotation-print-page .eq-table .col-price .cell-text,
 .quotation-print-page .eq-table .col-sub .cell-text{
   font-size:13px!important;
+  font-weight:600!important;
   font-variant-numeric:tabular-nums;
+  padding:0!important;
 }
 .quotation-print-page .eq-table .col-notes,
 .quotation-print-page .eq-table .col-notes .cell-text{
