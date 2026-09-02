@@ -38,34 +38,203 @@ export function buildQuotationHtml(quote: any, baseOrigin?: string): string {
     "小計",
     "備註",
   ] as const;
-  /* A4 186mm：短欄讓寬；型號 17% 讓 FI/FU-101HSG 盡量單行；備註 7.5% 讓「客廳」單行。 */
+  /* A4 186mm：品項／規格優先加寬；超出可印寬時先縮項次／品牌／數量／單位。 */
   const TABLE_COL_WIDTHS = [
-    "3.5%",
-    "11%",
-    "8%",
-    "21%",
-    "17%",
-    "4.5%",
-    "4.5%",
-    "11.5%",
-    "11.5%",
-    "7.5%",
+    "3%",
+    "12%",
+    "7%",
+    "26%",
+    "16%",
+    "4%",
+    "4%",
+    "9%",
+    "9%",
+    "10%",
   ] as const;
+
+  function fieldText(raw: unknown): string {
+    return String(raw ?? "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+  }
+
+  /** Escape + preserve author line breaks. Never concatenate 品項／型號／備註. */
+  function cellText(raw: unknown): string {
+    const text = fieldText(raw);
+    if (!text) return "";
+    return text.split("\n").map((line) => esc(line)).join("<br>");
+  }
+
+  /** If 備註 already lives inside 品項／規格, do not print the same sentence again. */
+  function notesIfNotDuplicated(itemNameRaw: unknown, notesRaw: unknown): string {
+    const name = fieldText(itemNameRaw);
+    const notes = fieldText(notesRaw);
+    if (!notes) return "";
+    if (name.includes(notes)) return "";
+    return notes;
+  }
+
+  const EQ_TABLE_FLOW_CSS = `
+.quotation-print-page .eq-table{
+  table-layout:fixed!important;
+  width:100%!important;
+  height:auto!important;
+  max-height:none!important;
+  font-size:15px!important;
+  line-height:1.4!important;
+  border-collapse:collapse!important;
+  transform:none!important;
+}
+.quotation-print-page .eq-table tr,
+.quotation-print-page .eq-table thead tr,
+.quotation-print-page .eq-table tbody tr{
+  height:auto!important;
+  max-height:none!important;
+  min-height:unset!important;
+}
+.quotation-print-page .eq-table th,
+.quotation-print-page .eq-table td{
+  height:auto!important;
+  max-height:none!important;
+  min-height:unset!important;
+  vertical-align:middle!important;
+  box-sizing:border-box!important;
+  position:static!important;
+  transform:none!important;
+  top:auto!important;
+  left:auto!important;
+  overflow:visible!important;
+  white-space:normal!important;
+  overflow-wrap:anywhere!important;
+  word-break:break-word!important;
+  line-height:1.4!important;
+}
+.quotation-print-page .eq-table .head-row,
+.quotation-print-page .eq-table .head-row th{
+  background:#111!important;color:#fff!important;
+  border-color:#111!important;
+  text-align:center!important;vertical-align:middle!important;
+  font-weight:700!important;font-size:13px!important;
+  white-space:nowrap!important;
+  padding:4px 3px!important;
+  height:auto!important;max-height:none!important;min-height:unset!important;
+  line-height:1.4!important;
+  word-break:keep-all!important;
+  overflow-wrap:normal!important;
+  position:static!important;transform:none!important;
+}
+.quotation-print-page .eq-table tbody td{
+  padding:1.8mm 1.2mm!important;
+  font-size:15px!important;
+  line-height:1.4!important;
+  height:auto!important;max-height:none!important;min-height:unset!important;
+  vertical-align:middle!important;
+  box-sizing:border-box!important;
+  white-space:normal!important;
+  word-break:break-word!important;
+  overflow-wrap:anywhere!important;
+  position:static!important;transform:none!important;
+}
+.quotation-print-page .eq-table tbody td .cell-text{
+  display:block!important;
+  width:100%!important;
+  height:auto!important;max-height:none!important;min-height:unset!important;
+  position:static!important;transform:none!important;
+  top:auto!important;left:auto!important;
+  white-space:normal!important;
+  overflow-wrap:anywhere!important;
+  word-break:break-word!important;
+  line-height:1.4!important;
+  overflow:visible!important;
+}
+.quotation-print-page .eq-table .col-no,
+.quotation-print-page .eq-table .col-qty,
+.quotation-print-page .eq-table .col-unit,
+.quotation-print-page .eq-table .col-price,
+.quotation-print-page .eq-table .col-sub,
+.quotation-print-page .eq-table .col-no .cell-text,
+.quotation-print-page .eq-table .col-qty .cell-text,
+.quotation-print-page .eq-table .col-unit .cell-text,
+.quotation-print-page .eq-table .col-price .cell-text,
+.quotation-print-page .eq-table .col-sub .cell-text{
+  white-space:nowrap!important;
+  word-break:keep-all!important;
+  overflow-wrap:normal!important;
+}
+.quotation-print-page .eq-table .col-cat,
+.quotation-print-page .eq-table .col-cat .cell-text{
+  white-space:normal!important;
+  word-break:break-word!important;
+  overflow-wrap:anywhere!important;
+  font-size:15px!important;font-weight:600!important;
+  text-align:center!important;
+}
+.quotation-print-page .eq-table .col-brand,
+.quotation-print-page .eq-table .col-brand .cell-text{
+  white-space:normal!important;
+  word-break:break-word!important;
+  overflow-wrap:anywhere!important;
+  font-size:15px!important;font-weight:600!important;
+  text-align:center!important;
+}
+.quotation-print-page .eq-table .col-item,
+.quotation-print-page .eq-table .col-item .cell-text{
+  white-space:normal!important;
+  word-break:break-word!important;
+  overflow-wrap:anywhere!important;
+  font-size:16px!important;font-weight:700!important;
+  text-align:left!important;
+  padding:1.8mm 1.6mm!important;
+}
+.quotation-print-page .eq-table .col-item .cell-text{padding:0!important}
+.quotation-print-page .eq-table .col-model,
+.quotation-print-page .eq-table .col-model .cell-text{
+  white-space:normal!important;
+  word-break:break-word!important;
+  overflow-wrap:anywhere!important;
+  font-size:15px!important;font-weight:600!important;
+  text-align:center!important;
+}
+.quotation-print-page .eq-table .col-price,
+.quotation-print-page .eq-table .col-sub,
+.quotation-print-page .eq-table .col-price .cell-text,
+.quotation-print-page .eq-table .col-sub .cell-text{
+  font-size:13px!important;
+  font-variant-numeric:tabular-nums;
+}
+.quotation-print-page .eq-table .col-notes,
+.quotation-print-page .eq-table .col-notes .cell-text{
+  white-space:normal!important;
+  word-break:break-word!important;
+  overflow-wrap:anywhere!important;
+  font-size:13px!important;font-weight:400!important;
+  text-align:center!important;
+}
+.quotation-print-page .amt-total .lbl{font-size:14px!important;font-weight:700!important}
+.quotation-print-page .amt-total .val{font-size:16px!important;font-weight:700!important}
+.quotation-print-page .info-label{font-size:12px!important;font-weight:500!important;color:#888!important}
+.quotation-print-page .info-value{font-size:15px!important;font-weight:600!important}
+`;
+
+  function td(className: string, inner: string): string {
+    return `<td class="${className}"><div class="cell-text">${inner}</div></td>`;
+  }
 
   function renderItemRow(item: any, index: number): string {
     const category = displayQuoteItemCategory(item);
     const brand = displayQuoteItemBrand(item);
+    const itemName = cellText(item.itemName || "");
+    const model = cellText(item.model) || "—";
+    const notes = cellText(notesIfNotDuplicated(item.itemName, item.notes));
     const cells = [
-      `<td class="tac col-no">${index + 1}</td>`,
-      `<td class="tac col-cat">${esc(category)}</td>`,
-      `<td class="tac col-brand">${esc(brand)}</td>`,
-      `<td class="tal col-item">${esc(item.itemName || "")}</td>`,
-      `<td class="tac col-model">${esc(item.model || "—")}</td>`,
-      `<td class="tac col-qty">${Number(item.quantity ?? 0)}</td>`,
-      `<td class="tac col-unit">${esc(item.unit || "")}</td>`,
-      `<td class="tac col-price">${fmtMoney(Number(item.unitPrice ?? 0))}</td>`,
-      `<td class="tac col-sub">${fmtMoney(Number(item.subtotal ?? 0))}</td>`,
-      `<td class="tac col-notes">${esc(item.notes || "")}</td>`,
+      td("tac col-no", String(index + 1)),
+      td("tac col-cat", cellText(category)),
+      td("tac col-brand", cellText(brand)),
+      td("tal col-item", itemName),
+      td("tac col-model", model),
+      td("tac col-qty", String(Number(item.quantity ?? 0))),
+      td("tac col-unit", cellText(item.unit || "")),
+      td("tac col-price", esc(fmtMoney(Number(item.unitPrice ?? 0)))),
+      td("tac col-sub", esc(fmtMoney(Number(item.subtotal ?? 0)))),
+      td("tac col-notes", notes),
     ];
     if (cells.length !== TABLE_HEADERS.length) {
       throw new Error(
@@ -180,9 +349,9 @@ body,.quotation-print-page{
 .eq-table{
   width:100%;max-width:100%;
   border-collapse:collapse;border-spacing:0;
-  table-layout:fixed;font-size:15px;line-height:1.3;
+  table-layout:fixed;font-size:15px;line-height:1.4;
   font-family:${PRINT_CJK_FONT_STACK};
-  transform:none;
+  transform:none;height:auto;
 }
 .eq-table .head-row{background:#111;color:#fff}
 .eq-table .head-row th{
@@ -191,50 +360,53 @@ body,.quotation-print-page{
   font-size:13px;font-weight:700;
   text-align:center;vertical-align:middle;
   box-sizing:border-box;
-  padding:3px 2px;
-  height:auto;min-height:0;
-  line-height:1.25;letter-spacing:0;transform:none;
-  white-space:nowrap;
+  padding:4px 3px;
+  height:auto;max-height:none;min-height:unset;
+  line-height:1.4;letter-spacing:0;transform:none;
+  white-space:nowrap;position:static;
 }
 .eq-table tbody td{
   border:1px solid #ccc;
   vertical-align:middle;font-size:15px;font-weight:500;
   box-sizing:border-box;
-  padding:3.5px 3px;
-  height:auto;min-height:0;
-  line-height:1.3;color:#111;text-align:center;
-  letter-spacing:0;transform:none;
+  padding:2mm 1.4mm;
+  height:auto;max-height:none;min-height:unset;
+  line-height:1.4;color:#111;text-align:center;
+  letter-spacing:0;transform:none;position:static;
   overflow:visible;white-space:normal;
-  word-break:normal;overflow-wrap:break-word;
+  word-break:break-word;overflow-wrap:anywhere;
 }
-.eq-table .col-no,.eq-table .col-qty,.eq-table .col-unit,
-.eq-table .col-price,.eq-table .col-sub,.eq-table .col-brand{
-  white-space:nowrap;word-break:keep-all;overflow-wrap:normal;
+.eq-table tbody td .cell-text{
+  display:block;width:100%;
+  height:auto;max-height:none;min-height:unset;
+  position:static;transform:none;top:auto;left:auto;
+  white-space:normal;overflow-wrap:anywhere;word-break:break-word;
+  line-height:1.4;overflow:visible;
 }
-.eq-table .col-item{
+.eq-table .col-item,.eq-table .col-item .cell-text{
   font-size:16px;font-weight:700;text-align:left;
-  word-break:normal;overflow-wrap:break-word;white-space:normal;
 }
-.eq-table .col-cat{
-  word-break:keep-all;overflow-wrap:break-word;white-space:normal;
+.eq-table .col-cat,.eq-table .col-cat .cell-text{
   text-align:center;font-weight:600;font-size:15px;
 }
 .eq-table .col-brand,.eq-table .col-model,
-.eq-table .col-qty,.eq-table .col-unit,.eq-table .col-price,.eq-table .col-sub{
+.eq-table .col-qty,.eq-table .col-unit,.eq-table .col-price,.eq-table .col-sub,
+.eq-table .col-brand .cell-text,.eq-table .col-model .cell-text,
+.eq-table .col-qty .cell-text,.eq-table .col-unit .cell-text,
+.eq-table .col-price .cell-text,.eq-table .col-sub .cell-text{
   text-align:center;font-weight:600;font-size:15px;
 }
-.eq-table .col-model{
-  word-break:break-word;overflow-wrap:break-word;white-space:normal;
-  font-variant-ligatures:none;
-}
-.eq-table .col-price,.eq-table .col-sub{
+.eq-table .col-model .cell-text{font-variant-ligatures:none}
+.eq-table .col-price .cell-text,.eq-table .col-sub .cell-text{
   font-size:13px;font-variant-numeric:tabular-nums;
 }
-.eq-table .col-notes{
+.eq-table .col-notes,.eq-table .col-notes .cell-text{
   font-size:13px;font-weight:400;text-align:center;
-  word-break:keep-all;overflow-wrap:break-word;white-space:normal;
 }
-.eq-table tr{page-break-inside:avoid;break-inside:avoid;height:auto}
+.eq-table tr,.eq-table tbody tr{
+  height:auto;max-height:none;min-height:unset;
+  page-break-inside:avoid;break-inside:avoid;
+}
 
 .tac{text-align:center}
 .tar{text-align:right}
@@ -362,92 +534,20 @@ body,.quotation-print-page{
   .notes-totals-row,.amt-box,.bank-box,.sig-row,.quotation-signature-section{
     page-break-inside:avoid;break-inside:avoid;
   }
-  .eq-table tr{page-break-inside:avoid;break-inside:avoid}
+  .eq-table tr,.eq-table tbody tr,.eq-table th,.eq-table td,.eq-table .cell-text{
+    height:auto!important;
+    max-height:none!important;
+    min-height:unset!important;
+    page-break-inside:avoid;break-inside:avoid;
+  }
+${EQ_TABLE_FLOW_CSS}
 }
 ${PRINT_DOC_TYPE_CSS}
 .quotation-print-page,.quotation-print-page *{transform:none!important}
-.quotation-print-page .eq-table{
-  table-layout:fixed!important;
-  width:100%!important;
-  font-size:15px!important;
-  line-height:1.3!important;
-}
-.quotation-print-page .eq-table .head-row,
-.quotation-print-page .eq-table .head-row th{
-  background:#111!important;color:#fff!important;
-  border-color:#111!important;
-  text-align:center!important;vertical-align:middle!important;
-  font-weight:700!important;font-size:13px!important;
-  white-space:nowrap!important;
-  padding:3px 2px!important;
-  height:auto!important;min-height:0!important;
-  line-height:1.25!important;
-  word-break:keep-all!important;
-  overflow-wrap:normal!important;
-}
-.quotation-print-page .eq-table tbody td{
-  padding:3.5px 3px!important;
-  font-size:15px!important;
-  line-height:1.3!important;
-  height:auto!important;min-height:0!important;
-  vertical-align:middle!important;
-  word-break:normal!important;
-  overflow-wrap:break-word!important;
-}
-.quotation-print-page .eq-table .col-no,
-.quotation-print-page .eq-table .col-qty,
-.quotation-print-page .eq-table .col-unit,
-.quotation-print-page .eq-table .col-brand,
-.quotation-print-page .eq-table .col-price,
-.quotation-print-page .eq-table .col-sub{
-  white-space:nowrap!important;
-  word-break:keep-all!important;
-  overflow-wrap:normal!important;
-}
-.quotation-print-page .eq-table .col-cat{
-  white-space:normal!important;
-  word-break:keep-all!important;
-  overflow-wrap:break-word!important;
-  font-size:15px!important;font-weight:600!important;
-  text-align:center!important;
-}
-.quotation-print-page .eq-table .col-brand{
-  font-size:15px!important;font-weight:600!important;
-  text-align:center!important;
-}
-.quotation-print-page .eq-table .col-item{
-  white-space:normal!important;
-  word-break:normal!important;
-  overflow-wrap:break-word!important;
-  font-size:16px!important;font-weight:700!important;
-  text-align:left!important;
-  padding:3.5px 4px!important;
-}
-.quotation-print-page .eq-table .col-model{
-  white-space:normal!important;
-  word-break:break-word!important;
-  overflow-wrap:break-word!important;
-  font-size:15px!important;font-weight:600!important;
-  text-align:center!important;
-}
-.quotation-print-page .eq-table .col-price,
-.quotation-print-page .eq-table .col-sub{
-  font-size:13px!important;
-  font-variant-numeric:tabular-nums;
-}
-.quotation-print-page .eq-table .col-notes{
-  white-space:normal!important;
-  word-break:keep-all!important;
-  overflow-wrap:break-word!important;
-  font-size:13px!important;font-weight:400!important;
-  text-align:center!important;
-  padding:3.5px 3px!important;
-}
-.quotation-print-page .amt-total .lbl{font-size:14px!important;font-weight:700!important}
-.quotation-print-page .amt-total .val{font-size:16px!important;font-weight:700!important}
-.quotation-print-page .info-label{font-size:12px!important;font-weight:500!important;color:#888!important}
-.quotation-print-page .info-value{font-size:15px!important;font-weight:600!important}
-</style>
+${EQ_TABLE_FLOW_CSS}
+@media print{
+${EQ_TABLE_FLOW_CSS}
+}</style>
 </head>
 <body>
 <div class="quotation-print-page">

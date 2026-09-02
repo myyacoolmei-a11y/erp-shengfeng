@@ -30,12 +30,12 @@ const demoQuote = {
   description: "施工方式：壁掛分離式\n施工天數：1天\n注意事項：施工前需清空場地",
   notes: "報價單有效期限30日，施工前請支付50%訂金。",
   items: [
-    { category: "安裝新機", brand: "聲寶", itemName: "壁掛分離式 變頻冷暖", model: "AU/AM-JF50DC", quantity: 1, unit: "台", unitPrice: 32800, subtotal: 32800, notes: "含基本安裝" },
-    { category: "追加項目", brand: "三菱重工", itemName: "壁掛分離式 3.5kW 超長品項名稱測試自動換行顯示效果", model: "MSZ-AP35VG", quantity: 2, unit: "台", unitPrice: 28500, subtotal: 57000, notes: "含安裝及基本配管" },
+    { category: "安裝新機", brand: "聲寶", itemName: "移機銅管基本安裝服務", model: "—", quantity: 1, unit: "式", unitPrice: 2800, subtotal: 2800, notes: "十品項" },
+    { category: "安裝新機", brand: "聲寶", itemName: "壁掛分離式變頻冷暖超長品項名稱測試自動換行顯示效果", model: "AU/AM-JF50DC", quantity: 1, unit: "台", unitPrice: 32800, subtotal: 32800, notes: "含基本安裝" },
+    { category: "追加項目", brand: "三菱重工", itemName: "壁掛分離式變頻冷暖超長品項名稱測試自動換行顯示效果含基本安裝與銅管配管工程服務項", model: "MSZ-AP35VG-LONG20MDL", quantity: 2, unit: "台", unitPrice: 28500, subtotal: 57000, notes: "本項含五米銅管電線訊號線基本安裝工資及高空作業補助，施工前請確認現場管線路徑與電源位置保留施工空間。" },
+    { category: "其他", brand: "—", itemName: "移機2/4銅管基本安裝服務\n含5米銅管、電線訊號", model: "", quantity: 1, unit: "式", unitPrice: 3500, subtotal: 3500, notes: "含5米銅管、電線訊號" },
     { category: "維修", brand: "日立", itemName: "室外機維修清洗", model: "RAS-22", quantity: 1, unit: "式", unitPrice: 2800, subtotal: 2800, notes: "" },
     { category: "保養", brand: "—", itemName: "年度保養", model: "", quantity: 1, unit: "式", unitPrice: 1800, subtotal: 1800, notes: "" },
-    { category: "其他", brand: "—", itemName: "銅管配管 5公尺", model: "", quantity: 1, unit: "式", unitPrice: 8500, subtotal: 8500, notes: "含吸排管" },
-    { category: "其他", brand: "—", itemName: "現場雜項", model: "", quantity: 1, unit: "式", unitPrice: 500, subtotal: 500, notes: "" },
   ],
 };
 
@@ -115,6 +115,37 @@ if (quoteHtml.includes("size:A4 landscape") || quoteHtml.includes("orientation:l
 }
 if (!quoteHtml.includes("background:#111") || !quoteHtml.includes("客戶簽名")) {
   throw new Error("missing black header or signature labels");
+}
+if (!quoteHtml.includes('class="cell-text"')) {
+  throw new Error("quotation cells must wrap text in .cell-text so rows can grow");
+}
+if (!quoteHtml.includes("overflow-wrap:anywhere") || !quoteHtml.includes("word-break:break-word")) {
+  throw new Error("quotation table must wrap with overflow-wrap:anywhere and word-break:break-word");
+}
+if (quoteHtml.includes("padding:3.5px 3px!important")) {
+  throw new Error("quotation eq-table must not use compact 3.5px cell padding");
+}
+if (!quoteHtml.includes("width:26%")) {
+  throw new Error("品項／規格 column must be widened to 26%");
+}
+{
+  const body = quoteHtml.match(/<tbody>([\s\S]*?)<\/tbody>/)?.[1] ?? "";
+  const yijiRows = [...body.matchAll(/<tr>([\s\S]*?)<\/tr>/g)]
+    .map((m) => m[1])
+    .filter((row) => row.includes("移機2/4銅管基本安裝服務"));
+  if (yijiRows.length !== 1) {
+    throw new Error(`expected one 移機2/4 row, got ${yijiRows.length}`);
+  }
+  const itemCell = yijiRows[0].match(/col-item[\s\S]*?cell-text">([\s\S]*?)<\/div>/)?.[1] ?? "";
+  const notesCell = yijiRows[0].match(/col-notes[\s\S]*?cell-text">([\s\S]*?)<\/div>/)?.[1] ?? "";
+  const itemHits = itemCell.split("含5米銅管、電線訊號").length - 1;
+  const notesHits = notesCell.split("含5米銅管、電線訊號").length - 1;
+  if (itemHits !== 1) {
+    throw new Error(`品項 cell should show 含5米銅管 once, got ${itemHits}: ${itemCell}`);
+  }
+  if (notesHits !== 0) {
+    throw new Error("備註 already inside 品項 must not be printed again in 備註 column");
+  }
 }
 
 const indexHtml = `<!DOCTYPE html>

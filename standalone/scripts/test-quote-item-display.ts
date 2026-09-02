@@ -24,10 +24,16 @@ function assert(cond: unknown, msg: string) {
 function tableRows(html: string): Array<{ cat: string; brand: string; item: string }> {
   const body = html.match(/<tbody>([\s\S]*?)<\/tbody>/)?.[1] ?? "";
   return [...body.matchAll(/<tr>([\s\S]*?)<\/tr>/g)].map((m) => {
-    const cat = m[1].match(/col-cat">([^<]*)/)?.[1] ?? "";
-    const brand = m[1].match(/col-brand">([^<]*)/)?.[1] ?? "";
-    const item = m[1].match(/col-item">([^<]*)/)?.[1] ?? "";
-    return { cat, brand, item };
+    const cell = (cls: string) => {
+      const td = m[1].match(new RegExp(`<td class="[^"]*${cls}[^"]*">([\\s\\S]*?)</td>`))?.[1] ?? "";
+      return td
+        .replace(/<div class="cell-text">/g, "")
+        .replace(/<\/div>/g, "")
+        .replace(/<br\s*\/?>/gi, "\n")
+        .replace(/<[^>]+>/g, "")
+        .trim();
+    };
+    return { cat: cell("col-cat"), brand: cell("col-brand"), item: cell("col-item") };
   });
 }
 

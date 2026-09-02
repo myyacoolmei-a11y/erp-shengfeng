@@ -25,6 +25,71 @@ function resolveHtml2Pdf(): any {
   return typeof mod === "function" ? mod : mod?.default ?? mod;
 }
 
+/** html2canvas clone: keep quotation equipment rows auto-height so wrapped CJK does not overlap. */
+function applyQuotationEqTableCloneFixes(clonedDoc: Document) {
+  const root = clonedDoc.querySelector(".quotation-print-page");
+  if (!root) return;
+
+  const style = clonedDoc.createElement("style");
+  style.setAttribute("data-quote-eq-flow", "1");
+  style.textContent = `
+.quotation-print-page .eq-table,
+.quotation-print-page .eq-table tr,
+.quotation-print-page .eq-table th,
+.quotation-print-page .eq-table td,
+.quotation-print-page .eq-table .cell-text{
+  height:auto!important;
+  max-height:none!important;
+  min-height:unset!important;
+  position:static!important;
+  transform:none!important;
+  top:auto!important;
+  left:auto!important;
+  overflow:visible!important;
+  line-height:1.4!important;
+  box-sizing:border-box!important;
+}
+.quotation-print-page .eq-table td,
+.quotation-print-page .eq-table .cell-text{
+  white-space:normal!important;
+  overflow-wrap:anywhere!important;
+  word-break:break-word!important;
+  vertical-align:middle!important;
+}
+.quotation-print-page .eq-table .cell-text{
+  display:block!important;
+  width:100%!important;
+}
+`;
+  clonedDoc.head.appendChild(style);
+
+  root.querySelectorAll(".eq-table, .eq-table tr, .eq-table th, .eq-table td, .eq-table .cell-text").forEach((node) => {
+    const h = node as HTMLElement;
+    h.style.setProperty("height", "auto", "important");
+    h.style.setProperty("max-height", "none", "important");
+    h.style.setProperty("min-height", "unset", "important");
+    h.style.setProperty("position", "static", "important");
+    h.style.setProperty("transform", "none", "important");
+    h.style.setProperty("top", "auto", "important");
+    h.style.setProperty("left", "auto", "important");
+    h.style.setProperty("line-height", "1.4", "important");
+    h.style.setProperty("box-sizing", "border-box", "important");
+    h.style.setProperty("overflow", "visible", "important");
+  });
+  root.querySelectorAll(".eq-table td, .eq-table .cell-text").forEach((node) => {
+    const h = node as HTMLElement;
+    h.style.setProperty("white-space", "normal", "important");
+    h.style.setProperty("overflow-wrap", "anywhere", "important");
+    h.style.setProperty("word-break", "break-word", "important");
+    h.style.setProperty("vertical-align", "middle", "important");
+  });
+  root.querySelectorAll(".eq-table .cell-text").forEach((node) => {
+    const h = node as HTMLElement;
+    h.style.setProperty("display", "block", "important");
+    h.style.setProperty("width", "100%", "important");
+  });
+}
+
 /** Ensure a Blob looks like a real PDF before opening/downloading. */
 export function assertPdfBlob(blob: Blob, context = "PDF"): Blob {
   const type = (blob.type || "").toLowerCase();
@@ -229,6 +294,7 @@ export async function generatePdfBlobFromHtml(
             h.style.setProperty("transform", "none", "important");
             h.style.setProperty("letter-spacing", "0", "important");
           });
+          applyQuotationEqTableCloneFixes(clonedDoc);
         },
       },
       jsPDF: { unit: "mm", format: pdfFormat, orientation: pdfOrientation },
