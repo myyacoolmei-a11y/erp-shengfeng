@@ -117,7 +117,7 @@ export function buildQuotationHtml(quote: any, baseOrigin?: string): string {
   max-height:none!important;
   border-collapse:collapse!important;
   border-spacing:0!important;
-  font-size:12px!important;
+  font-size:14px!important;
   font-weight:500!important;
   line-height:1.4!important;
   transform:none!important;
@@ -150,14 +150,14 @@ ${quoteEqColWidthCss(".quotation-print-page .eq-table")}
   top:auto!important;
   left:auto!important;
   font-weight:500!important;
-  font-size:12px!important;
+  font-size:14px!important;
 }
 .quotation-print-page .eq-table .head-row,
 .quotation-print-page .eq-table .head-row th{
   background:#111!important;color:#fff!important;
   border-color:#111!important;
   text-align:center!important;
-  font-weight:600!important;font-size:12px!important;
+  font-weight:600!important;font-size:14px!important;
   white-space:normal!important;
   word-break:normal!important;
   overflow-wrap:break-word!important;
@@ -172,7 +172,7 @@ ${quoteEqColWidthCss(".quotation-print-page .eq-table")}
   padding:7px 2px!important;
 }
 .quotation-print-page .eq-table tbody td{
-  font-size:12px!important;
+  font-size:14px!important;
   font-weight:500!important;
   line-height:1.4!important;
   overflow:visible!important;
@@ -202,7 +202,7 @@ ${quoteEqColWidthCss(".quotation-print-page .eq-table")}
   word-break:keep-all!important;
   overflow-wrap:normal!important;
   font-weight:500!important;
-  font-size:12px!important;
+  font-size:14px!important;
 }
 .quotation-print-page .eq-table .col-qty,
 .quotation-print-page .eq-table .col-unit,
@@ -213,16 +213,16 @@ ${quoteEqColWidthCss(".quotation-print-page .eq-table")}
   word-break:keep-all!important;
   overflow-wrap:normal!important;
   font-weight:500!important;
-  font-size:11.5px!important;
+  font-size:13.5px!important;
 }
 .quotation-print-page .eq-table .col-cat,
 .quotation-print-page .eq-table .col-cat .cell-text{
-  font-size:11.5px!important;font-weight:500!important;
+  font-size:13.5px!important;font-weight:500!important;
   text-align:center!important;
 }
 .quotation-print-page .eq-table .col-item,
 .quotation-print-page .eq-table .col-item .cell-text{
-  font-size:12px!important;font-weight:500!important;
+  font-size:14px!important;font-weight:500!important;
   text-align:left!important;
   white-space:normal!important;
   word-break:normal!important;
@@ -230,7 +230,7 @@ ${quoteEqColWidthCss(".quotation-print-page .eq-table")}
 }
 .quotation-print-page .eq-table .col-model,
 .quotation-print-page .eq-table .col-model .cell-text{
-  font-size:12px!important;font-weight:500!important;
+  font-size:14px!important;font-weight:500!important;
   text-align:center!important;
   white-space:normal!important;
   word-break:normal!important;
@@ -243,14 +243,14 @@ ${quoteEqColWidthCss(".quotation-print-page .eq-table")}
   white-space:nowrap!important;
   word-break:keep-all!important;
   overflow-wrap:normal!important;
-  font-size:11.5px!important;
+  font-size:13.5px!important;
   font-weight:500!important;
   font-variant-numeric:tabular-nums;
   text-align:center!important;
 }
 .quotation-print-page .eq-table .col-notes,
 .quotation-print-page .eq-table .col-notes .cell-text{
-  font-size:11px!important;font-weight:500!important;
+  font-size:13px!important;font-weight:500!important;
   text-align:center!important;
   white-space:normal!important;
   word-break:normal!important;
@@ -395,7 +395,7 @@ body,.quotation-print-page{
 .eq-table{
   width:100%;max-width:100%;
   border-collapse:collapse;border-spacing:0;
-  table-layout:fixed;font-size:12px;font-weight:500;line-height:1.4;
+  table-layout:fixed;font-size:14px;font-weight:500;line-height:1.4;
   font-family:${PRINT_CJK_FONT_STACK};
   transform:none;height:auto;
 }
@@ -403,7 +403,7 @@ body,.quotation-print-page{
 .eq-table .head-row th{
   background:#111;color:#fff;
   border:1px solid #111;
-  font-size:12px;font-weight:600;
+  font-size:14px;font-weight:600;
   text-align:center;vertical-align:middle;
   box-sizing:border-box;
   padding:7px 6px;
@@ -414,7 +414,7 @@ body,.quotation-print-page{
 }
 .eq-table tbody td{
   border:1px solid #ccc;
-  vertical-align:middle;font-size:12px;font-weight:500;
+  vertical-align:middle;font-size:14px;font-weight:500;
   box-sizing:border-box;
   padding:7px 6px;
   height:auto;max-height:none;min-height:0;
@@ -431,28 +431,28 @@ body,.quotation-print-page{
   line-height:1.4;overflow:visible;box-sizing:border-box;
 }
 .eq-table .col-item,.eq-table .col-item .cell-text{
-  font-size:12px;font-weight:500;text-align:left;
+  font-size:14px;font-weight:500;text-align:left;
 }
 .eq-table .col-cat,.eq-table .col-cat .cell-text{
-  text-align:center;font-weight:500;font-size:11.5px;
+  text-align:center;font-weight:500;font-size:13.5px;
 }
 .eq-table .col-model,.eq-table .col-model .cell-text{
-  text-align:center;font-weight:500;font-size:12px;
+  text-align:center;font-weight:500;font-size:14px;
 }
 .eq-table .col-no,.eq-table .col-no .cell-text{
-  text-align:center;font-weight:500;font-size:12px;
+  text-align:center;font-weight:500;font-size:14px;
 }
 .eq-table .col-qty,.eq-table .col-unit,.eq-table .col-price,.eq-table .col-sub,
 .eq-table .col-qty .cell-text,.eq-table .col-unit .cell-text,
 .eq-table .col-price .cell-text,.eq-table .col-sub .cell-text{
-  text-align:center;font-weight:500;font-size:11.5px;
+  text-align:center;font-weight:500;font-size:13.5px;
 }
 .eq-table .col-model .cell-text{font-variant-ligatures:none}
 .eq-table .col-price .cell-text,.eq-table .col-sub .cell-text{
-  font-size:11.5px;font-weight:500;font-variant-numeric:tabular-nums;white-space:nowrap;
+  font-size:13.5px;font-weight:500;font-variant-numeric:tabular-nums;white-space:nowrap;
 }
 .eq-table .col-notes,.eq-table .col-notes .cell-text{
-  font-size:11px;font-weight:500;text-align:center;
+  font-size:13px;font-weight:500;text-align:center;
 }
 .eq-table tr,.eq-table tbody tr{
   height:auto;max-height:none;min-height:0;
