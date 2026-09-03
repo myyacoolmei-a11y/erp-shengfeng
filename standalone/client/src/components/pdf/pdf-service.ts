@@ -50,7 +50,7 @@ function applyQuotationEqTableCloneFixes(clonedDoc: Document) {
   width:100%!important;
   max-width:100%!important;
   border-collapse:collapse!important;
-  font-size:11px!important;
+  font-size:12px!important;
   font-weight:500!important;
   line-height:1.4!important;
 }
@@ -76,23 +76,25 @@ ${colRules}
   vertical-align:middle!important;
   padding:7px 6px!important;
   font-weight:500!important;
-  font-size:11px!important;
+  font-size:12px!important;
   line-height:1.4!important;
 }
 .quotation-print-page .eq-table .head-row th{
   font-weight:600!important;
-  font-size:11px!important;
+  font-size:12px!important;
 }
 .quotation-print-page .eq-table .col-notes,
 .quotation-print-page .eq-table .col-notes .cell-text{
-  font-size:10px!important;
+  font-size:11px!important;
   font-weight:500!important;
 }
 .quotation-print-page .eq-table .col-item,
 .quotation-print-page .eq-table .col-item .cell-text,
 .quotation-print-page .eq-table .col-model,
-.quotation-print-page .eq-table .col-model .cell-text{
-  font-size:11px!important;
+.quotation-print-page .eq-table .col-model .cell-text,
+.quotation-print-page .eq-table .col-no,
+.quotation-print-page .eq-table .col-no .cell-text{
+  font-size:12px!important;
   font-weight:500!important;
 }
 .quotation-print-page .eq-table .cell-text{
@@ -100,6 +102,19 @@ ${colRules}
   width:100%!important;
   max-width:100%!important;
   padding:0!important;
+}
+.quotation-print-page .eq-table .col-cat,
+.quotation-print-page .eq-table .col-cat .cell-text,
+.quotation-print-page .eq-table .col-price,
+.quotation-print-page .eq-table .col-sub,
+.quotation-print-page .eq-table .col-qty,
+.quotation-print-page .eq-table .col-unit,
+.quotation-print-page .eq-table .col-price .cell-text,
+.quotation-print-page .eq-table .col-sub .cell-text,
+.quotation-print-page .eq-table .col-qty .cell-text,
+.quotation-print-page .eq-table .col-unit .cell-text{
+  font-size:11.5px!important;
+  font-weight:500!important;
 }
 .quotation-print-page .eq-table .col-price,
 .quotation-print-page .eq-table .col-sub,
@@ -112,8 +127,6 @@ ${colRules}
 .quotation-print-page .eq-table .col-unit .cell-text,
 .quotation-print-page .eq-table .col-no .cell-text{
   white-space:nowrap!important;
-  font-size:11px!important;
-  font-weight:500!important;
 }
 `;
   clonedDoc.head.appendChild(style);
@@ -161,13 +174,15 @@ ${colRules}
       || h.classList.contains("col-qty") || h.classList.contains("col-unit") || h.classList.contains("col-no");
     const isHead = h.tagName === "TH";
     const isNotes = h.classList.contains("col-notes");
+    const isCompact = h.classList.contains("col-cat") || h.classList.contains("col-qty")
+      || h.classList.contains("col-unit") || h.classList.contains("col-price") || h.classList.contains("col-sub");
     h.style.setProperty("white-space", nowrap ? "nowrap" : "normal", "important");
     h.style.setProperty("overflow-wrap", nowrap ? "normal" : "break-word", "important");
     h.style.setProperty("word-break", nowrap ? "keep-all" : "normal", "important");
     h.style.setProperty("vertical-align", "middle", "important");
     h.style.setProperty("padding", "7px 6px", "important");
     h.style.setProperty("font-weight", isHead ? "600" : "500", "important");
-    h.style.setProperty("font-size", isNotes ? "10px" : "11px", "important");
+    h.style.setProperty("font-size", isHead || (!isNotes && !isCompact) ? "12px" : isNotes ? "11px" : "11.5px", "important");
     h.style.setProperty("line-height", "1.4", "important");
   });
   root.querySelectorAll(".eq-table .cell-text").forEach((node) => {
@@ -292,8 +307,10 @@ export async function generatePdfBlobFromHtml(
       await Promise.all([
         doc.fonts.load('400 16px "Noto Sans TC"'),
         doc.fonts.load('500 11px "Noto Sans TC"'),
+        doc.fonts.load('500 12px "Noto Sans TC"'),
         doc.fonts.load('500 16px "Noto Sans TC"'),
         doc.fonts.load('600 11px "Noto Sans TC"'),
+        doc.fonts.load('600 12px "Noto Sans TC"'),
         doc.fonts.load('700 14px "Noto Sans TC"'),
         doc.fonts.load('700 18px "Noto Sans TC"'),
       ]);
@@ -362,7 +379,9 @@ export async function generatePdfBlobFromHtml(
       await Promise.all([
         document.fonts.load('400 16px "Noto Sans TC"'),
         document.fonts.load('500 11px "Noto Sans TC"'),
+        document.fonts.load('500 12px "Noto Sans TC"'),
         document.fonts.load('600 11px "Noto Sans TC"'),
+        document.fonts.load('600 12px "Noto Sans TC"'),
         document.fonts.load('700 14px "Noto Sans TC"'),
         document.fonts.load('700 18px "Noto Sans TC"'),
       ]);
