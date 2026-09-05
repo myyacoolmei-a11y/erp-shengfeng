@@ -3,6 +3,7 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { customersTable } from "./customers";
 import { employeesTable } from "./employees";
+import { usersTable } from "./users";
 
 export const REPAIR_STATUSES = [
   "待派工",
@@ -40,6 +41,8 @@ export const repairCasesTable = pgTable("repair_cases", {
   appointmentDate: date("appointment_date", { mode: "string" }),
   appointmentTime: text("appointment_time"),
   employeeId: integer("employee_id").references(() => employeesTable.id, { onDelete: "set null" }),
+  /** 負責業務（users.id）；舊案件允許 NULL */
+  salesUserId: integer("sales_user_id").references(() => usersTable.id, { onDelete: "set null" }),
   notes: text("notes"),
   /** 未申請補助 | 已申請補助 | 不適用 */
   subsidyStatus: text("subsidy_status").notNull().default("未申請補助"),

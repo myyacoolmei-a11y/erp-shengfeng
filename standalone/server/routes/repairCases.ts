@@ -1,11 +1,13 @@
 import { Router, type IRouter } from "express";
 import { eq, and, or, ilike, desc } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import {
   db,
   repairCasesTable,
   repairCasePhotosTable,
   customersTable,
   employeesTable,
+  usersTable,
 } from "@workspace/db";
 import { CreateRepairCaseBody, UpdateRepairCaseBody } from "@workspace/api-zod";
 import { requireFeature } from "../lib/auth";
@@ -15,6 +17,9 @@ import {
   canAccessRepairCase,
   assertRepairCaseDataAccess,
 } from "../lib/dataPermissionAccess.ts";
+import { buildRepairCaseSalesOptions } from "../lib/repairCases/salesOptions.ts";
+
+const salesUsersTable = alias(usersTable, "sales_users");
 
 const router: IRouter = Router();
 router.use("/repair-cases", requireFeature("repair_cases"));
@@ -39,17 +44,21 @@ function mapRepairCase(row: {
   appointmentDate: string | null;
   appointmentTime: string | null;
   employeeId: number | null;
+  salesUserId?: number | null;
   notes: string | null;
   subsidyStatus?: string | null;
   createdAt: Date | string;
   updatedAt: Date | string;
   customerName?: string | null;
   employeeName?: string | null;
+  salesUserName?: string | null;
 }) {
   return {
     ...row,
     customerName: row.customerName ?? row.tempCustomerName ?? null,
     employeeName: row.employeeName ?? null,
+    salesUserId: row.salesUserId ?? null,
+    salesUserName: row.salesUserName ?? null,
     subsidyStatus: row.subsidyStatus || "未申請補助",
     createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt,
     updatedAt: row.updatedAt instanceof Date ? row.updatedAt.toISOString() : row.updatedAt,
@@ -75,13 +84,24 @@ const caseSelect = {
   appointmentDate: repairCasesTable.appointmentDate,
   appointmentTime: repairCasesTable.appointmentTime,
   employeeId: repairCasesTable.employeeId,
+  salesUserId: repairCasesTable.salesUserId,
   notes: repairCasesTable.notes,
   subsidyStatus: repairCasesTable.subsidyStatus,
   createdAt: repairCasesTable.createdAt,
   updatedAt: repairCasesTable.updatedAt,
   customerName: customersTable.name,
   employeeName: employeesTable.name,
+  salesUserName: salesUsersTable.displayName,
 };
+
+function withJoins() {
+  return db
+    .select(caseSelect)
+    .from(repairCasesTable)
+    .leftJoin(customersTable, eq(repairCasesTable.customerId, customersTable.id))
+    .leftJoin(employeesTable, eq(repairCasesTable.employeeId, employeesTable.id))
+    .leftJoin(salesUsersTable, eq(repairCasesTable.salesUserId, salesUsersTable.id));
+}
 
 async function loadPhotos(repairCaseId: number) {
   return db
@@ -99,12 +119,37 @@ function generateRepairNo(id: number, createdAt: Date | string) {
   return `RC-${y}${m}${day}-${String(id).padStart(4, "0")}`;
 }
 
+router.get("/repair-cases/sales-options", async (_req, res): Promise<void> => {
+  const users = await db
+    .select({
+      id: usersTable.id,
+      displayName: usersTable.displayName,
+      role: usersTable.role,
+      roles: usersTable.roles,
+      isActive: usersTable.isActive,
+      employeePosition: employeesTable.position,
+      employeeName: employeesTable.name,
+    })
+    .from(usersTable)
+    .leftJoin(employeesTable, eq(usersTable.linkedEmployeeId, employeesTable.id));
+  res.json(buildRepairCaseSalesOptions({ users }));
+});
+
 router.get("/repair-cases", async (req, res): Promise<void> => {
-  const { search, status, source } = req.query as { search?: string; status?: string; source?: string };
+  const { search, status, source, salesUserId } = req.query as {
+    search?: string;
+    status?: string;
+    source?: string;
+    salesUserId?: string;
+  };
   const conditions = [];
 
   if (status && status !== "全部") conditions.push(eq(repairCasesTable.status, status));
   if (source && source !== "全部") conditions.push(eq(repairCasesTable.source, source));
+  if (salesUserId && salesUserId !== "全部" && salesUserId !== "all") {
+    const parsedSales = parseInt(salesUserId, 10);
+    if (!isNaN(parsedSales)) conditions.push(eq(repairCasesTable.salesUserId, parsedSales));
+  }
 
   if (search?.trim()) {
     const q = `%${search.trim()}%`;
@@ -114,15 +159,12 @@ router.get("/repair-cases", async (req, res): Promise<void> => {
       ilike(repairCasesTable.tempCustomerName, q),
       ilike(repairCasesTable.phone, q),
       ilike(employeesTable.name, q),
+      ilike(salesUsersTable.displayName, q),
       ilike(repairCasesTable.status, q),
     ));
   }
 
-  const rows = await db
-    .select(caseSelect)
-    .from(repairCasesTable)
-    .leftJoin(customersTable, eq(repairCasesTable.customerId, customersTable.id))
-    .leftJoin(employeesTable, eq(repairCasesTable.employeeId, employeesTable.id))
+  const rows = await withJoins()
     .where(conditions.length > 0 ? and(...conditions) : undefined)
     .orderBy(desc(repairCasesTable.createdAt));
 
@@ -161,16 +203,11 @@ router.post("/repair-cases", async (req, res): Promise<void> => {
     );
   }
 
-  const [enriched] = await db
-    .select(caseSelect)
-    .from(repairCasesTable)
-    .leftJoin(customersTable, eq(repairCasesTable.customerId, customersTable.id))
-    .leftJoin(employeesTable, eq(repairCasesTable.employeeId, employeesTable.id))
-    .where(eq(repairCasesTable.id, row.id));
+  const [enriched] = await withJoins().where(eq(repairCasesTable.id, row.id));
 
   const photoRows = await loadPhotos(row.id);
   res.status(201).json({
-    ...mapRepairCase(enriched ?? { ...row, customerName: null, employeeName: null }),
+    ...mapRepairCase(enriched ?? { ...row, customerName: null, employeeName: null, salesUserName: null }),
     photos: photoRows.map(p => ({
       id: p.id,
       repairCaseId: p.repairCaseId,
@@ -186,12 +223,7 @@ router.get("/repair-cases/:id", async (req, res): Promise<void> => {
   const id = parseInt(raw, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
-  const [row] = await db
-    .select(caseSelect)
-    .from(repairCasesTable)
-    .leftJoin(customersTable, eq(repairCasesTable.customerId, customersTable.id))
-    .leftJoin(employeesTable, eq(repairCasesTable.employeeId, employeesTable.id))
-    .where(eq(repairCasesTable.id, id));
+  const [row] = await withJoins().where(eq(repairCasesTable.id, id));
 
   if (!row) { res.status(404).json({ error: "找不到維修案件" }); return; }
 
@@ -218,12 +250,7 @@ router.patch("/repair-cases/:id", async (req, res): Promise<void> => {
   const id = parseInt(raw, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
-  const [existing] = await db
-    .select(caseSelect)
-    .from(repairCasesTable)
-    .leftJoin(customersTable, eq(repairCasesTable.customerId, customersTable.id))
-    .leftJoin(employeesTable, eq(repairCasesTable.employeeId, employeesTable.id))
-    .where(eq(repairCasesTable.id, id));
+  const [existing] = await withJoins().where(eq(repairCasesTable.id, id));
   if (!existing) { res.status(404).json({ error: "找不到維修案件" }); return; }
 
   if (req.user) {
@@ -263,16 +290,11 @@ router.patch("/repair-cases/:id", async (req, res): Promise<void> => {
     }
   }
 
-  const [enriched] = await db
-    .select(caseSelect)
-    .from(repairCasesTable)
-    .leftJoin(customersTable, eq(repairCasesTable.customerId, customersTable.id))
-    .leftJoin(employeesTable, eq(repairCasesTable.employeeId, employeesTable.id))
-    .where(eq(repairCasesTable.id, id));
+  const [enriched] = await withJoins().where(eq(repairCasesTable.id, id));
 
   const photoRows = await loadPhotos(id);
   res.json({
-    ...mapRepairCase(enriched ?? { ...updated, customerName: null, employeeName: null }),
+    ...mapRepairCase(enriched ?? { ...updated, customerName: null, employeeName: null, salesUserName: null }),
     photos: photoRows.map(p => ({
       id: p.id,
       repairCaseId: p.repairCaseId,
@@ -288,12 +310,7 @@ router.delete("/repair-cases/:id", async (req, res): Promise<void> => {
   const id = parseInt(raw, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
 
-  const [existing] = await db
-    .select(caseSelect)
-    .from(repairCasesTable)
-    .leftJoin(customersTable, eq(repairCasesTable.customerId, customersTable.id))
-    .leftJoin(employeesTable, eq(repairCasesTable.employeeId, employeesTable.id))
-    .where(eq(repairCasesTable.id, id));
+  const [existing] = await withJoins().where(eq(repairCasesTable.id, id));
   if (!existing) { res.status(404).json({ error: "找不到維修案件" }); return; }
 
   if (req.user) {

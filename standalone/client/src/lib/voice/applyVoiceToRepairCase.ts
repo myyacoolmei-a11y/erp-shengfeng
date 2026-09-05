@@ -16,6 +16,7 @@ export interface RepairCaseFormDraft {
   appointmentDate: string;
   appointmentTime: string;
   employeeId: number | null;
+  salesUserId: number | null;
   notes: string;
   photos: string[];
 }

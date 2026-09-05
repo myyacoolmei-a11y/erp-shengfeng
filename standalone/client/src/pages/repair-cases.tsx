@@ -10,7 +10,7 @@ import {
   getGetRepairCaseQueryKey,
 } from "@workspace/api-client-react";
 import type { RepairCase, RepairCaseDetail } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { invalidateStatistics } from "@/lib/invalidateStatistics";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,7 +24,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { CustomerSelector, type CustomerSelectorValue } from "@/components/customer-selector";
-import { Plus, Search, Eye, Trash2, FileText, CreditCard, Receipt, ShieldCheck, Bell, X } from "lucide-react";
+import { Plus, Search, Eye, Pencil, Trash2, FileText, CreditCard, Receipt, ShieldCheck, Bell, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { PENDING_DISPATCH_BADGE } from "@/lib/dispatchPendingTheme";
 import { VoiceAssistantButton } from "@/components/voice-assistant/VoiceAssistantDialog";
@@ -72,12 +72,17 @@ function emptyForm() {
     appointmentDate: "",
     appointmentTime: "",
     employeeId: null as number | null,
+    salesUserId: null as number | null,
     notes: "",
     photos: [] as string[],
   };
 }
 
-function buildPayload(form: ReturnType<typeof emptyForm>, customer: CustomerSelectorValue | null) {
+function buildPayload(
+  form: ReturnType<typeof emptyForm>,
+  customer: CustomerSelectorValue | null,
+  options?: { omitPhotos?: boolean },
+) {
   return {
     source: form.source,
     customerId: customer?.type === "linked" ? customer.customerId : null,
@@ -95,13 +100,80 @@ function buildPayload(form: ReturnType<typeof emptyForm>, customer: CustomerSele
     appointmentDate: form.appointmentDate || null,
     appointmentTime: form.appointmentTime || null,
     employeeId: form.employeeId,
+    salesUserId: form.salesUserId,
     notes: form.notes || null,
-    photos: form.photos.filter(Boolean),
+    ...(options?.omitPhotos ? {} : { photos: form.photos.filter(Boolean) }),
   };
 }
 
 function displayAddress(c: RepairCase) {
   return c.siteAddress || c.address || "—";
+}
+
+function displaySalesName(name?: string | null) {
+  return name?.trim() || "未指定";
+}
+
+const AUTH_TOKEN_KEY = "erp_auth_token";
+
+function authFetch(url: string) {
+  const token = localStorage.getItem(AUTH_TOKEN_KEY);
+  return fetch(url, {
+    headers: {
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+}
+
+type SalesOption = { id: number; name: string; isSales: boolean };
+
+function customerFromCase(detail: RepairCase | RepairCaseDetail): CustomerSelectorValue | null {
+  if (detail.customerId) {
+    return {
+      type: "linked",
+      customerId: detail.customerId,
+      name: detail.customerName ?? "",
+      contactPerson: detail.contactName ?? "",
+      phone: detail.phone ?? "",
+      mobile: detail.phone ?? "",
+      address: detail.address ?? "",
+      taxId: "",
+    };
+  }
+  const name = detail.tempCustomerName || detail.customerName;
+  if (!name) return null;
+  return {
+    type: "temp",
+    customerId: null,
+    name,
+    contactPerson: detail.contactName ?? "",
+    phone: detail.phone ?? "",
+    mobile: detail.phone ?? "",
+    address: detail.address ?? "",
+    taxId: "",
+  };
+}
+
+function formFromCase(detail: RepairCaseDetail) {
+  return {
+    source: detail.source || "客戶報修",
+    contactName: detail.contactName ?? "",
+    phone: detail.phone ?? "",
+    address: detail.address ?? "",
+    siteAddress: detail.siteAddress ?? "",
+    brand: detail.brand ?? "",
+    model: detail.model ?? "",
+    quantity: detail.quantity ?? 1,
+    problemDescription: detail.problemDescription ?? "",
+    status: detail.status || "待派工",
+    priority: detail.priority || "普通",
+    appointmentDate: detail.appointmentDate ?? "",
+    appointmentTime: detail.appointmentTime ?? "",
+    employeeId: detail.employeeId ?? null,
+    salesUserId: detail.salesUserId ?? null,
+    notes: detail.notes ?? "",
+    photos: (detail.photos ?? []).map(p => p.url).filter(Boolean),
+  };
 }
 
 function DetailSection({ title, children }: { title: string; children: React.ReactNode }) {
@@ -142,10 +214,12 @@ function PlaceholderActions({ onToast }: { onToast: (msg: string) => void }) {
 function RepairCaseDetailView({
   detail,
   onClose,
+  onEdit,
   onStatusChange,
 }: {
   detail: RepairCaseDetail;
   onClose: () => void;
+  onEdit: () => void;
   onStatusChange: (status: string) => void;
 }) {
   const { toast } = useToast();
@@ -172,6 +246,7 @@ function RepairCaseDetailView({
           <div><span className="text-muted-foreground">聯絡人：</span>{detail.contactName ?? "—"}</div>
           <div><span className="text-muted-foreground">電話：</span>{detail.phone ?? "—"}</div>
           <div><span className="text-muted-foreground">技師：</span>{detail.employeeName ?? "—"}</div>
+          <div><span className="text-muted-foreground">負責業務：</span>{displaySalesName(detail.salesUserName)}</div>
           <div className="col-span-2"><span className="text-muted-foreground">地址：</span>{detail.address ?? "—"}</div>
           <div className="col-span-2"><span className="text-muted-foreground">案件地址：</span>{detail.siteAddress ?? "—"}</div>
           <div><span className="text-muted-foreground">品牌：</span>{detail.brand ?? "—"}</div>
@@ -236,6 +311,7 @@ function RepairCaseDetailView({
 
       <DialogFooter className="pt-2">
         <Button variant="outline" onClick={onClose}>關閉</Button>
+        <Button onClick={onEdit}><Pencil className="h-3.5 w-3.5 mr-1" />編輯</Button>
       </DialogFooter>
     </div>
   );
@@ -247,20 +323,32 @@ export default function RepairCases() {
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("全部");
-  const [showCreate, setShowCreate] = useState(false);
+  const [salesFilter, setSalesFilter] = useState("all");
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
   const [detailId, setDetailId] = useState<number | null>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
 
   const [form, setForm] = useState(emptyForm);
   const [formCustomer, setFormCustomer] = useState<CustomerSelectorValue | null>(null);
   const [photoInput, setPhotoInput] = useState("");
+  const [omitPhotos, setOmitPhotos] = useState(false);
 
   const params: Record<string, string> = {};
   if (search.trim()) params.search = search.trim();
   if (statusFilter !== "全部") params.status = statusFilter;
+  if (salesFilter !== "all") params.salesUserId = salesFilter;
 
   const { data: cases, isLoading } = useListRepairCases(params);
   const { data: employees } = useListEmployees({});
+  const { data: salesOptions = [] } = useQuery({
+    queryKey: ["/api/repair-cases/sales-options"],
+    queryFn: async () => {
+      const res = await authFetch("/api/repair-cases/sales-options");
+      if (!res.ok) throw new Error("無法載入業務名單");
+      return res.json() as Promise<SalesOption[]>;
+    },
+  });
   const { data: detail } = useGetRepairCase(detailId ?? 0, {
     query: { enabled: detailId !== null, queryKey: getGetRepairCaseQueryKey(detailId ?? 0) },
   });
@@ -268,16 +356,16 @@ export default function RepairCases() {
   const invalidate = () => {
     invalidateStatistics(queryClient);
     queryClient.invalidateQueries({ queryKey: getListRepairCasesQueryKey() });
+    if (detailId != null) {
+      queryClient.invalidateQueries({ queryKey: getGetRepairCaseQueryKey(detailId) });
+    }
   };
 
   const createMutation = useCreateRepairCase({
     mutation: {
       onSuccess: () => {
         invalidate();
-        setShowCreate(false);
-        setForm(emptyForm());
-        setFormCustomer(null);
-        setPhotoInput("");
+        closeForm();
         toast({ title: "維修案件已建立" });
       },
       onError: (err: unknown) => {
@@ -288,9 +376,14 @@ export default function RepairCases() {
 
   const updateMutation = useUpdateRepairCase({
     mutation: {
-      onSuccess: () => {
+      onSuccess: (_data, variables) => {
         invalidate();
-        toast({ title: "案件已更新" });
+        if (variables.id === editingId) {
+          closeForm();
+          toast({ title: "案件已更新" });
+        } else {
+          toast({ title: "案件已更新" });
+        }
       },
       onError: (err: unknown) => {
         toast({ title: "更新失敗", description: String(err), variant: "destructive" });
@@ -310,6 +403,66 @@ export default function RepairCases() {
   });
 
   const techEmployees = (employees ?? []).filter(e => e.status === "在職");
+  const formSalesOptions = (() => {
+    const list = [...salesOptions];
+    if (form.salesUserId && !list.some(o => o.id === form.salesUserId)) {
+      const assigned = cases?.find(c => c.salesUserId === form.salesUserId)?.salesUserName
+        ?? detail?.salesUserName
+        ?? `業務`;
+      list.unshift({ id: form.salesUserId, name: assigned || "未指定", isSales: false });
+    }
+    return list;
+  })();
+
+  function closeForm() {
+    setShowForm(false);
+    setEditingId(null);
+    setForm(emptyForm());
+    setFormCustomer(null);
+    setPhotoInput("");
+    setOmitPhotos(false);
+  }
+
+  function openCreate() {
+    setEditingId(null);
+    setForm(emptyForm());
+    setFormCustomer(null);
+    setPhotoInput("");
+    setOmitPhotos(false);
+    setShowForm(true);
+  }
+
+  function openEdit(row: RepairCaseDetail | RepairCase) {
+    const full = "photos" in row ? row : detail?.id === row.id ? detail : null;
+    setOmitPhotos(!(full && "photos" in full));
+    if (full && "photos" in full) {
+      setForm(formFromCase(full));
+    } else {
+      setForm({
+        ...emptyForm(),
+        source: row.source || "客戶報修",
+        contactName: row.contactName ?? "",
+        phone: row.phone ?? "",
+        address: row.address ?? "",
+        siteAddress: row.siteAddress ?? "",
+        brand: row.brand ?? "",
+        model: row.model ?? "",
+        quantity: row.quantity ?? 1,
+        problemDescription: row.problemDescription ?? "",
+        status: row.status || "待派工",
+        priority: row.priority || "普通",
+        appointmentDate: row.appointmentDate ?? "",
+        appointmentTime: row.appointmentTime ?? "",
+        employeeId: row.employeeId ?? null,
+        salesUserId: row.salesUserId ?? null,
+        notes: row.notes ?? "",
+      });
+    }
+    setFormCustomer(customerFromCase(row));
+    setPhotoInput("");
+    setEditingId(row.id);
+    setShowForm(true);
+  }
 
   function addPhotoUrl() {
     const url = photoInput.trim();
@@ -320,9 +473,10 @@ export default function RepairCases() {
 
   function handleVoiceApply({ parsed }: VoiceAssistantApplyPayload) {
     if (parsed.formType !== "repair_case") return;
+    setEditingId(null);
     setForm(applyVoiceToRepairCaseForm(emptyForm, parsed));
     setFormCustomer(customerFromVoiceRepair(parsed));
-    setShowCreate(true);
+    setShowForm(true);
   }
 
   return (
@@ -334,7 +488,7 @@ export default function RepairCases() {
         </div>
         <div className="flex items-center gap-2">
           <VoiceAssistantButton formType="repair_case" onApply={handleVoiceApply} />
-          <Button size="sm" onClick={() => { setForm(emptyForm()); setFormCustomer(null); setShowCreate(true); }}>
+          <Button size="sm" onClick={openCreate}>
             <Plus className="h-4 w-4 mr-1" />建立案件
           </Button>
         </div>
@@ -345,14 +499,14 @@ export default function RepairCases() {
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             className="pl-9"
-            placeholder="搜尋案件編號、客戶、電話、技師、狀態…"
+            placeholder="搜尋案件編號、客戶、電話、技師、業務、狀態…"
             value={search}
             onChange={e => setSearch(e.target.value)}
           />
         </div>
       </div>
 
-      <div className="flex gap-2 flex-wrap">
+      <div className="flex gap-2 flex-wrap items-center">
         {["全部", ...STATUSES].map(s => (
           <button
             key={s}
@@ -362,6 +516,17 @@ export default function RepairCases() {
             {s}
           </button>
         ))}
+        <Select value={salesFilter} onValueChange={setSalesFilter}>
+          <SelectTrigger className="h-8 w-[140px] text-xs">
+            <SelectValue placeholder="全部業務" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">全部業務</SelectItem>
+            {salesOptions.map(o => (
+              <SelectItem key={o.id} value={String(o.id)}>{o.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {isLoading ? (
@@ -378,6 +543,7 @@ export default function RepairCases() {
                   <th className="px-3 py-2 font-medium hidden md:table-cell">電話</th>
                   <th className="px-3 py-2 font-medium hidden lg:table-cell">地址</th>
                   <th className="px-3 py-2 font-medium hidden md:table-cell">技師</th>
+                  <th className="px-3 py-2 font-medium hidden md:table-cell w-[72px]">業務</th>
                   <th className="px-3 py-2 font-medium">狀態</th>
                   <th className="px-3 py-2 font-medium hidden sm:table-cell">來源</th>
                   <th className="px-3 py-2 font-medium hidden lg:table-cell">預約日期</th>
@@ -393,6 +559,9 @@ export default function RepairCases() {
                     <td className="px-3 py-2.5 hidden md:table-cell">{c.phone ?? "—"}</td>
                     <td className="px-3 py-2.5 hidden lg:table-cell max-w-[160px] truncate">{displayAddress(c)}</td>
                     <td className="px-3 py-2.5 hidden md:table-cell">{c.employeeName ?? "—"}</td>
+                    <td className="px-3 py-2.5 hidden md:table-cell max-w-[72px] truncate" title={displaySalesName(c.salesUserName)}>
+                      {displaySalesName(c.salesUserName)}
+                    </td>
                     <td className="px-3 py-2.5">
                       <Badge className={`text-[10px] ${STATUS_COLORS[c.status] ?? ""}`}>{c.status}</Badge>
                     </td>
@@ -402,6 +571,9 @@ export default function RepairCases() {
                       <div className="flex gap-1">
                         <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setDetailId(c.id)}>
                           <Eye className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => openEdit(c)}>
+                          <Pencil className="h-3.5 w-3.5" />
                         </Button>
                         <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => setDeleteId(c.id)}>
                           <Trash2 className="h-3.5 w-3.5" />
@@ -418,9 +590,9 @@ export default function RepairCases() {
         <Card><CardContent className="py-12 text-center"><p className="text-muted-foreground">尚無維修案件</p></CardContent></Card>
       )}
 
-      <Dialog open={showCreate} onOpenChange={open => { setShowCreate(open); if (!open) { setFormCustomer(null); setForm(emptyForm()); setPhotoInput(""); } }}>
+      <Dialog open={showForm} onOpenChange={open => { if (open) setShowForm(true); else closeForm(); }}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>建立維修案件</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{editingId ? "編輯維修案件" : "建立維修案件"}</DialogTitle></DialogHeader>
           <form
             onSubmit={e => {
               e.preventDefault();
@@ -428,7 +600,12 @@ export default function RepairCases() {
                 toast({ title: "請選擇或輸入客戶", variant: "destructive" });
                 return;
               }
-              createMutation.mutate({ data: buildPayload(form, formCustomer) });
+              const payload = buildPayload(form, formCustomer, { omitPhotos });
+              if (editingId) {
+                updateMutation.mutate({ id: editingId, data: payload });
+              } else {
+                createMutation.mutate({ data: payload });
+              }
             }}
             className="space-y-3"
           >
@@ -523,6 +700,22 @@ export default function RepairCases() {
               </div>
             </div>
 
+            <div className="space-y-1.5">
+              <Label>業務</Label>
+              <Select
+                value={form.salesUserId ? String(form.salesUserId) : "none"}
+                onValueChange={v => setForm(f => ({ ...f, salesUserId: v === "none" ? null : parseInt(v, 10) }))}
+              >
+                <SelectTrigger><SelectValue placeholder="選擇業務" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">未指定</SelectItem>
+                  {formSalesOptions.map(o => (
+                    <SelectItem key={o.id} value={String(o.id)}>{o.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5"><Label>預約日期</Label><Input type="date" value={form.appointmentDate} onChange={e => setForm(f => ({ ...f, appointmentDate: e.target.value }))} min={todayStr()} /></div>
               <div className="space-y-1.5"><Label>預約時間</Label><Input type="time" value={form.appointmentTime} onChange={e => setForm(f => ({ ...f, appointmentTime: e.target.value }))} /></div>
@@ -531,8 +724,10 @@ export default function RepairCases() {
             <div className="space-y-1.5"><Label>備註</Label><Textarea rows={2} value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} /></div>
 
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setShowCreate(false)}>取消</Button>
-              <Button type="submit" disabled={createMutation.isPending}>建立</Button>
+              <Button type="button" variant="outline" onClick={closeForm}>取消</Button>
+              <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending}>
+                {editingId ? "儲存" : "建立"}
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>
@@ -545,6 +740,9 @@ export default function RepairCases() {
             <RepairCaseDetailView
               detail={detail}
               onClose={() => setDetailId(null)}
+              onEdit={() => {
+                openEdit(detail);
+              }}
               onStatusChange={status => detailId && updateMutation.mutate({ id: detailId, data: { status } })}
             />
           ) : (

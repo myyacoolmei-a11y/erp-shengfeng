@@ -1619,9 +1619,10 @@ export const DeleteMaintenanceReminderResponse = zod.void()
  * @summary 列出維修案件
  */
 export const ListRepairCasesQueryParams = zod.object({
-  "search": zod.coerce.string().optional().describe('搜尋案件編號、客戶、電話、技師、狀態'),
+  "search": zod.coerce.string().optional().describe('搜尋案件編號、客戶、電話、技師、業務、狀態'),
   "status": zod.coerce.string().optional(),
-  "source": zod.coerce.string().optional()
+  "source": zod.coerce.string().optional(),
+  "salesUserId": zod.coerce.string().optional()
 })
 
 export const ListRepairCasesResponseItem = zod.object({
@@ -1645,6 +1646,8 @@ export const ListRepairCasesResponseItem = zod.object({
   "appointmentTime": zod.string().nullish(),
   "employeeId": zod.number().nullish(),
   "employeeName": zod.string().nullish(),
+  "salesUserId": zod.number().nullish(),
+  "salesUserName": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "subsidyStatus": zod.string().optional(),
   "createdAt": zod.string(),
@@ -1673,6 +1676,7 @@ export const CreateRepairCaseBody = zod.object({
   "appointmentDate": zod.string().nullish(),
   "appointmentTime": zod.string().nullish(),
   "employeeId": zod.number().nullish(),
+  "salesUserId": zod.number().nullish(),
   "notes": zod.string().nullish(),
   "photos": zod.array(zod.string()).optional(),
   "subsidyStatus": zod.string().optional()
@@ -1699,6 +1703,8 @@ export const CreateRepairCaseResponse = zod.object({
   "appointmentTime": zod.string().nullish(),
   "employeeId": zod.number().nullish(),
   "employeeName": zod.string().nullish(),
+  "salesUserId": zod.number().nullish(),
+  "salesUserName": zod.string().nullish(),
   "notes": zod.string().nullish(),
   "subsidyStatus": zod.string().optional(),
   "createdAt": zod.string(),
@@ -1747,6 +1753,7 @@ export const UpdateRepairCaseBody = zod.object({
   "appointmentDate": zod.string().nullish(),
   "appointmentTime": zod.string().nullish(),
   "employeeId": zod.number().nullish(),
+  "salesUserId": zod.number().nullish(),
   "notes": zod.string().nullish(),
   "photos": zod.array(zod.string()).optional(),
   "subsidyStatus": zod.string().optional()

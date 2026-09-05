@@ -657,6 +657,10 @@ export interface RepairCase {
   /** @nullable */
   employeeName?: string | null;
   /** @nullable */
+  salesUserId?: number | null;
+  /** @nullable */
+  salesUserName?: string | null;
+  /** @nullable */
   notes?: string | null;
   /** 未申請補助 | 已申請補助 | 不適用 */
   subsidyStatus?: string;
@@ -699,6 +703,8 @@ export interface RepairCaseInput {
   /** @nullable */
   employeeId?: number | null;
   /** @nullable */
+  salesUserId?: number | null;
+  /** @nullable */
   notes?: string | null;
   photos?: string[];
   subsidyStatus?: string;
@@ -734,6 +740,8 @@ export interface RepairCaseUpdate {
   appointmentTime?: string | null;
   /** @nullable */
   employeeId?: number | null;
+  /** @nullable */
+  salesUserId?: number | null;
   /** @nullable */
   notes?: string | null;
   photos?: string[];
@@ -1386,11 +1394,12 @@ upcoming?: string;
 
 export type ListRepairCasesParams = {
 /**
- * 搜尋案件編號、客戶、電話、技師、狀態
+ * 搜尋案件編號、客戶、電話、技師、業務、狀態
  */
 search?: string;
 status?: string;
 source?: string;
+salesUserId?: string;
 };
 
 export type ListReceivablesParams = {
