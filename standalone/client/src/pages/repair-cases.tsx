@@ -15,7 +15,7 @@ import { invalidateStatistics } from "@/lib/invalidateStatistics";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -213,19 +213,15 @@ function PlaceholderActions({ onToast }: { onToast: (msg: string) => void }) {
 
 function RepairCaseDetailView({
   detail,
-  onClose,
-  onEdit,
   onStatusChange,
 }: {
   detail: RepairCaseDetail;
-  onClose: () => void;
-  onEdit: () => void;
   onStatusChange: (status: string) => void;
 }) {
   const { toast } = useToast();
 
   return (
-    <div className="space-y-4 max-h-[75vh] overflow-y-auto pr-1">
+    <div className="space-y-4">
       <div className="flex items-start justify-between gap-2">
         <div>
           <p className="text-lg font-bold">{detail.repairNo ?? `#${detail.id}`}</p>
@@ -309,10 +305,6 @@ function RepairCaseDetailView({
         </Select>
       </DetailSection>
 
-      <DialogFooter className="pt-2">
-        <Button variant="outline" onClick={onClose}>關閉</Button>
-        <Button onClick={onEdit}><Pencil className="h-3.5 w-3.5 mr-1" />編輯</Button>
-      </DialogFooter>
     </div>
   );
 }
@@ -591,7 +583,7 @@ export default function RepairCases() {
       )}
 
       <Dialog open={showForm} onOpenChange={open => { if (open) setShowForm(true); else closeForm(); }}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>{editingId ? "編輯維修案件" : "建立維修案件"}</DialogTitle></DialogHeader>
           <form
             onSubmit={e => {
@@ -607,8 +599,9 @@ export default function RepairCases() {
                 createMutation.mutate({ data: payload });
               }
             }}
-            className="space-y-3"
+            className="flex min-h-0 flex-1 flex-col overflow-hidden"
           >
+            <DialogBody className="space-y-3">
             <div className="space-y-1.5">
               <Label>來源</Label>
               <div className="flex gap-4">
@@ -722,6 +715,7 @@ export default function RepairCases() {
             </div>
 
             <div className="space-y-1.5"><Label>備註</Label><Textarea rows={2} value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} /></div>
+            </DialogBody>
 
             <DialogFooter>
               <Button type="button" variant="outline" onClick={closeForm}>取消</Button>
@@ -736,18 +730,27 @@ export default function RepairCases() {
       <Dialog open={detailId !== null} onOpenChange={open => !open && setDetailId(null)}>
         <DialogContent className="max-w-2xl">
           <DialogHeader><DialogTitle>案件詳情</DialogTitle></DialogHeader>
-          {detail ? (
-            <RepairCaseDetailView
-              detail={detail}
-              onClose={() => setDetailId(null)}
-              onEdit={() => {
-                openEdit(detail);
+          <DialogBody>
+            {detail ? (
+              <RepairCaseDetailView
+                detail={detail}
+                onStatusChange={status => detailId && updateMutation.mutate({ id: detailId, data: { status } })}
+              />
+            ) : (
+              <Skeleton className="h-40 w-full" />
+            )}
+          </DialogBody>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDetailId(null)}>關閉</Button>
+            <Button
+              onClick={() => {
+                if (detail) openEdit(detail);
               }}
-              onStatusChange={status => detailId && updateMutation.mutate({ id: detailId, data: { status } })}
-            />
-          ) : (
-            <Skeleton className="h-40 w-full" />
-          )}
+              disabled={!detail}
+            >
+              <Pencil className="h-3.5 w-3.5 mr-1" />編輯
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 

@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { Mic, Car, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import {
   LiveSpeechPreview,
@@ -294,7 +294,7 @@ export function VoiceAssistantDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className={drivingMode ? "max-w-md" : "max-w-lg max-h-[90vh] overflow-y-auto"}>
+      <DialogContent className={drivingMode ? "max-w-md" : "max-w-lg"}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Mic className="h-5 w-5" />
@@ -302,6 +302,7 @@ export function VoiceAssistantDialog({
           </DialogTitle>
         </DialogHeader>
 
+        <DialogBody className={drivingMode ? "p-0" : "space-y-0"}>
         {drivingMode ? (
           <DrivingModeView
             step={step}
@@ -380,6 +381,7 @@ export function VoiceAssistantDialog({
             )}
           </div>
         )}
+        </DialogBody>
 
         {!drivingMode && (
           <DialogFooter className="gap-2 sm:gap-0">
