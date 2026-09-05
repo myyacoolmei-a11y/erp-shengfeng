@@ -235,3 +235,78 @@
     pointer-events: none;
   }
 }
+
+/* Viewport gutters + inner scroll for shared Dialog / AlertDialog.
+   Width stays capped by Tailwind max-w-* so small confirms stay small. */
+.dialog-shell {
+  box-sizing: border-box;
+  width: min(100%, calc(100vw - 48px)) !important;
+  max-height: min(calc(100vh - 64px), calc(100dvh - 64px)) !important;
+  overflow: hidden !important;
+}
+
+@media (max-width: 639.98px) {
+  .dialog-shell {
+    width: calc(100vw - 24px) !important;
+    max-height: calc(100dvh - 24px) !important;
+  }
+}
+
+.dialog-shell > form {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.dialog-shell > form:not(:has([data-slot="dialog-body"])) {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding-inline: 1rem;
+  padding-top: 0.75rem;
+}
+
+@media (min-width: 640px) {
+  .dialog-shell > form:not(:has([data-slot="dialog-body"])) {
+    padding-inline: 1.5rem;
+  }
+}
+
+.dialog-shell > form:not(:has([data-slot="dialog-body"])) > [data-slot="dialog-footer"] {
+  margin-inline: -1rem;
+}
+
+@media (min-width: 640px) {
+  .dialog-shell > form:not(:has([data-slot="dialog-body"])) > [data-slot="dialog-footer"] {
+    margin-inline: -1.5rem;
+  }
+}
+
+.dialog-shell > :not([data-slot="dialog-header"]):not([data-slot="dialog-footer"]):not([data-slot="dialog-close"]):not([data-slot="dialog-body"]):not(form) {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.dialog-shell [data-slot="dialog-footer"] {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+}
+
+.alert-dialog-shell {
+  box-sizing: border-box;
+  width: min(100%, calc(100vw - 48px)) !important;
+  max-height: min(calc(100vh - 64px), calc(100dvh - 64px)) !important;
+}
+
+@media (max-width: 639.98px) {
+  .alert-dialog-shell {
+    width: calc(100vw - 24px) !important;
+    max-height: calc(100dvh - 24px) !important;
+  }
+}

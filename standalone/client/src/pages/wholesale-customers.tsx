@@ -162,7 +162,7 @@ export default function WholesaleCustomers() {
       )}
 
       <Dialog open={showDialog} onOpenChange={open => !open && close_()}>
-        <DialogContent className="max-w-xl max-h-[90dvh] overflow-y-auto">
+        <DialogContent className="max-w-xl">
           <DialogHeader><DialogTitle>{editItem ? `編輯 ${editItem.companyName}` : "新增批發客戶"}</DialogTitle></DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4 mt-1">
             <SectionHeading>基本資料</SectionHeading>

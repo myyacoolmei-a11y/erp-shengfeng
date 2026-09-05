@@ -543,7 +543,7 @@ export default function Inventory() {
 
       {/* Create / Edit */}
       <Dialog open={dialogOpen} onOpenChange={(o) => !o && setDialogOpen(false)}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>{editing ? "編輯庫存品項" : "新增庫存品項"}</DialogTitle>
           </DialogHeader>
@@ -726,7 +726,7 @@ export default function Inventory() {
 
       {/* History */}
       <Dialog open={!!historyItem} onOpenChange={(o) => !o && setHistoryItem(null)}>
-        <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>異動紀錄 — {historyItem?.itemName}</DialogTitle>
           </DialogHeader>

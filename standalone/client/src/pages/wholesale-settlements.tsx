@@ -575,7 +575,7 @@ export default function WholesaleSettlements() {
       )}
 
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
-        <DialogContent className="max-w-5xl max-h-[85vh] overflow-y-auto">
+        <DialogContent className="max-w-5xl">
           <DialogHeader>
             <DialogTitle>{detailCustomer?.name} — 出貨明細</DialogTitle>
           </DialogHeader>

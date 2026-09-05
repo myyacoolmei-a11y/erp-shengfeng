@@ -1566,7 +1566,7 @@ export default function WorkOrders() {
 
       {/* Create / Edit Dialog — sticky header/footer, scrollable body (iPhone Safari) */}
       <Dialog open={isDialogOpen} onOpenChange={open => { if (!open) { setShowCreate(false); setEditItem(null); } }}>
-        <DialogContent className="max-w-2xl w-[calc(100vw-1rem)] sm:w-full">
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>{dialogMode === "create" ? "新增派工單" : `編輯派工單 ${editItem?.workOrderNumber || ""}`}</DialogTitle>
           </DialogHeader>
@@ -1623,7 +1623,7 @@ export default function WorkOrders() {
 
       {/* AR creation modal */}
       <Dialog open={!!arModal} onOpenChange={open => { if (!open) setArModal(null); }}>
-        <DialogContent className="max-w-sm w-[calc(100vw-1.5rem)]">
+        <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>建立應收帳款</DialogTitle>
           </DialogHeader>

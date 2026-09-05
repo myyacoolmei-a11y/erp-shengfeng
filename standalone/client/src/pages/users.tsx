@@ -414,7 +414,7 @@ export default function UsersPage() {
       </div>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>新增用戶</DialogTitle>
             <DialogDescription>建立登入帳號並設定功能與資料權限，不必先建立員工資料。</DialogDescription>
@@ -448,7 +448,7 @@ export default function UsersPage() {
       </Dialog>
 
       <Dialog open={!!editTarget} onOpenChange={o => { if (!o) setEditTarget(null); }}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>編輯用戶</DialogTitle>
             <DialogDescription>{editTarget?.displayName}</DialogDescription>

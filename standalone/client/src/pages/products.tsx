@@ -366,7 +366,7 @@ export default function Products() {
 
       {/* Create / Edit Dialog */}
       <Dialog open={showDialog} onOpenChange={open => { if (!open) closeDialog(); }}>
-        <DialogContent className="max-w-2xl w-full max-h-[92dvh] overflow-y-auto p-4 sm:p-6">
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>{dialogTitle}</DialogTitle>
           </DialogHeader>

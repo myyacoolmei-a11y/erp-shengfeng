@@ -450,7 +450,7 @@ export default function WholesaleOrders() {
 
       {/* Create / Edit Dialog */}
       <Dialog open={showDialog} onOpenChange={open => !open && close_()}>
-        <DialogContent className="max-w-4xl w-full max-h-[95dvh] overflow-y-auto p-4 sm:p-6">
+        <DialogContent className="max-w-4xl">
           <DialogHeader><DialogTitle>{editId ? "編輯批發訂單" : "新增批發訂單"}</DialogTitle></DialogHeader>
           {editId && editLoading ? (
             <div className="space-y-2 py-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}</div>
@@ -612,7 +612,7 @@ export default function WholesaleOrders() {
 
       {/* Receivable + payment */}
       <Dialog open={receivableOrderId !== null} onOpenChange={open => !open && setReceivableOrderId(null)}>
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>應收款明細{receivableOrder?.orderNumber ? ` — ${receivableOrder.orderNumber}` : ""}</DialogTitle>
           </DialogHeader>

@@ -115,7 +115,7 @@ function WorkOrderDetailModal({ workOrder, onClose, onGoTo }: { workOrder: WorkO
     : null;
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-md max-h-[80vh] overflow-y-auto">
+      <DialogContent className="max-w-md">
         <DialogHeader><DialogTitle>派工單詳情</DialogTitle></DialogHeader>
         <div className="space-y-3 text-sm">
           <div>

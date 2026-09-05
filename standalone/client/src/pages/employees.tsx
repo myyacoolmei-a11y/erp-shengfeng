@@ -319,7 +319,7 @@ export default function Employees() {
 
       {[showCreate && "create", editItem && "edit"].filter(Boolean).map(mode => (
         <Dialog key={mode as string} open={true} onOpenChange={() => mode === "create" ? setShowCreate(false) : setEditItem(null)}>
-          <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-lg">
             <DialogHeader>
               <DialogTitle>{mode === "create" ? "新增員工" : "編輯員工"}</DialogTitle>
             </DialogHeader>

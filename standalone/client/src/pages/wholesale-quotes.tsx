@@ -244,7 +244,7 @@ export default function WholesaleQuotes() {
 
       {/* Create / Edit Dialog */}
       <Dialog open={showDialog} onOpenChange={open => !open && close_()}>
-        <DialogContent className="max-w-4xl w-full max-h-[95dvh] overflow-y-auto p-4 sm:p-6">
+        <DialogContent className="max-w-4xl">
           <DialogHeader>
             <DialogTitle>{editId ? `編輯報價單` : "新增批發報價單"}</DialogTitle>
           </DialogHeader>

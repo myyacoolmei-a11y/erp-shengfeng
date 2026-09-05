@@ -499,7 +499,7 @@ export default function Receivables() {
 
       {/* Create/Edit Dialog */}
       <Dialog open={showCreate || !!editItem} onOpenChange={open => { if (!open) { setShowCreate(false); setEditItem(null); } }}>
-        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>{editItem ? "編輯應收帳款" : "新增應收帳款"}</DialogTitle>
           </DialogHeader>
@@ -650,7 +650,7 @@ export default function Receivables() {
 
       {/* Edit Invoice Dialog */}
       <Dialog open={!!invoiceModal} onOpenChange={open => { if (!open) setInvoiceModal(null); }}>
-        <DialogContent className="max-w-sm max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>發票資料</DialogTitle>
           </DialogHeader>
@@ -735,7 +735,7 @@ export default function Receivables() {
 
       {/* Delete confirm */}
       <Dialog open={!!subsidyDocsItem} onOpenChange={(open) => { if (!open) setSubsidyDocsItem(null); }}>
-        <DialogContent className="max-w-md w-[calc(100vw-1.5rem)]">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>補助資料</DialogTitle>
           </DialogHeader>
@@ -871,7 +871,7 @@ function ReceivableDetailDialog({ item, onClose }: { item: Receivable; onClose: 
 
   return (
     <Dialog open onOpenChange={open => { if (!open) onClose(); }}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
           <div className="flex items-start justify-between gap-3 pr-6">
             <DialogTitle>應收帳款詳情</DialogTitle>

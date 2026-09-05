@@ -11,7 +11,7 @@ import { X, Plus, Pencil, Trash2, Printer, Copy, Download, FileText, MoreHorizon
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -1069,47 +1069,47 @@ export default function QuotesPage() {
 
       {/* Create / Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={open => !open && closeDialog()}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl">
           <DialogHeader>
             <DialogTitle>{editItem ? "編輯報價單" : "新增報價單"}</DialogTitle>
-          </DialogHeader>
-          {editItem && (
-            <div className="space-y-2 rounded-lg border bg-muted/30 p-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className={`text-xs px-2 py-0.5 rounded font-medium ${STATUS_COLORS[quoteStatusLabel(editItem.status)] ?? "bg-gray-100 text-gray-700"}`}>
-                  {quoteStatusLabel(editItem.status) === "已成交" ? "✓ 已成交" : quoteStatusLabel(editItem.status)}
-                </span>
-                {quoteHasLinkedWorkOrder(editItem) && (
-                  <span className="text-xs font-mono text-indigo-700">
-                    派工單 {editItem.workOrderNumber || `#${editItem.workOrderId}`}
+            {editItem && (
+              <div className="space-y-2 rounded-lg border bg-muted/30 p-3 text-left">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className={`text-xs px-2 py-0.5 rounded font-medium ${STATUS_COLORS[quoteStatusLabel(editItem.status)] ?? "bg-gray-100 text-gray-700"}`}>
+                    {quoteStatusLabel(editItem.status) === "已成交" ? "✓ 已成交" : quoteStatusLabel(editItem.status)}
                   </span>
+                  {quoteHasLinkedWorkOrder(editItem) && (
+                    <span className="text-xs font-mono text-indigo-700">
+                      派工單 {editItem.workOrderNumber || `#${editItem.workOrderId}`}
+                    </span>
+                  )}
+                </div>
+                {canWinQuoteAndCreateWorkOrder(editItem) && (
+                  <Button
+                    type="button"
+                    size="lg"
+                    className="h-12 w-full text-base font-semibold bg-emerald-600 hover:bg-emerald-700 text-white"
+                    disabled={winningId != null}
+                    onClick={() => void winQuoteAndDispatch(editItem)}
+                  >
+                    <Check className="h-5 w-5 mr-1.5" />
+                    {winningId === editItem.id ? "建立中…" : "客戶成交・建立派工單"}
+                  </Button>
+                )}
+                {quoteHasLinkedWorkOrder(editItem) && (
+                  <Button
+                    type="button"
+                    size="lg"
+                    variant="outline"
+                    className="h-12 w-full text-base font-semibold border-emerald-600 text-emerald-800 hover:bg-emerald-50"
+                    onClick={() => navigate(workOrderEditPath(editItem.workOrderId))}
+                  >
+                    <FileText className="h-5 w-5 mr-1.5" />查看派工單
+                  </Button>
                 )}
               </div>
-              {canWinQuoteAndCreateWorkOrder(editItem) && (
-                <Button
-                  type="button"
-                  size="lg"
-                  className="h-12 w-full text-base font-semibold bg-emerald-600 hover:bg-emerald-700 text-white"
-                  disabled={winningId != null}
-                  onClick={() => void winQuoteAndDispatch(editItem)}
-                >
-                  <Check className="h-5 w-5 mr-1.5" />
-                  {winningId === editItem.id ? "建立中…" : "客戶成交・建立派工單"}
-                </Button>
-              )}
-              {quoteHasLinkedWorkOrder(editItem) && (
-                <Button
-                  type="button"
-                  size="lg"
-                  variant="outline"
-                  className="h-12 w-full text-base font-semibold border-emerald-600 text-emerald-800 hover:bg-emerald-50"
-                  onClick={() => navigate(workOrderEditPath(editItem.workOrderId))}
-                >
-                  <FileText className="h-5 w-5 mr-1.5" />查看派工單
-                </Button>
-              )}
-            </div>
-          )}
+            )}
+          </DialogHeader>
           <form onSubmit={e => {
             e.preventDefault();
             const invalidManual = form.items.some(
@@ -1122,7 +1122,8 @@ export default function QuotesPage() {
             const data = formToApi(form) as any;
             if (editItem) updateMutation.mutate({ id: editItem.id, data });
             else createMutation.mutate({ data });
-          }} className="space-y-4">
+          }} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <DialogBody className="space-y-4">
 
             {/* Section: 客戶資訊 */}
             <div className="space-y-3">
@@ -1255,6 +1256,7 @@ export default function QuotesPage() {
                 <Textarea rows={3} value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="保固說明、付款條件、其他約定…" />
               </div>
             </div>
+            </DialogBody>
 
             <DialogFooter className="gap-2">
               <Button type="button" variant="outline" onClick={closeDialog}>取消</Button>
@@ -1269,7 +1271,7 @@ export default function QuotesPage() {
           <DialogHeader>
             <DialogTitle>標記未成交</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3">
+          <DialogBody className="space-y-3">
             <p className="text-sm text-muted-foreground">
               不會建立派工單，報價單會保留供成交率統計。原因可選填。
             </p>
@@ -1290,7 +1292,7 @@ export default function QuotesPage() {
                 <Input value={lostDetail} onChange={e => setLostDetail(e.target.value)} placeholder="選填" />
               </div>
             )}
-          </div>
+          </DialogBody>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setLostQuote(null)}>取消</Button>
             <Button type="button" disabled={markingLost} onClick={() => void submitMarkLost()}>
