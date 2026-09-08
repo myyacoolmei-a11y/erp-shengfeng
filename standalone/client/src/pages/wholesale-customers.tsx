@@ -17,18 +17,25 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Plus, Pencil, Trash2, Search, Building2, Phone, Mail } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useQuery } from "@tanstack/react-query";
+import { WHOLESALE_PAYMENT_TERMS } from "../../../shared/wholesaleAccount.ts";
+import { fetchWholesaleSalesOptions } from "@/lib/wholesaleAccountApi";
 
 const WRITE_ROLES = ["super_admin", "owner", "admin", "sales"] as const;
 
 function makeEmpty() {
   return {
     companyName: "", contactPerson: "", mobile: "", telephone: "",
-    taxId: "", address: "", email: "", paymentTerms: "", creditLimit: "", notes: "",
+    taxId: "", address: "", email: "", paymentTerms: "月結 30 天", creditLimit: "", notes: "",
+    billingCompanyName: "", billingTaxId: "", billingAddress: "", invoiceEmail: "",
+    salesUserId: "" as string, extraAddresses: "",
   };
 }
 type CForm = ReturnType<typeof makeEmpty>;
 
 function fromRow(r: any): CForm {
+  const extras = Array.isArray(r.deliveryAddresses) ? r.deliveryAddresses.filter(Boolean) : [];
   return {
     companyName: r.companyName ?? "",
     contactPerson: r.contactPerson ?? "",
@@ -37,9 +44,15 @@ function fromRow(r: any): CForm {
     taxId: r.taxId ?? "",
     address: r.address ?? "",
     email: r.email ?? "",
-    paymentTerms: r.paymentTerms ?? "",
+    paymentTerms: r.paymentTerms ?? "月結 30 天",
     creditLimit: r.creditLimit != null ? String(r.creditLimit) : "",
     notes: r.notes ?? "",
+    billingCompanyName: r.billingCompanyName ?? "",
+    billingTaxId: r.billingTaxId ?? "",
+    billingAddress: r.billingAddress ?? "",
+    invoiceEmail: r.invoiceEmail ?? "",
+    salesUserId: r.salesUserId != null ? String(r.salesUserId) : "",
+    extraAddresses: extras.join("\n"),
   };
 }
 
@@ -63,6 +76,11 @@ export default function WholesaleCustomers() {
   const [editItem, setEditItem] = useState<any>(null);
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [form, setForm] = useState<CForm>(makeEmpty());
+
+  const { data: salesOptions = [] } = useQuery({
+    queryKey: ["/api/wholesale/customers/sales-options"],
+    queryFn: fetchWholesaleSalesOptions,
+  });
 
   const { data: customers, isLoading } = useListWholesaleCustomers(search ? { search } : {});
   const inv = () => qc.invalidateQueries({ queryKey: getListWholesaleCustomersQueryKey() });
@@ -88,6 +106,12 @@ export default function WholesaleCustomers() {
       email: form.email || undefined,
       paymentTerms: form.paymentTerms || undefined,
       creditLimit: form.creditLimit !== "" ? parseFloat(form.creditLimit) : null,
+      billingCompanyName: form.billingCompanyName || null,
+      billingTaxId: form.billingTaxId || null,
+      billingAddress: form.billingAddress || null,
+      invoiceEmail: form.invoiceEmail || null,
+      salesUserId: form.salesUserId ? parseInt(form.salesUserId, 10) : null,
+      deliveryAddresses: form.extraAddresses.split("\n").map((s) => s.trim()).filter(Boolean),
       notes: form.notes || undefined,
     };
     if (editItem) updateMut.mutate({ id: editItem.id, data: payload });
@@ -193,15 +217,57 @@ export default function WholesaleCustomers() {
               </div>
               <div className="space-y-1">
                 <Label>付款條件</Label>
-                <Input value={form.paymentTerms} onChange={e => setForm(f => ({ ...f, paymentTerms: e.target.value }))} placeholder="例：月結30天" />
+                <Select value={form.paymentTerms || "月結 30 天"} onValueChange={(v) => setForm((f) => ({ ...f, paymentTerms: v }))}>
+                  <SelectTrigger><SelectValue placeholder="選擇付款條件" /></SelectTrigger>
+                  <SelectContent>
+                    {WHOLESALE_PAYMENT_TERMS.map((t) => (
+                      <SelectItem key={t} value={t}>{t}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-1">
                 <Label>信用額度</Label>
                 <Input type="number" min="0" step="1000" value={form.creditLimit} onChange={e => setForm(f => ({ ...f, creditLimit: e.target.value }))} placeholder="0" />
               </div>
               <div className="space-y-1 sm:col-span-2">
-                <Label>地址</Label>
+                <Label>負責業務</Label>
+                <Select value={form.salesUserId || "__none__"} onValueChange={(v) => setForm((f) => ({ ...f, salesUserId: v === "__none__" ? "" : v }))}>
+                  <SelectTrigger><SelectValue placeholder="選擇業務" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">（未指定）</SelectItem>
+                    {salesOptions.filter((s) => s.id != null).map((s) => (
+                      <SelectItem key={s.id} value={String(s.id)}>{s.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1 sm:col-span-2">
+                <Label>預設送貨地址</Label>
                 <Input value={form.address} onChange={e => setForm(f => ({ ...f, address: e.target.value }))} />
+              </div>
+              <div className="space-y-1 sm:col-span-2">
+                <Label>其他送貨地址（每行一筆）</Label>
+                <Textarea rows={2} value={form.extraAddresses} onChange={(e) => setForm((f) => ({ ...f, extraAddresses: e.target.value }))} placeholder="若有多個倉庫／門市地址，每行一個" />
+              </div>
+            </div>
+            <SectionHeading>帳單資料</SectionHeading>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label>帳單公司名稱</Label>
+                <Input value={form.billingCompanyName} onChange={(e) => setForm((f) => ({ ...f, billingCompanyName: e.target.value }))} />
+              </div>
+              <div className="space-y-1">
+                <Label>帳單統編</Label>
+                <Input value={form.billingTaxId} onChange={(e) => setForm((f) => ({ ...f, billingTaxId: e.target.value }))} />
+              </div>
+              <div className="space-y-1 sm:col-span-2">
+                <Label>帳單地址</Label>
+                <Input value={form.billingAddress} onChange={(e) => setForm((f) => ({ ...f, billingAddress: e.target.value }))} />
+              </div>
+              <div className="space-y-1 sm:col-span-2">
+                <Label>帳單 Email</Label>
+                <Input type="email" value={form.invoiceEmail} onChange={(e) => setForm((f) => ({ ...f, invoiceEmail: e.target.value }))} />
               </div>
               <div className="space-y-1 sm:col-span-2">
                 <Label>備註</Label>

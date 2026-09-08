@@ -4,6 +4,8 @@ import {
   usersTable,
   wholesaleOrdersTable,
   wholesalePaymentRecordsTable,
+  wholesalePaymentsTable,
+  wholesalePaymentAllocationsTable,
   wholesaleReceivablesTable,
 } from "@workspace/db";
 import type { JwtPayload } from "../auth.ts";
@@ -185,6 +187,26 @@ async function insertAllocations(opts: {
   note?: string | null;
   createdBy: number | null;
 }) {
+  const total = allocationsTotal(opts.allocations);
+  const [parent] = await db.insert(wholesalePaymentsTable).values({
+    customerId: opts.customerId,
+    paymentDate: opts.paymentDate,
+    amount: String(total),
+    paymentMethod: opts.paymentMethod,
+    note: opts.note?.trim() ? opts.note.trim() : null,
+    createdBy: opts.createdBy,
+  }).returning();
+
+  if (opts.allocations.length) {
+    await db.insert(wholesalePaymentAllocationsTable).values(
+      opts.allocations.map(a => ({
+        paymentId: parent.id,
+        orderId: a.orderId,
+        allocatedAmount: String(a.amount),
+      })),
+    );
+  }
+
   const inserted = [];
   for (const allocation of opts.allocations) {
     const [row] = await db
@@ -203,6 +225,10 @@ async function insertAllocations(opts: {
     await syncOrderReceivableFromPayments(allocation.orderId);
   }
   return inserted;
+}
+
+function allocationsTotal(allocations: WholesalePaymentAllocation[]): number {
+  return parseMoney(allocations.reduce((s, a) => s + a.amount, 0));
 }
 
 export async function recordWholesalePayment(opts: {

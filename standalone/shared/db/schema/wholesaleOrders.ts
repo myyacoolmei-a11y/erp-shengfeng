@@ -10,6 +10,7 @@ export const wholesaleOrdersTable = pgTable("wholesale_orders", {
   quoteNumber: text("quote_number"),
   customerId: integer("customer_id").references(() => wholesaleCustomersTable.id, { onDelete: "set null" }),
   customerName: text("customer_name"),
+  deliveryAddress: text("delivery_address"),
   orderDate: date("order_date", { mode: "string" }).notNull(),
   expectedDelivery: date("expected_delivery", { mode: "string" }),
   salesperson: text("salesperson"),
