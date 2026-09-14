@@ -11,7 +11,13 @@ export async function ensureQuoteWinDispatchMigration(): Promise<boolean> {
   try {
     await pool.query(`
       ALTER TABLE quotes
-        ADD COLUMN IF NOT EXISTS lost_reason text
+        ADD COLUMN IF NOT EXISTS lost_reason text,
+        ADD COLUMN IF NOT EXISTS won_at timestamptz,
+        ADD COLUMN IF NOT EXISTS won_by integer REFERENCES users(id) ON DELETE SET NULL,
+        ADD COLUMN IF NOT EXISTS won_by_name text,
+        ADD COLUMN IF NOT EXISTS win_canceled_at timestamptz,
+        ADD COLUMN IF NOT EXISTS win_canceled_by integer REFERENCES users(id) ON DELETE SET NULL,
+        ADD COLUMN IF NOT EXISTS win_canceled_by_name text
     `);
 
     await pool.query(`

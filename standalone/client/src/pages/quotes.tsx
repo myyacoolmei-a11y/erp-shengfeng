@@ -41,6 +41,7 @@ import {
   quoteHasLinkedWorkOrder,
   quoteListTab,
   quoteStatusLabel,
+  isQuoteWon,
 } from "@/lib/quoteToWorkOrder";
 import { QUOTE_LOST_REASONS } from "../../../shared/quoteStatus.ts";
 import { VoiceAssistantButton } from "@/components/voice-assistant/VoiceAssistantDialog";
@@ -518,6 +519,8 @@ export default function QuotesPage() {
   const [lostDetail, setLostDetail] = useState("");
   const [form, setForm] = useState<QuoteForm>(emptyForm());
   const [winningId, setWinningId] = useState<number | null>(null);
+  const [cancelWinQuote, setCancelWinQuote] = useState<any>(null);
+  const [cancelingWin, setCancelingWin] = useState(false);
   const [markingLost, setMarkingLost] = useState(false);
 
   const [statusFilter, setStatusFilter] = useState<QuoteFilterTab>("尚未成交");
@@ -632,10 +635,12 @@ export default function QuotesPage() {
       qc.invalidateQueries({ queryKey: getListWorkOrdersQueryKey() });
       setEditItem(null);
       toast({
-        title: data.created === false ? "此報價單已有派工單" : "已成交，派工單已建立",
-        description: data.workOrderNumber ? `派工單 ${data.workOrderNumber}，施工日期待安排` : "請補施工日期與人員",
+        title: data.created === false ? "已成交，已關聯原派工單" : "已成交，派工單已建立",
+        description: data.workOrderNumber
+          ? `派工單 ${data.workOrderNumber}${data.created === false ? "" : "，施工日期待安排"}`
+          : "請補施工日期與人員",
       });
-      navigate(workOrderEditPath(data.workOrderId));
+      if (data.workOrderId) navigate(workOrderEditPath(data.workOrderId));
     } catch (err: any) {
       toast({
         title: "成交並建立派工單失敗",
@@ -675,6 +680,40 @@ export default function QuotesPage() {
       });
     } finally {
       setMarkingLost(false);
+    }
+  }
+
+  async function submitCancelWin() {
+    if (!cancelWinQuote?.id || cancelingWin) return;
+    setCancelingWin(true);
+    try {
+      const res = await authFetch(`/api/quotes/${cancelWinQuote.id}/cancel-win`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.error || data?.message || `取消成交失敗（HTTP ${res.status}）`);
+      }
+      invQuotes();
+      qc.invalidateQueries({ queryKey: getListWorkOrdersQueryKey() });
+      const next = data.quote ?? {
+        ...cancelWinQuote,
+        status: "客戶確認中",
+        workOrderId: data.workOrderId ?? cancelWinQuote.workOrderId,
+        workOrderNumber: data.workOrderNumber ?? cancelWinQuote.workOrderNumber,
+      };
+      setCancelWinQuote(null);
+      if (editItem?.id === next.id) {
+        setEditItem(next);
+        setForm(quoteToForm(next));
+      }
+      toast({ title: "已取消成交", description: "報價單已恢復為客戶確認中" });
+    } catch (err: any) {
+      toast({
+        title: "取消成交失敗",
+        description: String(err?.message || err),
+        variant: "destructive",
+      });
+    } finally {
+      setCancelingWin(false);
     }
   }
 
@@ -910,7 +949,11 @@ export default function QuotesPage() {
                           onClick={() => void winQuoteAndDispatch(q)}
                         >
                           <Check className="h-5 w-5 mr-1.5" />
-                          {winningId === q.id ? "建立中…" : "客戶成交・建立派工單"}
+                          {winningId === q.id
+                            ? "處理中…"
+                            : hasWo
+                              ? "客戶成交"
+                              : "客戶成交・建立派工單"}
                         </Button>
                       )}
                       {hasWo && (
@@ -1079,6 +1122,18 @@ export default function QuotesPage() {
                 <span className={`text-xs px-2 py-0.5 rounded font-medium ${STATUS_COLORS[quoteStatusLabel(editItem.status)] ?? "bg-gray-100 text-gray-700"}`}>
                   {quoteStatusLabel(editItem.status) === "已成交" ? "✓ 已成交" : quoteStatusLabel(editItem.status)}
                 </span>
+                {isQuoteWon(editItem.status) && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                    disabled={cancelingWin}
+                    onClick={() => setCancelWinQuote(editItem)}
+                  >
+                    取消成交
+                  </Button>
+                )}
                 {quoteHasLinkedWorkOrder(editItem) && (
                   <span className="text-xs font-mono text-indigo-700">
                     派工單 {editItem.workOrderNumber || `#${editItem.workOrderId}`}
@@ -1094,7 +1149,11 @@ export default function QuotesPage() {
                   onClick={() => void winQuoteAndDispatch(editItem)}
                 >
                   <Check className="h-5 w-5 mr-1.5" />
-                  {winningId === editItem.id ? "建立中…" : "客戶成交・建立派工單"}
+                  {winningId === editItem.id
+                    ? "處理中…"
+                    : quoteHasLinkedWorkOrder(editItem)
+                      ? "客戶成交"
+                      : "客戶成交・建立派工單"}
                 </Button>
               )}
               {quoteHasLinkedWorkOrder(editItem) && (
@@ -1263,6 +1322,38 @@ export default function QuotesPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!cancelWinQuote} onOpenChange={(open) => { if (!open && !cancelingWin) setCancelWinQuote(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>確定取消成交？</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p>此操作會將報價單恢復為「報價中」。</p>
+                {cancelWinQuote && quoteHasLinkedWorkOrder(cancelWinQuote) && (
+                  <>
+                    <p>此報價單已建立派工單 {cancelWinQuote.workOrderNumber || `#${cancelWinQuote.workOrderId}`}。</p>
+                    <p>取消成交不會刪除既有派工單。</p>
+                  </>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={cancelingWin}>返回</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-secondary text-secondary-foreground hover:bg-secondary/80"
+              disabled={cancelingWin}
+              onClick={(e) => {
+                e.preventDefault();
+                void submitCancelWin();
+              }}
+            >
+              {cancelingWin ? "處理中…" : "確認取消成交"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog open={!!lostQuote} onOpenChange={(open) => { if (!open) setLostQuote(null); }}>
         <DialogContent className="max-w-md">

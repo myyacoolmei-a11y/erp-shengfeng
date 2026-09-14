@@ -8,7 +8,7 @@ import { QUOTE_STATUS_PENDING } from "../lib/quoteStatus";
 import { resolveQuoteItemsForSave } from "../lib/productCatalog";
 import { normalizeQuoteItemCategoryBrand } from "../../shared/quoteItemDisplay";
 import { signQuoteShareToken } from "../lib/quoteShareToken";
-import { winQuoteAndCreateWorkOrder, markQuoteLost } from "../lib/quoteWinDispatch";
+import { winQuoteAndCreateWorkOrder, markQuoteLost, cancelQuoteWin } from "../lib/quoteWinDispatch";
 import {
   QUOTE_DOCUMENT_SELECT,
   serializeQuoteItem,
@@ -263,7 +263,10 @@ router.post("/quotes/:id/win-and-dispatch", async (req, res): Promise<void> => {
     return;
   }
 
-  const result = await winQuoteAndCreateWorkOrder(id);
+  const actor = req.user
+    ? { id: req.user.id, displayName: req.user.displayName }
+    : null;
+  const result = await winQuoteAndCreateWorkOrder(id, actor);
   if (!result.ok) {
     res.status(result.status).json({
       error: result.error,
@@ -274,6 +277,41 @@ router.post("/quotes/:id/win-and-dispatch", async (req, res): Promise<void> => {
   }
 
   res.status(result.created ? 201 : 200).json(result);
+});
+
+/**
+ * Revert 已成交 → 客戶確認中. Keeps quote content, work order, and receivables.
+ * POST /api/quotes/:id/cancel-win
+ */
+router.post("/quotes/:id/cancel-win", async (req, res): Promise<void> => {
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const id = parseInt(raw, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+
+  const actor = req.user
+    ? { id: req.user.id, displayName: req.user.displayName }
+    : null;
+  const result = await cancelQuoteWin(id, actor);
+  if (!result.ok) {
+    res.status(result.status).json({
+      error: result.error,
+      workOrderId: result.workOrderId ?? null,
+      workOrderNumber: result.workOrderNumber ?? null,
+    });
+    return;
+  }
+
+  const quote = await loadQuoteDocument(id);
+  res.json({
+    ok: true,
+    quoteStatus: result.quoteStatus,
+    workOrderId: result.workOrderId,
+    workOrderNumber: result.workOrderNumber,
+    quote,
+  });
 });
 
 /**

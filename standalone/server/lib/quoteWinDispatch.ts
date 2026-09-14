@@ -1,6 +1,7 @@
 /**
- * One-shot「客戶成交・建立派工單」.
- * Creates the work order first, then marks the quote won — same transaction.
+ * Quote win / cancel-win / lost.
+ * Win creates or relinks a work order, then marks the quote 已成交.
+ * Cancel-win restores 客戶確認中 and keeps the existing work order + receivables.
  */
 import { eq, sql } from "drizzle-orm";
 import {
@@ -16,11 +17,64 @@ import { categoryToProjectType, deriveQuoteCustomer, stripQuotePricingFromNotes 
 import {
   QUOTE_STATUS_WON,
   QUOTE_STATUS_LOST,
+  QUOTE_STATUS_PENDING,
   formatLostReason,
+  isQuoteWon,
 } from "./quoteStatus";
 import { deriveDispatchStatus } from "./quoteWorkflow";
 import { emitWorkOrderCreatedNotifications } from "./notifications/workOrdersNotificationHook";
+import { writeAuditLog } from "./audit/auditLogService";
+import type { JwtPayload } from "./auth";
 import { logger } from "./logger";
+
+export type QuoteActor = {
+  id: number;
+  displayName: string;
+};
+
+function actorFields(
+  prefix: "won" | "winCanceled",
+  actor?: QuoteActor | null,
+) {
+  const now = new Date();
+  const userId = actor && actor.id > 0 ? actor.id : null;
+  const userName = actor?.displayName?.trim() || null;
+  if (prefix === "won") {
+    return {
+      wonAt: now,
+      wonBy: userId,
+      wonByName: userName,
+    };
+  }
+  return {
+    winCanceledAt: now,
+    winCanceledBy: userId,
+    winCanceledByName: userName,
+  };
+}
+
+async function maybeAudit(opts: {
+  action: string;
+  quoteId: number;
+  actor?: QuoteActor | null;
+  metadata?: Record<string, unknown>;
+}) {
+  if (!opts.actor || opts.actor.id <= 0) return;
+  try {
+    await writeAuditLog({
+      action: opts.action,
+      entityType: "quote",
+      entityId: opts.quoteId,
+      user: {
+        id: opts.actor.id,
+        displayName: opts.actor.displayName,
+      } as JwtPayload,
+      metadata: opts.metadata,
+    });
+  } catch (err) {
+    logger.error({ err, quoteId: opts.quoteId, action: opts.action }, "quote audit log failed");
+  }
+}
 
 export type WinAndDispatchSuccess = {
   ok: true;
@@ -99,7 +153,10 @@ function successFromExisting(
   };
 }
 
-export async function winQuoteAndCreateWorkOrder(quoteId: number): Promise<WinAndDispatchResult> {
+export async function winQuoteAndCreateWorkOrder(
+  quoteId: number,
+  actor?: QuoteActor | null,
+): Promise<WinAndDispatchResult> {
   try {
     const result = await db.transaction(async tx => {
       const quote = await lockQuoteRow(tx, quoteId);
@@ -115,6 +172,7 @@ export async function winQuoteAndCreateWorkOrder(quoteId: number): Promise<WinAn
             status: QUOTE_STATUS_WON,
             lostReason: null,
             dispatchStatus: deriveDispatchStatus(QUOTE_STATUS_WON, existing.status),
+            ...actorFields("won", actor),
           })
           .where(eq(quotesTable.id, quoteId));
         return successFromExisting(quoteId, existing);
@@ -223,6 +281,7 @@ export async function winQuoteAndCreateWorkOrder(quoteId: number): Promise<WinAn
           status: QUOTE_STATUS_WON,
           lostReason: null,
           dispatchStatus: deriveDispatchStatus(QUOTE_STATUS_WON, updated.status),
+          ...actorFields("won", actor),
         })
         .where(eq(quotesTable.id, quoteId));
 
@@ -236,6 +295,19 @@ export async function winQuoteAndCreateWorkOrder(quoteId: number): Promise<WinAn
         quoteStatus: QUOTE_STATUS_WON,
       };
     });
+
+    if (result.ok) {
+      await maybeAudit({
+        action: result.created ? "quote.win_and_dispatch" : "quote.win_relink",
+        quoteId,
+        actor,
+        metadata: {
+          workOrderId: result.workOrderId,
+          workOrderNumber: result.workOrderNumber,
+          created: result.created,
+        },
+      });
+    }
 
     if (result.ok && result.created) {
       const [created] = await db
@@ -272,6 +344,69 @@ export async function winQuoteAndCreateWorkOrder(quoteId: number): Promise<WinAn
       ok: false,
       status: 500,
       error: err instanceof Error ? err.message : "成交並建立派工單失敗，資料未變更",
+    };
+  }
+}
+
+export async function cancelQuoteWin(
+  quoteId: number,
+  actor?: QuoteActor | null,
+): Promise<
+  | {
+      ok: true;
+      quoteStatus: string;
+      workOrderId: number | null;
+      workOrderNumber: string | null;
+    }
+  | WinAndDispatchFailure
+> {
+  try {
+    const result = await db.transaction(async tx => {
+      const quote = await lockQuoteRow(tx, quoteId);
+      if (!quote) {
+        return { ok: false as const, status: 404, error: "找不到報價單" };
+      }
+      if (!isQuoteWon(quote.status)) {
+        return { ok: false as const, status: 400, error: "此報價單不是已成交狀態" };
+      }
+
+      const existing = await findExistingWorkOrder(tx, quoteId);
+      await tx
+        .update(quotesTable)
+        .set({
+          status: QUOTE_STATUS_PENDING,
+          dispatchStatus: deriveDispatchStatus(QUOTE_STATUS_PENDING, existing?.status),
+          ...actorFields("winCanceled", actor),
+        })
+        .where(eq(quotesTable.id, quoteId));
+
+      return {
+        ok: true as const,
+        quoteStatus: QUOTE_STATUS_PENDING,
+        workOrderId: existing?.id ?? null,
+        workOrderNumber: existing?.workOrderNumber ?? null,
+      };
+    });
+
+    if (result.ok) {
+      await maybeAudit({
+        action: "quote.cancel_win",
+        quoteId,
+        actor,
+        metadata: {
+          workOrderId: result.workOrderId,
+          workOrderNumber: result.workOrderNumber,
+        },
+      });
+    }
+
+    return result;
+  } catch (err) {
+    logger.error({ err, quoteId }, "cancelQuoteWin failed");
+    return {
+      ok: false,
+      status: 500,
+      error: err instanceof Error ? err.message : "取消成交失敗",
     };
   }
 }

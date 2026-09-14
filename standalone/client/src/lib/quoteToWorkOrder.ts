@@ -27,14 +27,14 @@ export function quoteHasLinkedWorkOrder(q: {
   return !!(q.workOrderNumber && String(q.workOrderNumber).trim());
 }
 
-/** Show「客戶成交・建立派工單」when this quote does not already have a work order and is not 未成交. */
+/** Show「客戶成交」when the quote is not currently won or lost. Existing work orders are reused. */
 export function canWinQuoteAndCreateWorkOrder(q: {
   status?: string | null;
   workOrderId?: number | string | null;
   workOrderNumber?: string | null;
 }): boolean {
-  if (quoteHasLinkedWorkOrder(q)) return false;
-  return !isQuoteLost(q.status);
+  if (isQuoteWon(q.status) || isQuoteLost(q.status)) return false;
+  return true;
 }
 
 /** @deprecated Use canWinQuoteAndCreateWorkOrder — win is the action that creates the work order. */

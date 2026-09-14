@@ -44,6 +44,12 @@ function testStatusMapping() {
   assert(formatLostReason("價格因素") === "價格因素", "lost reason");
   assert(formatLostReason("其他", "預算不足") === "其他：預算不足", "lost other");
   assert(formatLostReason("") === null, "empty reason");
+
+  const canWin = (status: string | null | undefined) => !isQuoteWon(status) && !isQuoteLost(status);
+  assert(canWin("客戶確認中"), "pending can win");
+  assert(canWin("草稿"), "legacy pending can win");
+  assert(!canWin("已成交"), "won cannot win again until canceled");
+  assert(!canWin("未成交"), "lost cannot win");
   console.log("ok status mapping");
 }
 
@@ -53,14 +59,16 @@ async function testDatabaseFlow() {
     return;
   }
 
-  const { db, quotesTable, quoteItemsTable, workOrdersTable, workOrderEquipmentItemsTable } = await import("../shared/db/index.ts");
+  const { db, quotesTable, quoteItemsTable, workOrdersTable, workOrderEquipmentItemsTable, customersTable, receivablesTable } = await import("../shared/db/index.ts");
   const { eq } = await import("drizzle-orm");
-  const { winQuoteAndCreateWorkOrder, markQuoteLost } = await import("../server/lib/quoteWinDispatch.ts");
+  const { winQuoteAndCreateWorkOrder, markQuoteLost, cancelQuoteWin } = await import("../server/lib/quoteWinDispatch.ts");
   const { ensureQuoteWinDispatchMigration } = await import("../server/lib/migrations/ensureQuoteWinDispatchMigration.ts");
 
   await ensureQuoteWinDispatchMigration();
 
   const marker = `__test_win_dispatch_${Date.now()}__`;
+  let recvId: number | null = null;
+  let recvCustomerId: number | null = null;
 
   const [quote] = await db.insert(quotesTable).values({
     title: marker,
@@ -91,7 +99,7 @@ async function testDatabaseFlow() {
   try {
     assert(normalizeQuoteStatus(quote.status) === QUOTE_STATUS_PENDING, "new quote pending");
 
-    const first = await winQuoteAndCreateWorkOrder(quote.id);
+    const first = await winQuoteAndCreateWorkOrder(quote.id, { id: 0, displayName: "測試成交者" });
     assert(first.ok, `first win failed: ${JSON.stringify(first)}`);
     if (!first.ok) return;
     assert(first.created === true, "first win should create");
@@ -116,6 +124,69 @@ async function testDatabaseFlow() {
 
     const [wonQuote] = await db.select().from(quotesTable).where(eq(quotesTable.id, quote.id));
     assert(wonQuote.status === QUOTE_STATUS_WON, "db quote won");
+    assert(wonQuote.wonAt != null, "won_at recorded");
+    assert(wonQuote.wonByName === "測試成交者", "win operator recorded");
+
+    const titleBefore = wonQuote.title;
+    const notesBefore = wonQuote.notes;
+    const amountBefore = String(wonQuote.amount);
+    const wonAtBefore = wonQuote.wonAt;
+
+    const [recvCustomer] = await db.insert(customersTable).values({
+      name: `${marker}_recv_cust`,
+      phone: "0912000000",
+    }).returning();
+    recvCustomerId = recvCustomer.id;
+    const [recv] = await db.insert(receivablesTable).values({
+      customerId: recvCustomer.id,
+      workOrderId: first.workOrderId,
+      workOrderNumber: first.workOrderNumber,
+      projectName: marker,
+      totalAmount: "10000",
+      receivedAmount: "3000",
+      paymentStatus: "部分收款",
+    }).returning();
+    recvId = recv.id;
+
+    const canceled = await cancelQuoteWin(quote.id, { id: 0, displayName: "測試操作者" });
+    assert(canceled.ok, `cancel win failed: ${JSON.stringify(canceled)}`);
+    if (!canceled.ok) return;
+    assert(canceled.quoteStatus === QUOTE_STATUS_PENDING, "cancel restores pending");
+    assert(canceled.workOrderId === first.workOrderId, "cancel keeps existing WO id");
+    assert(canceled.workOrderNumber === first.workOrderNumber, "cancel keeps WO number");
+
+    const [afterCancel] = await db.select().from(quotesTable).where(eq(quotesTable.id, quote.id));
+    assert(afterCancel.status === QUOTE_STATUS_PENDING, "db quote pending after cancel");
+    assert(afterCancel.title === titleBefore, "title preserved");
+    assert(afterCancel.notes === notesBefore, "notes preserved");
+    assert(String(afterCancel.amount) === amountBefore, "amount preserved");
+    assert(afterCancel.winCanceledAt != null, "win_canceled_at recorded");
+    assert(afterCancel.winCanceledByName === "測試操作者", "cancel operator recorded");
+    assert(afterCancel.wonAt != null, "original won_at kept");
+    assert(String(afterCancel.wonAt) === String(wonAtBefore), "won_at not cleared");
+
+    const itemsAfterCancel = await db.select().from(quoteItemsTable).where(eq(quoteItemsTable.quoteId, quote.id));
+    assert(itemsAfterCancel.length === 1, "quote items preserved");
+    const woAfterCancel = await db.select({ id: workOrdersTable.id }).from(workOrdersTable).where(eq(workOrdersTable.quoteId, quote.id));
+    assert(woAfterCancel.length === 1, "work order preserved after cancel");
+
+    const [recvAfterCancel] = await db.select().from(receivablesTable).where(eq(receivablesTable.id, recv.id));
+    assert(recvAfterCancel != null, "receivable still exists");
+    assert(String(recvAfterCancel.totalAmount) === "10000.00" || String(recvAfterCancel.totalAmount) === "10000", "receivable amount kept");
+    assert(String(recvAfterCancel.receivedAmount) === "3000.00" || String(recvAfterCancel.receivedAmount) === "3000", "receivable received kept");
+    assert(recvAfterCancel.paymentStatus === "部分收款", "receivable status kept");
+    assert(recvAfterCancel.workOrderId === first.workOrderId, "receivable still linked to WO");
+
+    const doubleCancel = await cancelQuoteWin(quote.id);
+    assert(!doubleCancel.ok && doubleCancel.status === 400, "cannot cancel a quote that is not won");
+
+    const rewin = await winQuoteAndCreateWorkOrder(quote.id, { id: 0, displayName: "測試操作者" });
+    assert(rewin.ok, `re-win failed: ${JSON.stringify(rewin)}`);
+    if (!rewin.ok) return;
+    assert(rewin.created === false, "re-win must not create another WO");
+    assert(rewin.workOrderId === first.workOrderId, "re-win relinks same WO");
+    const [rewon] = await db.select().from(quotesTable).where(eq(quotesTable.id, quote.id));
+    assert(rewon.status === QUOTE_STATUS_WON, "re-win marks won");
 
     const second = await winQuoteAndCreateWorkOrder(quote.id);
     assert(second.ok, "second call should return existing");
@@ -147,9 +218,15 @@ async function testDatabaseFlow() {
     assert(lostWos.length === 0, "lost quote has no WO");
 
     await db.delete(quotesTable).where(eq(quotesTable.id, lostQuote.id));
-    console.log("ok database win/duplicate/lost flow");
+    console.log("ok database win/cancel/re-win/duplicate/lost flow");
   } finally {
+    if (recvId != null) {
+      await db.delete(receivablesTable).where(eq(receivablesTable.id, recvId));
+    }
     await db.delete(workOrdersTable).where(eq(workOrdersTable.quoteId, quote.id));
+    if (recvCustomerId != null) {
+      await db.delete(customersTable).where(eq(customersTable.id, recvCustomerId));
+    }
     await db.delete(quotesTable).where(eq(quotesTable.id, quote.id));
   }
 }

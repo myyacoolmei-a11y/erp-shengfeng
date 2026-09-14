@@ -3,6 +3,7 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { customersTable } from "./customers";
 import { employeesTable } from "./employees";
+import { usersTable } from "./users";
 
 export const quotesTable = pgTable("quotes", {
   id: serial("id").primaryKey(),
@@ -22,10 +23,26 @@ export const quotesTable = pgTable("quotes", {
   taxType: text("tax_type").notNull().default("未稅"),
   salesRepId: integer("sales_rep_id").references(() => employeesTable.id, { onDelete: "set null" }),
   dispatchStatus: text("dispatch_status").notNull().default("未派工"),
+  wonAt: timestamp("won_at", { withTimezone: true }),
+  wonBy: integer("won_by").references(() => usersTable.id, { onDelete: "set null" }),
+  wonByName: text("won_by_name"),
+  winCanceledAt: timestamp("win_canceled_at", { withTimezone: true }),
+  winCanceledBy: integer("win_canceled_by").references(() => usersTable.id, { onDelete: "set null" }),
+  winCanceledByName: text("win_canceled_by_name"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 });
 
-export const insertQuoteSchema = createInsertSchema(quotesTable).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertQuoteSchema = createInsertSchema(quotesTable).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  wonAt: true,
+  wonBy: true,
+  wonByName: true,
+  winCanceledAt: true,
+  winCanceledBy: true,
+  winCanceledByName: true,
+});
 export type InsertQuote = z.infer<typeof insertQuoteSchema>;
 export type Quote = typeof quotesTable.$inferSelect;
