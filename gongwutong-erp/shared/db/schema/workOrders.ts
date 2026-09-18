@@ -1,0 +1,69 @@
+import { pgTable, text, serial, integer, timestamp, date, boolean, jsonb } from "drizzle-orm/pg-core";
+import { createInsertSchema } from "drizzle-zod";
+import { z } from "zod/v4";
+import { customersTable } from "./customers";
+import { quotesTable } from "./quotes";
+import { usersTable } from "./users";
+import type { AdminBillingInfo } from "../../adminWorkflowConstants";
+
+export const workOrdersTable = pgTable("work_orders", {
+  id: serial("id").primaryKey(),
+  customerId: integer("customer_id").references(() => customersTable.id, { onDelete: "set null" }),
+  customerName: text("customer_name"),
+  quoteId: integer("quote_id").references(() => quotesTable.id, { onDelete: "set null" }),
+  workOrderNumber: text("work_order_number"),
+  title: text("title").notNull(),
+  status: text("status").notNull().default("待處理"),
+  contactPerson: text("contact_person"),
+  mobilePhone: text("mobile_phone"),
+  telephone: text("telephone"),
+  installAddress: text("install_address"),
+  scheduledDate: date("scheduled_date", { mode: "string" }),
+  scheduledTime: text("scheduled_time"),
+  completedDate: date("completed_date", { mode: "string" }),
+  assignedTo: text("assigned_to"),
+  assistantTo: text("assistant_to"),
+  projectType: text("project_type"),
+  acBrand: text("ac_brand"),
+  modelNumber: text("model_number"),
+  quantity: integer("quantity"),
+  indoorUnits: integer("indoor_units"),
+  outdoorUnits: integer("outdoor_units"),
+  floorLevel: text("floor_level"),
+  hasElevator: text("has_elevator"),
+  description: text("description"),
+  notes: text("notes"),
+  technicians: text("technicians"),
+  estimatedWorkMinutes: integer("estimated_work_minutes"),
+  aiReminderEnabled: boolean("ai_reminder_enabled").notNull().default(false),
+  aiReminderScenarioIds: text("ai_reminder_scenario_ids"),
+  aiNotifySupervisorOnDelay: boolean("ai_notify_supervisor_on_delay").notNull().default(false),
+  aiReminderRuleSource: text("ai_reminder_rule_source").default("company_default"),
+  aiReminderCustomConfig: text("ai_reminder_custom_config"),
+  /** Admin daily workbench pipeline status */
+  adminWorkflowStatus: text("admin_workflow_status"),
+  adminBillingInfo: jsonb("admin_billing_info").$type<AdminBillingInfo | null>(),
+  adminNeedsSubsidy: boolean("admin_needs_subsidy").notNull().default(false),
+  adminSubsidyStatus: text("admin_subsidy_status").notNull().default("未申請補助"),
+  adminSubsidyAppliedAt: timestamp("admin_subsidy_applied_at", { withTimezone: true }),
+  adminSubsidyAppliedBy: integer("admin_subsidy_applied_by").references(() => usersTable.id, {
+    onDelete: "set null",
+  }),
+  adminSubsidyNote: text("admin_subsidy_note"),
+  /** Legacy archive checklist column kept in DB; admin close no longer uses warranty checks. */
+  adminArchiveChecklist: jsonb("admin_archive_checklist"),
+  adminConfirmedAt: timestamp("admin_confirmed_at", { withTimezone: true }),
+  adminConfirmedBy: integer("admin_confirmed_by").references(() => usersTable.id, { onDelete: "set null" }),
+  adminBilledAt: timestamp("admin_billed_at", { withTimezone: true }),
+  adminBilledBy: integer("admin_billed_by").references(() => usersTable.id, { onDelete: "set null" }),
+  adminClosedAt: timestamp("admin_closed_at", { withTimezone: true }),
+  adminClosedBy: integer("admin_closed_by").references(() => usersTable.id, { onDelete: "set null" }),
+  adminArchivedAt: timestamp("admin_archived_at", { withTimezone: true }),
+  adminArchivedBy: integer("admin_archived_by").references(() => usersTable.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+});
+
+export const insertWorkOrderSchema = createInsertSchema(workOrdersTable).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertWorkOrder = z.infer<typeof insertWorkOrderSchema>;
+export type WorkOrder = typeof workOrdersTable.$inferSelect;

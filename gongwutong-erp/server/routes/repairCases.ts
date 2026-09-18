@@ -1,0 +1,326 @@
+import { Router, type IRouter } from "express";
+import { eq, and, or, ilike, desc } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
+import {
+  db,
+  repairCasesTable,
+  repairCasePhotosTable,
+  customersTable,
+  employeesTable,
+  usersTable,
+} from "@workspace/db";
+import { CreateRepairCaseBody, UpdateRepairCaseBody } from "@workspace/api-zod";
+import { requireFeature } from "../lib/auth";
+import { shouldApplyOwnDataFilter } from "../../shared/userPermissions.ts";
+import { buildUserAssignmentContext } from "../lib/workOrders/workOrderAssignment.ts";
+import {
+  canAccessRepairCase,
+  assertRepairCaseDataAccess,
+} from "../lib/dataPermissionAccess.ts";
+import { buildRepairCaseSalesOptions } from "../lib/repairCases/salesOptions.ts";
+
+const salesUsersTable = alias(usersTable, "sales_users");
+
+const router: IRouter = Router();
+router.use("/repair-cases", requireFeature("repair_cases"));
+
+
+function mapRepairCase(row: {
+  id: number;
+  repairNo: string | null;
+  source: string;
+  customerId: number | null;
+  tempCustomerName: string | null;
+  contactName: string | null;
+  phone: string | null;
+  address: string | null;
+  siteAddress: string | null;
+  brand: string | null;
+  model: string | null;
+  quantity: number | null;
+  problemDescription: string | null;
+  status: string;
+  priority: string;
+  appointmentDate: string | null;
+  appointmentTime: string | null;
+  employeeId: number | null;
+  salesUserId?: number | null;
+  notes: string | null;
+  subsidyStatus?: string | null;
+  createdAt: Date | string;
+  updatedAt: Date | string;
+  customerName?: string | null;
+  employeeName?: string | null;
+  salesUserName?: string | null;
+}) {
+  return {
+    ...row,
+    customerName: row.customerName ?? row.tempCustomerName ?? null,
+    employeeName: row.employeeName ?? null,
+    salesUserId: row.salesUserId ?? null,
+    salesUserName: row.salesUserName ?? null,
+    subsidyStatus: row.subsidyStatus || "未申請補助",
+    createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt,
+    updatedAt: row.updatedAt instanceof Date ? row.updatedAt.toISOString() : row.updatedAt,
+  };
+}
+
+const caseSelect = {
+  id: repairCasesTable.id,
+  repairNo: repairCasesTable.repairNo,
+  source: repairCasesTable.source,
+  customerId: repairCasesTable.customerId,
+  tempCustomerName: repairCasesTable.tempCustomerName,
+  contactName: repairCasesTable.contactName,
+  phone: repairCasesTable.phone,
+  address: repairCasesTable.address,
+  siteAddress: repairCasesTable.siteAddress,
+  brand: repairCasesTable.brand,
+  model: repairCasesTable.model,
+  quantity: repairCasesTable.quantity,
+  problemDescription: repairCasesTable.problemDescription,
+  status: repairCasesTable.status,
+  priority: repairCasesTable.priority,
+  appointmentDate: repairCasesTable.appointmentDate,
+  appointmentTime: repairCasesTable.appointmentTime,
+  employeeId: repairCasesTable.employeeId,
+  salesUserId: repairCasesTable.salesUserId,
+  notes: repairCasesTable.notes,
+  subsidyStatus: repairCasesTable.subsidyStatus,
+  createdAt: repairCasesTable.createdAt,
+  updatedAt: repairCasesTable.updatedAt,
+  customerName: customersTable.name,
+  employeeName: employeesTable.name,
+  salesUserName: salesUsersTable.displayName,
+};
+
+function withJoins() {
+  return db
+    .select(caseSelect)
+    .from(repairCasesTable)
+    .leftJoin(customersTable, eq(repairCasesTable.customerId, customersTable.id))
+    .leftJoin(employeesTable, eq(repairCasesTable.employeeId, employeesTable.id))
+    .leftJoin(salesUsersTable, eq(repairCasesTable.salesUserId, salesUsersTable.id));
+}
+
+async function loadPhotos(repairCaseId: number) {
+  return db
+    .select()
+    .from(repairCasePhotosTable)
+    .where(eq(repairCasePhotosTable.repairCaseId, repairCaseId))
+    .orderBy(repairCasePhotosTable.sortOrder);
+}
+
+function generateRepairNo(id: number, createdAt: Date | string) {
+  const d = createdAt instanceof Date ? createdAt : new Date(createdAt);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `RC-${y}${m}${day}-${String(id).padStart(4, "0")}`;
+}
+
+router.get("/repair-cases/sales-options", async (_req, res): Promise<void> => {
+  const users = await db
+    .select({
+      id: usersTable.id,
+      displayName: usersTable.displayName,
+      role: usersTable.role,
+      roles: usersTable.roles,
+      isActive: usersTable.isActive,
+      employeePosition: employeesTable.position,
+      employeeName: employeesTable.name,
+    })
+    .from(usersTable)
+    .leftJoin(employeesTable, eq(usersTable.linkedEmployeeId, employeesTable.id));
+  res.json(buildRepairCaseSalesOptions({ users }));
+});
+
+router.get("/repair-cases", async (req, res): Promise<void> => {
+  const { search, status, source, salesUserId } = req.query as {
+    search?: string;
+    status?: string;
+    source?: string;
+    salesUserId?: string;
+  };
+  const conditions = [];
+
+  if (status && status !== "全部") conditions.push(eq(repairCasesTable.status, status));
+  if (source && source !== "全部") conditions.push(eq(repairCasesTable.source, source));
+  if (salesUserId && salesUserId !== "全部" && salesUserId !== "all") {
+    const parsedSales = parseInt(salesUserId, 10);
+    if (!isNaN(parsedSales)) conditions.push(eq(repairCasesTable.salesUserId, parsedSales));
+  }
+
+  if (search?.trim()) {
+    const q = `%${search.trim()}%`;
+    conditions.push(or(
+      ilike(repairCasesTable.repairNo, q),
+      ilike(customersTable.name, q),
+      ilike(repairCasesTable.tempCustomerName, q),
+      ilike(repairCasesTable.phone, q),
+      ilike(employeesTable.name, q),
+      ilike(salesUsersTable.displayName, q),
+      ilike(repairCasesTable.status, q),
+    ));
+  }
+
+  const rows = await withJoins()
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
+    .orderBy(desc(repairCasesTable.createdAt));
+
+  let filtered = rows;
+  if (req.user && shouldApplyOwnDataFilter(req.user)) {
+    const ctx = await buildUserAssignmentContext(req.user);
+    filtered = rows.filter(r => canAccessRepairCase(req.user!, r, ctx));
+  }
+
+  res.json(filtered.map(mapRepairCase));
+});
+
+router.post("/repair-cases", async (req, res): Promise<void> => {
+  const parsed = CreateRepairCaseBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const { photos, ...data } = parsed.data;
+  const [created] = await db.insert(repairCasesTable).values(data).returning();
+  const repairNo = generateRepairNo(created.id, created.createdAt);
+  const [row] = await db
+    .update(repairCasesTable)
+    .set({ repairNo })
+    .where(eq(repairCasesTable.id, created.id))
+    .returning();
+
+  if (photos && photos.length > 0) {
+    await db.insert(repairCasePhotosTable).values(
+      photos.map((url, idx) => ({
+        repairCaseId: created.id,
+        url,
+        sortOrder: idx,
+      })),
+    );
+  }
+
+  const [enriched] = await withJoins().where(eq(repairCasesTable.id, row.id));
+
+  const photoRows = await loadPhotos(row.id);
+  res.status(201).json({
+    ...mapRepairCase(enriched ?? { ...row, customerName: null, employeeName: null, salesUserName: null }),
+    photos: photoRows.map(p => ({
+      id: p.id,
+      repairCaseId: p.repairCaseId,
+      url: p.url,
+      sortOrder: p.sortOrder,
+      createdAt: p.createdAt instanceof Date ? p.createdAt.toISOString() : p.createdAt,
+    })),
+  });
+});
+
+router.get("/repair-cases/:id", async (req, res): Promise<void> => {
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const id = parseInt(raw, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const [row] = await withJoins().where(eq(repairCasesTable.id, id));
+
+  if (!row) { res.status(404).json({ error: "找不到維修案件" }); return; }
+
+  if (req.user) {
+    const access = await assertRepairCaseDataAccess(req.user, row);
+    if (!access.ok) { res.status(403).json({ error: access.message }); return; }
+  }
+
+  const photoRows = await loadPhotos(id);
+  res.json({
+    ...mapRepairCase(row),
+    photos: photoRows.map(p => ({
+      id: p.id,
+      repairCaseId: p.repairCaseId,
+      url: p.url,
+      sortOrder: p.sortOrder,
+      createdAt: p.createdAt instanceof Date ? p.createdAt.toISOString() : p.createdAt,
+    })),
+  });
+});
+
+router.patch("/repair-cases/:id", async (req, res): Promise<void> => {
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const id = parseInt(raw, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const [existing] = await withJoins().where(eq(repairCasesTable.id, id));
+  if (!existing) { res.status(404).json({ error: "找不到維修案件" }); return; }
+
+  if (req.user) {
+    const access = await assertRepairCaseDataAccess(req.user, existing);
+    if (!access.ok) { res.status(403).json({ error: access.message }); return; }
+  }
+
+  const parsed = UpdateRepairCaseBody.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
+
+  const { photos, ...data } = parsed.data;
+  if (
+    data.subsidyStatus !== undefined &&
+    !["未申請補助", "已申請補助", "不適用"].includes(data.subsidyStatus)
+  ) {
+    res.status(400).json({ error: "無效的補助狀態" });
+    return;
+  }
+
+  const [updated] = await db
+    .update(repairCasesTable)
+    .set(data)
+    .where(eq(repairCasesTable.id, id))
+    .returning();
+
+  if (!updated) { res.status(404).json({ error: "找不到維修案件" }); return; }
+
+  if (photos !== undefined) {
+    await db.delete(repairCasePhotosTable).where(eq(repairCasePhotosTable.repairCaseId, id));
+    if (photos.length > 0) {
+      await db.insert(repairCasePhotosTable).values(
+        photos.map((url, idx) => ({ repairCaseId: id, url, sortOrder: idx })),
+      );
+    }
+  }
+
+  const [enriched] = await withJoins().where(eq(repairCasesTable.id, id));
+
+  const photoRows = await loadPhotos(id);
+  res.json({
+    ...mapRepairCase(enriched ?? { ...updated, customerName: null, employeeName: null, salesUserName: null }),
+    photos: photoRows.map(p => ({
+      id: p.id,
+      repairCaseId: p.repairCaseId,
+      url: p.url,
+      sortOrder: p.sortOrder,
+      createdAt: p.createdAt instanceof Date ? p.createdAt.toISOString() : p.createdAt,
+    })),
+  });
+});
+
+router.delete("/repair-cases/:id", async (req, res): Promise<void> => {
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const id = parseInt(raw, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+
+  const [existing] = await withJoins().where(eq(repairCasesTable.id, id));
+  if (!existing) { res.status(404).json({ error: "找不到維修案件" }); return; }
+
+  if (req.user) {
+    const access = await assertRepairCaseDataAccess(req.user, existing);
+    if (!access.ok) { res.status(403).json({ error: access.message }); return; }
+  }
+
+  const [deleted] = await db.delete(repairCasesTable).where(eq(repairCasesTable.id, id)).returning();
+  if (!deleted) { res.status(404).json({ error: "找不到維修案件" }); return; }
+  res.sendStatus(204);
+});
+
+export default router;
