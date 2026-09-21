@@ -17,6 +17,7 @@ export const FEATURE_KEYS = [
   "employees",
   "users",
   "work_hours",
+  "sales_stats",
   "notifications",
   "ai_assistant",
   "company_culture",
@@ -46,6 +47,7 @@ export const FEATURE_LABELS: Record<FeatureKey, string> = {
   employees: "員工管理",
   users: "使用者管理",
   work_hours: "工時統計",
+  sales_stats: "業務統計",
   notifications: "通知中心",
   ai_assistant: "AI 小秘書",
   company_culture: "晟風夥伴文化",
@@ -68,6 +70,7 @@ export type NavIconName =
   | "Briefcase"
   | "UserCog"
   | "Clock"
+  | "TrendingUp"
   | "Bell"
   | "Sparkles"
   | "Heart";
@@ -265,6 +268,15 @@ export const NAV_ITEMS: NavItemDef[] = [
     visibleInPermissionEditor: true,
   },
   {
+    key: "sales_stats",
+    label: "業務統計",
+    path: "/sales-stats",
+    group: "company_internal",
+    icon: "TrendingUp",
+    visibleInSidebar: true,
+    visibleInPermissionEditor: true,
+  },
+  {
     key: "notifications",
     label: "通知中心",
     path: "/notification-settings",
@@ -345,8 +357,8 @@ export const LEGACY_FEATURE_MAP: Record<string, FeatureKey[]> = {
   dispatch: ["dispatch_orders"],
   repair_cases: ["repair_cases"],
   repair: ["repair_cases"],
-  receivables: ["receivables"],
-  payment: ["receivables"],
+  receivables: ["receivables", "sales_stats"],
+  payment: ["receivables", "sales_stats"],
   products: ["products"],
   wholesale: ["wholesale"],
   /** Old inventory gated 商品+庫存; keep as 庫存 only so 行政不自動拿到商品 */
@@ -355,7 +367,8 @@ export const LEGACY_FEATURE_MAP: Record<string, FeatureKey[]> = {
   warranty_maintenance: ["warranty_maintenance"],
   employees: ["employees"],
   users: ["users"],
-  work_hours: ["work_hours"],
+  work_hours: ["work_hours", "sales_stats"],
+  sales_stats: ["sales_stats"],
   notifications: ["notifications"],
   company_announce: ["company_culture"],
   company_announcements: ["company_culture"],
@@ -363,7 +376,7 @@ export const LEGACY_FEATURE_MAP: Record<string, FeatureKey[]> = {
   ai_assistant: ["ai_assistant"],
   ai: ["ai_assistant"],
   /** Old catch-all for 公司內部 */
-  system_settings: ["employees", "users", "work_hours", "notifications"],
+  system_settings: ["employees", "users", "work_hours", "sales_stats", "notifications"],
 };
 
 export function normalizeFeaturePermissions(raw: string[] | null | undefined): FeatureKey[] {

@@ -79,6 +79,7 @@ const ROLE_FEATURES: Record<string, FeatureKey[]> = {
     "warranty_maintenance",
     "receivables",
     "inventory",
+    "sales_stats",
     "notifications",
   ],
   sales: ["dashboard", "customers", "quotations", "products", "wholesale", "ai_assistant"],
@@ -98,7 +99,7 @@ const ROLE_FEATURES: Record<string, FeatureKey[]> = {
     "company_culture",
     "notifications",
   ],
-  accountant: ["dashboard", "customers", "receivables", "warranty_maintenance", "work_hours", "ai_assistant"],
+  accountant: ["dashboard", "customers", "receivables", "warranty_maintenance", "work_hours", "sales_stats", "ai_assistant"],
   distributor: ["dashboard", "quotations", "ai_assistant"],
 };
 
@@ -132,6 +133,7 @@ export const PERMISSION_TEMPLATES: Record<PermissionTemplateKey, PermissionTempl
       "warranty_maintenance",
       "receivables",
       "inventory",
+      "sales_stats",
       "notifications",
     ],
     dataPermission: "all",
@@ -164,7 +166,7 @@ export const PERMISSION_TEMPLATES: Record<PermissionTemplateKey, PermissionTempl
   accountant: {
     label: "會計",
     roles: ["accountant"],
-    features: ["dashboard", "customers", "receivables", "warranty_maintenance", "work_hours", "ai_assistant"],
+    features: ["dashboard", "customers", "receivables", "warranty_maintenance", "work_hours", "sales_stats", "ai_assistant"],
     dataPermission: "all",
     identityType: "employee",
     title: "會計",

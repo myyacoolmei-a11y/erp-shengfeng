@@ -36,6 +36,7 @@ import PartnerCultureRoute from "@/pages/partner-culture-route";
 import NotificationSettings from "@/pages/notification-settings";
 import AiAssistant from "@/pages/ai-assistant";
 import WorkHoursStats from "@/pages/work-hours-stats";
+import SalesStats from "@/pages/sales-stats";
 import Inventory from "@/pages/inventory";
 
 const queryClient = new QueryClient({
@@ -302,6 +303,11 @@ function AppRoutes() {
             </Route>
             <Route path="/work-hours-stats">
               <Guard feature="work_hours"><WorkHoursStats /></Guard>
+            </Route>
+            <Route path="/sales-stats">
+              <Guard feature="sales_stats" roles={["super_admin", "owner", "admin", "accountant"]}>
+                <SalesStats />
+              </Guard>
             </Route>
             <Route path="/products">
               <Guard feature="products"><Products /></Guard>
