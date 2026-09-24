@@ -4,6 +4,7 @@ import {
   db,
   workOrdersTable,
   workOrderEquipmentItemsTable,
+  workOrderFieldProgressTable,
   progressTable,
   customersTable,
   quotesTable,
@@ -33,6 +34,7 @@ import {
   emitWorkOrderUpdatedNotifications,
 } from "../lib/notifications/workOrdersNotificationHook.ts";
 import { WORK_ORDER_RETURN_REASONS } from "@workspace/db";
+import { pickFieldStatus, statusesForListFilter } from "../../shared/workOrderListTabs.ts";
 import {
   parseAiReminderScenarioIds,
   parseWorkOrderAiReminderCustomConfig,
@@ -212,6 +214,7 @@ function formatOrder(
       ? formatQuoteNumber(quoteId, linkedQuoteCreatedAt ?? rest.createdAt)
       : null,
     receivableId: receivableId ?? (rest.receivableId as number | null | undefined) ?? null,
+    fieldStatus: (rest.fieldStatus as string | null | undefined) ?? null,
     equipmentItems: resolveEquipmentItems(o, equipmentItems),
     notes: stripQuotePricingFromNotes(rest.notes as string | null | undefined) || null,
     createdAt: isoStr(o.createdAt),
@@ -295,7 +298,12 @@ router.get("/work-orders", async (req, res): Promise<void> => {
     if (!isNaN(cid)) conditions.push(eq(workOrdersTable.customerId, cid));
   }
   if (status) {
-    conditions.push(eq(workOrdersTable.status, status));
+    const statuses = statusesForListFilter(status);
+    if (statuses.length === 1) {
+      conditions.push(eq(workOrdersTable.status, statuses[0]!));
+    } else if (statuses.length > 1) {
+      conditions.push(inArray(workOrdersTable.status, statuses));
+    }
   }
 
   const applyAssignmentFilter = !!(req.user && shouldFilterWorkOrdersByAssignment(req.user));
@@ -357,6 +365,7 @@ router.get("/work-orders", async (req, res): Promise<void> => {
   const equipmentByOrder = await fetchEquipmentByWorkOrderIds(orderIds);
 
   const receivableByWo = new Map<number, number>();
+  const fieldStatusByWo = new Map<number, string>();
   if (orderIds.length > 0) {
     const recRows = await db
       .select({ id: receivablesTable.id, workOrderId: receivablesTable.workOrderId })
@@ -367,9 +376,31 @@ router.get("/work-orders", async (req, res): Promise<void> => {
         receivableByWo.set(r.workOrderId, r.id);
       }
     }
+
+    const progressRows = await db
+      .select({
+        workOrderId: workOrderFieldProgressTable.workOrderId,
+        fieldStatus: workOrderFieldProgressTable.fieldStatus,
+      })
+      .from(workOrderFieldProgressTable)
+      .where(inArray(workOrderFieldProgressTable.workOrderId, orderIds));
+    const grouped = new Map<number, Array<{ fieldStatus?: string | null }>>();
+    for (const row of progressRows) {
+      const list = grouped.get(row.workOrderId) ?? [];
+      list.push({ fieldStatus: row.fieldStatus });
+      grouped.set(row.workOrderId, list);
+    }
+    for (const [woId, rows] of grouped) {
+      const picked = pickFieldStatus(rows);
+      if (picked) fieldStatusByWo.set(woId, picked);
+    }
   }
 
-  res.json(orders.map(o => formatOrder(o, equipmentByOrder[o.id] ?? [], receivableByWo.get(o.id) ?? null)));
+  res.json(orders.map(o => formatOrder(
+    { ...o, fieldStatus: fieldStatusByWo.get(o.id) ?? null },
+    equipmentByOrder[o.id] ?? [],
+    receivableByWo.get(o.id) ?? null,
+  )));
 });
 
 router.post("/work-orders", async (req, res): Promise<void> => {

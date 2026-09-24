@@ -14,7 +14,7 @@ import { stripQuotePricingFromNotes, categoryToProjectType, deriveQuoteCustomer 
 import { DEFAULT_AI_REMINDER_SCENARIO_IDS, type AiReminderRuleSource } from "@/lib/aiWorkReminderSettings";
 import { WorkOrderAiReminderSection } from "@/components/work-orders/WorkOrderAiReminderSection";
 
-export const WO_STATUSES = ["待派工", "待施工", "施工中", "異常／暫停", "已完成", "已結案"];
+export const WO_STATUSES = ["待施工", "異常／暫停", "已完成", "已結案"];
 export const WO_PROJECT_TYPES = ["新裝", "維修", "保養", "遷機", "清洗", "保固服務"];
 export const WO_ELEVATOR_OPTIONS = ["有電梯", "無電梯"];
 /** Default status for new work orders */
@@ -768,7 +768,11 @@ export function WorkOrderFormFields({
           <Label>狀態</Label>
           <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: v }))}>
             <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>{WO_STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+            <SelectContent>
+              {(WO_STATUSES.includes(form.status) ? WO_STATUSES : [form.status, ...WO_STATUSES]).map(s => (
+                <SelectItem key={s} value={s}>{s}</SelectItem>
+              ))}
+            </SelectContent>
           </Select>
         </div>
         <div className="space-y-1">

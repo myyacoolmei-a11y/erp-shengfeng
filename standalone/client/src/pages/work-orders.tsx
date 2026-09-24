@@ -96,6 +96,15 @@ import {
   type FieldProgressRecord,
 } from "@/lib/fieldProgressApi";
 import {
+  ADMIN_FILTER_TABS,
+  type AdminFilterTab,
+  constructionProgressLabel,
+  listStatusBadge,
+  matchesAdminFilter,
+  normalizeWoStatus,
+  tabForWorkOrder,
+} from "../../../shared/workOrderListTabs.ts";
+import {
   advanceAdminSubsidyPipeline,
   confirmAdminSubsidyDocs,
   fetchAdminCaseDetail,
@@ -106,32 +115,17 @@ import { SubsidyFilesDialog } from "@/components/subsidy/SubsidyFilesDialog";
 import { SubsidyAcceptanceDialog } from "@/components/subsidy/SubsidyAcceptanceDialog";
 import { downloadSubsidyCaseZip } from "@/lib/subsidyFilesApi";
 
-const ADMIN_FILTER_TABS = ["待派工", "待施工", "施工中", "異常／暫停", "施工完成", "歷史紀錄"] as const;
-type AdminFilterTab = (typeof ADMIN_FILTER_TABS)[number];
 const ENGINEER_FILTERS = ["進行中", "今日", "即將施工", "已完成", "全部"] as const;
 type EngineerFilter = (typeof ENGINEER_FILTERS)[number];
 const WO_COMPLETED = new Set(["已完成", "已結案"]);
 
 const STATUS_COLORS: Record<string, string> = {
-  "待派工": "bg-slate-100 text-slate-700",
   "待施工": "bg-amber-100 text-amber-700",
-  "施工中": "bg-blue-100 text-blue-700",
   "異常／暫停": "bg-orange-100 text-orange-800",
   "已完成": "bg-green-100 text-green-700",
   "已結案": "bg-gray-100 text-gray-600",
-  // backward compat for old statuses
-  "待處理": "bg-amber-100 text-amber-700",
-  "進行中": "bg-blue-100 text-blue-700",
-  "已取消": "bg-gray-100 text-gray-700",
+  "施工完成": "bg-green-100 text-green-700",
 };
-
-function normalizeWoStatus(status: string | null | undefined): string {
-  if (!status) return "待施工";
-  if (status === "待處理") return "待施工";
-  if (status === "進行中") return "施工中";
-  if (status === "已取消" || status === "暫停") return "異常／暫停";
-  return status;
-}
 
 /** 列表排序：施工日 DESC → createdAt DESC（最新在前；無施工日依建立時間） */
 function compareWorkOrdersNewestFirst(a: any, b: any): number {
@@ -144,38 +138,6 @@ function compareWorkOrdersNewestFirst(a: any, b: any): number {
   const cb = b.createdAt ? String(b.createdAt) : "";
   if (ca !== cb) return cb.localeCompare(ca);
   return (b.id ?? 0) - (a.id ?? 0);
-}
-
-function matchesAdminFilter(o: any, tab: AdminFilterTab, _today: string): boolean {
-  const s = normalizeWoStatus(o.status);
-  switch (tab) {
-    case "待派工":
-      return (s === "待派工" || s === "待施工") && !o.scheduledDate && !WO_COMPLETED.has(s);
-    case "待施工":
-      return s === "待施工" && !!o.scheduledDate;
-    case "施工中":
-      return s === "施工中";
-    case "異常／暫停":
-      return s === "異常／暫停";
-    case "施工完成":
-      return s === "已完成";
-    case "歷史紀錄":
-      return s === "已結案";
-    default:
-      return true;
-  }
-}
-
-/** Pick the list tab that contains this work order. */
-function tabForWorkOrder(o: any): AdminFilterTab {
-  const s = normalizeWoStatus(o.status);
-  if (s === "已結案") return "歷史紀錄";
-  if (s === "已完成") return "施工完成";
-  if (s === "異常／暫停") return "異常／暫停";
-  if (s === "施工中") return "施工中";
-  if ((s === "待派工" || s === "待施工") && !o.scheduledDate) return "待派工";
-  if (s === "待施工" && o.scheduledDate) return "待施工";
-  return "待施工";
 }
 
 const PT_COLORS: Record<string, string> = {
@@ -832,7 +794,16 @@ export default function WorkOrders() {
   const editParam = parseInt(urlParams.get("edit") ?? "0", 10) || null;
   const focusId = highlightParam || openParam || expandParam || editParam;
 
-  const [statusFilter, setStatusFilter] = useState<AdminFilterTab>(editParam ? "待派工" : "待施工");
+  const statusParam = urlParams.get("status");
+  const initialTab: AdminFilterTab =
+    statusParam === "施工完成" || statusParam === "已完成"
+      ? "施工完成"
+      : statusParam === "歷史紀錄" || statusParam === "已結案"
+        ? "歷史紀錄"
+        : statusParam === "異常／暫停" || statusParam === "暫停" || statusParam === "已取消"
+          ? "異常／暫停"
+          : "待施工";
+  const [statusFilter, setStatusFilter] = useState<AdminFilterTab>(initialTab);
   const [listSearch, setListSearch] = useState("");
   const [engineerFilter, setEngineerFilter] = useState<EngineerFilter>("進行中");
   const [showCreate, setShowCreate] = useState(false);
@@ -895,7 +866,7 @@ export default function WorkOrders() {
         if (focused) return [focused];
       }
 
-      let filtered = list.filter((o) => matchesAdminFilter(o, statusFilter, today));
+      let filtered = list.filter((o) => matchesAdminFilter(o, statusFilter));
       if (q) {
         filtered = filtered.filter((o) => {
           const hay = [
@@ -1138,7 +1109,7 @@ export default function WorkOrders() {
     openEdit(found);
     setHighlightId(editParam);
     setExpandedId(editParam);
-    if (!found.scheduledDate) setStatusFilter("待派工");
+    setStatusFilter(tabForWorkOrder(found));
   }, [editParam, orders]);
 
   function handleSubmit(e: React.FormEvent, mode: "create" | "edit") {
@@ -1341,9 +1312,12 @@ export default function WorkOrders() {
         <div className="grid grid-cols-1 gap-3 max-w-3xl">
           {displayedOrders.map(o => {
             const techDisplay = getTechDisplay(o);
-            const statusLabel = normalizeWoStatus(o.status);
+            const statusLabel = listStatusBadge(o.status);
+            const tab = tabForWorkOrder(o);
+            const progressLabel = constructionProgressLabel((o as any).fieldStatus);
             const hasAr = !!(o as any).receivableId;
             const needsCustomer = !o.customerId;
+            const isClosed = tab === "施工完成" || tab === "歷史紀錄";
             return (
               <Card
                 key={o.id}
@@ -1385,11 +1359,18 @@ export default function WorkOrders() {
                     )}
                     <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
                       {o.scheduledDate ? (
-                        <span>施工：{o.scheduledDate}{o.scheduledTime ? ` ${o.scheduledTime}` : ""}</span>
-                      ) : statusLabel !== "已完成" && statusLabel !== "已結案" ? (
+                        <span>施工日期：{o.scheduledDate}{o.scheduledTime ? ` ${o.scheduledTime}` : ""}</span>
+                      ) : !isClosed ? (
                         <span className="text-amber-700 font-medium">施工日期：待安排</span>
                       ) : null}
-                      {techDisplay !== "—" && <span>技師：{techDisplay}</span>}
+                      {techDisplay !== "—" ? (
+                        <span>施工人員：{techDisplay}</span>
+                      ) : !isClosed ? (
+                        <span className="text-amber-700 font-medium">施工人員：未安排</span>
+                      ) : null}
+                      {tab === "待施工" && (
+                        <span>施工進度：{progressLabel}</span>
+                      )}
                       {o.completedDate && <span className="text-green-600">完成：{o.completedDate}</span>}
                     </div>
                     {o.quoteId && (o as any).quoteNumber && (
@@ -1415,7 +1396,7 @@ export default function WorkOrders() {
                   {/* Actions — compact text buttons + icon ops (same pattern as quote list) */}
                   <TooltipProvider delayDuration={300}>
                     <div className="flex flex-wrap items-center gap-2">
-                      {canWrite && !o.scheduledDate && statusLabel !== "已完成" && statusLabel !== "已結案" && (
+                      {canWrite && !o.scheduledDate && !isClosed && (
                         <Button
                           size="sm"
                           className="h-11 sm:h-9 w-auto px-3 shrink-0"
@@ -1437,18 +1418,6 @@ export default function WorkOrders() {
                         <span className="sm:hidden">{expandedId === o.id ? "收合" : "查看"}</span>
                         <span className="hidden sm:inline">{expandedId === o.id ? "收合" : "查看案件"}</span>
                       </Button>
-                      {(statusLabel === "施工中" || statusLabel === "待施工" || statusLabel === "已完成") && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-11 sm:h-9 w-auto px-3 shrink-0"
-                          onClick={() => setExpandedId(o.id)}
-                          title="查看施工"
-                          aria-label="查看施工"
-                        >
-                          查看施工
-                        </Button>
-                      )}
                       {isAdmin && (
                         (o as any).adminWorkflowStatus ? (
                           <span className="text-xs px-2 py-1 rounded font-medium bg-sky-50 text-sky-800 border border-sky-200">

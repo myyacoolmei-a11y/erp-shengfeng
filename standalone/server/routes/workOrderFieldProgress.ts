@@ -390,6 +390,11 @@ router.post(
       .where(eq(workOrderFieldProgressTable.id, progress.id))
       .returning();
 
+    await db
+      .update(workOrdersTable)
+      .set({ status: "異常／暫停", updatedAt: now })
+      .where(eq(workOrdersTable.id, workOrderId));
+
     res.json(serializeFieldProgress(updated));
   },
 );
@@ -438,6 +443,16 @@ router.post(
       })
       .where(eq(workOrderFieldProgressTable.id, progress.id))
       .returning();
+
+    await db
+      .update(workOrdersTable)
+      .set({ status: "待施工", updatedAt: now })
+      .where(
+        and(
+          eq(workOrdersTable.id, workOrderId),
+          sql`${workOrdersTable.status} NOT IN ('已完成', '已結案')`,
+        ),
+      );
 
     res.json(serializeFieldProgress(updated));
   },
@@ -587,6 +602,11 @@ router.post(
       })
       .where(eq(workOrderFieldProgressTable.id, progress.id))
       .returning();
+
+    await db
+      .update(workOrdersTable)
+      .set({ status: "異常／暫停", updatedAt: now })
+      .where(eq(workOrdersTable.id, workOrderId));
 
     emitFieldProgressNotify(req, workOrderId, "unable", now, {
       unableReason: reason,
