@@ -50,7 +50,7 @@ function applyQuotationEqTableCloneFixes(clonedDoc: Document) {
   width:100%!important;
   max-width:100%!important;
   border-collapse:collapse!important;
-  font-size:12px!important;
+  font-size:14px!important;
   font-weight:500!important;
   line-height:1.4!important;
 }
@@ -76,16 +76,16 @@ ${colRules}
   vertical-align:middle!important;
   padding:7px 6px!important;
   font-weight:500!important;
-  font-size:12px!important;
+  font-size:14px!important;
   line-height:1.4!important;
 }
 .quotation-print-page .eq-table .head-row th{
   font-weight:600!important;
-  font-size:12px!important;
+  font-size:14px!important;
 }
 .quotation-print-page .eq-table .col-notes,
 .quotation-print-page .eq-table .col-notes .cell-text{
-  font-size:11px!important;
+  font-size:13px!important;
   font-weight:500!important;
 }
 .quotation-print-page .eq-table .col-item,
@@ -94,7 +94,7 @@ ${colRules}
 .quotation-print-page .eq-table .col-model .cell-text,
 .quotation-print-page .eq-table .col-no,
 .quotation-print-page .eq-table .col-no .cell-text{
-  font-size:12px!important;
+  font-size:14px!important;
   font-weight:500!important;
 }
 .quotation-print-page .eq-table .cell-text{
@@ -113,7 +113,7 @@ ${colRules}
 .quotation-print-page .eq-table .col-sub .cell-text,
 .quotation-print-page .eq-table .col-qty .cell-text,
 .quotation-print-page .eq-table .col-unit .cell-text{
-  font-size:11.5px!important;
+  font-size:13.5px!important;
   font-weight:500!important;
 }
 .quotation-print-page .eq-table .col-price,
@@ -182,7 +182,7 @@ ${colRules}
     h.style.setProperty("vertical-align", "middle", "important");
     h.style.setProperty("padding", "7px 6px", "important");
     h.style.setProperty("font-weight", isHead ? "600" : "500", "important");
-    h.style.setProperty("font-size", isHead || (!isNotes && !isCompact) ? "12px" : isNotes ? "11px" : "11.5px", "important");
+    h.style.setProperty("font-size", isHead || (!isNotes && !isCompact) ? "14px" : isNotes ? "13px" : "13.5px", "important");
     h.style.setProperty("line-height", "1.4", "important");
   });
   root.querySelectorAll(".eq-table .cell-text").forEach((node) => {
@@ -308,9 +308,13 @@ export async function generatePdfBlobFromHtml(
         doc.fonts.load('400 16px "Noto Sans TC"'),
         doc.fonts.load('500 11px "Noto Sans TC"'),
         doc.fonts.load('500 12px "Noto Sans TC"'),
+        doc.fonts.load('500 13px "Noto Sans TC"'),
+        doc.fonts.load('500 13.5px "Noto Sans TC"'),
+        doc.fonts.load('500 14px "Noto Sans TC"'),
         doc.fonts.load('500 16px "Noto Sans TC"'),
         doc.fonts.load('600 11px "Noto Sans TC"'),
         doc.fonts.load('600 12px "Noto Sans TC"'),
+        doc.fonts.load('600 14px "Noto Sans TC"'),
         doc.fonts.load('700 14px "Noto Sans TC"'),
         doc.fonts.load('700 18px "Noto Sans TC"'),
       ]);
@@ -380,8 +384,12 @@ export async function generatePdfBlobFromHtml(
         document.fonts.load('400 16px "Noto Sans TC"'),
         document.fonts.load('500 11px "Noto Sans TC"'),
         document.fonts.load('500 12px "Noto Sans TC"'),
+        document.fonts.load('500 13px "Noto Sans TC"'),
+        document.fonts.load('500 13.5px "Noto Sans TC"'),
+        document.fonts.load('500 14px "Noto Sans TC"'),
         document.fonts.load('600 11px "Noto Sans TC"'),
         document.fonts.load('600 12px "Noto Sans TC"'),
+        document.fonts.load('600 14px "Noto Sans TC"'),
         document.fonts.load('700 14px "Noto Sans TC"'),
         document.fonts.load('700 18px "Noto Sans TC"'),
       ]);

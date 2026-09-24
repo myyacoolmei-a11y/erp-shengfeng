@@ -149,8 +149,11 @@ if (!quoteHtml.includes("overflow-wrap:break-word") || !quoteHtml.includes("word
 if (/\.eq-table tbody td\{[^}]*overflow:hidden/.test(quoteHtml) || quoteHtml.includes("font-size:8px")) {
   throw new Error("quotation eq-table must not clip cells or use 8px type");
 }
-if (!quoteHtml.includes("font-size:12px") || !quoteHtml.includes("font-size:11.5px")) {
-  throw new Error("quotation eq-table must use 12px body and 11.5px compact columns");
+if (!quoteHtml.includes("font-size:14px") || !quoteHtml.includes("font-size:13.5px")) {
+  throw new Error("quotation eq-table must use 14px body and 13.5px compact columns");
+}
+if (!quoteHtml.includes("font-size:13px!important;font-weight:500!important")) {
+  throw new Error("quotation notes column must be 13px");
 }
 if (quoteHtml.includes("padding:3.5px 3px!important")) {
   throw new Error("quotation eq-table must not use compact 3.5px cell padding");
