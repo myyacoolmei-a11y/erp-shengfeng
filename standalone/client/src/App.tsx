@@ -29,6 +29,7 @@ import SubsidyUploadPage from "@/pages/subsidy-upload";
 import Employees from "@/pages/employees";
 import Products from "@/pages/products";
 import WholesaleCustomers from "@/pages/wholesale-customers";
+import WholesaleCustomerOrders from "@/pages/wholesale-customer-orders";
 import WholesaleProducts from "@/pages/wholesale-products";
 import WholesaleOrders from "@/pages/wholesale-orders";
 import WholesaleSettlements from "@/pages/wholesale-settlements";
@@ -311,6 +312,11 @@ function AppRoutes() {
             </Route>
             <Route path="/products">
               <Guard feature="products"><Products /></Guard>
+            </Route>
+            <Route path="/wholesale/customers/:customerId/orders">
+              {() => (
+                <Guard feature="wholesale"><WholesaleCustomerOrders /></Guard>
+              )}
             </Route>
             <Route path="/wholesale/customers">
               <Guard feature="wholesale"><WholesaleCustomers /></Guard>

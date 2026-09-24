@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, ilike, or, and, desc, SQL } from "drizzle-orm";
 import {
-  db, wholesaleOrdersTable, wholesaleOrderItemsTable, wholesaleReceivablesTable,
+  db, wholesaleOrdersTable, wholesaleOrderItemsTable, wholesaleReceivablesTable, wholesaleCustomersTable, usersTable,
 } from "@workspace/db";
 import { z } from "zod/v4";
 import { requireFeature } from "../lib/auth";
@@ -33,6 +33,7 @@ const OrderInput = z.object({
   quoteNumber: z.string().optional().nullable(),
   customerId: z.number().int().nullable().optional(),
   customerName: z.string().optional(),
+  deliveryAddress: z.string().optional().nullable(),
   orderDate: z.string(),
   expectedDelivery: z.string().optional().nullable(),
   salesperson: z.string().optional(),
@@ -139,9 +140,21 @@ router.post("/wholesale/orders", async (req, res): Promise<void> => {
   const parsed = OrderInput.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const { items, taxRate, shippingFee, ...header } = parsed.data;
+  if (header.customerId) {
+    const [cust] = await db.select().from(wholesaleCustomersTable).where(eq(wholesaleCustomersTable.id, header.customerId));
+    if (cust) {
+      header.customerName = header.customerName || cust.companyName;
+      if (!header.deliveryAddress) header.deliveryAddress = cust.address ?? undefined;
+      if (!header.salesperson && cust.salesUserId) {
+        const [sales] = await db.select({ displayName: usersTable.displayName }).from(usersTable).where(eq(usersTable.id, cust.salesUserId));
+        if (sales?.displayName) header.salesperson = sales.displayName;
+      }
+    }
+  }
   const { computed, subtotal, taxAmount, total } = computeTotals(items, taxRate, shippingFee);
   const [order] = await db.insert(wholesaleOrdersTable).values({
     ...header,
+    status: header.status || "備貨中",
     taxRate: String(taxRate),
     shippingFee: String(shippingFee),
     subtotal: String(subtotal),
