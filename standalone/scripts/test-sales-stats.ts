@@ -275,6 +275,7 @@ function testWiring() {
   assert(!layout.includes("react-icons"), "no extra icon library");
 
   const page = read("client/src/pages/sales-stats.tsx");
+  assert(page.includes("【{expanded.salesName}｜案件明細】"), "detail title format");
   assert(page.includes("此條件下尚無業務案件"), "empty state copy");
   assert(page.includes("overflow-x-auto"), "mobile horizontal scroll");
   assert(page.includes('useState<Preset>("month")'), "default 本月");

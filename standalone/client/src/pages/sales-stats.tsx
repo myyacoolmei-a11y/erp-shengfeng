@@ -189,7 +189,7 @@ export default function SalesStatsPage() {
       {expanded ? (
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">{expanded.salesName}｜案件明細</CardTitle>
+            <CardTitle className="text-base">【{expanded.salesName}｜案件明細】</CardTitle>
           </CardHeader>
           <CardContent className="p-0 overflow-x-auto">
             <table className="w-full text-xs min-w-[720px]">
