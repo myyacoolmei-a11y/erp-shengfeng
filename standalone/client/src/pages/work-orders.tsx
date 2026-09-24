@@ -1437,18 +1437,6 @@ export default function WorkOrders() {
                         <span className="sm:hidden">{expandedId === o.id ? "收合" : "查看"}</span>
                         <span className="hidden sm:inline">{expandedId === o.id ? "收合" : "查看案件"}</span>
                       </Button>
-                      {(statusLabel === "施工中" || statusLabel === "待施工" || statusLabel === "已完成") && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-11 sm:h-9 w-auto px-3 shrink-0"
-                          onClick={() => setExpandedId(o.id)}
-                          title="查看施工"
-                          aria-label="查看施工"
-                        >
-                          查看施工
-                        </Button>
-                      )}
                       {isAdmin && (
                         (o as any).adminWorkflowStatus ? (
                           <span className="text-xs px-2 py-1 rounded font-medium bg-sky-50 text-sky-800 border border-sky-200">
