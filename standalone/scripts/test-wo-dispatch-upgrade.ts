@@ -134,10 +134,34 @@ assert(digitalOverrideTail.includes("font-weight:400!important"), "override afte
 assert(!digitalOverrideTail.includes("font-weight:700"), "override tail has no 700");
 
 const cp = buildWorkOrderHtml(multi, { mode: "continuous-print" });
-assert(cp.includes("@page{size:auto;margin:0}"), "continuous still size:auto");
+assert(cp.includes("@page{size:240mm 130mm;margin:0}"), "continuous 24x13cm page");
+assert(cp.includes("dot-matrix-page"), "independent dot-matrix page box");
 assert(!cp.includes("size:A4 landscape"), "continuous not A4");
+assert(!cp.includes("transform:scale"), "continuous must not scale");
+assert(cp.includes("flex-wrap:nowrap"), "checkbox row nowrap");
+assert(cp.includes("white-space:nowrap"), "checkbox item nowrap");
+assert(cp.includes("chk-item"), "checkbox+label atomic");
 assert(cp.includes("晟風空調工程｜派工單"), "continuous title");
 assert(cp.includes("☑"), "continuous checkboxes");
+assert(cp.includes("收款方式") && cp.includes("匯款"), "compact 匯款 label");
+assert(!cp.includes("銀行匯款") || cp.includes("匯款"), "print shows 匯款 not stacked 銀行匯款");
+assert(cp.includes("font-size:14.5pt") && cp.includes("font-size:10.5pt"), "title 14.5pt body 10.5pt");
+assert(cp.includes("dot-matrix-page:last-child"), "last page no forced blank");
+assert((cp.match(/class="dot-matrix-page"/g) || []).length === 1, "5 materials fit one 13cm page");
+
+const acceptCp = buildWorkOrderHtml(acceptance, { mode: "continuous-print" });
+assert(acceptCp.includes("WO-20261013-0192"), "acceptance on continuous");
+assert(acceptCp.includes("chk-row pay"), "pay row class");
+assert((acceptCp.match(/class="dot-matrix-page"/g) || []).length === 1, "0192 single page");
+
+const manyMats = {
+  ...multi,
+  equipmentItems: Array.from({ length: 16 }, (_, i) => ({ itemName: `材料${i + 1}`, quantity: 1, unit: "式" })),
+};
+const manyCp = buildWorkOrderHtml(manyMats, { mode: "continuous-print" });
+assert((manyCp.match(/class="dot-matrix-page"/g) || []).length >= 2, "overflow continues on next 24x13 page");
+assert(manyCp.includes("（續頁）") || manyCp.includes("材料16"), "overflow not clipped");
+assert(manyCp.includes("材料16"), "last material kept");
 
 const th80 = buildWorkOrderHtml(multi, { mode: "thermal-80" });
 assert(th80.includes("size:80mm auto"), "80mm thermal");
