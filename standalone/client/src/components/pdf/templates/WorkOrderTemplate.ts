@@ -2,7 +2,7 @@
 // 獨立版面：修改此檔不影響其他 Template
 // continuous-print：EPSON 點陣機 9.5×5.5in（241.3×139.7mm）單頁極簡黑白版型
 
-import { logoUrl, COMPANY, COLORS, esc, PRINT_DOC_TYPE_CSS, PRINT_CJK_FONT_STACK, PRINT_CJK_METRIC_CSS, printFontLinksHtml } from "./brand-config";
+import { logoUrl, COMPANY, COLORS, esc, PRINT_DOC_TYPE_CSS, PRINT_CJK_FONT_STACK, printFontLinksHtml } from "./brand-config";
 import { stripQuotePricingFromNotes } from "../../../../../shared/workOrderNotes.ts";
 import { CONTINUOUS_PAPER, PRINT_CALIBRATION_DEFAULT, type PrintCalibration } from "@/lib/printPaperConfig";
 import { displayQuoteItemCategory, displayQuoteItemBrand } from "./printCategory";
@@ -149,7 +149,9 @@ function jobTypeCheckRow(order: Record<string, unknown>): string {
   });
   return WO_JOB_TYPE_OPTIONS.map((t) => {
     const on = jobTypeHas(resolved, t);
-    const label = t === "其他" && resolved.otherLabel ? `其他：${esc(resolved.otherLabel)}` : t;
+    const label = t === "其他"
+      ? (resolved.otherLabel ? `其他：${esc(resolved.otherLabel)}` : "其他：______")
+      : t;
     return `${chkBox(on)}${label}`;
   }).join("　");
 }
@@ -166,9 +168,48 @@ function paymentCheckRow(order: Record<string, unknown>): string {
   });
   return WO_PAYMENT_METHOD_OPTIONS.map((m) => {
     const on = resolved.methods.includes(m);
-    const label = m === "其他" && resolved.otherLabel ? `其他：${esc(resolved.otherLabel)}` : (m === "銀行匯款" ? "匯款" : m);
+    const label = m === "其他" && resolved.otherLabel ? `其他：${esc(resolved.otherLabel)}` : m;
     return `${chkBox(on)}${label}`;
   }).join("　");
+}
+
+function paymentStatusCheckRow(order: Record<string, unknown>): string {
+  const billing = (order as any).billing || {};
+  const total = Number(billing.totalAmount ?? order.billingTotalAmount ?? 0) || 0;
+  const received = Number(billing.receivedAmount ?? 0) || 0;
+  const status = deriveWoPaymentStatus({
+    noCharge: Boolean(order.noCharge),
+    totalAmount: total,
+    receivedAmount: received,
+    storedStatus: billing.paymentStatus,
+  });
+  return (["未收款", "部分收款", "已收款", "無須收款"] as const)
+    .map((s) => `${chkBox(s === status)}${s}`)
+    .join("　");
+}
+
+function billingAmountRow(order: Record<string, unknown>): string {
+  const billing = (order as any).billing || {};
+  const total = Number(billing.totalAmount ?? order.billingTotalAmount ?? 0) || 0;
+  const received = Number(billing.receivedAmount ?? 0) || 0;
+  const remain = remainingBalance(total, received);
+  const invoice = String(order.invoiceStatus || billing.invoiceStatus || "").trim();
+  const money = (n: number) => (n > 0 ? n.toLocaleString("zh-TW") : "________");
+  return `應收金額：${money(total)}　累計已收：${money(received)}　未收餘額：${money(remain)}${invoice ? `　發票：${esc(invoice)}` : ""}`;
+}
+
+function techCheckRow(order: Record<string, unknown>): string {
+  const t = resolveTechnicians({
+    technicians: order.technicians as string | null,
+    assignedTo: order.assignedTo as string | null,
+    assistantTo: order.assistantTo as string | null,
+    primaryTechnician: order.primaryTechnician as string | null,
+    extraTechnician: order.extraTechnician as string | null,
+  });
+  const selected = t.names.filter((n) => n && n !== t.extra);
+  const boxes = selected.map((n) => `${chkBox(true)}${esc(n)}`).join("　");
+  const extra = t.extra ? `${chkBox(true)}其他：${esc(t.extra)}` : `${chkBox(false)}其他：______`;
+  return `${boxes}${boxes ? "　" : ""}${extra}`;
 }
 
 function printTech(order: Record<string, unknown>): { names: string; primary: string; extra: string } {
@@ -379,9 +420,9 @@ html,body,.sheet,.page{
 }
 body{
   font-family:${PRINT_CJK_FONT_STACK};
-  font-size:15px;
+  font-size:16px;
   line-height:1.4;
-  font-weight:500;
+  font-weight:400;
   font-stretch:100%;
   font-synthesis:none;
   font-variation-settings:normal;
@@ -391,7 +432,7 @@ body{
 .cp-title{
   display:block;
   text-align:center;
-  font-size:20px;
+  font-size:24px;
   font-weight:600;
   color:#000!important;
   letter-spacing:1px;
@@ -405,7 +446,7 @@ body{
 .cp-types{
   display:block;
   text-align:center;
-  font-size:13px;
+  font-size:15px;
   font-weight:400;
   color:#000!important;
   margin:0 0 0.6mm;
@@ -418,7 +459,7 @@ body{
   font-weight:400;
   font-family:${PRINT_CJK_FONT_STACK};
 }
-.chk.on{font-weight:600}
+.chk.on{font-weight:500}
 .cp-grid{
   display:grid;
   grid-template-columns:minmax(0,1fr) minmax(0,1fr);
@@ -451,7 +492,7 @@ body{
   width:24mm;
   min-width:24mm;
   max-width:24mm;
-  font-size:13px;font-weight:500;color:#000!important;
+  font-size:14px;font-weight:500;color:#000!important;
   white-space:nowrap;
   letter-spacing:0;
   overflow:visible;
@@ -459,7 +500,7 @@ body{
 }
 .cp-val{
   flex:1 1 auto;
-  font-size:13px;font-weight:400;color:#000!important;
+  font-size:15px;font-weight:400;color:#000!important;
   min-width:0;
   line-height:1.35;
 }
@@ -532,7 +573,7 @@ body{
   overflow:visible;
 }
 .cp-mat-header{
-  font-size:14px;font-weight:700;color:#000!important;
+  font-size:14px;font-weight:500;color:#000!important;
   padding:0.2mm 0 0.25mm;
   margin:0;
   border:none;
@@ -562,9 +603,9 @@ body{
 .cp-mat-row:last-child{
   border-bottom:0.15mm dotted #999;
 }
-.cp-mat-no{text-align:center;font-weight:700}
-.cp-mat-name{text-align:left;min-width:0;padding-right:1.2mm;font-size:16px;font-weight:600}
-.cp-mat-qty{text-align:center;font-weight:700;font-size:16px}
+.cp-mat-no{text-align:center;font-weight:400}
+.cp-mat-name{text-align:left;min-width:0;padding-right:1.2mm;font-size:16px;font-weight:400}
+.cp-mat-qty{text-align:center;font-weight:400;font-size:16px}
 .cp-mat-pad{min-width:0}
 /* 材料下方手寫留白：0/1/2 筆較大；5/8 筆縮小；有餘高時再伸展 */
 .cp-mat-handwrite{
@@ -654,7 +695,7 @@ body{
   display:flex;
   align-items:center;
   gap:1.4mm;
-  font-size:15px;font-weight:700;color:#000!important;
+  font-size:15px;font-weight:400;color:#000!important;
   line-height:1.35;
   margin:0.15mm 0 0;
 }
@@ -707,7 +748,7 @@ body{
 .page:has(.cp-mat-block[data-mat-count="8"]) .cp-notes-block{padding-bottom:0}
 .page:has(.cp-mat-block[data-mat-count="8"]) .cp-sig-date{margin-top:0.3mm}
 .page:has(.cp-mat-block[data-mat-count="7"]) .cp-title,
-.page:has(.cp-mat-block[data-mat-count="8"]) .cp-title{font-size:24px;line-height:1.25;margin:0}
+.page:has(.cp-mat-block[data-mat-count="8"]) .cp-title{font-size:24px;font-weight:600;line-height:1.25;margin:0}
 .page:has(.cp-mat-block[data-mat-count="7"]) .cp-field,
 .page:has(.cp-mat-block[data-mat-count="8"]) .cp-field{line-height:1.3}
 .page:has(.cp-mat-block[data-mat-count="8"]) .cp-mat-row{line-height:1.25;min-height:0}
@@ -723,7 +764,7 @@ body{
   overflow:visible;
 }
 .cp-sig-title{
-  font-size:13px;font-weight:700;
+  font-size:13px;font-weight:500;
   margin:0;padding:0;
   flex:0 0 auto;
   line-height:1.35;
@@ -744,7 +785,7 @@ body{
   flex:0 0 auto;
 }
 .cp-sig-date{
-  font-size:12px;font-weight:700;
+  font-size:12px;font-weight:400;
   display:block;
   margin-top:1.2mm;
   flex:0 0 auto;
@@ -752,6 +793,16 @@ body{
   border:none;
 }
 .hdr,.co-logo,.pf,.head-row{display:none!important}
+/* 列印字重最後覆蓋：禁止整張粗黑／描邊／縮小 */
+.sheet,.page,.cp-val,.cp-text,.cp-mat-name,.cp-mat-row,.cp-mat-qty,.cp-mat-no,.cp-fee-opt{
+  font-weight:400!important;
+  font-synthesis:none!important;
+  -webkit-text-stroke:0!important;
+  text-shadow:none!important;
+  transform:none!important;
+}
+.cp-lbl,.cp-sec,.cp-mat-header,.cp-sig-title{font-weight:500!important}
+.cp-title{font-weight:600!important}
 `;
 }
 
@@ -785,7 +836,6 @@ export function buildWorkOrderHtml(order: any, options: WorkOrderHtmlOptions = {
   const printDate = new Date().toLocaleDateString("zh-TW");
   const techResolved = printTech(order);
   const techDisplay = techResolved.names;
-  const techDisplayDigital = techDisplay || "—";
 
   const equipment = resolveEquipmentItems(order);
   const itemRows = buildMaterialRows(equipment);
@@ -817,7 +867,6 @@ ${printFontLinksHtml()}
 *{margin:0;padding:0;box-sizing:border-box}
 ${buildPageBoxCss(mode, calibration)}
 ${buildCompactOverridesCss(mode)}
-${PRINT_CJK_METRIC_CSS}
 </style>
 </head>
 <body>
@@ -830,7 +879,8 @@ ${PRINT_CJK_METRIC_CSS}
     <div class="cp-col">
       <div class="cp-field"><span class="cp-lbl">案件編號：</span><span class="cp-val">${esc(woNum)}</span></div>
       <div class="cp-field"><span class="cp-lbl">客戶：</span><span class="cp-val">${dash(order.customerName)}</span></div>
-      <div class="cp-field cp-field-tech${techDisplay ? "" : " is-empty"}"><span class="cp-lbl">技師：</span><span class="cp-val">${esc(techDisplay)}${techResolved.primary ? `（主：${esc(techResolved.primary)}）` : ""}</span></div>
+      <div class="cp-field cp-field-tech${techDisplay ? "" : " is-empty"}"><span class="cp-lbl">施工師傅：</span><span class="cp-val">${techCheckRow(order)}</span></div>
+      <div class="cp-field"><span class="cp-lbl">主要負責人：</span><span class="cp-val">${esc(techResolved.primary || "")}</span></div>
       <div class="cp-field"><span class="cp-lbl">現場聯絡人：</span><span class="cp-val">${dash(order.contactPerson)}</span></div>
       <div class="cp-field"><span class="cp-lbl">地址：</span><span class="cp-val">${dash(order.installAddress)}</span></div>
     </div>
@@ -861,8 +911,9 @@ ${PRINT_CJK_METRIC_CSS}
   <section class="cp-fee-block">
     <div class="cp-fee-left">
       <h2 class="cp-sec">工程收費：</h2>
-      <div class="cp-fee-opt">${paymentCheckRow(order)}</div>
-      <div class="cp-fee-opt">${esc(formatPrintBillingLine(order))}</div>
+      <div class="cp-fee-opt">收款方式：${paymentCheckRow(order)}</div>
+      <div class="cp-fee-opt">收款狀態：${paymentStatusCheckRow(order)}</div>
+      <div class="cp-fee-opt">${billingAmountRow(order)}</div>
     </div>
     <div class="cp-fee-right">
       <h2 class="cp-sec">客戶備註：</h2>
@@ -923,12 +974,12 @@ ${buildPageBoxCss(mode, calibration)}
   width:44px;height:44px;max-width:44px;max-height:44px;
   object-fit:contain;flex-shrink:0;
 }
-.co-name{font-size:15px;font-weight:700;line-height:1.4;color:#111}
+.co-name{font-size:16px;font-weight:600;line-height:1.4;color:#111}
 .co-sub{font-size:12px;font-weight:400;color:#666;line-height:1.4}
 .wo-right{text-align:right}
-.wo-label{font-size:28px;font-weight:700;color:#111;letter-spacing:2px;line-height:1.2}
-.wo-num{font-size:13px;font-weight:600;font-family:monospace;line-height:1.4}
-.wo-meta{font-size:12px;font-weight:400;color:#666;margin-top:1px;line-height:1.4}
+.wo-label{font-size:26px;font-weight:600;color:#111;letter-spacing:2px;line-height:1.2}
+.wo-num{font-size:13px;font-weight:500;font-family:monospace;line-height:1.4}
+.wo-meta{font-size:13px;font-weight:400;color:#111;margin-top:1px;line-height:1.4}
 
 .grid{
   display:grid;grid-template-columns:1fr 1fr;
@@ -937,11 +988,11 @@ ${buildPageBoxCss(mode, calibration)}
 }
 .field{display:flex;flex-direction:column;gap:0.6mm}
 .lbl{font-size:13px;font-weight:500;color:#666;line-height:1.3}
-.val{font-size:16px;font-weight:600;color:#111;line-height:1.4}
+.val{font-size:16px;font-weight:400;color:#111;line-height:1.4}
 .full{grid-column:1/-1}
 
 .sec-title{
-  color:#111;font-size:16px;font-weight:700;
+  color:#111;font-size:16px;font-weight:500;
   background:transparent;border:none;
   padding:0 0 1.2mm;margin:0 0 2mm;
   display:block;width:fit-content;
@@ -949,7 +1000,7 @@ ${buildPageBoxCss(mode, calibration)}
   letter-spacing:0;line-height:1.3;
 }
 .eq-title{
-  color:#111;font-size:18px;font-weight:700;
+  color:#111;font-size:17px;font-weight:500;
   background:transparent;border:none;
   padding:0 0 1.2mm;margin:0 0 2mm;
   display:block;width:fit-content;
@@ -966,7 +1017,7 @@ ${buildPageBoxCss(mode, calibration)}
 .eq-table .head-row{background:#f4f4f4;color:#111}
 .eq-table .head-row th{
   border:1px solid #ccc;
-  font-size:14px;font-weight:700;text-align:center;
+  font-size:14px;font-weight:500;text-align:center;
   vertical-align:middle;line-height:1.4;
   padding:8px 6px;color:#111;
   font-stretch:100%;letter-spacing:0;transform:none;zoom:normal;
@@ -974,7 +1025,7 @@ ${buildPageBoxCss(mode, calibration)}
 }
 .eq-table tbody td{
   border:1px solid #ccc;
-  vertical-align:middle;font-size:16px;font-weight:500;
+  vertical-align:middle;font-size:16px;font-weight:400;
   line-height:1.4;padding:8px 6px;color:#111;text-align:center;
   font-stretch:100%;letter-spacing:0;transform:none;zoom:normal;
   overflow:visible;
@@ -983,8 +1034,8 @@ ${buildPageBoxCss(mode, calibration)}
 .tac{text-align:center}
 .tar{text-align:right}
 .tal{text-align:left}
-.eq-table .col-item{font-size:18px;font-weight:700;text-align:left;word-break:break-word}
-.eq-table .col-cat,.eq-table .col-model,.eq-table .col-qty,.eq-table .col-unit{text-align:center;font-weight:700;font-size:16px}
+.eq-table .col-item{font-size:17px;font-weight:400;text-align:left;word-break:break-word}
+.eq-table .col-cat,.eq-table .col-model,.eq-table .col-qty,.eq-table .col-unit{text-align:center;font-weight:400;font-size:16px}
 .eq-table .col-qty,.eq-table .col-unit{white-space:nowrap}
 .eq-table .col-notes{font-size:13px;font-weight:400;text-align:center}
 .col-w6{width:6%}
@@ -996,7 +1047,7 @@ ${buildPageBoxCss(mode, calibration)}
 .box{
   border:1px solid #e5e5e5;
   padding:2mm 3mm;
-  font-size:16px;font-weight:500;white-space:pre-wrap;
+  font-size:16px;font-weight:400;white-space:pre-wrap;
   line-height:1.45;background:#fff;color:#111;
 }
 .section-flex-notes .box{font-size:15px}
@@ -1022,9 +1073,23 @@ ${buildPageBoxCss(mode, calibration)}
   border-top:1px solid #eee;padding-top:1.5mm;
 }
 ${PRINT_DOC_TYPE_CSS}
-.section-flex .box{font-size:16px!important;font-weight:500!important}
+/* 覆蓋 PRINT_DOC_TYPE_CSS／PRINT_CJK_METRIC_CSS 的 700 字重：字大、筆畫細 */
+body,.sheet,.page,.box,.val,.wo-meta,.eq-table,.eq-table tbody td,
+.eq-table .col-item,.eq-table .col-cat,.eq-table .col-model,.eq-table .col-qty,.eq-table .col-unit{
+  font-weight:400!important;
+  font-synthesis:none!important;
+  -webkit-text-stroke:0!important;
+  text-shadow:none!important;
+  transform:none!important;
+}
+.lbl,.sec-title,.eq-title,.eq-table .head-row th,.sig{font-weight:500!important}
+.co-name,.wo-label{font-weight:600!important}
+.section-flex .box{font-size:16px!important;font-weight:400!important}
 .section-flex-notes .box{font-size:15px!important;font-weight:400!important}
 .eq-table .head-row th,.eq-table tbody td{padding:8px 6px!important}
+.eq-table .head-row th{font-size:14px!important;font-weight:500!important}
+.eq-table tbody td,.eq-table .col-cat,.eq-table .col-model,.eq-table .col-qty,.eq-table .col-unit{font-size:16px!important;font-weight:400!important}
+.eq-table .col-item{font-size:17px!important;font-weight:400!important}
 </style>
 </head>
 <body>
@@ -1056,7 +1121,8 @@ ${PRINT_DOC_TYPE_CSS}
     ${order.title ? `<div class="field full f-title"><span class="lbl">工程名稱</span><span class="val">${esc(order.title)}</span></div>` : ""}
     ${order.contactPerson ? `<div class="field f-contact"><span class="lbl">現場聯絡</span><span class="val">${esc(order.contactPerson)}</span></div>` : ""}
     <div class="field full f-address"><span class="lbl">地址</span><span class="val">${esc(order.installAddress || "—")}</span></div>
-    <div class="field f-tech"><span class="lbl">技師</span><span class="val">${esc(techDisplayDigital)}</span></div>
+    <div class="field full f-tech"><span class="lbl">施工師傅</span><span class="val">${techCheckRow(order)}</span></div>
+    <div class="field f-primary"><span class="lbl">主要負責人</span><span class="val">${esc(techResolved.primary || "________")}</span></div>
   </div>
 
   <div class="section section-flex">
@@ -1083,6 +1149,13 @@ ${PRINT_DOC_TYPE_CSS}
   <div class="section section-flex-notes">
     <div class="sec-title">備註</div>
     <div class="box">${esc(woNotes || "（無）")}</div>
+  </div>
+
+  <div class="section section-flex">
+    <div class="sec-title">工程收費</div>
+    <div class="box">收款方式：${paymentCheckRow(order)}
+收款狀態：${paymentStatusCheckRow(order)}
+${billingAmountRow(order)}</div>
   </div>
 
   <div class="bottom-block">
@@ -1168,24 +1241,24 @@ html,body{margin:0;padding:0;background:#fff;color:#000}
 *{box-sizing:border-box;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 body,.sheet,.page{
   font-family:${PRINT_CJK_FONT_STACK};
-  font-size:12.5pt;font-weight:400;line-height:1.45;color:#000;background:#fff;
-  transform:none;zoom:normal;font-synthesis:none;
+  font-size:13pt;font-weight:400;line-height:1.45;color:#000;background:#fff;
+  transform:none;zoom:normal;font-synthesis:none;-webkit-text-stroke:0;text-shadow:none;
 }
 .sheet{width:100%}
 .page{width:100%}
 .no-print{display:none!important}
-h1{font-size:19pt;font-weight:600;text-align:center;margin:0 0 2mm;letter-spacing:.4mm}
-.types{text-align:center;font-size:12.5pt;font-weight:400;margin:0 0 3mm}
+h1{font-size:22pt;font-weight:600;text-align:center;margin:0 0 2mm;letter-spacing:.4mm}
+.types{text-align:center;font-size:14pt;font-weight:400;margin:0 0 3mm}
 .chk{display:inline-block;width:1.2em;font-weight:400}
-.chk.on{font-weight:600}
-.meta{display:flex;justify-content:space-between;font-size:13pt;font-weight:400;margin:0 0 2.5mm;border-bottom:.3pt solid #000;padding-bottom:1.5mm}
+.chk.on{font-weight:400}
+.meta{display:flex;justify-content:space-between;font-size:14pt;font-weight:400;margin:0 0 2.5mm;border-bottom:.3pt solid #000;padding-bottom:1.5mm}
 .grid{display:grid;grid-template-columns:1fr 1fr;column-gap:8mm;row-gap:1.2mm;margin-bottom:3mm}
-.field{display:flex;gap:2mm;align-items:baseline;min-width:0;font-size:12.5pt}
-.lbl{flex:0 0 24mm;font-weight:500;white-space:nowrap}
+.field{display:flex;gap:2mm;align-items:baseline;min-width:0;font-size:14pt}
+.lbl{flex:0 0 26mm;font-weight:500;white-space:nowrap}
 .val{flex:1;font-weight:400;min-width:0;word-break:break-word}
-.sec{font-size:13pt;font-weight:600;margin:2.5mm 0 1mm;border-bottom:.35pt solid #222;padding-bottom:.6mm}
-.body{font-size:13pt;font-weight:400;white-space:pre-wrap;min-height:8mm}
-table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:12.5pt;margin:0 0 2mm}
+.sec{font-size:14pt;font-weight:500;margin:2.5mm 0 1mm;border-bottom:.35pt solid #222;padding-bottom:.6mm}
+.body{font-size:14.5pt;font-weight:400;white-space:pre-wrap;min-height:8mm}
+table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:14pt;margin:0 0 2mm}
 th,td{border:.35pt solid #333;padding:2mm 1.6mm;vertical-align:middle;font-weight:400}
 th{font-weight:500;text-align:center;background:#f7f7f7}
 .tac{text-align:center}
@@ -1200,6 +1273,15 @@ thead{display:table-header-group}
   nav,header,footer,button,.no-print{display:none!important}
   body{background:#fff}
 }
+body,.sheet,.page,.val,.body,td,.types,.meta{
+  font-weight:400!important;
+  font-synthesis:none!important;
+  -webkit-text-stroke:0!important;
+  text-shadow:none!important;
+  transform:none!important;
+}
+.lbl,.sec,.sig-title,th{font-weight:500!important}
+h1{font-weight:600!important}
 </style>
 </head>
 <body>
@@ -1215,7 +1297,7 @@ thead{display:table-header-group}
     <div class="field"><span class="lbl">現場聯絡人</span><span class="val">${dash(order.contactPerson)}</span></div>
     <div class="field"><span class="lbl">負責業務</span><span class="val">${dash(salesRep)}</span></div>
     <div class="field" style="grid-column:1/-1"><span class="lbl">施工地址</span><span class="val">${dash(order.installAddress)}</span></div>
-    <div class="field" style="grid-column:1/-1"><span class="lbl">技師</span><span class="val">${techChecks || "—"}${techResolved.primary ? `<div class="muted">主要負責人：${esc(techResolved.primary)}</div>` : ""}</span></div>
+    <div class="field" style="grid-column:1/-1"><span class="lbl">施工師傅</span><span class="val">${techChecks}<div class="muted">主要負責人：${esc(techResolved.primary || "________")}</div></span></div>
   </div>
   <div class="sec">施工內容</div>
   <div class="body">${esc(order.description || "")}</div>
@@ -1229,8 +1311,9 @@ thead{display:table-header-group}
   <div class="fee">
     <div>
       <div class="sec">工程收費</div>
-      <div>${paymentCheckRow(order)}</div>
-      <div class="body" style="margin-top:1.5mm">${esc(formatPrintBillingLine(order))}</div>
+      <div>收款方式：${paymentCheckRow(order)}</div>
+      <div style="margin-top:1mm">收款狀態：${paymentStatusCheckRow(order)}</div>
+      <div class="body" style="margin-top:1.5mm">${billingAmountRow(order)}</div>
     </div>
     <div>
       <div class="sec">客戶備註</div>

@@ -29,6 +29,7 @@ assert(legacyInstall.types.includes("安裝") && legacyInstall.fromLegacy, "lega
 const legacyMove = resolveJobTypes({ projectType: "遷機" });
 assert(legacyMove.types.includes("其他") && legacyMove.otherLabel === "遷機", "legacy 遷機 → 其他：遷機");
 assert(jobTypeLabels(legacyMove)[0] === "其他：遷機", "legacy other label");
+assert(resolveJobTypes({ projectType: "未知種類XYZ" }).types.length === 0, "unknown type not guessed");
 assert(resolveJobTypes({ jobTypes: ["安裝", "保養"] }).fromLegacy === false, "new jobTypes not legacy");
 assert(deriveProjectTypeFromJobTypes(["安裝", "保養"]) === "新裝", "mixed 安裝+保養 keeps 新裝");
 assert(deriveProjectTypeFromJobTypes(["保養"]) === "保養", "only 保養");
@@ -94,10 +95,43 @@ assert(a4.includes("font-weight:600"), "title 600");
 assert(a4.includes("安裝") && a4.includes("保養"), "multi types");
 assert(a4.includes("陳弘健") && a4.includes("洪至佑"), "multi techs");
 assert(a4.includes("主要負責人"), "primary printed");
-assert(a4.includes("現金") && a4.includes("匯款"), "payment methods");
+assert(a4.includes("現金") && a4.includes("銀行匯款"), "payment methods");
+assert(a4.includes("收款狀態") && a4.includes("應收金額"), "payment status + amounts");
+assert(a4.includes("施工師傅"), "tech checkbox label");
+assert(a4.includes("其他：______") || a4.includes("其他：清洗濾網"), "other type blank or label");
+assert(a4.includes("☑陳弘健") || a4.includes("☑") && a4.includes("陳弘健"), "tech names as whole, not split");
+assert(!a4.includes("☑陳</span>弘"), "tech checkbox not per-character");
+assert(!/font-weight:7\d0/.test(a4.replace(/@font-face\{[\s\S]*?\}/g,"")), "A4 body not 700");
 assert(a4.includes("壁掛分離式") && a4.includes("冷媒"), "materials kept");
 assert(a4.includes("thead{display:table-header-group}"), "table header repeats");
 assert(a4.includes("客戶簽名") && a4.includes("技師簽名"), "signatures kept");
+
+const acceptance = {
+  id: 192,
+  workOrderNumber: "WO-20261013-0192",
+  customerName: "驗收客戶",
+  projectType: "新裝",
+  assignedTo: "陳弘健",
+  assistantTo: "洪至佑",
+  description: "安裝室內機",
+  notes: "舊工單無新欄位",
+  installAddress: "彰化縣花壇鄉",
+};
+const acceptA4 = buildWorkOrderHtml(acceptance, { mode: "a4-landscape" });
+assert(acceptA4.includes("WO-20261013-0192"), "acceptance WO number");
+assert(acceptA4.includes("☑") && acceptA4.includes("安裝"), "legacy 新裝 → 安裝 checked");
+assert(acceptA4.includes("☐保養") || acceptA4.includes("☐") && acceptA4.includes("保養"), "保養 not guessed");
+assert(acceptA4.includes("陳弘健") && acceptA4.includes("洪至佑"), "legacy assigned/assistant as checks");
+assert(acceptA4.includes("收款方式") && acceptA4.includes("收款狀態"), "old WO still new print fields");
+
+const digital = buildWorkOrderHtml(multi);
+assert(digital.includes("施工師傅"), "digital also uses new tech row");
+assert(digital.includes("收款方式"), "digital payment methods");
+assert(digital.includes("font-weight:400!important"), "digital override 400");
+assert(!digital.includes("transform:scale"), "digital must not scale the sheet");
+const digitalOverrideTail = digital.slice(digital.lastIndexOf("覆蓋 PRINT_DOC_TYPE_CSS"));
+assert(digitalOverrideTail.includes("font-weight:400!important"), "override after brand CSS");
+assert(!digitalOverrideTail.includes("font-weight:700"), "override tail has no 700");
 
 const cp = buildWorkOrderHtml(multi, { mode: "continuous-print" });
 assert(cp.includes("@page{size:auto;margin:0}"), "continuous still size:auto");

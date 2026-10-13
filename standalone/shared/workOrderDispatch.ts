@@ -109,7 +109,8 @@ export function resolveJobTypes(input: {
   if (mapped) {
     return { types: [...mapped.types], otherLabel: mapped.other ?? "", fromLegacy: true };
   }
-  return { types: ["其他"], otherLabel: pt, fromLegacy: true };
+  // 無法對應的舊類型：列印／畫面不猜測勾選
+  return { types: [], otherLabel: "", fromLegacy: true };
 }
 
 export function jobTypeLabels(resolved: ResolvedJobTypes): string[] {
