@@ -12,11 +12,12 @@ export interface PdfBlobResult {
   html: string;
 }
 
-export type PageFormat = "a4" | "custom-240x140-landscape";
+export type PageFormat = "a4" | "a4-landscape" | "custom-240x140-landscape";
 
 const PAGE_CONFIG: Record<PageFormat, { format: string | number[]; orientation: "portrait" | "landscape"; margin: number[]; scale: number; renderWidth: number }> = {
   // 210mm @ 96dpi ≈ 794px，與 A4 CSS mm 單位同比例，避免 canvas 被非等比拉高／壓窄
   "a4": { format: "a4", orientation: "portrait", margin: [10, 12, 10, 12], scale: 2, renderWidth: 794 },
+  "a4-landscape": { format: "a4", orientation: "landscape", margin: [10, 12, 10, 12], scale: 2, renderWidth: 1123 },
   // 240mm @ 96dpi ≈ 907px
   "custom-240x140-landscape": { format: [240, 140] as any, orientation: "landscape", margin: [0, 0, 0, 0], scale: 2, renderWidth: 907 },
 };

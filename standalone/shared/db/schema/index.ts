@@ -6,6 +6,7 @@ export * from "./quotes";
 export * from "./quoteItems";
 export * from "./workOrders";
 export * from "./workOrderEquipmentItems";
+export * from "./workOrderDeliveryItems";
 export * from "./repairCases";
 export * from "./repairCasePhotos";
 export * from "./progress";

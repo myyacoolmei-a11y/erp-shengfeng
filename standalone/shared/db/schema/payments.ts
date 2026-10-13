@@ -16,6 +16,7 @@ export const paymentsTable = pgTable("payments", {
   paymentDate: date("payment_date", { mode: "string" }).notNull(),
   paymentMethod: text("payment_method"),
   notes: text("notes"),
+  recordedBy: text("recorded_by"),
   reversedAt: timestamp("reversed_at", { withTimezone: true }),
   reversalOfPaymentId: integer("reversal_of_payment_id"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

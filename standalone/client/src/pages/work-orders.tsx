@@ -20,11 +20,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Pencil, Trash2, ChevronDown, ChevronUp, CreditCard, Printer, MapPin, X, FileText, AlertCircle, UserPlus, Eye, Ruler } from "lucide-react";
+import { Plus, Pencil, Trash2, ChevronDown, ChevronUp, CreditCard, Printer, MapPin, X, FileText, AlertCircle, UserPlus, Eye, Ruler, Truck } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth, hasRole, userHasFeature } from "@/contexts/auth-context";
-import { makeEmpty, type WOForm, buildPayload, hasWorkOrderCustomer, WorkOrderFormFields, equipmentItemsFromOrder } from "@/components/work-order-form";
+import { makeEmpty, type WOForm, buildPayload, hasWorkOrderCustomer, hasJobTypeSelection, WorkOrderFormFields, equipmentItemsFromOrder } from "@/components/work-order-form";
 import { BindCustomerDialog } from "@/components/bind-customer-dialog";
 import { validateWorkOrderAiReminder } from "@/components/work-orders/WorkOrderAiReminderSection";
 import {
@@ -42,6 +43,25 @@ import type { VoiceAssistantApplyPayload } from "@/components/voice-assistant/ty
 import { PdfPreviewDialog } from "@/components/pdf/pdf-preview-dialog";
 import { handlePdfAction, isMobileDevice, openLineShareText, openPrintWindow } from "@/components/pdf/pdf-service";
 import { buildWorkOrderHtml } from "@/components/pdf/templates/WorkOrderTemplate";
+import { printWorkOrderDocument, WO_PRINT_FORMATS, loadWoPrintFormat, saveWoPrintFormat, type WoPrintFormatId } from "@/lib/workOrderPrint";
+import {
+  WO_JOB_TYPE_OPTIONS,
+  WO_JOB_TYPE_BADGE_COLORS,
+  resolveJobTypes,
+  jobTypeLabels,
+} from "../../../shared/workOrderDispatch.ts";
+
+function authFetch(url: string, options: RequestInit = {}) {
+  const token = localStorage.getItem("erp_auth_token");
+  return fetch(url, {
+    ...options,
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(options.headers ?? {}),
+    },
+  });
+}
 
 /** Same compact icon button as quote list — min 44×44 touch target on mobile. */
 function WoIconButton({
@@ -52,7 +72,7 @@ function WoIconButton({
   children,
 }: {
   label: string;
-  onClick: () => void;
+  onClick?: () => void;
   disabled?: boolean;
   className?: string;
   children: React.ReactNode;
@@ -214,29 +234,9 @@ async function printWorkOrderPDF(
   order: any,
   setPdfPreview: (v: { url: string; filename: string } | null) => void,
   toast: any,
+  format?: WoPrintFormatId,
 ) {
-  const woNum = order.workOrderNumber || `#${order.id}`;
-  if (isMobileDevice()) {
-    // 行動裝置：維持原有 PDF 下載版面，不套用連續報表紙送紙孔／撕線邊界與列印校正
-    const html = buildWorkOrderHtml(order);
-    await handlePdfAction({
-      html,
-      docNo: woNum,
-      filename: `派工單_${woNum}.pdf`,
-      title: "晟風工程派工單",
-      action: "download",
-      setPdfPreview,
-      toast,
-      pageFormat: "custom-240x140-landscape",
-    });
-  } else {
-    // 桌機列印：套用點陣印表機連續報表紙安全邊界，並套用使用者儲存的列印校正偏移量
-    const html = buildWorkOrderHtml(order, {
-      mode: "continuous-print",
-      calibration: loadPrintCalibration(),
-    });
-    openPrintWindow(html, `晟風工程派工單 — ${woNum}`);
-  }
+  await printWorkOrderDocument(order, format ?? loadWoPrintFormat(), setPdfPreview, toast);
 }
 
 async function shareWorkOrderViaLine(
@@ -833,6 +833,7 @@ export default function WorkOrders() {
   const focusId = highlightParam || openParam || expandParam || editParam;
 
   const [statusFilter, setStatusFilter] = useState<AdminFilterTab>(editParam ? "待派工" : "待施工");
+  const [jobTypeFilter, setJobTypeFilter] = useState<string>("全部");
   const [listSearch, setListSearch] = useState("");
   const [engineerFilter, setEngineerFilter] = useState<EngineerFilter>("進行中");
   const [showCreate, setShowCreate] = useState(false);
@@ -911,6 +912,16 @@ export default function WorkOrders() {
           return hay.includes(q);
         });
       }
+      if (jobTypeFilter !== "全部") {
+        filtered = filtered.filter((o) => {
+          const resolved = resolveJobTypes({
+            jobTypes: (o as any).jobTypes ?? (o as any).jobTypesResolved?.types,
+            jobTypeOther: (o as any).jobTypeOther ?? (o as any).jobTypesResolved?.otherLabel,
+            projectType: o.projectType,
+          });
+          return resolved.types.includes(jobTypeFilter as any) || o.projectType === jobTypeFilter;
+        });
+      }
       return [...filtered].sort(compareWorkOrdersNewestFirst);
     }
 
@@ -946,7 +957,7 @@ export default function WorkOrders() {
       }
     })
       .sort(compareWorkOrdersNewestFirst);
-  }, [orders, isEngineerView, engineerFilter, progressMap, today, completedSince, statusFilter, listSearch, focusId]);
+  }, [orders, isEngineerView, engineerFilter, progressMap, today, completedSince, statusFilter, jobTypeFilter, listSearch, focusId]);
 
   // 工程師不打客戶／報價 API（常因無 customers/quotations 權限而 403）
   const { data: customers } = useListCustomers(
@@ -1098,6 +1109,13 @@ export default function WorkOrders() {
       if (Array.isArray(parsed)) technicians = parsed;
     } catch { /* ignore */ }
 
+    const jobs = resolveJobTypes({
+      jobTypes: o.jobTypes ?? o.jobTypesResolved?.types,
+      jobTypeOther: o.jobTypeOther ?? o.jobTypesResolved?.otherLabel,
+      projectType: o.projectType,
+    });
+    const extra = o.extraTechnician ?? "";
+    if (extra && !technicians.includes(extra)) technicians = [...technicians];
     setForm({
       customerMode: o.customerId ? "existing" as const : (o.customerName ? "temporary" as const : null),
       quoteId: o.quoteId ?? undefined,
@@ -1113,7 +1131,24 @@ export default function WorkOrders() {
       scheduledTime: o.scheduledTime ?? "",
       completedDate: o.completedDate ?? "",
       technicians,
+      primaryTechnician: o.primaryTechnician || o.assignedTo || technicians[0] || "",
+      extraTechnician: extra,
+      jobTypes: jobs.types,
+      jobTypeOther: jobs.otherLabel,
       projectType: o.projectType ?? "",
+      paymentMethods: Array.isArray(o.paymentMethods) ? o.paymentMethods : [],
+      paymentMethodOther: o.paymentMethodOther ?? "",
+      invoiceStatus: o.invoiceStatus || o.billing?.invoiceStatus || "",
+      billingTotalAmount: o.billing?.totalAmount != null ? String(o.billing.totalAmount) : (o.billingTotalAmount != null ? String(o.billingTotalAmount) : ""),
+      billingNotes: o.billingNotes || o.billing?.notes || "",
+      noCharge: Boolean(o.noCharge),
+      currentPaymentAmount: "",
+      currentPaymentDate: new Date().toISOString().slice(0, 10),
+      currentPaymentMethod: "",
+      currentPaymentNotes: "",
+      receivedAmount: Number(o.billing?.receivedAmount ?? 0) || 0,
+      wholesaleOrderId: o.wholesaleOrderId ?? undefined,
+      parentWorkOrderId: o.parentWorkOrderId ?? undefined,
       equipmentItems: equipmentItemsFromOrder(o),
       hasElevator: o.hasElevator ?? "",
       description: o.description ?? "",
@@ -1146,6 +1181,15 @@ export default function WorkOrders() {
     if (!hasWorkOrderCustomer(form)) {
       toast({
         title: form.customerMode === "temporary" ? "請填寫臨時客戶姓名與手機" : "請選擇客戶",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (!hasJobTypeSelection(form)) {
+      toast({
+        title: form.jobTypes.includes("其他") && !form.jobTypeOther.trim()
+          ? "選擇「其他」時請填寫類型名稱"
+          : "請至少選擇一種工單類型",
         variant: "destructive",
       });
       return;
@@ -1288,6 +1332,25 @@ export default function WorkOrders() {
             ))}
       </div>
 
+      {!isEngineerView && (
+        <div className="flex gap-1.5 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-none">
+          {["全部", ...WO_JOB_TYPE_OPTIONS].map((t) => (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setJobTypeFilter(t)}
+              className={`text-xs px-3 py-1.5 rounded-full border transition-colors whitespace-nowrap shrink-0 ${
+                jobTypeFilter === t
+                  ? "bg-primary text-primary-foreground border-primary"
+                  : "bg-background border-border hover:bg-muted"
+              }`}
+            >
+              {t === "全部" ? "全部類型" : t}
+            </button>
+          ))}
+        </div>
+      )}
+
       {isEngineerView && (
         <p className="text-xs text-muted-foreground">
           預設顯示進行中（含逾期未完成）。已完成預設最近 30 天。
@@ -1367,10 +1430,22 @@ export default function WorkOrders() {
                     <span className={`text-xs px-2 py-0.5 rounded font-medium ${STATUS_COLORS[statusLabel] ?? STATUS_COLORS[o.status] ?? "bg-gray-100 text-gray-600"}`}>
                       {statusLabel}
                     </span>
-                    {o.projectType && (
-                      <span className={`text-xs px-2 py-0.5 rounded font-medium ${PT_COLORS[o.projectType] ?? "bg-gray-100 text-gray-600"}`}>
-                        {o.projectType}
+                    {(jobTypeLabels(resolveJobTypes({
+                      jobTypes: (o as any).jobTypes ?? (o as any).jobTypesResolved?.types,
+                      jobTypeOther: (o as any).jobTypeOther ?? (o as any).jobTypesResolved?.otherLabel,
+                      projectType: o.projectType,
+                    })) || (o.projectType ? [o.projectType] : [])).map((label) => (
+                      <span
+                        key={label}
+                        className={`text-xs px-2 py-0.5 rounded font-medium ${WO_JOB_TYPE_BADGE_COLORS[label] ?? PT_COLORS[o.projectType ?? ""] ?? "bg-gray-100 text-gray-600"}`}
+                      >
+                        {label}
                       </span>
+                    ))}
+                    {(o as any).wholesaleOrderNumber && (
+                      <Link href={`/wholesale/orders`} className="text-xs px-2 py-0.5 rounded font-medium bg-indigo-50 text-indigo-700">
+                        批發 {(o as any).wholesaleOrderNumber}
+                      </Link>
                     )}
                     {needsCustomer && (
                       <span className="text-xs px-2 py-0.5 rounded font-medium bg-red-50 text-red-700">未綁定客戶</span>
@@ -1500,12 +1575,68 @@ export default function WorkOrders() {
                         )
                       )}
 
-                      <WoIconButton
-                        label="列印派工單"
-                        onClick={() => void printWorkOrderPDF(o, setPdfPreview, toast)}
-                      >
-                        <Printer className="h-4 w-4" />
-                      </WoIconButton>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <span>
+                            <WoIconButton label="列印派工單">
+                              <Printer className="h-4 w-4" />
+                            </WoIconButton>
+                          </span>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          {WO_PRINT_FORMATS.map((fmt) => (
+                            <DropdownMenuItem
+                              key={fmt.id}
+                              onClick={() => {
+                                saveWoPrintFormat(fmt.id);
+                                void printWorkOrderPDF(o, setPdfPreview, toast, fmt.id);
+                              }}
+                            >
+                              {fmt.label}
+                            </DropdownMenuItem>
+                          ))}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                      {(o as any).wholesaleOrderId && !(o as any).deliveryConfirmedAt && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-11 sm:h-9 w-auto px-3 shrink-0"
+                          onClick={async () => {
+                            try {
+                              const res = await authFetch(`/api/work-orders/${o.id}/confirm-delivery`, { method: "POST" });
+                              const data = await res.json().catch(() => ({}));
+                              if (!res.ok) throw new Error(data.error || "出貨確認失敗");
+                              toast({ title: data.alreadyConfirmed ? "此出貨單已確認過" : "已確認出貨（列印不會改變狀態）" });
+                              queryClient.invalidateQueries({ queryKey: getListWorkOrdersQueryKey() });
+                            } catch (err: any) {
+                              toast({ title: err.message || "出貨確認失敗", variant: "destructive" });
+                            }
+                          }}
+                        >
+                          <Truck className="h-4 w-4 mr-1" />出貨確認
+                        </Button>
+                      )}
+                      {(o as any).wholesaleOrderId && (o as any).jobTypesResolved?.types?.includes("送貨／出貨") && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-11 sm:h-9 w-auto px-3 shrink-0"
+                          onClick={async () => {
+                            try {
+                              const res = await authFetch(`/api/work-orders/${o.id}/related-install`, { method: "POST" });
+                              const data = await res.json().catch(() => ({}));
+                              if (!res.ok) throw new Error(data.error || "建立失敗");
+                              toast({ title: `已建立安裝工單 ${data.workOrderNumber || ""}` });
+                              queryClient.invalidateQueries({ queryKey: getListWorkOrdersQueryKey() });
+                            } catch (err: any) {
+                              toast({ title: err.message || "建立安裝工單失敗", variant: "destructive" });
+                            }
+                          }}
+                        >
+                          建立安裝工單
+                        </Button>
+                      )}
                       <WoIconButton
                         label="LINE 分享派工單"
                         className="border-[#06C755]/40"

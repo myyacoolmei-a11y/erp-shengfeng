@@ -3,6 +3,12 @@ import { eq, ilike, or, and, desc, SQL } from "drizzle-orm";
 import {
   db, wholesaleOrdersTable, wholesaleOrderItemsTable, wholesaleReceivablesTable,
 } from "@workspace/db";
+import {
+  createDeliveryWorkOrder,
+  listDeliveryWorkOrders,
+  shippedQtyByWholesaleItem,
+  WholesaleDeliveryError,
+} from "../lib/wholesale/wholesaleDeliveryService.ts";
 import { z } from "zod/v4";
 import { requireFeature } from "../lib/auth";
 import {
@@ -87,7 +93,20 @@ async function getOrderWithItems(id: number) {
   const items = await db.select().from(wholesaleOrderItemsTable)
     .where(eq(wholesaleOrderItemsTable.orderId, id))
     .orderBy(wholesaleOrderItemsTable.sortOrder);
-  return { ...order, items };
+  const shippedMap = await shippedQtyByWholesaleItem(id);
+  const deliveries = await listDeliveryWorkOrders(id);
+  return {
+    ...order,
+    items: items.map((it) => {
+      const shippedQty = shippedMap.get(it.id) ?? 0;
+      return {
+        ...it,
+        shippedQty,
+        pendingQty: Math.max(0, it.qty - shippedQty),
+      };
+    }),
+    deliveries,
+  };
 }
 
 async function maybeCreateReceivable(order: typeof wholesaleOrdersTable.$inferSelect) {
@@ -203,6 +222,47 @@ router.delete("/wholesale/orders/:id", async (req, res): Promise<void> => {
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   await db.delete(wholesaleOrdersTable).where(eq(wholesaleOrdersTable.id, id));
   res.status(204).send();
+});
+
+router.get("/wholesale/orders/:id/deliveries", async (req, res): Promise<void> => {
+  const id = parseId(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const result = await getOrderWithItems(id);
+  if (!result) { res.status(404).json({ error: "找不到批發訂單" }); return; }
+  res.json({
+    orderId: id,
+    orderNumber: result.orderNumber,
+    items: result.items,
+    deliveries: result.deliveries,
+  });
+});
+
+router.post("/wholesale/orders/:id/deliveries", async (req, res): Promise<void> => {
+  const id = parseId(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const items = Array.isArray(req.body?.items) ? req.body.items : [];
+  try {
+    const created = await createDeliveryWorkOrder({
+      wholesaleOrderId: id,
+      items: items.map((it: any) => ({
+        wholesaleOrderItemId: Number(it.wholesaleOrderItemId ?? it.id),
+        shipQty: Number(it.shipQty ?? 0),
+      })),
+      technicians: Array.isArray(req.body?.technicians) ? req.body.technicians : [],
+      primaryTechnician: req.body?.primaryTechnician,
+      extraTechnician: req.body?.extraTechnician,
+      scheduledDate: req.body?.scheduledDate,
+      notes: req.body?.notes,
+      user: req.user,
+    });
+    res.status(201).json(created);
+  } catch (err) {
+    if (err instanceof WholesaleDeliveryError) {
+      res.status(err.status).json({ error: err.message });
+      return;
+    }
+    res.status(500).json({ error: "建立出貨單失敗" });
+  }
 });
 
 export default router;

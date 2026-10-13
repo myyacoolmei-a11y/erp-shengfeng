@@ -7,6 +7,42 @@
  */
 import * as zod from 'zod';
 
+/** Additive 派工單升級欄位（選填，舊客戶端不傳也不影響）。 */
+const workOrderDispatchBodyFields = {
+  jobTypes: zod.array(zod.string()).optional(),
+  jobTypeOther: zod.string().optional().nullable(),
+  primaryTechnician: zod.string().optional().nullable(),
+  extraTechnician: zod.string().optional().nullable(),
+  paymentMethods: zod.array(zod.string()).optional(),
+  paymentMethodOther: zod.string().optional().nullable(),
+  invoiceStatus: zod.string().optional().nullable(),
+  billingTotalAmount: zod.number().optional().nullable(),
+  billingNotes: zod.string().optional().nullable(),
+  noCharge: zod.boolean().optional(),
+  wholesaleOrderId: zod.number().int().optional().nullable(),
+  parentWorkOrderId: zod.number().int().optional().nullable(),
+  currentPaymentAmount: zod.number().optional(),
+  currentPaymentMethod: zod.string().optional(),
+  currentPaymentDate: zod.string().optional(),
+  currentPaymentNotes: zod.string().optional(),
+};
+
+const workOrderEquipmentInputFields = {
+  productId: zod.number().optional(),
+  quoteItemId: zod.number().optional(),
+  category: zod.string().optional(),
+  itemName: zod.string().optional(),
+  brand: zod.string().optional(),
+  model: zod.string().optional(),
+  quantity: zod.number().optional(),
+  unit: zod.string().optional(),
+  notes: zod.string().optional(),
+  indoorUnits: zod.number().optional(),
+  outdoorUnits: zod.number().optional(),
+  floor: zod.string().optional(),
+  sortOrder: zod.number().optional(),
+};
+
 
 /**
  * @summary Health check
@@ -1025,15 +1061,8 @@ export const CreateWorkOrderBody = zod.object({
   "aiNotifySupervisorOnDelay": zod.boolean().optional(),
   "aiReminderRuleSource": zod.enum(["company_default", "custom"]).optional(),
   "aiReminderCustomConfig": zod.record(zod.string(), zod.any()).optional(),
-  "equipmentItems": zod.array(zod.object({
-  "brand": zod.string().optional(),
-  "model": zod.string().optional(),
-  "quantity": zod.number().optional(),
-  "indoorUnits": zod.number().optional(),
-  "outdoorUnits": zod.number().optional(),
-  "floor": zod.string().optional(),
-  "sortOrder": zod.number().optional()
-})).optional()
+  ...workOrderDispatchBodyFields,
+  "equipmentItems": zod.array(zod.object(workOrderEquipmentInputFields)).optional()
 }).refine(
   (data) => !!data.customerId || (!!data.customerName?.trim() && !!data.mobilePhone?.trim()),
   { message: "請選擇正式客戶，或填寫臨時客戶姓名與手機" },
@@ -1184,15 +1213,11 @@ export const UpdateWorkOrderBody = zod.object({
   "aiNotifySupervisorOnDelay": zod.boolean().optional(),
   "aiReminderRuleSource": zod.enum(["company_default", "custom"]).optional(),
   "aiReminderCustomConfig": zod.record(zod.string(), zod.any()).optional(),
-  "equipmentItems": zod.array(zod.object({
-  "brand": zod.string().optional(),
-  "model": zod.string().optional(),
-  "quantity": zod.number().optional(),
-  "indoorUnits": zod.number().optional(),
-  "outdoorUnits": zod.number().optional(),
-  "floor": zod.string().optional(),
-  "sortOrder": zod.number().optional()
-})).optional()
+  "reopenReason": zod.string().optional(),
+  "reopenNote": zod.string().optional(),
+  "adminNotificationNote": zod.string().optional(),
+  ...workOrderDispatchBodyFields,
+  "equipmentItems": zod.array(zod.object(workOrderEquipmentInputFields)).optional()
 })
 
 export const UpdateWorkOrderResponse = zod.object({

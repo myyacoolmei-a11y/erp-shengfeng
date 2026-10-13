@@ -8,6 +8,7 @@ import {
   customersTable,
   quotesTable,
   receivablesTable,
+  wholesaleOrdersTable,
 } from "@workspace/db";
 import { CreateWorkOrderBody, UpdateWorkOrderBody, CreateProgressBody } from "@workspace/api-zod";
 import { requireRoleOrFeature, effectiveRoles } from "../lib/auth";
@@ -37,6 +38,25 @@ import {
   parseAiReminderScenarioIds,
   parseWorkOrderAiReminderCustomConfig,
 } from "../../shared/aiWorkReminder.ts";
+import {
+  deriveProjectTypeFromJobTypes,
+  resolveJobTypes,
+  resolveTechnicians,
+  jobTypeLabels,
+  deriveWoPaymentStatus,
+  remainingBalance,
+  normalizeInvoiceStatus,
+} from "../../shared/workOrderDispatch.ts";
+import {
+  loadWorkOrderBilling,
+  upsertWorkOrderReceivable,
+  recordWorkOrderPayment,
+} from "../lib/workOrders/workOrderBillingService.ts";
+import {
+  confirmDeliveryWorkOrder,
+  createRelatedInstallWorkOrder,
+  WholesaleDeliveryError,
+} from "../lib/wholesale/wholesaleDeliveryService.ts";
 
 const WO_COMPLETED_STATUSES = ["已完成", "已結案"];
 const WO_ADMIN_ROLES = ["super_admin", "owner", "admin"];
@@ -87,6 +107,19 @@ const WO_SELECT = {
   description: workOrdersTable.description,
   notes: workOrdersTable.notes,
   technicians: workOrdersTable.technicians,
+  jobTypes: workOrdersTable.jobTypes,
+  jobTypeOther: workOrdersTable.jobTypeOther,
+  primaryTechnician: workOrdersTable.primaryTechnician,
+  extraTechnician: workOrdersTable.extraTechnician,
+  paymentMethods: workOrdersTable.paymentMethods,
+  paymentMethodOther: workOrdersTable.paymentMethodOther,
+  invoiceStatus: workOrdersTable.invoiceStatus,
+  billingTotalAmount: workOrdersTable.billingTotalAmount,
+  billingNotes: workOrdersTable.billingNotes,
+  noCharge: workOrdersTable.noCharge,
+  wholesaleOrderId: workOrdersTable.wholesaleOrderId,
+  parentWorkOrderId: workOrdersTable.parentWorkOrderId,
+  deliveryConfirmedAt: workOrdersTable.deliveryConfirmedAt,
   estimatedWorkMinutes: workOrdersTable.estimatedWorkMinutes,
   aiReminderEnabled: workOrdersTable.aiReminderEnabled,
   aiReminderScenarioIds: workOrdersTable.aiReminderScenarioIds,
@@ -94,6 +127,7 @@ const WO_SELECT = {
   aiReminderRuleSource: workOrdersTable.aiReminderRuleSource,
   aiReminderCustomConfig: workOrdersTable.aiReminderCustomConfig,
   adminWorkflowStatus: workOrdersTable.adminWorkflowStatus,
+  wholesaleOrderNumber: wholesaleOrdersTable.orderNumber,
   createdAt: workOrdersTable.createdAt,
   updatedAt: workOrdersTable.updatedAt,
 };
@@ -216,7 +250,67 @@ function formatOrder(
     notes: stripQuotePricingFromNotes(rest.notes as string | null | undefined) || null,
     createdAt: isoStr(o.createdAt),
     updatedAt: isoStr(o.updatedAt),
+    deliveryConfirmedAt: isoStr(rest.deliveryConfirmedAt),
+    jobTypesResolved: (() => {
+      const resolved = resolveJobTypes({
+        jobTypes: rest.jobTypes,
+        jobTypeOther: rest.jobTypeOther as string | null,
+        projectType: rest.projectType as string | null,
+      });
+      return { ...resolved, labels: jobTypeLabels(resolved) };
+    })(),
+    techniciansResolved: resolveTechnicians({
+      technicians: rest.technicians as string | null,
+      assignedTo: rest.assignedTo as string | null,
+      assistantTo: rest.assistantTo as string | null,
+      primaryTechnician: rest.primaryTechnician as string | null,
+      extraTechnician: rest.extraTechnician as string | null,
+    }),
+    invoiceStatus: normalizeInvoiceStatus(rest.invoiceStatus as string | null) || rest.invoiceStatus || null,
+    wholesaleOrderNumber: (rest as any).wholesaleOrderNumber ?? null,
+    billing: rest.billing ?? undefined,
   };
+}
+
+async function syncBillingFromPayload(
+  workOrder: { id: number; customerId: number | null; workOrderNumber: string | null; title: string; projectType: string | null; completedDate: string | null },
+  payload: Record<string, unknown>,
+  user: typeof Router extends never ? never : any,
+) {
+  const noCharge = Boolean(payload.noCharge);
+  const totalRaw = payload.billingTotalAmount;
+  const totalAmount = totalRaw == null || totalRaw === "" ? null : Number(totalRaw);
+  await upsertWorkOrderReceivable({
+    workOrderId: workOrder.id,
+    workOrderNumber: workOrder.workOrderNumber,
+    customerId: workOrder.customerId,
+    projectName: workOrder.title,
+    projectType: workOrder.projectType,
+    completionDate: workOrder.completedDate,
+    totalAmount: totalAmount != null && Number.isFinite(totalAmount) ? totalAmount : null,
+    invoiceStatus: typeof payload.invoiceStatus === "string" ? payload.invoiceStatus : null,
+    paymentMethods: Array.isArray(payload.paymentMethods) ? payload.paymentMethods as string[] : null,
+    billingNotes: typeof payload.billingNotes === "string" ? payload.billingNotes : null,
+    noCharge,
+    user,
+  });
+
+  const payAmt = Number(payload.currentPaymentAmount ?? 0);
+  if (payAmt > 0 && user) {
+    const payResult = await recordWorkOrderPayment({
+      workOrderId: workOrder.id,
+      amount: payAmt,
+      paymentDate: typeof payload.currentPaymentDate === "string" && payload.currentPaymentDate
+        ? payload.currentPaymentDate
+        : new Date().toISOString().slice(0, 10),
+      paymentMethod: typeof payload.currentPaymentMethod === "string" ? payload.currentPaymentMethod : undefined,
+      notes: typeof payload.currentPaymentNotes === "string" ? payload.currentPaymentNotes : undefined,
+      user,
+    });
+    if (!payResult.ok) {
+      throw Object.assign(new Error(payResult.error), { status: 400 });
+    }
+  }
 }
 
 async function buildEquipmentInsert(itemInputs: any[], workOrderId: number) {
@@ -259,13 +353,48 @@ async function fetchEquipmentByWorkOrderIds(workOrderIds: number[]) {
 }
 
 /** Strip equipmentItems and optionally clear legacy flat equipment columns */
+const DISPATCH_PAYMENT_TRANSIENT = [
+  "currentPaymentAmount",
+  "currentPaymentMethod",
+  "currentPaymentDate",
+  "currentPaymentNotes",
+];
+
+function applyDispatchFields(result: Record<string, unknown>): Record<string, unknown> {
+  for (const key of DISPATCH_PAYMENT_TRANSIENT) delete result[key];
+
+  const jobTypes = Array.isArray(result.jobTypes) ? (result.jobTypes as string[]) : undefined;
+  const jobTypeOther = typeof result.jobTypeOther === "string" ? result.jobTypeOther : null;
+  if (jobTypes && jobTypes.length > 0) {
+    const derived = deriveProjectTypeFromJobTypes(
+      jobTypes,
+      jobTypeOther,
+      typeof result.projectType === "string" ? result.projectType : null,
+    );
+    if (derived) result.projectType = derived;
+  }
+
+  const extra = typeof result.extraTechnician === "string" ? result.extraTechnician : "";
+  const primary = typeof result.primaryTechnician === "string" ? result.primaryTechnician : "";
+  if (primary && !result.assignedTo) result.assignedTo = primary;
+  if (extra && typeof result.technicians === "string") {
+    try {
+      const arr = JSON.parse(result.technicians);
+      if (Array.isArray(arr) && extra && !arr.includes(extra)) {
+        result.technicians = JSON.stringify([...arr, extra]);
+      }
+    } catch { /* ignore */ }
+  }
+  return result;
+}
+
 function sanitizeWOData<T extends Record<string, unknown>>(
   data: T,
   options?: { clearLegacyEquipment?: boolean },
 ): Record<string, unknown> {
   const DATE_FIELDS = ["scheduledDate", "completedDate"];
   const { equipmentItems: _items, ...rest } = data;
-  const result = { ...rest } as Record<string, unknown>;
+  const result = applyDispatchFields({ ...rest } as Record<string, unknown>);
 
   for (const f of DATE_FIELDS) {
     if (result[f] === "") result[f] = undefined;
@@ -313,6 +442,7 @@ router.get("/work-orders", async (req, res): Promise<void> => {
     .from(workOrdersTable)
     .leftJoin(customersTable, eq(workOrdersTable.customerId, customersTable.id))
     .leftJoin(quotesTable, eq(workOrdersTable.quoteId, quotesTable.id))
+    .leftJoin(wholesaleOrdersTable, eq(workOrdersTable.wholesaleOrderId, wholesaleOrdersTable.id))
     .where(conditions.length > 0 ? and(...conditions) : undefined)
     // 施工日新→舊；無施工日排後面；同日再依建立時間新→舊
     .orderBy(
@@ -357,19 +487,60 @@ router.get("/work-orders", async (req, res): Promise<void> => {
   const equipmentByOrder = await fetchEquipmentByWorkOrderIds(orderIds);
 
   const receivableByWo = new Map<number, number>();
+  const billingByWo = new Map<number, {
+    totalAmount: unknown;
+    receivedAmount: unknown;
+    paymentStatus: string | null;
+    invoiceStatus: string | null;
+    paymentMethod: string | null;
+  }>();
   if (orderIds.length > 0) {
     const recRows = await db
-      .select({ id: receivablesTable.id, workOrderId: receivablesTable.workOrderId })
+      .select({
+        id: receivablesTable.id,
+        workOrderId: receivablesTable.workOrderId,
+        totalAmount: receivablesTable.totalAmount,
+        receivedAmount: receivablesTable.receivedAmount,
+        paymentStatus: receivablesTable.paymentStatus,
+        invoiceStatus: receivablesTable.invoiceStatus,
+        paymentMethod: receivablesTable.paymentMethod,
+      })
       .from(receivablesTable)
       .where(inArray(receivablesTable.workOrderId, orderIds));
     for (const r of recRows) {
       if (r.workOrderId != null && !receivableByWo.has(r.workOrderId)) {
         receivableByWo.set(r.workOrderId, r.id);
+        billingByWo.set(r.workOrderId, r);
       }
     }
   }
 
-  res.json(orders.map(o => formatOrder(o, equipmentByOrder[o.id] ?? [], receivableByWo.get(o.id) ?? null)));
+  res.json(orders.map(o => {
+    const rec = billingByWo.get(o.id);
+    const total = rec ? parseFloat(String(rec.totalAmount ?? "0")) || 0 : (o.billingTotalAmount != null ? parseFloat(String(o.billingTotalAmount)) || 0 : 0);
+    const received = rec ? parseFloat(String(rec.receivedAmount ?? "0")) || 0 : 0;
+    return formatOrder(
+      {
+        ...o,
+        billing: rec || o.noCharge || total
+          ? {
+              totalAmount: total,
+              receivedAmount: received,
+              remainingAmount: remainingBalance(total, received),
+              paymentStatus: deriveWoPaymentStatus({
+                noCharge: Boolean(o.noCharge),
+                totalAmount: total,
+                receivedAmount: received,
+                storedStatus: rec?.paymentStatus ?? null,
+              }),
+              invoiceStatus: normalizeInvoiceStatus(o.invoiceStatus ?? rec?.invoiceStatus) || rec?.invoiceStatus || null,
+            }
+          : undefined,
+      },
+      equipmentByOrder[o.id] ?? [],
+      receivableByWo.get(o.id) ?? null,
+    );
+  }));
 });
 
 router.post("/work-orders", async (req, res): Promise<void> => {
@@ -386,6 +557,16 @@ router.post("/work-orders", async (req, res): Promise<void> => {
 
   if (!parsed.data.customerId && !parsed.data.mobilePhone?.trim()) {
     res.status(400).json({ error: "臨時客戶請填寫手機號碼" });
+    return;
+  }
+
+  const createJobTypes = Array.isArray((parsed.data as any).jobTypes) ? (parsed.data as any).jobTypes as string[] : [];
+  if (createJobTypes.length === 0 && !(parsed.data as any).projectType) {
+    res.status(400).json({ error: "請至少選擇一種工單類型" });
+    return;
+  }
+  if (createJobTypes.includes("其他") && !String((parsed.data as any).jobTypeOther ?? "").trim()) {
+    res.status(400).json({ error: "選擇「其他」時請填寫類型名稱" });
     return;
   }
 
@@ -442,7 +623,18 @@ router.post("/work-orders", async (req, res): Promise<void> => {
     logger.error({ err, workOrderId: updated.id }, "work order create notification failed");
   });
 
-  res.status(201).json(formatOrder({ ...updated, linkedCustomerName: null }, insertedItems));
+  try {
+    await syncBillingFromPayload(updated, orderFields, req.user);
+  } catch (err: any) {
+    logger.error({ err, workOrderId: updated.id }, "work order billing sync failed on create");
+    if (err?.status === 400) {
+      res.status(400).json({ error: err.message, workOrderId: updated.id });
+      return;
+    }
+  }
+
+  const billing = await loadWorkOrderBilling(updated.id);
+  res.status(201).json(formatOrder({ ...updated, linkedCustomerName: null, billing }, insertedItems, billing.receivableId));
 });
 
 /**
@@ -499,6 +691,7 @@ router.get("/work-orders/:id", async (req, res): Promise<void> => {
     .from(workOrdersTable)
     .leftJoin(customersTable, eq(workOrdersTable.customerId, customersTable.id))
     .leftJoin(quotesTable, eq(workOrdersTable.quoteId, quotesTable.id))
+    .leftJoin(wholesaleOrdersTable, eq(workOrdersTable.wholesaleOrderId, wholesaleOrdersTable.id))
     .where(eq(workOrdersTable.id, id));
 
   if (!order) { res.status(404).json({ error: "找不到派工單" }); return; }
@@ -523,7 +716,8 @@ router.get("/work-orders/:id", async (req, res): Promise<void> => {
   });
 
   const equipmentByOrder = await fetchEquipmentByWorkOrderIds([id]);
-  res.json(formatOrder(order, equipmentByOrder[id] ?? []));
+  const billing = await loadWorkOrderBilling(id);
+  res.json(formatOrder({ ...order, billing }, equipmentByOrder[id] ?? [], billing.receivableId));
 });
 
 router.patch("/work-orders/:id", async (req, res): Promise<void> => {
@@ -648,7 +842,18 @@ router.patch("/work-orders/:id", async (req, res): Promise<void> => {
     logger.error({ err, workOrderId: id }, "work order update notification failed");
   });
 
-  res.json(formatOrder({ ...order, linkedCustomerName: null }, equipmentItems));
+  try {
+    await syncBillingFromPayload(order, orderFields, req.user);
+  } catch (err: any) {
+    logger.error({ err, workOrderId: id }, "work order billing sync failed on update");
+    if (err?.status === 400) {
+      res.status(400).json({ error: err.message });
+      return;
+    }
+  }
+
+  const billing = await loadWorkOrderBilling(id);
+  res.json(formatOrder({ ...order, linkedCustomerName: null, billing }, equipmentItems, billing.receivableId));
 });
 
 router.delete("/work-orders/:id", async (req, res): Promise<void> => {
@@ -735,6 +940,69 @@ router.post("/work-orders/:workOrderId/progress", async (req, res): Promise<void
 
   const [entry] = await db.insert(progressTable).values({ ...parsed.data, workOrderId }).returning();
   res.status(201).json({ ...entry, createdAt: isoStr(entry.createdAt) });
+});
+
+router.post("/work-orders/:id/confirm-delivery", async (req, res): Promise<void> => {
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const id = parseInt(raw, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  try {
+    const result = await confirmDeliveryWorkOrder(id, req.user);
+    res.json(result);
+  } catch (err) {
+    if (err instanceof WholesaleDeliveryError) {
+      res.status(err.status).json({ error: err.message });
+      return;
+    }
+    logger.error({ err, workOrderId: id }, "confirm delivery failed");
+    res.status(500).json({ error: "出貨確認失敗" });
+  }
+});
+
+router.post("/work-orders/:id/related-install", async (req, res): Promise<void> => {
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const id = parseInt(raw, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  try {
+    const result = await createRelatedInstallWorkOrder(id);
+    res.status(201).json(result);
+  } catch (err) {
+    if (err instanceof WholesaleDeliveryError) {
+      res.status(err.status).json({ error: err.message });
+      return;
+    }
+    logger.error({ err, workOrderId: id }, "related install failed");
+    res.status(500).json({ error: "建立安裝工單失敗" });
+  }
+});
+
+router.get("/work-orders/:id/billing", async (req, res): Promise<void> => {
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const id = parseInt(raw, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const billing = await loadWorkOrderBilling(id);
+  res.json(billing);
+});
+
+router.post("/work-orders/:id/payments", async (req, res): Promise<void> => {
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const id = parseInt(raw, 10);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  if (!req.user) { res.status(401).json({ error: "請先登入" }); return; }
+  const amount = Number(req.body?.amount ?? 0);
+  const result = await recordWorkOrderPayment({
+    workOrderId: id,
+    amount,
+    paymentDate: String(req.body?.paymentDate || new Date().toISOString().slice(0, 10)),
+    paymentMethod: req.body?.paymentMethod,
+    notes: req.body?.notes,
+    user: req.user,
+  });
+  if (!result.ok) {
+    res.status(400).json({ error: result.error });
+    return;
+  }
+  res.status(201).json(await loadWorkOrderBilling(id));
 });
 
 export default router;

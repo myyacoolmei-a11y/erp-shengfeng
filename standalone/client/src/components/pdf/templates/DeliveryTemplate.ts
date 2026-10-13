@@ -10,7 +10,7 @@ import {
   type PrintCalibration,
 } from "@/lib/printPaperConfig";
 
-export type DeliveryHtmlMode = "digital" | "continuous-print";
+export type DeliveryHtmlMode = "digital" | "continuous-print" | "a4-landscape";
 
 export interface DeliveryHtmlOptions {
   mode?: DeliveryHtmlMode;
@@ -208,6 +208,9 @@ export function buildDeliveryHtml(order: any, options: DeliveryHtmlOptions = {})
   if (mode === "continuous-print") {
     return buildContinuousDeliveryHtml(order, calibration);
   }
+  if (mode === "a4-landscape") {
+    return buildA4DeliveryHtml(order);
+  }
 
   const items: any[] = order.items ?? [];
   const orderNo = order.orderNumber || `DO-${String(order.id).padStart(4, "0")}`;
@@ -369,4 +372,59 @@ tr{page-break-inside:avoid;break-inside:avoid}
 </div>
 </body>
 </html>`;
+}
+
+function buildA4DeliveryHtml(order: any): string {
+  const items: any[] = Array.isArray(order.items) ? order.items : [];
+  const orderNo = order.orderNumber || `DO-${String(order.id).padStart(4, "0")}`;
+  const phone = order.customerPhone || order.mobile || order.telephone || "";
+  const address = order.customerAddress || order.address || "";
+  const rows = items.map((it: any, i: number) => `
+    <tr>
+      <td style="text-align:center">${i + 1}</td>
+      <td>${esc(itemName(it))}</td>
+      <td>${esc(it.model || "")}</td>
+      <td style="text-align:center">${it.qty ?? 1}${it.unit ? " " + esc(it.unit) : ""}</td>
+      <td style="text-align:right">${esc(fmtMoney(Number(it.unitPrice ?? 0)))}</td>
+      <td style="text-align:right">${esc(fmtMoney(lineAmount(it)))}</td>
+    </tr>`).join("");
+  return `<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>出貨單 ${esc(orderNo)}</title>
+${printFontLinksHtml()}
+<style>
+@page{size:A4 landscape;margin:10mm 12mm}
+body{font-family:${PRINT_CJK_FONT_STACK};font-size:12.5pt;font-weight:400;color:#000;margin:0;font-synthesis:none}
+h1{font-size:19pt;font-weight:600;text-align:center;margin:0 0 3mm}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:1.5mm 8mm;margin-bottom:3mm}
+.lbl{font-weight:500}
+table{width:100%;border-collapse:collapse}
+th,td{border:.35pt solid #333;padding:2mm;font-weight:400}
+th{font-weight:500;background:#f7f7f7}
+.sigs{display:grid;grid-template-columns:1fr 1fr;gap:12mm;margin-top:8mm}
+.sig-line{border-bottom:.35pt solid #000;height:14mm}
+</style>
+</head>
+<body>
+<h1>晟風空調工程｜出貨單</h1>
+<div class="grid">
+  <div><span class="lbl">出貨單號：</span>${esc(orderNo)}</div>
+  <div><span class="lbl">日期：</span>${esc(order.orderDate || today())}</div>
+  <div><span class="lbl">客戶：</span>${dash(order.customerName)}</div>
+  <div><span class="lbl">電話：</span>${esc(phone || "—")}</div>
+  <div style="grid-column:1/-1"><span class="lbl">地址：</span>${dash(address)}</div>
+  ${order.wholesaleOrderNumber || order.orderNumber ? `<div style="grid-column:1/-1"><span class="lbl">批發訂單：</span>${esc(order.orderNumber || "")}</div>` : ""}
+</div>
+<table>
+  <thead><tr><th>項次</th><th>品項名稱</th><th>規格／型號</th><th>數量</th><th>單價</th><th>小計</th></tr></thead>
+  <tbody>${rows || `<tr><td colspan="6">（無商品）</td></tr>`}</tbody>
+</table>
+${order.notes ? `<p>備註：${esc(order.notes)}</p>` : ""}
+<div class="sigs">
+  <div>客戶簽收<div class="sig-line"></div></div>
+  <div>經手簽名<div class="sig-line"></div></div>
+</div>
+</body></html>`;
 }
