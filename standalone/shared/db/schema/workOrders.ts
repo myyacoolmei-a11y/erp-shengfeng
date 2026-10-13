@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, timestamp, date, boolean, jsonb } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, timestamp, date, boolean, jsonb, numeric } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 import { customersTable } from "./customers";
@@ -34,6 +34,21 @@ export const workOrdersTable = pgTable("work_orders", {
   description: text("description"),
   notes: text("notes"),
   technicians: text("technicians"),
+  /** Multi-select 工單類型：安裝／保養／維修／送貨／出貨／其他。舊單可為 null。 */
+  jobTypes: jsonb("job_types").$type<string[] | null>(),
+  jobTypeOther: text("job_type_other"),
+  primaryTechnician: text("primary_technician"),
+  extraTechnician: text("extra_technician"),
+  paymentMethods: jsonb("payment_methods").$type<string[] | null>(),
+  paymentMethodOther: text("payment_method_other"),
+  invoiceStatus: text("invoice_status"),
+  billingTotalAmount: numeric("billing_total_amount", { precision: 12, scale: 2 }),
+  billingNotes: text("billing_notes"),
+  noCharge: boolean("no_charge").notNull().default(false),
+  wholesaleOrderId: integer("wholesale_order_id"),
+  parentWorkOrderId: integer("parent_work_order_id"),
+  deliveryConfirmedAt: timestamp("delivery_confirmed_at", { withTimezone: true }),
+  deliveryConfirmedBy: integer("delivery_confirmed_by").references(() => usersTable.id, { onDelete: "set null" }),
   estimatedWorkMinutes: integer("estimated_work_minutes"),
   aiReminderEnabled: boolean("ai_reminder_enabled").notNull().default(false),
   aiReminderScenarioIds: text("ai_reminder_scenario_ids"),

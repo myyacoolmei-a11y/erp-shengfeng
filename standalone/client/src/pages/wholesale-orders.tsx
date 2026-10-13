@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import {
   useListWholesaleOrders, useCreateWholesaleOrder, useUpdateWholesaleOrder,
   useDeleteWholesaleOrder, useGetWholesaleOrder,
-  useListWholesaleCustomers, useListWholesaleProducts,
+  useListWholesaleCustomers, useListWholesaleProducts, useListEmployees,
   getListWholesaleOrdersQueryKey,
   getGetWholesaleOrderQueryKey, getWholesaleOrder,
 } from "@workspace/api-client-react";
@@ -18,7 +18,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Pencil, Trash2, Search, ShoppingCart, X, CreditCard, Printer, Share2 } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, ShoppingCart, X, CreditCard, Printer, Share2, Truck } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/auth-context";
 import { PdfPreviewDialog } from "@/components/pdf/pdf-preview-dialog";
@@ -230,6 +232,14 @@ export default function WholesaleOrders() {
   const [payNote, setPayNote] = useState("");
   const [paying, setPaying] = useState(false);
   const [deletingPaymentId, setDeletingPaymentId] = useState<number | null>(null);
+  const [deliveryOrder, setDeliveryOrder] = useState<any | null>(null);
+  const [deliveryQtys, setDeliveryQtys] = useState<Record<number, number>>({});
+  const [deliveryTechs, setDeliveryTechs] = useState<string[]>([]);
+  const [deliveryPrimary, setDeliveryPrimary] = useState("");
+  const [deliveryExtra, setDeliveryExtra] = useState("");
+  const [deliveryDate, setDeliveryDate] = useState(todayStr());
+  const [deliveryNotes, setDeliveryNotes] = useState("");
+  const [deliverySaving, setDeliverySaving] = useState(false);
 
   const { data: orders, isLoading } = useListWholesaleOrders({
     ...(search ? { search } : {}),
@@ -243,6 +253,8 @@ export default function WholesaleOrders() {
 
   const { data: customers } = useListWholesaleCustomers({});
   const { data: products } = useListWholesaleProducts({ forSelection: "true" });
+  const { data: employees } = useListEmployees();
+  const technicianOptions = (employees ?? []).filter((e: any) => e.position?.includes("技師") && e.status !== "離職");
   const { data: orderPayments = [], isPending: paymentsPending, refetch: refetchOrderPayments } = useQuery({
     queryKey: ["wholesale-order-payments", receivableOrderId],
     queryFn: () => listWholesalePaymentsByOrder(receivableOrderId!),
@@ -425,6 +437,31 @@ export default function WholesaleOrders() {
                       <Button
                         variant="outline"
                         size="sm"
+                        className="h-7 gap-1 text-xs"
+                        onClick={async () => {
+                          try {
+                            const full = await getWholesaleOrder(o.id);
+                            const qtys: Record<number, number> = {};
+                            for (const it of (full as any).items ?? []) {
+                              qtys[it.id] = it.pendingQty ?? Math.max(0, (it.qty ?? 0) - (it.shippedQty ?? 0));
+                            }
+                            setDeliveryQtys(qtys);
+                            setDeliveryTechs([]);
+                            setDeliveryPrimary("");
+                            setDeliveryExtra("");
+                            setDeliveryDate((full as any).expectedDelivery || todayStr());
+                            setDeliveryNotes("");
+                            setDeliveryOrder(full);
+                          } catch {
+                            toast({ title: "無法載入訂單", variant: "destructive" });
+                          }
+                        }}
+                      >
+                        <Truck className="h-3 w-3" />建立出貨單
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
                         className={`h-7 gap-1 text-xs ${
                           o.status === "已出貨" && normalizeWholesalePaymentStatus(o.paymentStatus) === "已收清"
                             ? "text-green-700 border-green-200 hover:bg-green-50"
@@ -437,7 +474,16 @@ export default function WholesaleOrders() {
                         <CreditCard className="h-3 w-3" />{receivableButtonLabel(o)}
                       </Button>
                       <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-destructive hover:text-destructive" onClick={() => setDeleteId(o.id)}><Trash2 className="h-3 w-3" />刪除</Button>
-                      <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" title="列印出貨單" onClick={() => printOrder(o, setPdfPreview, toast, customers)}><Printer className="h-3 w-3" />列印</Button>
+                      <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" title="列印出貨單（點陣紙）" onClick={() => printOrder(o, setPdfPreview, toast, customers)}><Printer className="h-3 w-3" />列印</Button>
+                      <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs" title="A4 橫式出貨單" onClick={async () => {
+                        try {
+                          const full = await loadOrderForPrint(o, customers);
+                          const { printDeliveryDocument } = await import("@/lib/workOrderPrint");
+                          await printDeliveryDocument(full, "a4-landscape", setPdfPreview, toast);
+                        } catch {
+                          toast({ title: "無法載入出貨單", variant: "destructive" });
+                        }
+                      }}>A4</Button>
                       <Button variant="ghost" size="sm" className="h-7 gap-1 text-xs text-green-600 hover:text-green-700" title="LINE 分享出貨單" onClick={() => shareOrderViaLine(o, setPdfPreview, toast, customers)}><Share2 className="h-3 w-3" />LINE</Button>
                     </div>
                   )}
@@ -736,6 +782,127 @@ export default function WholesaleOrders() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={!!deliveryOrder} onOpenChange={(open) => { if (!open) setDeliveryOrder(null); }}>
+        <DialogContent className="max-w-lg w-[calc(100vw-1rem)]">
+          <DialogHeader>
+            <DialogTitle>建立出貨單（派工單）</DialogTitle>
+          </DialogHeader>
+          {deliveryOrder && (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                客戶：{deliveryOrder.customerName || "—"}　訂單：{deliveryOrder.orderNumber}
+              </p>
+              <div className="border rounded-md divide-y text-sm">
+                {(deliveryOrder.items ?? []).map((it: any) => {
+                  const pending = it.pendingQty ?? Math.max(0, (it.qty ?? 0) - (it.shippedQty ?? 0));
+                  return (
+                    <div key={it.id} className="p-2 space-y-1">
+                      <p className="font-medium">{it.productName} {it.model || ""}</p>
+                      <p className="text-xs text-muted-foreground">訂購 {it.qty}{it.unit || ""}　已出貨 {it.shippedQty ?? 0}　待出貨 {pending}</p>
+                      <div className="flex items-center gap-2">
+                        <Label className="text-xs shrink-0">本次出貨</Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          max={pending}
+                          className="h-8"
+                          value={deliveryQtys[it.id] ?? 0}
+                          onChange={(e) => setDeliveryQtys((q) => ({ ...q, [it.id]: parseInt(e.target.value, 10) || 0 }))}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {(deliveryOrder.deliveries ?? []).length > 0 && (
+                <div className="text-xs space-y-1">
+                  <p className="font-medium">已建立出貨單</p>
+                  {deliveryOrder.deliveries.map((d: any) => (
+                    <Link key={d.id} href="/work-orders" className="block text-blue-600 hover:underline">
+                      {d.workOrderNumber || `#${d.id}`} {d.deliveryConfirmedAt ? "（已確認出貨）" : "（未確認）"}
+                    </Link>
+                  ))}
+                </div>
+              )}
+              <div className="space-y-1">
+                <Label>配送師傅</Label>
+                <div className="border rounded-md p-2 max-h-32 overflow-y-auto space-y-1">
+                  {technicianOptions.map((emp: any) => (
+                    <div key={emp.id} className="flex items-center gap-2">
+                      <Checkbox
+                        checked={deliveryTechs.includes(emp.name)}
+                        onCheckedChange={() => {
+                          setDeliveryTechs((list) =>
+                            list.includes(emp.name) ? list.filter((n) => n !== emp.name) : [...list, emp.name],
+                          );
+                          if (!deliveryPrimary) setDeliveryPrimary(emp.name);
+                        }}
+                      />
+                      <span className="text-sm flex-1">{emp.name}</span>
+                      {deliveryTechs.includes(emp.name) && (
+                        <label className="text-xs flex items-center gap-1">
+                          <input type="radio" checked={deliveryPrimary === emp.name} onChange={() => setDeliveryPrimary(emp.name)} />
+                          負責人
+                        </label>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <Input placeholder="其他外包師傅" value={deliveryExtra} onChange={(e) => setDeliveryExtra(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label>出貨日期</Label>
+                <Input type="date" value={deliveryDate} onChange={(e) => setDeliveryDate(e.target.value)} />
+              </div>
+              <div className="space-y-1">
+                <Label>備註</Label>
+                <Textarea rows={2} value={deliveryNotes} onChange={(e) => setDeliveryNotes(e.target.value)} />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeliveryOrder(null)}>取消</Button>
+            <Button
+              disabled={deliverySaving}
+              onClick={async () => {
+                if (!deliveryOrder) return;
+                setDeliverySaving(true);
+                try {
+                  const token = localStorage.getItem("erp_auth_token");
+                  const res = await fetch(`/api/wholesale/orders/${deliveryOrder.id}/deliveries`, {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                    },
+                    body: JSON.stringify({
+                      items: (deliveryOrder.items ?? []).map((it: any) => ({
+                        wholesaleOrderItemId: it.id,
+                        shipQty: deliveryQtys[it.id] ?? 0,
+                      })),
+                      technicians: deliveryTechs,
+                      primaryTechnician: deliveryPrimary,
+                      extraTechnician: deliveryExtra,
+                      scheduledDate: deliveryDate,
+                      notes: deliveryNotes,
+                    }),
+                  });
+                  const data = await res.json().catch(() => ({}));
+                  if (!res.ok) throw new Error(data.error || "建立失敗");
+                  toast({ title: `已建立出貨派工單 ${data.workOrderNumber || ""}` });
+                  setDeliveryOrder(null);
+                  invOrders();
+                } catch (err: any) {
+                  toast({ title: err.message || "建立出貨單失敗", variant: "destructive" });
+                } finally {
+                  setDeliverySaving(false);
+                }
+              }}
+            >建立出貨單</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <PdfPreviewDialog
         open={!!pdfPreview}

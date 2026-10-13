@@ -86,7 +86,8 @@ export async function recordReceivablePayment(opts: {
       paymentDate: opts.paymentDate,
       paymentMethod: opts.paymentMethod ?? current.paymentMethod ?? undefined,
       notes: paymentNotes,
-    });
+      recordedBy: opts.user.displayName || opts.user.username || null,
+    } as any);
   });
 
   await writeAuditLog({

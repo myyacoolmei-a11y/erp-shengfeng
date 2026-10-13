@@ -13,6 +13,16 @@ import { CustomerSelector, type CustomerSelectorValue } from "@/components/custo
 import { stripQuotePricingFromNotes, categoryToProjectType, deriveQuoteCustomer } from "../../../shared/workOrderNotes.ts";
 import { DEFAULT_AI_REMINDER_SCENARIO_IDS, type AiReminderRuleSource } from "@/lib/aiWorkReminderSettings";
 import { WorkOrderAiReminderSection } from "@/components/work-orders/WorkOrderAiReminderSection";
+import {
+  WO_JOB_TYPE_OPTIONS,
+  WO_PAYMENT_METHOD_OPTIONS,
+  WO_INVOICE_STATUSES,
+  deriveProjectTypeFromJobTypes,
+  deriveWoPaymentStatus,
+  remainingBalance,
+  resolveJobTypes,
+  buildTechniciansPayload,
+} from "../../../shared/workOrderDispatch.ts";
 
 export const WO_STATUSES = ["待派工", "待施工", "施工中", "異常／暫停", "已完成", "已結案"];
 export const WO_PROJECT_TYPES = ["新裝", "維修", "保養", "遷機", "清洗", "保固服務"];
@@ -137,7 +147,24 @@ export function makeEmpty() {
     scheduledTime: "",
     completedDate: "",
     technicians: [] as string[],
+    primaryTechnician: "",
+    extraTechnician: "",
+    jobTypes: [] as string[],
+    jobTypeOther: "",
     projectType: "",
+    paymentMethods: [] as string[],
+    paymentMethodOther: "",
+    invoiceStatus: "",
+    billingTotalAmount: "" as string,
+    billingNotes: "",
+    noCharge: false,
+    currentPaymentAmount: "",
+    currentPaymentDate: new Date().toISOString().slice(0, 10),
+    currentPaymentMethod: "",
+    currentPaymentNotes: "",
+    receivedAmount: 0,
+    wholesaleOrderId: undefined as number | undefined,
+    parentWorkOrderId: undefined as number | undefined,
     equipmentItems: [defaultEquipmentItem()] as EquipmentItemForm[],
     hasElevator: "",
     description: "",
@@ -162,11 +189,24 @@ export function hasWorkOrderCustomer(f: WOForm): boolean {
   return f.customerId > 0 || (f.customerName.trim().length > 0 && f.mobilePhone.trim().length > 0);
 }
 
+export function hasJobTypeSelection(f: WOForm): boolean {
+  if (f.jobTypes.length > 0) {
+    if (f.jobTypes.includes("其他") && !f.jobTypeOther.trim()) return false;
+    return true;
+  }
+  return !!f.projectType;
+}
+
 export function buildPayload(f: WOForm) {
-  const title = f.title.trim() || `${f.projectType || "派工"} 派工單`;
+  const projectType = deriveProjectTypeFromJobTypes(f.jobTypes, f.jobTypeOther, f.projectType) || f.projectType || undefined;
+  const title = f.title.trim() || `${projectType || "派工"} 派工單`;
   const isLinked = (f.customerMode === "existing" || f.customerMode == null) && f.customerId > 0;
   // Snapshot name/phone/address even when linked — display + repair orphans.
   const snapshotName = (f.customerName || "").trim();
+  const techPayload = buildTechniciansPayload(f.technicians, f.extraTechnician);
+  const primary = f.primaryTechnician.trim() || techPayload.assignedTo;
+  const billingTotal = f.noCharge ? 0 : (f.billingTotalAmount.trim() === "" ? undefined : parseFloat(f.billingTotalAmount));
+  const currentPay = f.currentPaymentAmount.trim() === "" ? undefined : parseFloat(f.currentPaymentAmount);
   return {
     customerId: isLinked ? f.customerId : null,
     customerName: isLinked
@@ -182,10 +222,26 @@ export function buildPayload(f: WOForm) {
     scheduledDate: f.scheduledDate || undefined,
     scheduledTime: f.scheduledTime || undefined,
     completedDate: f.completedDate || undefined,
-    assignedTo: f.technicians[0] || undefined,
-    assistantTo: f.technicians[1] || undefined,
-    technicians: f.technicians.length > 0 ? JSON.stringify(f.technicians) : undefined,
-    projectType: f.projectType || undefined,
+    assignedTo: primary || techPayload.assignedTo,
+    assistantTo: techPayload.assistantTo,
+    technicians: techPayload.technicians,
+    primaryTechnician: primary || undefined,
+    extraTechnician: f.extraTechnician.trim() || undefined,
+    jobTypes: f.jobTypes.length > 0 ? f.jobTypes : undefined,
+    jobTypeOther: f.jobTypes.includes("其他") ? (f.jobTypeOther.trim() || undefined) : undefined,
+    projectType,
+    paymentMethods: f.paymentMethods.length > 0 ? f.paymentMethods : undefined,
+    paymentMethodOther: f.paymentMethods.includes("其他") ? (f.paymentMethodOther.trim() || undefined) : undefined,
+    invoiceStatus: f.invoiceStatus || undefined,
+    billingTotalAmount: billingTotal != null && Number.isFinite(billingTotal) ? billingTotal : undefined,
+    billingNotes: f.billingNotes.trim() || undefined,
+    noCharge: f.noCharge,
+    currentPaymentAmount: currentPay != null && Number.isFinite(currentPay) && currentPay > 0 ? currentPay : undefined,
+    currentPaymentMethod: f.currentPaymentMethod || undefined,
+    currentPaymentDate: f.currentPaymentDate || undefined,
+    currentPaymentNotes: f.currentPaymentNotes.trim() || undefined,
+    wholesaleOrderId: f.wholesaleOrderId,
+    parentWorkOrderId: f.parentWorkOrderId,
     hasElevator: f.hasElevator || undefined,
     description: f.description || undefined,
     notes: f.notes || undefined,
@@ -556,6 +612,18 @@ export function WorkOrderFormFields({
       projectType: quote.items?.[0]?.category
         ? categoryToProjectType(quote.items[0].category)
         : f.projectType,
+      jobTypes: (() => {
+        const pt = quote.items?.[0]?.category
+          ? categoryToProjectType(quote.items[0].category)
+          : f.projectType;
+        return resolveJobTypes({ projectType: pt, jobTypes: f.jobTypes }).types;
+      })(),
+      jobTypeOther: (() => {
+        const pt = quote.items?.[0]?.category
+          ? categoryToProjectType(quote.items[0].category)
+          : f.projectType;
+        return resolveJobTypes({ projectType: pt, jobTypes: f.jobTypes }).otherLabel || f.jobTypeOther;
+      })(),
       description: quote.description || f.description || "",
       notes: stripQuotePricingFromNotes(notesParts.join("\n\n")) || f.notes,
       equipmentItems: (quote.items ?? []).length > 0
@@ -579,11 +647,36 @@ export function WorkOrderFormFields({
   }
 
   function toggleTechnician(name: string) {
+    setForm(f => {
+      const next = f.technicians.includes(name)
+        ? f.technicians.filter(n => n !== name)
+        : [...f.technicians, name];
+      const primary = next.includes(f.primaryTechnician) ? f.primaryTechnician : (next[0] ?? "");
+      return { ...f, technicians: next, primaryTechnician: primary };
+    });
+  }
+
+  function toggleJobType(type: string) {
+    setForm(f => {
+      const next = f.jobTypes.includes(type)
+        ? f.jobTypes.filter(t => t !== type)
+        : [...f.jobTypes, type];
+      const jobTypeOther = type === "其他" && !next.includes("其他") ? "" : f.jobTypeOther;
+      return {
+        ...f,
+        jobTypes: next,
+        jobTypeOther,
+        projectType: deriveProjectTypeFromJobTypes(next, jobTypeOther, f.projectType) || f.projectType,
+      };
+    });
+  }
+
+  function togglePaymentMethod(method: string) {
     setForm(f => ({
       ...f,
-      technicians: f.technicians.includes(name)
-        ? f.technicians.filter(n => n !== name)
-        : [...f.technicians, name],
+      paymentMethods: f.paymentMethods.includes(method)
+        ? f.paymentMethods.filter(m => m !== method)
+        : [...f.paymentMethods, method],
     }));
   }
 
@@ -786,12 +879,33 @@ export function WorkOrderFormFields({
           <Label>完成日期</Label>
           <Input type="date" value={form.completedDate} onChange={e => setForm(f => ({ ...f, completedDate: e.target.value }))} />
         </div>
-        <div className="space-y-1">
-          <Label>工程類型</Label>
-          <Select value={form.projectType} onValueChange={v => setForm(f => ({ ...f, projectType: v }))}>
-            <SelectTrigger><SelectValue placeholder="選擇類型" /></SelectTrigger>
-            <SelectContent>{WO_PROJECT_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
-          </Select>
+        <div className="space-y-1 sm:col-span-3">
+          <Label>工單類型 <span className="text-destructive">*</span></Label>
+          <div className="border rounded-md p-2 grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+            {WO_JOB_TYPE_OPTIONS.map(type => (
+              <div key={type} className="flex items-center gap-2">
+                <Checkbox
+                  id={`job-${type}`}
+                  checked={form.jobTypes.includes(type)}
+                  onCheckedChange={() => toggleJobType(type)}
+                />
+                <label htmlFor={`job-${type}`} className="text-sm cursor-pointer">{type}</label>
+              </div>
+            ))}
+          </div>
+          {form.jobTypes.includes("其他") && (
+            <Input
+              className="mt-1"
+              placeholder="其他類型名稱，例如：遷機"
+              value={form.jobTypeOther}
+              onChange={e => setForm(f => ({
+                ...f,
+                jobTypeOther: e.target.value,
+                projectType: deriveProjectTypeFromJobTypes(f.jobTypes, e.target.value, f.projectType) || f.projectType,
+              }))}
+            />
+          )}
+          <p className="text-xs text-muted-foreground">可複選。舊工單若僅有工程類型也會自動對應顯示。</p>
         </div>
         <div className="space-y-1">
           <Label>工程名稱</Label>
@@ -803,11 +917,11 @@ export function WorkOrderFormFields({
         </div>
       </div>
 
-      {/* ── 施工技師 ── */}
+      {/* ── 施工師傅 ── */}
       <div className="space-y-1">
-        <Label>施工技師</Label>
+        <Label>施工師傅</Label>
         {technicianOptions.length > 0 ? (
-          <div className="border rounded-md p-2 max-h-36 overflow-y-auto space-y-1.5">
+          <div className="border rounded-md p-2 max-h-44 overflow-y-auto space-y-1.5">
             {technicianOptions.map(emp => (
               <div key={emp.id} className="flex items-center gap-2">
                 <Checkbox
@@ -815,15 +929,43 @@ export function WorkOrderFormFields({
                   checked={form.technicians.includes(emp.name)}
                   onCheckedChange={() => toggleTechnician(emp.name)}
                 />
-                <label htmlFor={`tech-${emp.id}`} className="text-sm cursor-pointer">{emp.name}</label>
+                <label htmlFor={`tech-${emp.id}`} className="text-sm cursor-pointer flex-1">{emp.name}</label>
+                {form.technicians.includes(emp.name) && (
+                  <label className="text-xs text-muted-foreground flex items-center gap-1">
+                    <input
+                      type="radio"
+                      name="primary-tech"
+                      checked={form.primaryTechnician === emp.name}
+                      onChange={() => setForm(f => ({ ...f, primaryTechnician: emp.name }))}
+                    />
+                    主要負責
+                  </label>
+                )}
               </div>
             ))}
           </div>
         ) : (
           <p className="text-xs text-muted-foreground border rounded-md p-2">尚無在職技師資料（請至員工管理新增職位為「師傅技師」的員工）</p>
         )}
-        {form.technicians.length > 0 && (
-          <p className="text-xs text-muted-foreground">已選：{form.technicians.join("、")}</p>
+        <div className="flex items-center gap-2 pt-1">
+          <Checkbox
+            id="extra-tech"
+            checked={!!form.extraTechnician}
+            onCheckedChange={(v) => setForm(f => ({ ...f, extraTechnician: v ? (f.extraTechnician || " ") : "" }))}
+          />
+          <Label htmlFor="extra-tech" className="text-sm font-normal">其他外包師傅</Label>
+          <Input
+            className="h-8 flex-1"
+            placeholder="手動輸入姓名"
+            value={form.extraTechnician}
+            onChange={e => setForm(f => ({ ...f, extraTechnician: e.target.value }))}
+          />
+        </div>
+        {(form.technicians.length > 0 || form.extraTechnician.trim()) && (
+          <p className="text-xs text-muted-foreground">
+            已選：{[...form.technicians, form.extraTechnician.trim()].filter(Boolean).join("、")}
+            {form.primaryTechnician ? `　主要負責人：${form.primaryTechnician}` : ""}
+          </p>
         )}
       </div>
 
@@ -888,6 +1030,130 @@ export function WorkOrderFormFields({
             onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
           />
         </div>
+      </div>
+
+      {/* ── 工程收費／收款 ── */}
+      <SectionHeading>工程收費與收款</SectionHeading>
+      <div className="space-y-3">
+        <div className="flex items-center gap-2">
+          <Checkbox
+            id="no-charge"
+            checked={form.noCharge}
+            onCheckedChange={(v) => setForm(f => ({ ...f, noCharge: Boolean(v) }))}
+          />
+          <Label htmlFor="no-charge" className="text-sm font-normal">無須收款</Label>
+        </div>
+        <div className="space-y-1">
+          <Label>收款方式（可複選）</Label>
+          <div className="border rounded-md p-2 grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+            {WO_PAYMENT_METHOD_OPTIONS.map(method => (
+              <div key={method} className="flex items-center gap-2">
+                <Checkbox
+                  id={`pay-${method}`}
+                  checked={form.paymentMethods.includes(method)}
+                  onCheckedChange={() => togglePaymentMethod(method)}
+                  disabled={form.noCharge}
+                />
+                <label htmlFor={`pay-${method}`} className="text-sm cursor-pointer">{method}</label>
+              </div>
+            ))}
+          </div>
+          {form.paymentMethods.includes("其他") && (
+            <Input
+              placeholder="其他收款方式"
+              value={form.paymentMethodOther}
+              onChange={e => setForm(f => ({ ...f, paymentMethodOther: e.target.value }))}
+            />
+          )}
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+          <div className="space-y-1">
+            <Label>應收總金額</Label>
+            <Input
+              type="number"
+              min={0}
+              disabled={form.noCharge}
+              value={form.billingTotalAmount}
+              onChange={e => setForm(f => ({ ...f, billingTotalAmount: e.target.value }))}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label>累計已收</Label>
+            <Input readOnly value={form.receivedAmount ? String(form.receivedAmount) : "0"} />
+          </div>
+          <div className="space-y-1">
+            <Label>未收餘額</Label>
+            <Input
+              readOnly
+              value={String(remainingBalance(parseFloat(form.billingTotalAmount || "0") || 0, form.receivedAmount || 0))}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label>本次收款金額</Label>
+            <Input
+              type="number"
+              min={0}
+              disabled={form.noCharge}
+              value={form.currentPaymentAmount}
+              onChange={e => setForm(f => ({ ...f, currentPaymentAmount: e.target.value }))}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label>收款日期</Label>
+            <Input
+              type="date"
+              disabled={form.noCharge}
+              value={form.currentPaymentDate}
+              onChange={e => setForm(f => ({ ...f, currentPaymentDate: e.target.value }))}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label>本次收款方式</Label>
+            <Select
+              value={form.currentPaymentMethod}
+              onValueChange={v => setForm(f => ({ ...f, currentPaymentMethod: v }))}
+              disabled={form.noCharge}
+            >
+              <SelectTrigger><SelectValue placeholder="選擇" /></SelectTrigger>
+              <SelectContent>
+                {WO_PAYMENT_METHOD_OPTIONS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <div className="space-y-1">
+          <Label>收款備註／客戶備註</Label>
+          <Textarea
+            rows={2}
+            value={form.billingNotes}
+            onChange={e => setForm(f => ({ ...f, billingNotes: e.target.value }))}
+            placeholder="訂金／尾款說明…"
+          />
+        </div>
+        <div className="space-y-1">
+          <Label>發票狀態（與支票付款分開）</Label>
+          <div className="flex flex-wrap gap-3">
+            {WO_INVOICE_STATUSES.map(s => (
+              <label key={s} className="text-sm flex items-center gap-1.5">
+                <input
+                  type="radio"
+                  name="invoice-status"
+                  checked={form.invoiceStatus === s}
+                  onChange={() => setForm(f => ({ ...f, invoiceStatus: s }))}
+                />
+                {s}
+              </label>
+            ))}
+          </div>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          收款狀態：{deriveWoPaymentStatus({
+            noCharge: form.noCharge,
+            totalAmount: parseFloat(form.billingTotalAmount || "0") || 0,
+            receivedAmount: form.receivedAmount || 0,
+          })}
+          （依實際收款紀錄計算，勾選付款方式不會自動變成已收款）
+        </p>
       </div>
 
     </div>

@@ -160,6 +160,16 @@ export const PRINT_CJK_FONT_FACE_CSS = `
   unicode-range:U+3000-303F,U+3400-4DBF,U+4E00-9FFF,U+F900-FAFF,U+FF00-FFEF;
 }
 @font-face{
+  font-family:"Noto Sans TC";font-style:normal;font-weight:500;font-stretch:100%;font-display:block;
+  src:url("/fonts/NotoSansTC-TC-400.woff2") format("woff2");
+  unicode-range:U+3000-303F,U+3400-4DBF,U+4E00-9FFF,U+F900-FAFF,U+FF00-FFEF;
+}
+@font-face{
+  font-family:"Noto Sans TC";font-style:normal;font-weight:600;font-stretch:100%;font-display:block;
+  src:url("/fonts/NotoSansTC-TC-400.woff2") format("woff2");
+  unicode-range:U+3000-303F,U+3400-4DBF,U+4E00-9FFF,U+F900-FAFF,U+FF00-FFEF;
+}
+@font-face{
   font-family:"Noto Sans TC";font-style:normal;font-weight:700;font-stretch:100%;font-display:block;
   src:url("/fonts/NotoSansTC-TC-700.woff2") format("woff2");
   unicode-range:U+3000-303F,U+3400-4DBF,U+4E00-9FFF,U+F900-FAFF,U+FF00-FFEF;

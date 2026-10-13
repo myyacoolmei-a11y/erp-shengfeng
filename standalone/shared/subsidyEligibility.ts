@@ -10,7 +10,10 @@ export function isMaintenanceProjectType(projectType: string | null | undefined)
 
 /** 保養案件整個補助 workflow 不適用。 */
 export function isSubsidyApplicableForProjectType(projectType: string | null | undefined): boolean {
-  return !isMaintenanceProjectType(projectType);
+  const t = (projectType ?? "").trim();
+  if (isMaintenanceProjectType(t)) return false;
+  if (t === "送貨／出貨" || t === "送貨/出貨") return false;
+  return true;
 }
 
 /**
