@@ -78,7 +78,8 @@ const multi = {
   description: "安裝室內機並做保養",
   notes: "負責業務：洪宇風\n請小心磁磚",
   paymentMethods: ["現金", "銀行匯款"],
-  billing: { totalAmount: 20000, receivedAmount: 5000, paymentStatus: "部分收款", payments: [{ paymentMethod: "銀行匯款", amount: 5000 }] },
+  billingNotes: "請於完工後收款",
+  billing: { totalAmount: 20000, receivedAmount: 5000, paymentStatus: "部分收款", notes: "請於完工後收款", payments: [{ paymentMethod: "銀行匯款", amount: 5000 }] },
   equipmentItems: [
     { itemName: "壁掛分離式", brand: "大金", model: "RX-A", quantity: 1, unit: "台" },
     { itemName: "銅管", quantity: 2, unit: "式" },
@@ -134,35 +135,43 @@ assert(digitalOverrideTail.includes("font-weight:400!important"), "override afte
 assert(!digitalOverrideTail.includes("font-weight:700"), "override tail has no 700");
 
 const cp = buildWorkOrderHtml(multi, { mode: "continuous-print" });
-assert(cp.includes('data-wo-print="continuous-240x130-v4"'), "v4 template marker loaded");
-assert(cp.includes("<!-- wo-continuous-print 240x130 v4 -->"), "html comment fingerprint");
+assert(cp.includes('data-wo-print="continuous-240x130-v5"'), "v5 template marker loaded");
+assert(cp.includes("<!-- wo-continuous-print 240x130 v5 -->"), "html comment fingerprint");
 assert(cp.includes("@page{size:240mm 130mm;margin:0}"), "continuous 24x13cm page");
-assert(cp.includes("wo13-page") && cp.includes("wo13-pay-line") && cp.includes("wo13-opts"), "v4 form layout classes");
+assert(cp.includes("wo13-page") && cp.includes("wo13-paytab") && cp.includes("wo13-chip"), "v5 pay table + chips");
 assert(cp.includes("<table class=\"wo13-mat\">"), "materials use real table, not pad column");
 assert(cp.includes(">項次<") && cp.includes("品項名稱") && cp.includes("數量"), "material columns aligned");
 assert(!cp.includes("cp-mat-pad") && !cp.includes("cp-mat-row") && !cp.includes("dm13-"), "old continuous classes gone");
+assert(!cp.includes("wo13-pay-line") && !cp.includes("wo13-opts"), "old pay flex rows gone");
 assert(!cp.includes("size:A4 landscape"), "continuous not A4");
 assert(!cp.includes("transform:scale"), "continuous must not scale");
 assert(!cp.includes("PRINT_DOC_TYPE_CSS") && !cp.includes("eq-table"), "no global print CSS / eq-table");
 assert(!cp.includes("printFontLinks") && !cp.includes("NotoSansTC-700"), "no global CJK 700 font face");
+assert(!cp.includes("grid-template-columns:1.2fr"), "pay not squeezed next to 客戶備註");
 assert(!cp.includes("word-break:break-word") && !cp.includes("overflow-wrap:anywhere"), "no CJK split wrapping");
 assert(cp.includes("word-break:keep-all"), "CJK keep-all");
-assert(cp.includes("wo13-opt") && cp.includes("flex-wrap:nowrap"), "checkbox+label atomic nowrap rows");
+assert(cp.includes("wo13-chip") && cp.includes("flex-shrink:0") && cp.includes("white-space:nowrap"), "chips nowrap no-shrink");
+assert(!/\.wo13-chip\{[^}]*flex:\s*1/.test(cp), "chips must not use flex:1");
 assert(cp.includes("晟風空調工程｜派工單"), "continuous title");
-assert(cp.includes("收款方式：") && cp.includes("銀行匯款"), "full 銀行匯款 on pay row");
-assert(cp.includes("收款狀態：") && cp.includes("未收款") && cp.includes("無須收款"), "status row");
-assert(cp.includes("應收金額") && cp.includes("累計已收") && cp.includes("未收餘額"), "amount row");
+assert(cp.includes("收款方式：") && cp.includes("&nbsp;匯款"), "print label 匯款, not wrapping 銀行匯款");
+assert(!cp.includes("&nbsp;銀行匯款"), "continuous pay chip uses short 匯款");
+assert(cp.includes("收款狀態：") && cp.includes("未收款") && cp.includes("部分收款") && cp.includes("無須收款"), "status chips");
+assert(cp.includes("應收：") && cp.includes("已收：") && cp.includes("未收："), "amount row short labels");
+assert(cp.includes('colspan="2"'), "amount row full width");
 assert(cp.includes("font-size:15pt") && cp.includes("font-weight:600"), "title slightly bold");
 assert(cp.includes("font-size:10.5pt") && cp.includes("font-weight:400"), "body 400");
 assert(cp.includes("wo13-page:last-child"), "last page no forced blank");
 assert((cp.match(/class="wo13-page"/g) || []).length === 1, "5 materials fit one 13cm page");
 assert(!/font-weight:7\d0/.test(cp.replace(/@font-face\{[\s\S]*?\}/g,"")), "continuous body not 700");
 assert(cp.includes("客戶簽名") && cp.includes("技師簽名") && cp.includes("日期"), "signatures not dropped");
+const bodyHtml = cp.slice(cp.indexOf("<body>"));
+assert(bodyHtml.includes("客戶備註：請於完工後收款"), "customer notes kept");
+assert(bodyHtml.indexOf("客戶備註") < bodyHtml.indexOf('class="wo13-paytab"'), "客戶備註 is above payment, not a right column");
 
 const acceptCp = buildWorkOrderHtml(acceptance, { mode: "continuous-print" });
 assert(acceptCp.includes("WO-20261013-0192"), "acceptance on continuous");
-assert(acceptCp.includes('data-wo-print="continuous-240x130-v4"'), "0192 uses v4");
-assert(acceptCp.includes("wo13-pay-line"), "pay rows");
+assert(acceptCp.includes('data-wo-print="continuous-240x130-v5"'), "0192 uses v5");
+assert(acceptCp.includes("wo13-paytab"), "pay table");
 assert((acceptCp.match(/class="wo13-page"/g) || []).length === 1, "0192 single page");
 assert(acceptCp.includes("材料／設備：（無）"), "empty materials not padded with blank boxes");
 
@@ -174,7 +183,7 @@ const manyCp = buildWorkOrderHtml(manyMats, { mode: "continuous-print" });
 assert((manyCp.match(/class="wo13-page"/g) || []).length >= 2, "overflow continues on next 24x13 page");
 assert(manyCp.includes("（續頁）") || manyCp.includes("材料16"), "overflow not clipped");
 assert(manyCp.includes("材料16"), "last material kept");
-assert(manyCp.includes("wo13-pay-line"), "payment stays on last page");
+assert(manyCp.includes("wo13-paytab"), "payment stays on last page");
 
 const th80 = buildWorkOrderHtml(multi, { mode: "thermal-80" });
 assert(th80.includes("size:80mm auto"), "80mm thermal");

@@ -464,24 +464,38 @@ html,body{
 .wo13-mat .n,.wo13-mat th.n{width:14mm;text-align:center;white-space:nowrap}
 .wo13-mat .q,.wo13-mat th.q{width:22mm;text-align:right;white-space:nowrap}
 .wo13-mat .name{text-align:left}
-.wo13-note{margin:0 0 1.2mm;font-size:10.5pt;flex:none;word-break:keep-all}
+.wo13-note{margin:0 0 1.1mm;font-size:10.5pt;flex:none;word-break:keep-all;width:100%}
+.wo13-custnote{
+  width:100%;margin:0 0 1.2mm;font-size:10.5pt;flex:none;
+  word-break:keep-all;overflow-wrap:break-word;white-space:normal;
+}
 .wo13-pay{
-  margin:0;padding:1.3mm 0 0;border-top:0.45mm solid #000;flex:none;
+  width:100%;margin:0;padding:1.2mm 0 0;border-top:0.45mm solid #000;flex:none;
 }
-.wo13-pay-line{
-  display:flex;flex-direction:row;flex-wrap:nowrap;align-items:center;
-  white-space:nowrap;margin:0 0 1.15mm;font-size:10.5pt;
+.wo13-paytab{
+  width:100%;max-width:100%;border-collapse:collapse;table-layout:auto;
+  font-size:10.5pt;
 }
-.wo13-pay-lab{flex:none;white-space:nowrap;margin-right:2.2mm}
-.wo13-opts{
-  display:flex;flex-direction:row;flex-wrap:nowrap;align-items:center;
-  gap:4.2mm;white-space:nowrap;
+.wo13-paytab th,.wo13-paytab td{
+  font-weight:400;vertical-align:middle;border:none;
+  padding:0.65mm 0;white-space:nowrap;word-break:keep-all;overflow-wrap:normal;
+  writing-mode:horizontal-tb;text-orientation:mixed;
 }
-.wo13-amts{
-  display:flex;flex-direction:row;flex-wrap:nowrap;align-items:center;
-  gap:7mm;white-space:nowrap;margin:0 0 1.15mm;font-size:10.5pt;
+.wo13-paytab th{
+  width:1%;text-align:left;padding-right:2.4mm;white-space:nowrap;flex-shrink:0;
 }
-.wo13-blank{display:inline-block;min-width:22mm;border-bottom:0.25mm solid #000;height:4.2mm;vertical-align:bottom}
+.wo13-paytab td.opts,.wo13-paytab td.amts{width:99%;white-space:nowrap}
+.wo13-chip{
+  display:inline-block;white-space:nowrap;word-break:keep-all;overflow-wrap:normal;
+  flex-shrink:0;flex:none;margin-right:5mm;vertical-align:middle;
+  writing-mode:horizontal-tb;
+}
+.wo13-chip .box{display:inline;flex:none;flex-shrink:0}
+.wo13-amt{
+  display:inline-block;white-space:nowrap;flex-shrink:0;flex:none;
+  margin-right:8mm;vertical-align:middle;
+}
+.wo13-blank{display:inline-block;min-width:22mm;border-bottom:0.25mm solid #000;height:4.2mm;vertical-align:bottom;flex-shrink:0}
 .wo13-sigs{
   display:flex;flex-direction:row;flex-wrap:nowrap;align-items:flex-end;
   justify-content:space-between;gap:10mm;
@@ -515,6 +529,11 @@ function wo13Opt(on: boolean, label: string): string {
   return `<span class="wo13-opt"><span class="box">${on ? "☑" : "☐"}</span>${label}</span>`;
 }
 
+/** 收款勾選：checkbox + 文字同一 inline-block，不可拆行、不可被 flex 壓縮。 */
+function wo13Chip(on: boolean, label: string): string {
+  return `<span class="wo13-chip"><span class="box">${on ? "☑" : "☐"}</span>&nbsp;${label}</span>`;
+}
+
 function wo13JobTypes(order: Record<string, unknown>): string {
   const resolved = resolveJobTypes({
     jobTypes: order.jobTypes ?? (order as any).jobTypesResolved?.types,
@@ -542,8 +561,9 @@ function wo13PayMethods(order: Record<string, unknown>): string {
   });
   return WO_PAYMENT_METHOD_OPTIONS.map((m) => {
     const on = resolved.methods.includes(m);
-    const label = m === "其他" && resolved.otherLabel ? `其他：${esc(resolved.otherLabel)}` : m;
-    return wo13Opt(on, label);
+    const raw = m === "其他" && resolved.otherLabel ? `其他：${esc(resolved.otherLabel)}` : m;
+    const label = CP_PAY_PRINT_LABEL[raw] || CP_PAY_PRINT_LABEL[m] || raw;
+    return wo13Chip(on, label);
   }).join("");
 }
 
@@ -558,7 +578,7 @@ function wo13PayStatus(order: Record<string, unknown>): string {
     storedStatus: billing.paymentStatus,
   });
   return (["未收款", "部分收款", "已收款", "無須收款"] as const)
-    .map((s) => wo13Opt(s === status, s))
+    .map((s) => wo13Chip(s === status, s))
     .join("");
 }
 
@@ -669,27 +689,31 @@ function buildDotMatrixWorkOrderHtml(
     : `<div class="wo13-note">備註：</div>`;
 
   const custLine = custNotes
-    ? `<div class="wo13-note">客戶備註：${esc(custNotes)}</div>`
+    ? `<div class="wo13-custnote">客戶備註：${esc(custNotes)}</div>`
     : "";
 
   const footer = `
   ${notesLine}
+  ${custLine}
+  ${invoice ? `<div class="wo13-note">發票：${esc(invoice)}</div>` : ""}
   <div class="wo13-pay">
-    <div class="wo13-pay-line">
-      <span class="wo13-pay-lab">收款方式：</span>
-      <div class="wo13-opts">${wo13PayMethods(order)}</div>
-    </div>
-    <div class="wo13-pay-line">
-      <span class="wo13-pay-lab">收款狀態：</span>
-      <div class="wo13-opts">${wo13PayStatus(order)}</div>
-    </div>
-    <div class="wo13-amts">
-      <span>應收金額：${wo13Money(total)}</span>
-      <span>累計已收：${wo13Money(received)}</span>
-      <span>未收餘額：${wo13Money(remain)}</span>
-    </div>
-    ${invoice ? `<div class="wo13-note">發票：${esc(invoice)}</div>` : ""}
-    ${custLine}
+    <table class="wo13-paytab">
+      <tr>
+        <th>收款方式：</th>
+        <td class="opts">${wo13PayMethods(order)}</td>
+      </tr>
+      <tr>
+        <th>收款狀態：</th>
+        <td class="opts">${wo13PayStatus(order)}</td>
+      </tr>
+      <tr>
+        <td class="amts" colspan="2">
+          <span class="wo13-amt">應收：${wo13Money(total)}</span>
+          <span class="wo13-amt">已收：${wo13Money(received)}</span>
+          <span class="wo13-amt">未收：${wo13Money(remain)}</span>
+        </td>
+      </tr>
+    </table>
     <div class="wo13-sigs">
       <div class="wo13-sig"><span>客戶簽名</span><span class="ln"></span><span>日期</span><span class="ln-sm"></span></div>
       <div class="wo13-sig"><span>技師簽名</span><span class="ln"></span><span>日期</span><span class="ln-sm"></span></div>
@@ -701,7 +725,7 @@ function buildDotMatrixWorkOrderHtml(
     const showFooter = pg.kind === "single" || pg.kind === "last";
     const heading = totalPages > 1 ? `材料／設備（${idx + 1}/${totalPages}）` : "材料／設備";
     return `<div class="wo13-page" data-page="${idx + 1}" data-total="${totalPages}">
-  <div class="wo13-ver">continuous-240x130-v4</div>
+  <div class="wo13-ver">continuous-240x130-v5</div>
   ${showFullHeader ? headerFull : headerContinue}
   ${buildDotMatrixMaterialSlice(equipment, pg.start, pg.end, heading)}
   ${showFooter ? footer : ""}
@@ -709,7 +733,7 @@ function buildDotMatrixWorkOrderHtml(
   }).join("\n");
 
   return `<!DOCTYPE html>
-<html lang="zh-TW" data-wo-print="continuous-240x130-v4">
+<html lang="zh-TW" data-wo-print="continuous-240x130-v5">
 <head>
 <meta charset="UTF-8">
 <title>派工單 ${esc(woNum)}</title>
@@ -718,7 +742,7 @@ ${buildDotMatrix24x13Css(calibration)}
 </style>
 </head>
 <body>
-<!-- wo-continuous-print 240x130 v4 -->
+<!-- wo-continuous-print 240x130 v5 -->
 ${pageHtml}
 </body>
 </html>`;
