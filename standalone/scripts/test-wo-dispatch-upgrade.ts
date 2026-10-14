@@ -135,10 +135,10 @@ assert(digitalOverrideTail.includes("font-weight:400!important"), "override afte
 assert(!digitalOverrideTail.includes("font-weight:700"), "override tail has no 700");
 
 const cp = buildWorkOrderHtml(multi, { mode: "continuous-print" });
-assert(cp.includes('data-wo-print="continuous-240x130-v5"'), "v5 template marker loaded");
-assert(cp.includes("<!-- wo-continuous-print 240x130 v5 -->"), "html comment fingerprint");
+assert(cp.includes('data-wo-print="continuous-240x130-v6"'), "v6 template marker loaded");
+assert(cp.includes("<!-- wo-continuous-print 240x130 v6 -->"), "html comment fingerprint");
 assert(cp.includes("@page{size:240mm 130mm;margin:0}"), "continuous 24x13cm page");
-assert(cp.includes("wo13-page") && cp.includes("wo13-paytab") && cp.includes("wo13-chip"), "v5 pay table + chips");
+assert(cp.includes("wo13-page") && cp.includes("wo13-paytab") && cp.includes("wo13-chip"), "pay table + chips");
 assert(cp.includes("<table class=\"wo13-mat\">"), "materials use real table, not pad column");
 assert(cp.includes(">項次<") && cp.includes("品項名稱") && cp.includes("數量"), "material columns aligned");
 assert(!cp.includes("cp-mat-pad") && !cp.includes("cp-mat-row") && !cp.includes("dm13-"), "old continuous classes gone");
@@ -158,8 +158,8 @@ assert(!cp.includes("&nbsp;銀行匯款"), "continuous pay chip uses short 匯�
 assert(cp.includes("收款狀態：") && cp.includes("未收款") && cp.includes("部分收款") && cp.includes("無須收款"), "status chips");
 assert(cp.includes("應收：") && cp.includes("已收：") && cp.includes("未收："), "amount row short labels");
 assert(cp.includes('colspan="2"'), "amount row full width");
-assert(cp.includes("font-size:15pt") && cp.includes("font-weight:600"), "title slightly bold");
-assert(cp.includes("font-size:10.5pt") && cp.includes("font-weight:400"), "body 400");
+assert(cp.includes("font-size:18pt") && cp.includes("font-weight:600"), "title slightly bold 18pt");
+assert(cp.includes("font-size:13pt") && cp.includes("font-weight:400"), "body 13pt 400");
 assert(cp.includes("wo13-page:last-child"), "last page no forced blank");
 assert((cp.match(/class="wo13-page"/g) || []).length === 1, "5 materials fit one 13cm page");
 assert(!/font-weight:7\d0/.test(cp.replace(/@font-face\{[\s\S]*?\}/g,"")), "continuous body not 700");
@@ -170,7 +170,7 @@ assert(bodyHtml.indexOf("客戶備註") < bodyHtml.indexOf('class="wo13-paytab"'
 
 const acceptCp = buildWorkOrderHtml(acceptance, { mode: "continuous-print" });
 assert(acceptCp.includes("WO-20261013-0192"), "acceptance on continuous");
-assert(acceptCp.includes('data-wo-print="continuous-240x130-v5"'), "0192 uses v5");
+assert(acceptCp.includes('data-wo-print="continuous-240x130-v6"'), "0192 uses v6");
 assert(acceptCp.includes("wo13-paytab"), "pay table");
 assert((acceptCp.match(/class="wo13-page"/g) || []).length === 1, "0192 single page");
 assert(acceptCp.includes("材料／設備：（無）"), "empty materials not padded with blank boxes");

@@ -317,7 +317,7 @@ const DOT_MATRIX_WO = {
   /** 左右避開拖紙孔 */
   PAD_X_MM: 10,
   /** 上下避開齒孔撕線 */
-  PAD_Y_MM: 5,
+  PAD_Y_MM: 4,
 } as const;
 
 type DotMatrixPageKind = "single" | "first" | "mid" | "last";
@@ -389,7 +389,7 @@ function buildDotMatrix24x13Css(calibration: PrintCalibration): string {
 html,body{
   width:${W}mm;margin:0;padding:0;background:#fff;color:#000;
   font-family:"PingFang TC","Microsoft JhengHei","Noto Sans TC",sans-serif;
-  font-size:10.5pt;font-weight:400;line-height:1.28;
+  font-size:13pt;font-weight:400;line-height:1.22;
   font-synthesis:none;-webkit-font-smoothing:antialiased;
   transform:none;zoom:normal;
 }
@@ -410,14 +410,14 @@ html,body{
 .wo13-ver{display:none}
 .wo13-head{
   display:flex;flex-direction:row;align-items:baseline;justify-content:space-between;
-  gap:4mm;margin:0 0 1.4mm;padding:0 0 1.1mm;
+  gap:4mm;margin:0 0 0.9mm;padding:0 0 0.7mm;
   border-bottom:0.45mm solid #000;flex:none;
 }
-.wo13-title{font-size:15pt;font-weight:600;letter-spacing:0.25mm;line-height:1.1;white-space:nowrap}
-.wo13-meta{font-size:10.5pt;font-weight:400;white-space:nowrap}
+.wo13-title{font-size:18pt;font-weight:600;letter-spacing:0.2mm;line-height:1.1;white-space:nowrap}
+.wo13-meta{font-size:13pt;font-weight:400;white-space:nowrap}
 .wo13-types{
   display:flex;flex-direction:row;flex-wrap:nowrap;align-items:center;
-  gap:3.2mm;margin:0 0 1.8mm;font-size:10.5pt;white-space:nowrap;flex:none;
+  gap:2.8mm;margin:0 0 1.1mm;font-size:13pt;white-space:nowrap;flex:none;
 }
 .wo13-opt{
   display:inline-flex;flex:none;flex-direction:row;align-items:center;gap:0.7mm;
@@ -426,37 +426,37 @@ html,body{
 .wo13-opt .box{flex:none;line-height:1}
 .wo13-info{
   width:100%;border-collapse:collapse;table-layout:auto;
-  margin:0 0 1.8mm;font-size:10.5pt;flex:none;
+  margin:0 0 1mm;font-size:13pt;flex:none;
 }
 .wo13-info th,.wo13-info td{
-  font-weight:400;vertical-align:baseline;padding:0.35mm 2.2mm 0.35mm 0;
+  font-weight:400;vertical-align:baseline;padding:0.2mm 2.2mm 0.2mm 0;
   border:none;
 }
 .wo13-info th{white-space:nowrap;width:1%;text-align:left}
 .wo13-info td{word-break:keep-all;overflow-wrap:break-word}
 .wo13-techline{
   display:flex;flex-direction:row;flex-wrap:wrap;align-items:center;
-  gap:1.2mm 2.5mm;margin:0 0 1.6mm;font-size:10.5pt;flex:none;
+  gap:1mm 2.5mm;margin:0 0 1mm;font-size:13pt;flex:none;
 }
 .wo13-k{white-space:nowrap;font-weight:400}
 .wo13-work{
   display:flex;flex-direction:row;align-items:flex-start;gap:1.6mm;
-  margin:0 0 1.6mm;font-size:10.5pt;flex:none;
+  margin:0 0 1mm;font-size:13pt;flex:none;
 }
 .wo13-work .txt{
   flex:1 1 auto;min-width:0;font-weight:400;
   white-space:pre-wrap;word-break:keep-all;overflow-wrap:break-word;
 }
 .wo13-sec{
-  font-size:10.5pt;font-weight:400;margin:0 0 0.6mm;white-space:nowrap;flex:none;
+  font-size:13pt;font-weight:400;margin:0 0 0.3mm;white-space:nowrap;flex:none;
 }
-.wo13-mat-wrap{flex:none;margin:0 0 1.4mm}
+.wo13-mat-wrap{flex:none;margin:0 0 0.8mm}
 .wo13-mat{
-  width:100%;border-collapse:collapse;table-layout:fixed;font-size:10.5pt;
+  width:100%;border-collapse:collapse;table-layout:fixed;font-size:13pt;
 }
 .wo13-mat th,.wo13-mat td{
   font-weight:400;vertical-align:middle;
-  padding:0.45mm 1.6mm 0.45mm 0;
+  padding:0.25mm 1.6mm 0.25mm 0;
   border:none;border-bottom:0.18mm solid #777;
   word-break:keep-all;overflow-wrap:break-word;
 }
@@ -464,21 +464,21 @@ html,body{
 .wo13-mat .n,.wo13-mat th.n{width:14mm;text-align:center;white-space:nowrap}
 .wo13-mat .q,.wo13-mat th.q{width:22mm;text-align:right;white-space:nowrap}
 .wo13-mat .name{text-align:left}
-.wo13-note{margin:0 0 1.1mm;font-size:10.5pt;flex:none;word-break:keep-all;width:100%}
+.wo13-note{margin:0 0 0.6mm;font-size:13pt;flex:none;word-break:keep-all;width:100%}
 .wo13-custnote{
-  width:100%;margin:0 0 1.2mm;font-size:10.5pt;flex:none;
+  width:100%;margin:0 0 0.6mm;font-size:13pt;flex:none;
   word-break:keep-all;overflow-wrap:break-word;white-space:normal;
 }
 .wo13-pay{
-  width:100%;margin:0;padding:1.2mm 0 0;border-top:0.45mm solid #000;flex:none;
+  width:100%;margin:0;padding:0.7mm 0 0;border-top:0.45mm solid #000;flex:none;
 }
 .wo13-paytab{
   width:100%;max-width:100%;border-collapse:collapse;table-layout:auto;
-  font-size:10.5pt;
+  font-size:13pt;
 }
 .wo13-paytab th,.wo13-paytab td{
   font-weight:400;vertical-align:middle;border:none;
-  padding:0.65mm 0;white-space:nowrap;word-break:keep-all;overflow-wrap:normal;
+  padding:0.35mm 0;white-space:nowrap;word-break:keep-all;overflow-wrap:normal;
   writing-mode:horizontal-tb;text-orientation:mixed;
 }
 .wo13-paytab th{
@@ -487,7 +487,7 @@ html,body{
 .wo13-paytab td.opts,.wo13-paytab td.amts{width:99%;white-space:nowrap}
 .wo13-chip{
   display:inline-block;white-space:nowrap;word-break:keep-all;overflow-wrap:normal;
-  flex-shrink:0;flex:none;margin-right:5mm;vertical-align:middle;
+  flex-shrink:0;flex:none;margin-right:4mm;vertical-align:middle;
   writing-mode:horizontal-tb;
 }
 .wo13-chip .box{display:inline;flex:none;flex-shrink:0}
@@ -499,13 +499,13 @@ html,body{
 .wo13-sigs{
   display:flex;flex-direction:row;flex-wrap:nowrap;align-items:flex-end;
   justify-content:space-between;gap:10mm;
-  margin-top:1.4mm;font-size:10.5pt;white-space:nowrap;
+  margin-top:0.8mm;font-size:13pt;white-space:nowrap;
 }
 .wo13-sig{
   display:flex;flex-direction:row;flex-wrap:nowrap;align-items:flex-end;gap:1.4mm;
 }
-.wo13-sig .ln{display:inline-block;border-bottom:0.25mm solid #000;width:36mm;height:5.2mm}
-.wo13-sig .ln-sm{display:inline-block;border-bottom:0.25mm solid #000;width:20mm;height:5.2mm}
+.wo13-sig .ln{display:inline-block;border-bottom:0.25mm solid #000;width:36mm;height:4.2mm}
+.wo13-sig .ln-sm{display:inline-block;border-bottom:0.25mm solid #000;width:20mm;height:4.2mm}
 @media print{
   html,body{width:${W}mm;height:${H}mm;background:#fff}
   .wo13-ver{display:none!important}
@@ -725,7 +725,7 @@ function buildDotMatrixWorkOrderHtml(
     const showFooter = pg.kind === "single" || pg.kind === "last";
     const heading = totalPages > 1 ? `材料／設備（${idx + 1}/${totalPages}）` : "材料／設備";
     return `<div class="wo13-page" data-page="${idx + 1}" data-total="${totalPages}">
-  <div class="wo13-ver">continuous-240x130-v5</div>
+  <div class="wo13-ver">continuous-240x130-v6</div>
   ${showFullHeader ? headerFull : headerContinue}
   ${buildDotMatrixMaterialSlice(equipment, pg.start, pg.end, heading)}
   ${showFooter ? footer : ""}
@@ -733,7 +733,7 @@ function buildDotMatrixWorkOrderHtml(
   }).join("\n");
 
   return `<!DOCTYPE html>
-<html lang="zh-TW" data-wo-print="continuous-240x130-v5">
+<html lang="zh-TW" data-wo-print="continuous-240x130-v6">
 <head>
 <meta charset="UTF-8">
 <title>派工單 ${esc(woNum)}</title>
@@ -742,7 +742,7 @@ ${buildDotMatrix24x13Css(calibration)}
 </style>
 </head>
 <body>
-<!-- wo-continuous-print 240x130 v5 -->
+<!-- wo-continuous-print 240x130 v6 -->
 ${pageHtml}
 </body>
 </html>`;
