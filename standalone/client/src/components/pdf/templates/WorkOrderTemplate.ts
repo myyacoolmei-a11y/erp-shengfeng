@@ -465,12 +465,21 @@ html,body{
 .wo13-mat .q,.wo13-mat th.q{width:22mm;text-align:right;white-space:nowrap}
 .wo13-mat .name{text-align:left}
 .wo13-note{margin:0 0 0.6mm;font-size:13pt;flex:none;word-break:keep-all;width:100%}
-.wo13-custnote{
-  width:100%;margin:0 0 0.6mm;font-size:13pt;flex:none;
-  word-break:keep-all;overflow-wrap:break-word;white-space:normal;
+.wo13-foot{width:100%;flex:none;padding:0.6mm 0 0;border-top:0.45mm solid #000}
+.wo13-fee-head{
+  display:grid;grid-template-columns:1fr 1fr;column-gap:6mm;align-items:start;
+  width:100%;margin:0 0 0.7mm;
 }
+.wo13-fee-title{white-space:nowrap;font-size:13pt;font-weight:400}
+.wo13-cust{
+  min-width:0;font-size:13pt;font-weight:400;
+  word-break:keep-all;overflow-wrap:break-word;white-space:normal;
+  max-height:11mm;overflow:hidden;
+}
+.wo13-cust .lab{white-space:nowrap;margin-right:1.5mm}
 .wo13-pay{
-  width:100%;margin:0;padding:0.7mm 0 0;border-top:0.45mm solid #000;flex:none;
+  width:100%;max-width:100%;margin:0;padding:0;flex:none;
+  display:block;
 }
 .wo13-paytab{
   width:100%;max-width:100%;border-collapse:collapse;table-layout:auto;
@@ -688,32 +697,33 @@ function buildDotMatrixWorkOrderHtml(
     ? `<div class="wo13-note">備註：${esc(notesText)}</div>`
     : `<div class="wo13-note">備註：</div>`;
 
-  const custLine = custNotes
-    ? `<div class="wo13-custnote">客戶備註：${esc(custNotes)}</div>`
-    : "";
-
   const footer = `
   ${notesLine}
-  ${custLine}
   ${invoice ? `<div class="wo13-note">發票：${esc(invoice)}</div>` : ""}
-  <div class="wo13-pay">
-    <table class="wo13-paytab">
-      <tr>
-        <th>收款方式：</th>
-        <td class="opts">${wo13PayMethods(order)}</td>
-      </tr>
-      <tr>
-        <th>收款狀態：</th>
-        <td class="opts">${wo13PayStatus(order)}</td>
-      </tr>
-      <tr>
-        <td class="amts" colspan="2">
-          <span class="wo13-amt">應收：${wo13Money(total)}</span>
-          <span class="wo13-amt">已收：${wo13Money(received)}</span>
-          <span class="wo13-amt">未收：${wo13Money(remain)}</span>
-        </td>
-      </tr>
-    </table>
+  <div class="wo13-foot">
+    <div class="wo13-fee-head">
+      <div class="wo13-fee-title">工程收費</div>
+      <div class="wo13-cust"><span class="lab">客戶備註：</span>${custNotes ? esc(custNotes) : ""}</div>
+    </div>
+    <div class="wo13-pay">
+      <table class="wo13-paytab">
+        <tr>
+          <th>收款方式：</th>
+          <td class="opts">${wo13PayMethods(order)}</td>
+        </tr>
+        <tr>
+          <th>收款狀態：</th>
+          <td class="opts">${wo13PayStatus(order)}</td>
+        </tr>
+        <tr>
+          <td class="amts" colspan="2">
+            <span class="wo13-amt">應收：${wo13Money(total)}</span>
+            <span class="wo13-amt">已收：${wo13Money(received)}</span>
+            <span class="wo13-amt">未收：${wo13Money(remain)}</span>
+          </td>
+        </tr>
+      </table>
+    </div>
     <div class="wo13-sigs">
       <div class="wo13-sig"><span>客戶簽名</span><span class="ln"></span><span>日期</span><span class="ln-sm"></span></div>
       <div class="wo13-sig"><span>技師簽名</span><span class="ln"></span><span>日期</span><span class="ln-sm"></span></div>
@@ -725,7 +735,7 @@ function buildDotMatrixWorkOrderHtml(
     const showFooter = pg.kind === "single" || pg.kind === "last";
     const heading = totalPages > 1 ? `材料／設備（${idx + 1}/${totalPages}）` : "材料／設備";
     return `<div class="wo13-page" data-page="${idx + 1}" data-total="${totalPages}">
-  <div class="wo13-ver">continuous-240x130-v6</div>
+  <div class="wo13-ver">continuous-240x130-v7</div>
   ${showFullHeader ? headerFull : headerContinue}
   ${buildDotMatrixMaterialSlice(equipment, pg.start, pg.end, heading)}
   ${showFooter ? footer : ""}
@@ -733,7 +743,7 @@ function buildDotMatrixWorkOrderHtml(
   }).join("\n");
 
   return `<!DOCTYPE html>
-<html lang="zh-TW" data-wo-print="continuous-240x130-v6">
+<html lang="zh-TW" data-wo-print="continuous-240x130-v7">
 <head>
 <meta charset="UTF-8">
 <title>派工單 ${esc(woNum)}</title>
@@ -742,7 +752,7 @@ ${buildDotMatrix24x13Css(calibration)}
 </style>
 </head>
 <body>
-<!-- wo-continuous-print 240x130 v6 -->
+<!-- wo-continuous-print 240x130 v7 -->
 ${pageHtml}
 </body>
 </html>`;

@@ -135,8 +135,8 @@ assert(digitalOverrideTail.includes("font-weight:400!important"), "override afte
 assert(!digitalOverrideTail.includes("font-weight:700"), "override tail has no 700");
 
 const cp = buildWorkOrderHtml(multi, { mode: "continuous-print" });
-assert(cp.includes('data-wo-print="continuous-240x130-v6"'), "v6 template marker loaded");
-assert(cp.includes("<!-- wo-continuous-print 240x130 v6 -->"), "html comment fingerprint");
+assert(cp.includes('data-wo-print="continuous-240x130-v7"'), "v7 template marker loaded");
+assert(cp.includes("<!-- wo-continuous-print 240x130 v7 -->"), "html comment fingerprint");
 assert(cp.includes("@page{size:240mm 130mm;margin:0}"), "continuous 24x13cm page");
 assert(cp.includes("wo13-page") && cp.includes("wo13-paytab") && cp.includes("wo13-chip"), "pay table + chips");
 assert(cp.includes("<table class=\"wo13-mat\">"), "materials use real table, not pad column");
@@ -165,12 +165,17 @@ assert((cp.match(/class="wo13-page"/g) || []).length === 1, "5 materials fit one
 assert(!/font-weight:7\d0/.test(cp.replace(/@font-face\{[\s\S]*?\}/g,"")), "continuous body not 700");
 assert(cp.includes("客戶簽名") && cp.includes("技師簽名") && cp.includes("日期"), "signatures not dropped");
 const bodyHtml = cp.slice(cp.indexOf("<body>"));
-assert(bodyHtml.includes("客戶備註：請於完工後收款"), "customer notes kept");
-assert(bodyHtml.indexOf("客戶備註") < bodyHtml.indexOf('class="wo13-paytab"'), "客戶備註 is above payment, not a right column");
+assert(bodyHtml.includes("工程收費"), "工程收費 title kept on left");
+assert(bodyHtml.includes("客戶備註：") && bodyHtml.includes("請於完工後收款"), "customer notes kept on right");
+assert(bodyHtml.includes("wo13-fee-head") && bodyHtml.includes("wo13-cust"), "title row is left 工程收費 / right 客戶備註");
+const feeHead = bodyHtml.slice(bodyHtml.indexOf("wo13-fee-head"), bodyHtml.indexOf("wo13-pay"));
+assert(feeHead.includes("工程收費") && feeHead.includes("客戶備註"), "titles live in fee-head only");
+assert(!feeHead.includes("收款方式") && !feeHead.includes("wo13-paytab"), "pay rows are NOT inside the two-column head");
+assert(bodyHtml.indexOf("wo13-fee-head") < bodyHtml.indexOf('class="wo13-paytab"'), "full-width pay table is sibling below titles");
 
 const acceptCp = buildWorkOrderHtml(acceptance, { mode: "continuous-print" });
 assert(acceptCp.includes("WO-20261013-0192"), "acceptance on continuous");
-assert(acceptCp.includes('data-wo-print="continuous-240x130-v6"'), "0192 uses v6");
+assert(acceptCp.includes('data-wo-print="continuous-240x130-v7"'), "0192 uses v7");
 assert(acceptCp.includes("wo13-paytab"), "pay table");
 assert((acceptCp.match(/class="wo13-page"/g) || []).length === 1, "0192 single page");
 assert(acceptCp.includes("材料／設備：（無）"), "empty materials not padded with blank boxes");
