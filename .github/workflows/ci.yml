@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: standalone tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: standalone
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: standalone/package-lock.json
+      - name: Install
+        run: npm ci
+      - name: Print and layout tests
+        run: |
+          set -e
+          npx tsx scripts/test-wo-dispatch-upgrade.ts
+          npx tsx scripts/test-delivery-dot-matrix-print.ts
+          npx tsx scripts/test-quote-a4-row-flow.ts
+          npx tsx scripts/test-quote-item-display.ts
+          npx tsx scripts/test-quote-win-dispatch.ts
+          npx tsx scripts/test-wholesale-payments.ts
+          npx tsx scripts/test-sales-stats.ts
+          npx tsx scripts/test-repair-case-sales.ts
+        env:
+          # Never point CI at the official database.
+          DATABASE_URL: ""
