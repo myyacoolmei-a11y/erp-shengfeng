@@ -81,6 +81,22 @@ jobs:
         run: |
           echo "Low-risk layout/print/text change; merging after tests."
           gh pr merge "${{ github.event.pull_request.number }}" --merge --delete-branch=false
+      - name: Verify official site after merge
+        if: steps.risk.outputs.kind == 'LOW_RISK'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PROD_URL: https://bountiful-vitality-production-76ab.up.railway.app
+          RAILWAY_OK_CONTEXT: erp-shengfeng - bountiful-vitality
+        run: |
+          # GITHUB_TOKEN merges do not retrigger push workflows; verify here.
+          MERGE_SHA="$(gh pr view "${{ github.event.pull_request.number }}" --json mergeCommit --jq .mergeCommit.oid)"
+          if [[ -z "${MERGE_SHA}" || "${MERGE_SHA}" == "null" ]]; then
+            echo "FAIL: merge commit SHA missing after merge" >&2
+            exit 1
+          fi
+          echo "merge_sha=${MERGE_SHA}"
+          chmod +x .github/scripts/verify-production.sh
+          GITHUB_SHA="${MERGE_SHA}" .github/scripts/verify-production.sh
       - name: Hold high-risk PR
         if: steps.risk.outputs.kind == 'HIGH_RISK'
         env:
