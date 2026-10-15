@@ -42,7 +42,8 @@ const woHtml = buildWorkOrderHtml({ id: 1, workOrderNumber: "WO-1", customerName
 const digital = buildDeliveryHtml(order);
 
 assert(html.includes("@page{size:auto;margin:0}"), "delivery must use WO @page size:auto;margin:0");
-assert(woHtml.includes("@page{size:auto;margin:0}"), "work order still size:auto");
+assert(woHtml.includes("@page{size:240mm 130mm;margin:0}"), "work order continuous is 24x13cm");
+assert(!woHtml.includes("size:A4 landscape"), "work order continuous is not A4");
 assert(html.includes(`${CONTINUOUS_PAPER.WIDTH_MM}mm`), "241.3mm width");
 assert(html.includes(`${CONTINUOUS_PAPER.HEIGHT_MM}mm`), "139.7mm height");
 assert(html.includes("9.5") && html.includes("5.5"), "9.5x5.5 paper hint");
