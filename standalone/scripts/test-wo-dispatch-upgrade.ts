@@ -135,9 +135,13 @@ assert(digitalOverrideTail.includes("font-weight:400!important"), "override afte
 assert(!digitalOverrideTail.includes("font-weight:700"), "override tail has no 700");
 
 const cp = buildWorkOrderHtml(multi, { mode: "continuous-print" });
-assert(cp.includes('data-wo-print="continuous-240x130-v7"'), "v7 template marker loaded");
-assert(cp.includes("<!-- wo-continuous-print 240x130 v7 -->"), "html comment fingerprint");
+assert(cp.includes('data-wo-print="continuous-240x130-v8"'), "v8 template marker loaded");
+assert(cp.includes("<!-- wo-continuous-print 240x130 v8 -->"), "html comment fingerprint");
 assert(cp.includes("@page{size:240mm 130mm;margin:0}"), "continuous 24x13cm page");
+assert(!/@page\{[^}]*landscape/.test(cp), "do not add landscape (swaps to 130x240)");
+assert(!/html,body\{[^}]*height:130mm/.test(cp), "print html/body must not lock 130mm height");
+assert(!/\.wo13-page\{[^}]*overflow:hidden/.test(cp), "must not clip overflow to fake one page");
+assert(cp.includes("wo13-bar") && cp.includes("240×130mm"), "print preview toolbar with paper hint");
 assert(cp.includes("wo13-page") && cp.includes("wo13-paytab") && cp.includes("wo13-chip"), "pay table + chips");
 assert(cp.includes("<table class=\"wo13-mat\">"), "materials use real table, not pad column");
 assert(cp.includes(">項次<") && cp.includes("品項名稱") && cp.includes("數量"), "material columns aligned");
@@ -173,9 +177,25 @@ assert(feeHead.includes("工程收費") && feeHead.includes("客戶備註"), "ti
 assert(!feeHead.includes("收款方式") && !feeHead.includes("wo13-paytab"), "pay rows are NOT inside the two-column head");
 assert(bodyHtml.indexOf("wo13-fee-head") < bodyHtml.indexOf('class="wo13-paytab"'), "full-width pay table is sibling below titles");
 
+const wo0195 = {
+  ...multi,
+  id: 195,
+  workOrderNumber: "WO-20261015-0195",
+  customerName: "驗收客戶",
+  installAddress: "彰化縣花壇鄉中山路一段195號",
+  scheduledDate: "2026-10-15",
+};
+const cp0195 = buildWorkOrderHtml(wo0195, { mode: "continuous-print" });
+assert(cp0195.includes("WO-20261015-0195"), "0195 number");
+assert(cp0195.includes('data-wo-print="continuous-240x130-v8"'), "0195 uses v8");
+assert((cp0195.match(/class="wo13-page"/g) || []).length === 1, "0195 single 240x130 page");
+assert(cp0195.includes("客戶簽名") && cp0195.includes("技師簽名"), "0195 signatures kept");
+assert(cp0195.includes("wo13-paytab") && cp0195.includes("wo13-chip"), "0195 pay chips");
+assert(cp0195.includes("工程收費") && cp0195.includes("客戶備註"), "0195 fee / notes titles");
+
 const acceptCp = buildWorkOrderHtml(acceptance, { mode: "continuous-print" });
 assert(acceptCp.includes("WO-20261013-0192"), "acceptance on continuous");
-assert(acceptCp.includes('data-wo-print="continuous-240x130-v7"'), "0192 uses v7");
+assert(acceptCp.includes('data-wo-print="continuous-240x130-v8"'), "0192 uses v8");
 assert(acceptCp.includes("wo13-paytab"), "pay table");
 assert((acceptCp.match(/class="wo13-page"/g) || []).length === 1, "0192 single page");
 assert(acceptCp.includes("材料／設備：（無）"), "empty materials not padded with blank boxes");

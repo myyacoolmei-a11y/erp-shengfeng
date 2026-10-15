@@ -385,11 +385,12 @@ function buildDotMatrix24x13Css(calibration: PrintCalibration): string {
   const W = DOT_MATRIX_WO.WIDTH_MM;
   const H = DOT_MATRIX_WO.HEIGHT_MM;
   return `
+/* 紙張就是 240mm 寬 × 130mm 高，不要再加 landscape（會把寬高對調成 130×240）。 */
 @page{size:${W}mm ${H}mm;margin:0}
 html,body{
-  width:${W}mm;margin:0;padding:0;background:#fff;color:#000;
+  width:${W}mm;height:auto;margin:0;padding:0;background:#fff;color:#000;
   font-family:"PingFang TC","Microsoft JhengHei","Noto Sans TC",sans-serif;
-  font-size:13pt;font-weight:400;line-height:1.22;
+  font-size:13pt;font-weight:400;line-height:1.12;
   font-synthesis:none;-webkit-font-smoothing:antialiased;
   transform:none;zoom:normal;
 }
@@ -398,26 +399,28 @@ html,body{
   box-shadow:none;transform:none;zoom:normal;
   word-break:keep-all;overflow-wrap:normal;
 }
+.wo13-bar{display:none}
 .wo13-page{
-  width:${W}mm;height:${H}mm;
+  width:${W}mm;height:${H}mm;max-height:${H}mm;
   padding:${padTop}mm ${padRight}mm ${padBottom}mm ${padLeft}mm;
   display:flex;flex-direction:column;justify-content:flex-start;
   background:#fff;color:#000;
   page-break-after:always;break-after:page;
-  overflow:hidden;position:relative;
+  page-break-inside:avoid;break-inside:avoid;
+  overflow:visible;position:relative;
 }
 .wo13-page:last-child{page-break-after:auto;break-after:auto}
 .wo13-ver{display:none}
 .wo13-head{
   display:flex;flex-direction:row;align-items:baseline;justify-content:space-between;
-  gap:4mm;margin:0 0 0.9mm;padding:0 0 0.7mm;
+  gap:4mm;margin:0 0 0.5mm;padding:0 0 0.5mm;
   border-bottom:0.45mm solid #000;flex:none;
 }
 .wo13-title{font-size:18pt;font-weight:600;letter-spacing:0.2mm;line-height:1.1;white-space:nowrap}
 .wo13-meta{font-size:13pt;font-weight:400;white-space:nowrap}
 .wo13-types{
   display:flex;flex-direction:row;flex-wrap:nowrap;align-items:center;
-  gap:2.8mm;margin:0 0 1.1mm;font-size:13pt;white-space:nowrap;flex:none;
+  gap:2.8mm;margin:0 0 0.6mm;font-size:13pt;white-space:nowrap;flex:none;
 }
 .wo13-opt{
   display:inline-flex;flex:none;flex-direction:row;align-items:center;gap:0.7mm;
@@ -426,7 +429,7 @@ html,body{
 .wo13-opt .box{flex:none;line-height:1}
 .wo13-info{
   width:100%;border-collapse:collapse;table-layout:auto;
-  margin:0 0 1mm;font-size:13pt;flex:none;
+  margin:0 0 0.6mm;font-size:13pt;flex:none;
 }
 .wo13-info th,.wo13-info td{
   font-weight:400;vertical-align:baseline;padding:0.2mm 2.2mm 0.2mm 0;
@@ -441,7 +444,7 @@ html,body{
 .wo13-k{white-space:nowrap;font-weight:400}
 .wo13-work{
   display:flex;flex-direction:row;align-items:flex-start;gap:1.6mm;
-  margin:0 0 1mm;font-size:13pt;flex:none;
+  margin:0 0 0.6mm;font-size:13pt;flex:none;
 }
 .wo13-work .txt{
   flex:1 1 auto;min-width:0;font-weight:400;
@@ -450,7 +453,7 @@ html,body{
 .wo13-sec{
   font-size:13pt;font-weight:400;margin:0 0 0.3mm;white-space:nowrap;flex:none;
 }
-.wo13-mat-wrap{flex:none;margin:0 0 0.8mm}
+.wo13-mat-wrap{flex:1 1 auto;min-height:0;margin:0 0 0.4mm}
 .wo13-mat{
   width:100%;border-collapse:collapse;table-layout:fixed;font-size:13pt;
 }
@@ -465,7 +468,7 @@ html,body{
 .wo13-mat .q,.wo13-mat th.q{width:22mm;text-align:right;white-space:nowrap}
 .wo13-mat .name{text-align:left}
 .wo13-note{margin:0 0 0.6mm;font-size:13pt;flex:none;word-break:keep-all;width:100%}
-.wo13-foot{width:100%;flex:none;padding:0.6mm 0 0;border-top:0.45mm solid #000}
+.wo13-foot{width:100%;flex:none;margin-top:auto;padding:0.4mm 0 0;border-top:0.45mm solid #000}
 .wo13-fee-head{
   display:grid;grid-template-columns:1fr 1fr;column-gap:6mm;align-items:start;
   width:100%;margin:0 0 0.7mm;
@@ -516,12 +519,24 @@ html,body{
 .wo13-sig .ln{display:inline-block;border-bottom:0.25mm solid #000;width:36mm;height:4.2mm}
 .wo13-sig .ln-sm{display:inline-block;border-bottom:0.25mm solid #000;width:20mm;height:4.2mm}
 @media print{
-  html,body{width:${W}mm;height:${H}mm;background:#fff}
-  .wo13-ver{display:none!important}
+  html,body{width:${W}mm;height:auto!important;margin:0!important;padding:0!important;background:#fff}
+  .wo13-bar,.wo13-ver{display:none!important}
+  .wo13-page{margin:0;outline:none}
 }
 @media screen{
   html,body{width:auto;height:auto;background:#cfcfcf}
-  body{padding:8mm 0 12mm}
+  body{padding:0 0 12mm}
+  .wo13-bar{
+    display:flex;align-items:flex-start;justify-content:space-between;gap:8px;
+    position:sticky;top:0;z-index:2;
+    background:#1f2937;color:#fff;padding:8px 12px;margin:0 0 8mm;
+    font:12px/1.45 "PingFang TC","Microsoft JhengHei",sans-serif;
+  }
+  .wo13-bar-txt{flex:1 1 auto;font-weight:400}
+  .wo13-bar-btn{
+    flex:none;border:0;background:#f8fafc;color:#111;border-radius:4px;
+    padding:6px 12px;font-size:13px;cursor:pointer;white-space:nowrap;
+  }
   .wo13-page{
     background:#fff;margin:0 auto 12mm;
     outline:0.4mm solid #333;
@@ -695,7 +710,7 @@ function buildDotMatrixWorkOrderHtml(
 
   const notesLine = notesText
     ? `<div class="wo13-note">備註：${esc(notesText)}</div>`
-    : `<div class="wo13-note">備註：</div>`;
+    : "";
 
   const footer = `
   ${notesLine}
@@ -735,15 +750,24 @@ function buildDotMatrixWorkOrderHtml(
     const showFooter = pg.kind === "single" || pg.kind === "last";
     const heading = totalPages > 1 ? `材料／設備（${idx + 1}/${totalPages}）` : "材料／設備";
     return `<div class="wo13-page" data-page="${idx + 1}" data-total="${totalPages}">
-  <div class="wo13-ver">continuous-240x130-v7</div>
+  <div class="wo13-ver">continuous-240x130-v8</div>
   ${showFullHeader ? headerFull : headerContinue}
   ${buildDotMatrixMaterialSlice(equipment, pg.start, pg.end, heading)}
   ${showFooter ? footer : ""}
 </div>`;
   }).join("\n");
 
+  const toolbar = `
+<div class="wo13-bar" data-wo-print-bar>
+  <div class="wo13-bar-txt">
+    點陣連續紙 <b>240×130mm</b>　共 <b>${totalPages}</b> 頁　
+    Safari／macOS：紙張選自訂「240×130mm」或「9.5×5.5 in」，方向選<strong>直向</strong>（紙張本身已是橫式；選橫向會變成 130×240 而印成兩頁）。縮放 100%。關閉頁首／頁尾。邊界無。
+  </div>
+  <button type="button" class="wo13-bar-btn" onclick="window.print()">列印</button>
+</div>`;
+
   return `<!DOCTYPE html>
-<html lang="zh-TW" data-wo-print="continuous-240x130-v7">
+<html lang="zh-TW" data-wo-print="continuous-240x130-v8">
 <head>
 <meta charset="UTF-8">
 <title>派工單 ${esc(woNum)}</title>
@@ -752,7 +776,8 @@ ${buildDotMatrix24x13Css(calibration)}
 </style>
 </head>
 <body>
-<!-- wo-continuous-print 240x130 v7 -->
+<!-- wo-continuous-print 240x130 v8 -->
+${toolbar}
 ${pageHtml}
 </body>
 </html>`;
