@@ -135,13 +135,16 @@ assert(digitalOverrideTail.includes("font-weight:400!important"), "override afte
 assert(!digitalOverrideTail.includes("font-weight:700"), "override tail has no 700");
 
 const cp = buildWorkOrderHtml(multi, { mode: "continuous-print" });
-assert(cp.includes('data-wo-print="continuous-240x130-v8"'), "v8 template marker loaded");
-assert(cp.includes("<!-- wo-continuous-print 240x130 v8 -->"), "html comment fingerprint");
+assert(cp.includes('data-wo-print="continuous-240x130-v9"'), "v9 template marker loaded");
+assert(cp.includes("<!-- wo-continuous-print 240x130 v9 -->"), "html comment fingerprint");
 assert(cp.includes("@page{size:240mm 130mm;margin:0}"), "continuous 24x13cm page");
 assert(!/@page\{[^}]*landscape/.test(cp), "do not add landscape (swaps to 130x240)");
+assert(!/@page\{[^}]*portrait/.test(cp), "do not add portrait keyword (shorter-side-horizontal)");
 assert(!/html,body\{[^}]*height:130mm/.test(cp), "print html/body must not lock 130mm height");
 assert(!/\.wo13-page\{[^}]*overflow:hidden/.test(cp), "must not clip overflow to fake one page");
-assert(cp.includes("wo13-bar") && cp.includes("240×130mm"), "print preview toolbar with paper hint");
+assert(!cp.includes("page-break-after:always"), "Safari last-page always-break creates a blank sheet");
+assert(cp.includes(".wo13-page + .wo13-page") && cp.includes("page-break-before:always"), "breaks only between pages");
+assert(cp.includes("wo13-bar") && cp.includes("寬 240mm × 高 130mm"), "print preview toolbar with upright paper hint");
 assert(cp.includes("wo13-page") && cp.includes("wo13-paytab") && cp.includes("wo13-chip"), "pay table + chips");
 assert(cp.includes("<table class=\"wo13-mat\">"), "materials use real table, not pad column");
 assert(cp.includes(">項次<") && cp.includes("品項名稱") && cp.includes("數量"), "material columns aligned");
@@ -164,7 +167,7 @@ assert(cp.includes("應收：") && cp.includes("已收：") && cp.includes("未�
 assert(cp.includes('colspan="2"'), "amount row full width");
 assert(cp.includes("font-size:18pt") && cp.includes("font-weight:600"), "title slightly bold 18pt");
 assert(cp.includes("font-size:13pt") && cp.includes("font-weight:400"), "body 13pt 400");
-assert(cp.includes("wo13-page:last-child"), "last page no forced blank");
+assert(cp.includes(".wo13-page + .wo13-page"), "no last-child always-break");
 assert((cp.match(/class="wo13-page"/g) || []).length === 1, "5 materials fit one 13cm page");
 assert(!/font-weight:7\d0/.test(cp.replace(/@font-face\{[\s\S]*?\}/g,"")), "continuous body not 700");
 assert(cp.includes("客戶簽名") && cp.includes("技師簽名") && cp.includes("日期"), "signatures not dropped");
@@ -187,7 +190,7 @@ const wo0195 = {
 };
 const cp0195 = buildWorkOrderHtml(wo0195, { mode: "continuous-print" });
 assert(cp0195.includes("WO-20261015-0195"), "0195 number");
-assert(cp0195.includes('data-wo-print="continuous-240x130-v8"'), "0195 uses v8");
+assert(cp0195.includes('data-wo-print="continuous-240x130-v9"'), "0195 uses v9");
 assert((cp0195.match(/class="wo13-page"/g) || []).length === 1, "0195 single 240x130 page");
 assert(cp0195.includes("客戶簽名") && cp0195.includes("技師簽名"), "0195 signatures kept");
 assert(cp0195.includes("wo13-paytab") && cp0195.includes("wo13-chip"), "0195 pay chips");
@@ -195,7 +198,7 @@ assert(cp0195.includes("工程收費") && cp0195.includes("客戶備註"), "0195
 
 const acceptCp = buildWorkOrderHtml(acceptance, { mode: "continuous-print" });
 assert(acceptCp.includes("WO-20261013-0192"), "acceptance on continuous");
-assert(acceptCp.includes('data-wo-print="continuous-240x130-v8"'), "0192 uses v8");
+assert(acceptCp.includes('data-wo-print="continuous-240x130-v9"'), "0192 uses v9");
 assert(acceptCp.includes("wo13-paytab"), "pay table");
 assert((acceptCp.match(/class="wo13-page"/g) || []).length === 1, "0192 single page");
 assert(acceptCp.includes("材料／設備：（無）"), "empty materials not padded with blank boxes");
