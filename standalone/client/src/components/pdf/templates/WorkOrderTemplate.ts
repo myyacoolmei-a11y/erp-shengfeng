@@ -385,7 +385,9 @@ function buildDotMatrix24x13Css(calibration: PrintCalibration): string {
   const W = DOT_MATRIX_WO.WIDTH_MM;
   const H = DOT_MATRIX_WO.HEIGHT_MM;
   return `
-/* 紙張就是 240mm 寬 × 130mm 高，不要再加 landscape（會把寬高對調成 130×240）。 */
+/* 自訂紙張原始方向：寬 240mm × 高 130mm。
+   不可寫 landscape／portrait（Safari 不吃 @page size；關鍵字會把寬高對調）。
+   Safari 請在對話框維持「直立」，紙張選 240×130mm。 */
 @page{size:${W}mm ${H}mm;margin:0}
 html,body{
   width:${W}mm;height:auto;margin:0;padding:0;background:#fff;color:#000;
@@ -405,11 +407,11 @@ html,body{
   padding:${padTop}mm ${padRight}mm ${padBottom}mm ${padLeft}mm;
   display:flex;flex-direction:column;justify-content:flex-start;
   background:#fff;color:#000;
-  page-break-after:always;break-after:page;
+  page-break-after:auto;break-after:auto;
   page-break-inside:avoid;break-inside:avoid;
   overflow:visible;position:relative;
 }
-.wo13-page:last-child{page-break-after:auto;break-after:auto}
+.wo13-page + .wo13-page{page-break-before:always;break-before:page}
 .wo13-ver{display:none}
 .wo13-head{
   display:flex;flex-direction:row;align-items:baseline;justify-content:space-between;
@@ -477,7 +479,7 @@ html,body{
 .wo13-cust{
   min-width:0;font-size:13pt;font-weight:400;
   word-break:keep-all;overflow-wrap:break-word;white-space:normal;
-  max-height:11mm;overflow:hidden;
+  max-height:none;overflow:visible;
 }
 .wo13-cust .lab{white-space:nowrap;margin-right:1.5mm}
 .wo13-pay{
@@ -519,9 +521,10 @@ html,body{
 .wo13-sig .ln{display:inline-block;border-bottom:0.25mm solid #000;width:36mm;height:4.2mm}
 .wo13-sig .ln-sm{display:inline-block;border-bottom:0.25mm solid #000;width:20mm;height:4.2mm}
 @media print{
+  @page{size:${W}mm ${H}mm;margin:0}
   html,body{width:${W}mm;height:auto!important;margin:0!important;padding:0!important;background:#fff}
   .wo13-bar,.wo13-ver{display:none!important}
-  .wo13-page{margin:0;outline:none}
+  .wo13-page{margin:0;outline:none;page-break-after:auto;break-after:auto}
 }
 @media screen{
   html,body{width:auto;height:auto;background:#cfcfcf}
@@ -750,7 +753,7 @@ function buildDotMatrixWorkOrderHtml(
     const showFooter = pg.kind === "single" || pg.kind === "last";
     const heading = totalPages > 1 ? `材料／設備（${idx + 1}/${totalPages}）` : "材料／設備";
     return `<div class="wo13-page" data-page="${idx + 1}" data-total="${totalPages}">
-  <div class="wo13-ver">continuous-240x130-v8</div>
+  <div class="wo13-ver">continuous-240x130-v9</div>
   ${showFullHeader ? headerFull : headerContinue}
   ${buildDotMatrixMaterialSlice(equipment, pg.start, pg.end, heading)}
   ${showFooter ? footer : ""}
@@ -760,14 +763,14 @@ function buildDotMatrixWorkOrderHtml(
   const toolbar = `
 <div class="wo13-bar" data-wo-print-bar>
   <div class="wo13-bar-txt">
-    點陣連續紙 <b>240×130mm</b>　共 <b>${totalPages}</b> 頁　
-    Safari／macOS：紙張選自訂「240×130mm」或「9.5×5.5 in」，方向選<strong>直向</strong>（紙張本身已是橫式；選橫向會變成 130×240 而印成兩頁）。縮放 100%。關閉頁首／頁尾。邊界無。
+    點陣連續紙 <b>寬 240mm × 高 130mm</b>　共 <b>${totalPages}</b> 頁　
+    Safari：方向維持<strong>直立</strong>。紙張選自訂「寬 240mm、高 130mm」（不要選 A4，不要改橫向）。縮放 100%。關閉頁首／頁尾。邊界無。
   </div>
   <button type="button" class="wo13-bar-btn" onclick="window.print()">列印</button>
 </div>`;
 
   return `<!DOCTYPE html>
-<html lang="zh-TW" data-wo-print="continuous-240x130-v8">
+<html lang="zh-TW" data-wo-print="continuous-240x130-v9">
 <head>
 <meta charset="UTF-8">
 <title>派工單 ${esc(woNum)}</title>
@@ -776,7 +779,7 @@ ${buildDotMatrix24x13Css(calibration)}
 </style>
 </head>
 <body>
-<!-- wo-continuous-print 240x130 v8 -->
+<!-- wo-continuous-print 240x130 v9 -->
 ${toolbar}
 ${pageHtml}
 </body>
