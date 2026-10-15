@@ -1,0 +1,116 @@
+name: Auto release
+
+# Low-risk layout / copy / print PRs: test already ran in CI, then merge to main.
+# Railway Auto Deploy on bountiful-vitality publishes main.
+# High-risk (schema, payment math, inventory, deletes, auth) stays unmerged.
+# Never overwrite or roll back the official database.
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review, labeled]
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+  statuses: read
+  checks: read
+
+jobs:
+  auto-merge:
+    name: auto-merge low-risk PR
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Wait for CI
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const deadline = Date.now() + 12 * 60 * 1000;
+            const sha = context.payload.pull_request.head.sha;
+            while (Date.now() < deadline) {
+              const { data } = await github.rest.checks.listForRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: sha,
+              });
+              const ours = data.check_runs.filter((r) => r.name === "standalone tests");
+              if (ours.some((r) => r.conclusion === "failure" || r.conclusion === "cancelled")) {
+                core.setFailed("CI standalone tests did not pass; refusing to merge.");
+                return;
+              }
+              if (ours.length && ours.every((r) => r.status === "completed" && r.conclusion === "success")) {
+                console.log("CI standalone tests passed");
+                return;
+              }
+              await new Promise((r) => setTimeout(r, 15000));
+            }
+            core.setFailed("Timed out waiting for CI standalone tests.");
+      - name: Classify risk
+        id: risk
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_DRAFT: ${{ github.event.pull_request.draft }}
+        run: |
+          chmod +x .github/scripts/classify-pr-risk.sh
+          set +e
+          out="$(.github/scripts/classify-pr-risk.sh "${{ github.event.pull_request.base.sha }}" "${{ github.event.pull_request.head.sha }}")"
+          code=$?
+          set -e
+          echo "${out}"
+          if [[ ${code} -ne 0 ]]; then
+            echo "classification failed"
+            exit ${code}
+          fi
+          kind="$(echo "${out}" | head -n1 | awk '{print $1}')"
+          echo "kind=${kind}" >> "${GITHUB_OUTPUT}"
+          {
+            echo "detail<<EOF"
+            echo "${out}"
+            echo "EOF"
+          } >> "${GITHUB_OUTPUT}"
+      - name: Merge low-risk PR
+        if: steps.risk.outputs.kind == 'LOW_RISK'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Low-risk layout/print/text change; merging after tests."
+          gh pr merge "${{ github.event.pull_request.number }}" --merge --delete-branch=false
+      - name: Hold high-risk PR
+        if: steps.risk.outputs.kind == 'HIGH_RISK'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "HIGH_RISK — owner confirmation required. Not merging."
+          echo "${{ steps.risk.outputs.detail }}"
+          gh pr comment "${{ github.event.pull_request.number }}" --body "$(cat <<'EOF'
+          此 PR 含高風險變更（資料庫結構、收款計算、庫存、刪除或權限），已通過測試也不會自動合併。
+
+          請店長確認後再合併。合併後 Railway 服務 **bountiful-vitality** 會自動部署。
+
+          部署失敗時不會自動回滾正式資料庫。
+          EOF
+          )" || true
+      - name: Skip
+        if: steps.risk.outputs.kind == 'SKIP'
+        run: echo "Skipped auto-merge (${{ steps.risk.outputs.detail }})"
+
+  verify-production:
+    name: verify official site
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Wait and verify bountiful-vitality
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PROD_URL: https://bountiful-vitality-production-76ab.up.railway.app
+          RAILWAY_OK_CONTEXT: erp-shengfeng - bountiful-vitality
+        run: |
+          chmod +x .github/scripts/verify-production.sh
+          .github/scripts/verify-production.sh
