@@ -322,27 +322,81 @@ const DOT_MATRIX_WO = {
 
 type DotMatrixPageKind = "single" | "first" | "mid" | "last";
 
-function paginateDotMatrixMaterials(count: number): Array<{ start: number; end: number; kind: DotMatrixPageKind }> {
-  const SINGLE = 5;
-  const FIRST = 7;
-  const LAST_WITH_FOOTER = 4;
-  const MID = 12;
-  if (count <= SINGLE) return [{ start: 0, end: count, kind: "single" }];
+/** 估算施工內容佔高（mm）。用字數估行，不用 flex 硬塞。 */
+function estimateWorkMm(desc: string): number {
+  const text = (desc || "—").trim() || "—";
+  const lines = text.split(/\n/).reduce((n, line) => {
+    const chars = Array.from(line).length;
+    return n + Math.max(1, Math.ceil(chars / 38));
+  }, 0);
+  return 5.4 * Math.max(1, lines);
+}
+
+/**
+ * 依實際區塊高度決定每頁材料列數。
+ * 內容盒 122mm（130 − 上下各 4）。超出就續頁，不重疊、不裁切。
+ */
+function maxMaterialRowsOnPage(opts: {
+  fullHeader: boolean;
+  footer: boolean;
+  desc: string;
+  notes: boolean;
+  contact: boolean;
+}): number {
+  const USABLE = DOT_MATRIX_WO.HEIGHT_MM - DOT_MATRIX_WO.PAD_Y_MM * 2;
+  let used = 0;
+  if (opts.fullHeader) {
+    used += 8.2;
+    used += 6.2;
+    used += opts.contact ? 16 : 11.2;
+    used += 6.4;
+    used += estimateWorkMm(opts.desc);
+  } else {
+    used += 9;
+  }
+  if (opts.footer) {
+    if (opts.notes) used += 6.2;
+    used += 34;
+  }
+  used += 7.2;
+  return Math.max(0, Math.floor((USABLE - used) / 6.1));
+}
+
+function paginateDotMatrixContent(
+  count: number,
+  desc: string,
+  notes: boolean,
+  contact: boolean,
+): Array<{ start: number; end: number; kind: DotMatrixPageKind }> {
+  const singleRows = maxMaterialRowsOnPage({
+    fullHeader: true, footer: true, desc, notes, contact,
+  });
+  if (count <= singleRows) return [{ start: 0, end: count, kind: "single" }];
+
   const pages: Array<{ start: number; end: number; kind: DotMatrixPageKind }> = [];
-  const firstEnd = Math.min(FIRST, count);
+  const firstRows = maxMaterialRowsOnPage({
+    fullHeader: true, footer: false, desc, notes: false, contact,
+  });
+  const firstEnd = Math.min(Math.max(firstRows, 0), count);
   pages.push({ start: 0, end: firstEnd, kind: "first" });
   let i = firstEnd;
   if (i >= count) {
     pages.push({ start: count, end: count, kind: "last" });
     return pages;
   }
+  const lastRows = maxMaterialRowsOnPage({
+    fullHeader: false, footer: true, desc, notes, contact,
+  });
+  const midRows = maxMaterialRowsOnPage({
+    fullHeader: false, footer: false, desc, notes: false, contact: false,
+  });
   while (i < count) {
     const left = count - i;
-    if (left <= LAST_WITH_FOOTER) {
+    if (left <= lastRows) {
       pages.push({ start: i, end: count, kind: "last" });
       break;
     }
-    const take = Math.min(MID, left - LAST_WITH_FOOTER);
+    const take = Math.min(Math.max(midRows, 1), left - Math.max(lastRows, 0));
     pages.push({ start: i, end: i + take, kind: "mid" });
     i += take;
   }
@@ -405,7 +459,7 @@ html,body{
 .wo13-page{
   width:${W}mm;height:${H}mm;max-height:${H}mm;
   padding:${padTop}mm ${padRight}mm ${padBottom}mm ${padLeft}mm;
-  display:flex;flex-direction:column;justify-content:flex-start;
+  display:block;
   background:#fff;color:#000;
   page-break-after:auto;break-after:auto;
   page-break-inside:avoid;break-inside:avoid;
@@ -455,7 +509,7 @@ html,body{
 .wo13-sec{
   font-size:13pt;font-weight:400;margin:0 0 0.3mm;white-space:nowrap;flex:none;
 }
-.wo13-mat-wrap{flex:1 1 auto;min-height:0;margin:0 0 0.4mm}
+.wo13-mat-wrap{display:block;width:100%;margin:0 0 0.5mm}
 .wo13-mat{
   width:100%;border-collapse:collapse;table-layout:fixed;font-size:13pt;
 }
@@ -470,7 +524,7 @@ html,body{
 .wo13-mat .q,.wo13-mat th.q{width:22mm;text-align:right;white-space:nowrap}
 .wo13-mat .name{text-align:left}
 .wo13-note{margin:0 0 0.6mm;font-size:13pt;flex:none;word-break:keep-all;width:100%}
-.wo13-foot{width:100%;flex:none;margin-top:auto;padding:0.4mm 0 0;border-top:0.45mm solid #000}
+.wo13-foot{display:block;width:100%;margin:0.6mm 0 0;padding:0.4mm 0 0;border-top:0.45mm solid #000}
 .wo13-fee-head{
   display:grid;grid-template-columns:1fr 1fr;column-gap:6mm;align-items:start;
   width:100%;margin:0 0 0.7mm;
@@ -511,12 +565,11 @@ html,body{
 }
 .wo13-blank{display:inline-block;min-width:22mm;border-bottom:0.25mm solid #000;height:4.2mm;vertical-align:bottom;flex-shrink:0}
 .wo13-sigs{
-  display:flex;flex-direction:row;flex-wrap:nowrap;align-items:flex-end;
-  justify-content:space-between;gap:10mm;
-  margin-top:0.8mm;font-size:13pt;white-space:nowrap;
+  display:table;width:100%;table-layout:fixed;
+  margin-top:1.2mm;font-size:13pt;white-space:nowrap;
 }
 .wo13-sig{
-  display:flex;flex-direction:row;flex-wrap:nowrap;align-items:flex-end;gap:1.4mm;
+  display:table-cell;width:50%;vertical-align:bottom;
 }
 .wo13-sig .ln{display:inline-block;border-bottom:0.25mm solid #000;width:36mm;height:4.2mm}
 .wo13-sig .ln-sm{display:inline-block;border-bottom:0.25mm solid #000;width:20mm;height:4.2mm}
@@ -677,7 +730,7 @@ function buildDotMatrixWorkOrderHtml(
   const received = Number(billing.receivedAmount ?? 0) || 0;
   const remain = remainingBalance(total, received);
   const invoice = String(order.invoiceStatus || billing.invoiceStatus || "").trim();
-  const pages = paginateDotMatrixMaterials(equipment.length);
+  const pages = paginateDotMatrixContent(equipment.length, descText, Boolean(notesText), Boolean(contact));
   const totalPages = pages.length;
   const dateStr = dash(order.scheduledDate || printDate);
 
@@ -752,10 +805,13 @@ function buildDotMatrixWorkOrderHtml(
     const showFullHeader = pg.kind === "single" || pg.kind === "first";
     const showFooter = pg.kind === "single" || pg.kind === "last";
     const heading = totalPages > 1 ? `材料／設備（${idx + 1}/${totalPages}）` : "材料／設備";
+    const materialsHtml = (pg.end > pg.start || pg.kind === "single")
+      ? buildDotMatrixMaterialSlice(equipment, pg.start, pg.end, heading)
+      : "";
     return `<div class="wo13-page" data-page="${idx + 1}" data-total="${totalPages}">
-  <div class="wo13-ver">continuous-240x130-v9</div>
+  <div class="wo13-ver">continuous-240x130-v10</div>
   ${showFullHeader ? headerFull : headerContinue}
-  ${buildDotMatrixMaterialSlice(equipment, pg.start, pg.end, heading)}
+  ${materialsHtml}
   ${showFooter ? footer : ""}
 </div>`;
   }).join("\n");
@@ -764,13 +820,13 @@ function buildDotMatrixWorkOrderHtml(
 <div class="wo13-bar" data-wo-print-bar>
   <div class="wo13-bar-txt">
     點陣連續紙 <b>寬 240mm × 高 130mm</b>　共 <b>${totalPages}</b> 頁　
-    Safari：方向維持<strong>直立</strong>。紙張選自訂「寬 240mm、高 130mm」（不要選 A4，不要改橫向）。縮放 100%。關閉頁首／頁尾。邊界無。
+    Safari：方向維持<strong>直立</strong>。紙張選自訂「寬 240mm、高 130mm」（不要選 A4，不要改橫向）。縮放 100%。關閉頁首／頁尾。邊界無。若標題左右偏移，請把 ERP「列印校正」歸零。
   </div>
   <button type="button" class="wo13-bar-btn" onclick="window.print()">列印</button>
 </div>`;
 
   return `<!DOCTYPE html>
-<html lang="zh-TW" data-wo-print="continuous-240x130-v9">
+<html lang="zh-TW" data-wo-print="continuous-240x130-v10">
 <head>
 <meta charset="UTF-8">
 <title>派工單 ${esc(woNum)}</title>
@@ -779,7 +835,7 @@ ${buildDotMatrix24x13Css(calibration)}
 </style>
 </head>
 <body>
-<!-- wo-continuous-print 240x130 v9 -->
+<!-- wo-continuous-print 240x130 v10 -->
 ${toolbar}
 ${pageHtml}
 </body>

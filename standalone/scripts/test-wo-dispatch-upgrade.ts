@@ -135,8 +135,8 @@ assert(digitalOverrideTail.includes("font-weight:400!important"), "override afte
 assert(!digitalOverrideTail.includes("font-weight:700"), "override tail has no 700");
 
 const cp = buildWorkOrderHtml(multi, { mode: "continuous-print" });
-assert(cp.includes('data-wo-print="continuous-240x130-v9"'), "v9 template marker loaded");
-assert(cp.includes("<!-- wo-continuous-print 240x130 v9 -->"), "html comment fingerprint");
+assert(cp.includes('data-wo-print="continuous-240x130-v10"'), "v10 template marker loaded");
+assert(cp.includes("<!-- wo-continuous-print 240x130 v10 -->"), "html comment fingerprint");
 assert(cp.includes("@page{size:240mm 130mm;margin:0}"), "continuous 24x13cm page");
 assert(!/@page\{[^}]*landscape/.test(cp), "do not add landscape (swaps to 130x240)");
 assert(!/@page\{[^}]*portrait/.test(cp), "do not add portrait keyword (shorter-side-horizontal)");
@@ -145,6 +145,10 @@ assert(!/\.wo13-page\{[^}]*overflow:hidden/.test(cp), "must not clip overflow to
 assert(!cp.includes("page-break-after:always"), "Safari last-page always-break creates a blank sheet");
 assert(cp.includes(".wo13-page + .wo13-page") && cp.includes("page-break-before:always"), "breaks only between pages");
 assert(cp.includes("wo13-bar") && cp.includes("寬 240mm × 高 130mm"), "print preview toolbar with upright paper hint");
+assert(/\.wo13-page\{[^}]*display:block/.test(cp), "page uses document flow, not flex pin");
+assert(!/\.wo13-mat-wrap\{[^}]*flex:\s*1/.test(cp), "materials must not shrink under the footer");
+assert(!/\.wo13-foot\{[^}]*margin-top:auto/.test(cp), "footer must not pin over notes/materials");
+assert(cp.includes("display:table-cell") && cp.includes("客戶簽名"), "signatures are table cells, not stacked");
 assert(cp.includes("wo13-page") && cp.includes("wo13-paytab") && cp.includes("wo13-chip"), "pay table + chips");
 assert(cp.includes("<table class=\"wo13-mat\">"), "materials use real table, not pad column");
 assert(cp.includes(">項次<") && cp.includes("品項名稱") && cp.includes("數量"), "material columns aligned");
@@ -190,7 +194,7 @@ const wo0195 = {
 };
 const cp0195 = buildWorkOrderHtml(wo0195, { mode: "continuous-print" });
 assert(cp0195.includes("WO-20261015-0195"), "0195 number");
-assert(cp0195.includes('data-wo-print="continuous-240x130-v9"'), "0195 uses v9");
+assert(cp0195.includes('data-wo-print="continuous-240x130-v10"'), "0195 uses v10");
 assert((cp0195.match(/class="wo13-page"/g) || []).length === 1, "0195 single 240x130 page");
 assert(cp0195.includes("客戶簽名") && cp0195.includes("技師簽名"), "0195 signatures kept");
 assert(cp0195.includes("wo13-paytab") && cp0195.includes("wo13-chip"), "0195 pay chips");
@@ -198,10 +202,47 @@ assert(cp0195.includes("工程收費") && cp0195.includes("客戶備註"), "0195
 
 const acceptCp = buildWorkOrderHtml(acceptance, { mode: "continuous-print" });
 assert(acceptCp.includes("WO-20261013-0192"), "acceptance on continuous");
-assert(acceptCp.includes('data-wo-print="continuous-240x130-v9"'), "0192 uses v9");
+assert(acceptCp.includes('data-wo-print="continuous-240x130-v10"'), "0192 uses v10");
 assert(acceptCp.includes("wo13-paytab"), "pay table");
 assert((acceptCp.match(/class="wo13-page"/g) || []).length === 1, "0192 single page");
 assert(acceptCp.includes("材料／設備：（無）"), "empty materials not padded with blank boxes");
+
+const wo0178 = {
+  ...multi,
+  id: 178,
+  workOrderNumber: "WO-20261006-0178",
+  customerName: "連續紙驗收",
+  contactPerson: "林先生",
+  mobilePhone: "0912-000-178",
+  installAddress: "彰化縣花壇鄉中山路一段178號",
+  title: "室內機安裝＋銅管配管",
+  scheduledDate: "2026-10-06",
+  description: "拆除舊機後安裝壁掛室內機，配管沿既有路徑，完工試機。",
+  notes: "負責業務：洪宇風\n現場磁磚請鋪布",
+  equipmentItems: [
+    { itemName: "壁掛分離式", brand: "大金", model: "RX-A", quantity: 1, unit: "台" },
+    { itemName: "銅管", quantity: 2, unit: "式" },
+    { itemName: "排水管", quantity: 1, unit: "式" },
+    { itemName: "架台", quantity: 1, unit: "式" },
+    { itemName: "冷媒", quantity: 1, unit: "罐" },
+    { itemName: "電源線", quantity: 1, unit: "式" },
+    { itemName: "固定螺絲", quantity: 8, unit: "支" },
+    { itemName: "隔震墊", quantity: 4, unit: "個" },
+  ],
+};
+const cp0178 = buildWorkOrderHtml(wo0178, { mode: "continuous-print" });
+assert(cp0178.includes("WO-20261006-0178"), "0178 number");
+assert(cp0178.includes('data-wo-print="continuous-240x130-v10"'), "0178 uses v10");
+assert(cp0178.includes("客戶簽名") && cp0178.includes("技師簽名"), "0178 signatures kept");
+assert(cp0178.includes("隔震墊"), "0178 last material not dropped");
+assert(!cp0178.includes("margin-top:auto"), "0178 footer not pinned");
+assert((cp0178.match(/class="wo13-page"/g) || []).length === 2, "0178 eight materials continue to page 2");
+assert(cp0178.includes("（續頁）"), "0178 continuation header");
+assert(!/材料／設備（2\/2）：（無）/.test(cp0178), "0178 last page must not show empty materials");
+assert(cp0178.includes("現場磁磚請鋪布"), "0178 notes stay on last page");
+assert(cp0178.indexOf("隔震墊") < cp0178.indexOf("工程收費"), "0178 last material before footer");
+assert(cp0178.indexOf("備註：") < cp0178.indexOf("工程收費"), "0178 notes before fee block");
+assert(cp0178.indexOf("wo13-paytab") < cp0178.indexOf("wo13-sigs"), "0178 pay before signatures");
 
 const manyMats = {
   ...multi,
