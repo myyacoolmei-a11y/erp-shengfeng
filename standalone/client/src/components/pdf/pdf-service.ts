@@ -569,11 +569,6 @@ export async function handlePdfAction(options: {
   }
 }
 
-function isSafariBrowser(): boolean {
-  const ua = navigator.userAgent;
-  return /safari/i.test(ua) && !/chrome|chromium|android|crios|fxios/i.test(ua);
-}
-
 /** Open HTML in a new window and print after the document has actually loaded. */
 export function openPrintWindow(html: string, _title: string) {
   const w = window.open("", "_blank");
@@ -582,13 +577,10 @@ export function openPrintWindow(html: string, _title: string) {
     return;
   }
 
-  const isContinuous = /data-wo-print="continuous-240x130/.test(html);
-  // Safari 必須先選自訂 240×130 紙張；立刻 print() 會用 A4 預設印成兩頁且方向鎖死。
-  const autoPrint = !(isContinuous && isSafariBrowser());
-
+  // 還原 a2c9b19：連續紙與其他格式一樣，文件載入後自動叫出列印對話框。
   let printed = false;
   const attemptPrint = () => {
-    if (!autoPrint || printed) return;
+    if (printed) return;
     printed = true;
     try {
       w.focus();
