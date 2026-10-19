@@ -383,9 +383,9 @@ function buildCompactOverridesCss(mode: WorkOrderHtmlMode): string {
 .dot-matrix-page{
   box-sizing:border-box;
   font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
-  font-size:12pt;
+  font-size:11.5pt;
   font-weight:500;
-  line-height:1.15;
+  line-height:1.12;
   letter-spacing:0;
   color:#000;
   background:#fff;
@@ -399,11 +399,11 @@ function buildCompactOverridesCss(mode: WorkOrderHtmlMode): string {
   text-shadow:none;
 }
 .dot-matrix-page .workorder-title{
-  font-size:15pt;
+  font-size:14.5pt;
   font-weight:600;
   line-height:1.1;
   text-align:center;
-  margin:0 0 1mm;
+  margin:0 0 0.4mm;
 }
 .dot-matrix-page .info-row{
   display:flex;
@@ -416,9 +416,9 @@ function buildCompactOverridesCss(mode: WorkOrderHtmlMode): string {
 .dot-matrix-page .info-field{
   min-width:0;
   flex:1 1 auto;
-  font-size:12pt;
+  font-size:11.5pt;
   font-weight:500;
-  line-height:1.15;
+  line-height:1.12;
   white-space:nowrap;
   overflow:hidden;
   text-overflow:ellipsis;
@@ -433,17 +433,17 @@ function buildCompactOverridesCss(mode: WorkOrderHtmlMode): string {
 }
 .dot-matrix-page .print-section{
   margin:0;
-  padding:0.6mm 0;
+  padding:0.3mm 0;
 }
 .dot-matrix-page .section-title{
-  font-size:12pt;
+  font-size:11.5pt;
   font-weight:500;
-  margin:0 0 0.5mm;
+  margin:0 0 0.3mm;
 }
 .dot-matrix-page .work-text{
-  font-size:12pt;
+  font-size:11.5pt;
   font-weight:500;
-  line-height:1.15;
+  line-height:1.12;
   white-space:pre-wrap;
   word-break:keep-all;
   overflow-wrap:break-word;
@@ -455,11 +455,11 @@ function buildCompactOverridesCss(mode: WorkOrderHtmlMode): string {
 }
 .dot-matrix-page .material-table th,
 .dot-matrix-page .material-table td{
-  padding:0.4mm 1mm;
-  font-size:12pt;
+  padding:0.15mm 1mm;
+  font-size:11.5pt;
   font-weight:500;
-  line-height:1.15;
-  vertical-align:top;
+  line-height:1.12;
+  vertical-align:middle;
   overflow-wrap:anywhere;
   border:none;
   border-bottom:0.15mm solid #888;
@@ -478,15 +478,15 @@ function buildCompactOverridesCss(mode: WorkOrderHtmlMode): string {
   grid-template-columns:1fr 1fr;
   column-gap:4mm;
   width:100%;
-  margin-top:0.8mm;
-  padding-top:0.6mm;
+  margin-top:0.4mm;
+  padding-top:0.4mm;
   border-top:0.3mm solid #000;
 }
 .dot-matrix-page .payment-row{
   display:flex;
   align-items:center;
   gap:2mm;
-  margin:0 0 0.4mm;
+  margin:0 0 0.2mm;
   white-space:nowrap;
 }
 .dot-matrix-page .payment-option{
@@ -498,7 +498,7 @@ function buildCompactOverridesCss(mode: WorkOrderHtmlMode): string {
 }
 .dot-matrix-page .cust-note{
   min-width:0;
-  font-size:12pt;
+  font-size:11.5pt;
   font-weight:500;
   word-break:keep-all;
   overflow-wrap:break-word;
@@ -514,11 +514,11 @@ function buildCompactOverridesCss(mode: WorkOrderHtmlMode): string {
   display:grid;
   grid-template-columns:1fr 1fr;
   gap:4mm;
-  margin-top:1.6mm;
+  margin-top:0.8mm;
 }
 .dot-matrix-page .signature-field{
   min-width:0;
-  font-size:12pt;
+  font-size:11.5pt;
   font-weight:500;
   white-space:nowrap;
 }
@@ -526,7 +526,7 @@ function buildCompactOverridesCss(mode: WorkOrderHtmlMode): string {
   display:inline-block;
   border-bottom:0.25mm solid #000;
   width:28mm;
-  height:7mm;
+  height:5.5mm;
   vertical-align:bottom;
   margin:0 1.2mm;
 }
@@ -534,7 +534,7 @@ function buildCompactOverridesCss(mode: WorkOrderHtmlMode): string {
   display:inline-block;
   border-bottom:0.25mm solid #000;
   width:16mm;
-  height:7mm;
+  height:5.5mm;
   vertical-align:bottom;
   margin:0 1.2mm;
 }
@@ -603,9 +603,9 @@ function estimateWorkMm(desc: string): number {
   const text = (desc || "—").trim() || "—";
   const lines = text.split(/\n/).reduce((n, line) => {
     const chars = Array.from(line).length;
-    return n + Math.max(1, Math.ceil(chars / 42));
+    return n + Math.max(1, Math.ceil(chars / 46));
   }, 0);
-  return 4.8 * Math.max(1, lines);
+  return 4.2 * Math.max(1, lines);
 }
 
 function maxMaterialRowsOnContinuousPage(opts: {
@@ -615,17 +615,17 @@ function maxMaterialRowsOnContinuousPage(opts: {
   contact: boolean;
 }): number {
   const usable = WO_DOT_H_MM - WO_DOT_PAD_Y_MM * 2;
-  let used = 8;
+  let used = 4;
   if (opts.fullHeader) {
-    used += 7;
-    used += opts.contact ? 24 : 20;
-    used += 5 + estimateWorkMm(opts.desc);
+    used += 6;
+    used += opts.contact ? 22 : 18;
+    used += 4 + estimateWorkMm(opts.desc);
   } else {
     used += 8;
   }
-  if (opts.footer) used += 22;
-  used += 7;
-  return Math.max(0, Math.floor((usable - used) / 5.4));
+  if (opts.footer) used += 16;
+  used += 5;
+  return Math.max(0, Math.floor((usable - used) / 4.4));
 }
 
 type ContinuousPageKind = "single" | "first" | "mid" | "last";
@@ -644,13 +644,11 @@ function paginateContinuousContent(
   const firstRows = maxMaterialRowsOnContinuousPage({
     fullHeader: true, footer: false, desc, contact,
   });
+  // 全部材料已能放進第一頁時，不要再拆出只有收款／簽名的空白續頁。
+  if (count <= firstRows) return [{ start: 0, end: count, kind: "single" }];
   const firstEnd = Math.min(Math.max(firstRows, 0), count);
   pages.push({ start: 0, end: firstEnd, kind: "first" });
   let i = firstEnd;
-  if (i >= count) {
-    pages.push({ start: count, end: count, kind: "last" });
-    return pages;
-  }
   const lastRows = maxMaterialRowsOnContinuousPage({
     fullHeader: false, footer: true, desc, contact: false,
   });
@@ -768,7 +766,7 @@ function buildRestoredContinuousWorkOrderHtml(
   }).join("\n");
 
   return `<!DOCTYPE html>
-<html lang="zh-TW" data-wo-print="continuous-240x130-compact">
+<html lang="zh-TW" data-wo-print="continuous-240x130-onesheet">
 <head>
 <meta charset="UTF-8">
 <title>派工單 ${esc(woNum)}</title>
@@ -780,7 +778,7 @@ ${buildCompactOverridesCss("continuous-print")}
 </style>
 </head>
 <body>
-<!-- wo-continuous-print 240x130 compact -->
+<!-- wo-continuous-print 240x130 onesheet -->
 ${pageHtml}
 </body>
 </html>`;

@@ -135,8 +135,8 @@ assert(digitalOverrideTail.includes("font-weight:400!important"), "override afte
 assert(!digitalOverrideTail.includes("font-weight:700"), "override tail has no 700");
 
 const cp = buildWorkOrderHtml(multi, { mode: "continuous-print" });
-assert(cp.includes('data-wo-print="continuous-240x130-compact"'), "compact 240x130 marker");
-assert(cp.includes("<!-- wo-continuous-print 240x130 compact -->"), "html comment fingerprint");
+assert(cp.includes('data-wo-print="continuous-240x130-onesheet"'), "compact 240x130 marker");
+assert(cp.includes("<!-- wo-continuous-print 240x130 onesheet -->"), "html comment fingerprint");
 assert(cp.includes("@page{size:auto;margin:0}"), "keep successful size:auto");
 assert(cp.includes("width:240mm") && cp.includes("height:130mm"), "content box 240×130");
 assert(!/@page\{[^}]*landscape/.test(cp), "do not add landscape");
@@ -144,9 +144,9 @@ assert(!/@page\{[^}]*portrait/.test(cp), "do not add portrait");
 assert(!cp.includes("@page{size:240mm 130mm"), "do not overwrite @page with fixed 240×130");
 assert(!cp.includes("wo13-page") && !cp.includes("cp-mat-pad"), "old pad/v10 classes gone");
 assert(cp.includes("晟風空調工程｜派工單") && cp.includes("workorder-title"), "centered title");
-assert(cp.includes("font-size:12pt") && cp.includes("font-weight:500"), "body 12pt 500");
-assert(cp.includes("font-size:15pt") && cp.includes("font-weight:600"), "title 15pt 600");
-assert(cp.includes("line-height:1.15"), "tight line height");
+assert(cp.includes("font-size:11.5pt") && cp.includes("font-weight:500"), "body 11.5pt 500");
+assert(cp.includes("font-size:14.5pt") && cp.includes("font-weight:600"), "title 14.5pt 600");
+assert(cp.includes("line-height:1.12"), "tight line height");
 assert(cp.includes("案件編號：") && cp.includes("日期："), "row 1");
 assert(cp.includes("客戶：") && cp.includes("電話："), "row 2");
 assert(cp.includes("工程名稱：") && cp.includes("施工技師：") && cp.includes("負責業務："), "name / tech / sales");
@@ -175,14 +175,14 @@ const wo0195 = {
 };
 const cp0195 = buildWorkOrderHtml(wo0195, { mode: "continuous-print" });
 assert(cp0195.includes("WO-20261015-0195"), "0195 number");
-assert(cp0195.includes('data-wo-print="continuous-240x130-compact"'), "0195 uses compact template");
+assert(cp0195.includes('data-wo-print="continuous-240x130-onesheet"'), "0195 uses compact template");
 assert((cp0195.match(/class="sheet dot-matrix-page"/g) || []).length === 1, "0195 single 240×130 page");
 assert(cp0195.includes("客戶簽名") && cp0195.includes("技師簽名"), "0195 signatures kept");
 assert(cp0195.includes("客戶備註：") && !cp0195.includes("工程收費"), "0195 notes kept, fee title gone");
 
 const acceptCp = buildWorkOrderHtml(acceptance, { mode: "continuous-print" });
 assert(acceptCp.includes("WO-20261013-0192"), "acceptance on continuous");
-assert(acceptCp.includes('data-wo-print="continuous-240x130-compact"'), "0192 uses compact template");
+assert(acceptCp.includes('data-wo-print="continuous-240x130-onesheet"'), "0192 uses compact template");
 assert((acceptCp.match(/class="sheet dot-matrix-page"/g) || []).length === 1, "0192 single page");
 assert(acceptCp.includes("材料／設備"), "empty materials still show section");
 assert(!acceptCp.includes("wo13-page"), "acceptance not later v10 layout");
@@ -212,7 +212,7 @@ const wo0178 = {
 };
 const cp0178 = buildWorkOrderHtml(wo0178, { mode: "continuous-print" });
 assert(cp0178.includes("WO-20261006-0178"), "0178 number");
-assert(cp0178.includes('data-wo-print="continuous-240x130-compact"'), "0178 uses compact template");
+assert(cp0178.includes('data-wo-print="continuous-240x130-onesheet"'), "0178 uses compact template");
 assert(cp0178.includes("客戶簽名") && cp0178.includes("技師簽名"), "0178 signatures kept");
 assert(cp0178.includes("隔震墊"), "0178 last material not dropped");
 assert(cp0178.includes("現場聯絡人：林先生"), "0178 contact shown");
@@ -240,11 +240,17 @@ const wo0185 = {
     { itemName: "架台", quantity: 1, unit: "式" },
     { itemName: "冷媒", quantity: 1, unit: "罐" },
     { itemName: "電源線", quantity: 1, unit: "式" },
+    { itemName: "固定螺絲", quantity: 8, unit: "支" },
+    { itemName: "隔震墊", quantity: 4, unit: "個" },
+    { itemName: "包布", quantity: 1, unit: "式" },
   ],
 };
 const cp0185 = buildWorkOrderHtml(wo0185, { mode: "continuous-print" });
 assert(cp0185.includes("WO-20261012-0185"), "0185 number");
-assert((cp0185.match(/class="sheet dot-matrix-page"/g) || []).length === 1, "0185 typical content one page");
+assert((cp0185.match(/class="sheet dot-matrix-page"/g) || []).length === 1, "0185 nine materials stay on one page");
+assert(!cp0185.includes("（續頁）"), "0185 must not create a footer-only continuation");
+assert(cp0185.includes("包布") && cp0185.includes("隔震墊") && cp0185.includes("固定螺絲"), "0185 all 9 materials printed");
+assert(cp0185.includes("收款方式：") && cp0185.includes("客戶簽名"), "0185 pay and signatures on same page");
 assert(cp0185.includes("☑") && cp0185.includes("現金"), "0185 cash checked from ERP");
 assert(cp0185.includes("20,000") && cp0185.includes("5,000"), "0185 receivable and received");
 assert(cp0185.includes("客戶備註：請於完工後收款"), "0185 customer notes");
