@@ -135,24 +135,35 @@ assert(digitalOverrideTail.includes("font-weight:400!important"), "override afte
 assert(!digitalOverrideTail.includes("font-weight:700"), "override tail has no 700");
 
 const cp = buildWorkOrderHtml(multi, { mode: "continuous-print" });
-assert(cp.includes('data-wo-print="continuous-9.5x5.5-a2c9b19"'), "restored a2c9b19 continuous marker");
-assert(cp.includes("<!-- wo-continuous-print restored-from-a2c9b19 9.5x5.5in -->"), "html comment fingerprint");
-assert(cp.includes("@page{size:auto;margin:0}"), "restored size:auto like the working print");
-assert(cp.includes("241.3mm") && cp.includes("139.7mm"), "restored 9.5×5.5in paper box");
+assert(cp.includes('data-wo-print="continuous-240x130-compact"'), "compact 240x130 marker");
+assert(cp.includes("<!-- wo-continuous-print 240x130 compact -->"), "html comment fingerprint");
+assert(cp.includes("@page{size:auto;margin:0}"), "keep successful size:auto");
+assert(cp.includes("width:240mm") && cp.includes("height:130mm"), "content box 240×130");
 assert(!/@page\{[^}]*landscape/.test(cp), "do not add landscape");
 assert(!/@page\{[^}]*portrait/.test(cp), "do not add portrait");
-assert(!cp.includes("@page{size:240mm 130mm"), "must not use later 240×130 rewrite");
-assert(!cp.includes("wo13-page") && !cp.includes("wo13-paytab"), "later 24×13 classes gone");
-assert(!cp.includes("收款方式：") && !cp.includes("收款狀態："), "do not add later payment rows");
-assert(cp.includes("cp-title") && cp.includes("晟風空調工程｜派工單"), "original centered title");
-assert(cp.includes("cp-mat-row") && cp.includes("cp-mat-pad"), "original material rows");
-assert(cp.includes("項次") && cp.includes("品項名稱") && cp.includes("數量"), "original material columns");
-assert(cp.includes("施工內容：") && cp.includes("材料／設備") && cp.includes("備註："), "original sections");
-assert(cp.includes("工程收費：") && cp.includes("無收費") && cp.includes("客戶備註："), "original fee block");
-assert(cp.includes("客戶簽名：") && cp.includes("技師簽名："), "original signatures");
+assert(!cp.includes("@page{size:240mm 130mm"), "do not overwrite @page with fixed 240×130");
+assert(!cp.includes("wo13-page") && !cp.includes("cp-mat-pad"), "old pad/v10 classes gone");
+assert(cp.includes("晟風空調工程｜派工單") && cp.includes("workorder-title"), "centered title");
+assert(cp.includes("font-size:12pt") && cp.includes("font-weight:500"), "body 12pt 500");
+assert(cp.includes("font-size:15pt") && cp.includes("font-weight:600"), "title 15pt 600");
+assert(cp.includes("line-height:1.15"), "tight line height");
+assert(cp.includes("案件編號：") && cp.includes("日期："), "row 1");
+assert(cp.includes("客戶：") && cp.includes("電話："), "row 2");
+assert(cp.includes("工程名稱：") && cp.includes("施工技師：") && cp.includes("負責業務："), "name / tech / sales");
+assert(cp.includes("地址："), "address row");
+assert(cp.includes("施工內容") && cp.includes("<table class=\"material-table\">"), "work + materials table");
+assert(cp.includes("收款方式：") && cp.includes("現金") && cp.includes("匯款"), "pay methods");
+assert(cp.includes("應收：") && cp.includes("已收："), "amounts");
+assert(cp.includes("客戶備註：") && cp.includes("請於完工後收款"), "customer notes on the right");
+assert(!cp.includes("工程收費") && !cp.includes("無收費"), "old fee checkboxes removed");
+const bodyCp = cp.slice(cp.indexOf("<body>"));
+assert(!bodyCp.includes("備註：") || bodyCp.includes("客戶備註："), "left notes block removed");
+assert(!bodyCp.includes(">備註<") && !bodyCp.includes("section-title\">備註"), "left 備註 title gone");
+assert(cp.includes("客戶簽名") && cp.includes("技師簽名"), "signatures");
+assert(cp.includes("☑") && cp.includes("現金") && cp.includes("匯款"), "pay checks from ERP data");
 assert(!/transform:\s*scale\(/.test(cp), "continuous must not scale");
 assert(!cp.includes("size:A4 landscape"), "continuous not A4");
-assert((cp.match(/class="page"/g) || []).length === 1, "original single 9.5×5.5 page");
+assert((cp.match(/class="sheet dot-matrix-page"/g) || []).length === 1, "5 materials fit one 240×130 page");
 
 const wo0195 = {
   ...multi,
@@ -164,17 +175,17 @@ const wo0195 = {
 };
 const cp0195 = buildWorkOrderHtml(wo0195, { mode: "continuous-print" });
 assert(cp0195.includes("WO-20261015-0195"), "0195 number");
-assert(cp0195.includes('data-wo-print="continuous-9.5x5.5-a2c9b19"'), "0195 uses restored template");
-assert((cp0195.match(/class="page"/g) || []).length === 1, "0195 single 9.5×5.5 page");
-assert(cp0195.includes("客戶簽名：") && cp0195.includes("技師簽名："), "0195 signatures kept");
-assert(cp0195.includes("工程收費：") && cp0195.includes("客戶備註："), "0195 fee / notes titles");
+assert(cp0195.includes('data-wo-print="continuous-240x130-compact"'), "0195 uses compact template");
+assert((cp0195.match(/class="sheet dot-matrix-page"/g) || []).length === 1, "0195 single 240×130 page");
+assert(cp0195.includes("客戶簽名") && cp0195.includes("技師簽名"), "0195 signatures kept");
+assert(cp0195.includes("客戶備註：") && !cp0195.includes("工程收費"), "0195 notes kept, fee title gone");
 
 const acceptCp = buildWorkOrderHtml(acceptance, { mode: "continuous-print" });
 assert(acceptCp.includes("WO-20261013-0192"), "acceptance on continuous");
-assert(acceptCp.includes('data-wo-print="continuous-9.5x5.5-a2c9b19"'), "0192 uses restored template");
-assert((acceptCp.match(/class="page"/g) || []).length === 1, "0192 single page");
-assert(acceptCp.includes("材料／設備"), "empty materials still show original section");
-assert(!acceptCp.includes("wo13-page"), "acceptance not later 24×13 layout");
+assert(acceptCp.includes('data-wo-print="continuous-240x130-compact"'), "0192 uses compact template");
+assert((acceptCp.match(/class="sheet dot-matrix-page"/g) || []).length === 1, "0192 single page");
+assert(acceptCp.includes("材料／設備"), "empty materials still show section");
+assert(!acceptCp.includes("wo13-page"), "acceptance not later v10 layout");
 
 const wo0178 = {
   ...multi,
@@ -201,22 +212,62 @@ const wo0178 = {
 };
 const cp0178 = buildWorkOrderHtml(wo0178, { mode: "continuous-print" });
 assert(cp0178.includes("WO-20261006-0178"), "0178 number");
-assert(cp0178.includes('data-wo-print="continuous-9.5x5.5-a2c9b19"'), "0178 uses restored template");
-assert(cp0178.includes("客戶簽名：") && cp0178.includes("技師簽名："), "0178 signatures kept");
+assert(cp0178.includes('data-wo-print="continuous-240x130-compact"'), "0178 uses compact template");
+assert(cp0178.includes("客戶簽名") && cp0178.includes("技師簽名"), "0178 signatures kept");
 assert(cp0178.includes("隔震墊"), "0178 last material not dropped");
-assert((cp0178.match(/class="page"/g) || []).length === 1, "original layout kept 8 materials on one 9.5×5.5 page");
-assert(cp0178.includes("現場磁磚請鋪布"), "0178 notes kept");
-const body0178 = cp0178.slice(cp0178.indexOf("<body>"));
-assert(body0178.indexOf("隔震墊") < body0178.indexOf("工程收費"), "0178 last material before fee");
-assert(body0178.indexOf("備註：") < body0178.indexOf("工程收費"), "0178 notes before fee block");
+assert(cp0178.includes("現場聯絡人：林先生"), "0178 contact shown");
+assert(!cp0178.includes("現場磁磚請鋪布"), "left 備註 block removed");
+assert(cp0178.includes("洪宇風"), "sales rep still printed");
+assert((cp0178.match(/class="sheet dot-matrix-page"/g) || []).length === 1, "8 materials still one 240×130 page");
+
+const wo0185 = {
+  ...multi,
+  id: 185,
+  workOrderNumber: "WO-20261012-0185",
+  customerName: "花壇林宅",
+  contactPerson: "林太太",
+  mobilePhone: "0912-000-185",
+  installAddress: "彰化縣花壇鄉中山路一段185號",
+  title: "室內機安裝＋銅管配管＋室外機移位",
+  scheduledDate: "2026-10-12",
+  description: "拆除舊機後安裝壁掛室內機兩台，配管沿既有路徑重拉，室外機改掛陽台外側，完工試機並說明濾網清潔。",
+  notes: "負責業務：洪宇風",
+  billingNotes: "請於完工後收款",
+  equipmentItems: [
+    { itemName: "壁掛分離式", brand: "大金", model: "RX-A", quantity: 2, unit: "台" },
+    { itemName: "銅管", quantity: 2, unit: "式" },
+    { itemName: "排水管", quantity: 1, unit: "式" },
+    { itemName: "架台", quantity: 1, unit: "式" },
+    { itemName: "冷媒", quantity: 1, unit: "罐" },
+    { itemName: "電源線", quantity: 1, unit: "式" },
+  ],
+};
+const cp0185 = buildWorkOrderHtml(wo0185, { mode: "continuous-print" });
+assert(cp0185.includes("WO-20261012-0185"), "0185 number");
+assert((cp0185.match(/class="sheet dot-matrix-page"/g) || []).length === 1, "0185 typical content one page");
+assert(cp0185.includes("☑") && cp0185.includes("現金"), "0185 cash checked from ERP");
+assert(cp0185.includes("20,000") && cp0185.includes("5,000"), "0185 receivable and received");
+assert(cp0185.includes("客戶備註：請於完工後收款"), "0185 customer notes");
+assert(!cp0185.includes("工程收費") && !cp0185.includes("無收費"), "0185 old fee gone");
+
+const longWo = {
+  ...wo0185,
+  workOrderNumber: "WO-LONG",
+  description: "拆除舊機後安裝壁掛室內機兩台，配管沿既有路徑重拉並包覆保溫，室外機改掛陽台外側，電源由室內配電箱另拉專用迴路，完工試機、調整冷媒、說明濾網清潔與保固注意事項。".repeat(3),
+  equipmentItems: Array.from({ length: 14 }, (_, i) => ({ itemName: `材料${i + 1}`, quantity: 1, unit: "式" })),
+};
+const longCp = buildWorkOrderHtml(longWo, { mode: "continuous-print" });
+assert((longCp.match(/class="sheet dot-matrix-page"/g) || []).length >= 2, "long content continues to next 240×130 page");
+assert(longCp.includes("材料14"), "overflow last material kept");
+assert(longCp.includes("收款方式：") && longCp.includes("客戶簽名"), "pay and signatures stay on last page");
 
 const manyMats = {
   ...multi,
   equipmentItems: Array.from({ length: 16 }, (_, i) => ({ itemName: `材料${i + 1}`, quantity: 1, unit: "式" })),
 };
 const manyCp = buildWorkOrderHtml(manyMats, { mode: "continuous-print" });
-assert(manyCp.includes("材料16"), "last material kept on restored single sheet");
-assert(manyCp.includes("工程收費："), "fee block stays");
+assert(manyCp.includes("材料16"), "last material kept");
+assert(manyCp.includes("收款方式："), "pay block stays");
 
 const th80 = buildWorkOrderHtml(multi, { mode: "thermal-80" });
 assert(th80.includes("size:80mm auto"), "80mm thermal");
