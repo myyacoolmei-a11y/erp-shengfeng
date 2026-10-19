@@ -1,10 +1,10 @@
-// 派工單 Template — digital 24×14cm／A4 橫式／點陣連續紙 9.5×5.5in／熱感
+// 派工單 Template — digital 24×14cm／A4 橫式／點陣連續紙 240×130／熱感
 // 獨立版面：修改此檔不影響其他 Template
-// continuous-print：還原 a2c9b19 已成功列印的 241.3×139.7mm（@page size:auto）
+// continuous-print：內容盒 240×130mm；@page 維持成功的 size:auto（不寫 landscape／portrait）
 
 import { logoUrl, COMPANY, COLORS, esc, PRINT_DOC_TYPE_CSS, PRINT_CJK_FONT_STACK, PRINT_CJK_METRIC_CSS, printFontLinksHtml } from "./brand-config";
 import { stripQuotePricingFromNotes } from "../../../../../shared/workOrderNotes.ts";
-import { CONTINUOUS_PAPER, PRINT_CALIBRATION_DEFAULT, type PrintCalibration } from "@/lib/printPaperConfig";
+import { PRINT_CALIBRATION_DEFAULT, type PrintCalibration } from "@/lib/printPaperConfig";
 import { displayQuoteItemCategory, displayQuoteItemBrand } from "./printCategory";
 import {
   WO_JOB_TYPE_OPTIONS,
@@ -283,37 +283,45 @@ export interface WorkOrderHtmlOptions {
   /**
    * "digital"（預設）：既有 PDF 下載／行動裝置／LINE 分享流程使用，
    * 版面與既有輸出完全相同，不受連續報表紙改版影響。
-   * "continuous-print"：還原 a2c9b19 的 9.5×5.5in 點陣連續紙（@page size:auto）。
+   * "continuous-print"：240×130mm 內容盒；@page 維持 size:auto，不鎖定方向。
    */
   mode?: WorkOrderHtmlMode;
   /** 僅 mode==="continuous-print" 時套用：正式列印時的上下左右位置校正（mm）。 */
   calibration?: PrintCalibration;
 }
 
-function buildContinuousMaterialRows(equipment: EquipmentRow[]): string {
-  if (equipment.length === 0) return "";
-  return equipment.map((it, i) => {
-    // 連續紙只顯示數量數字，不附加單位／規格欄
+function buildContinuousMaterialName(it: EquipmentRow): string {
+  const remark = equipmentRemark(it);
+  const spec = equipmentSpec(it);
+  const cat = displayQuoteItemCategory(it);
+  const nameCore = remark ? `${spec}（${remark}）` : spec;
+  return cat && cat !== "—" ? `${cat}｜${nameCore}` : nameCore;
+}
+
+function buildContinuousMaterialRows(equipment: EquipmentRow[], start = 0, end = equipment.length): string {
+  if (end <= start) {
+    return `<tr><td class="n">—</td><td class="name">（無）</td><td class="q"></td></tr>`;
+  }
+  return equipment.slice(start, end).map((it, i) => {
     const qtyDisplay = it.quantity != null && String(it.quantity).trim() !== ""
       ? String(it.quantity)
       : "";
-    const remark = equipmentRemark(it);
-    const spec = equipmentSpec(it);
-    const cat = displayQuoteItemCategory(it);
-    const nameCore = remark ? `${spec}（${remark}）` : spec;
-    const name = cat ? `${cat}｜${nameCore}` : nameCore;
-    return `<div class="cp-mat-row" data-mat-index="${i + 1}">
-      <div class="cp-mat-no">${i + 1}</div>
-      <div class="cp-mat-name">${esc(name)}</div>
-      <div class="cp-mat-qty">${esc(qtyDisplay)}</div>
-      <div class="cp-mat-pad" aria-hidden="true"></div>
-    </div>`;
+    return `<tr>
+      <td class="n">${start + i + 1}</td>
+      <td class="name">${esc(buildContinuousMaterialName(it))}</td>
+      <td class="q">${esc(qtyDisplay)}</td>
+    </tr>`;
   }).join("");
 }
 
+const WO_DOT_W_MM = 240;
+const WO_DOT_H_MM = 130;
+const WO_DOT_PAD_X_MM = 10;
+const WO_DOT_PAD_Y_MM = 4;
+
 /**
  * digital：維持既有 240×140mm。
- * continuous-print：@page size:auto，內容根容器 241.3×139.7mm（還原 a2c9b19）。
+ * continuous-print：內容盒 240×130mm；@page 維持成功的 size:auto，不鎖定方向。
  */
 function buildPageBoxCss(mode: WorkOrderHtmlMode, calibration: PrintCalibration): string {
   if (mode !== "continuous-print") {
@@ -329,518 +337,222 @@ function buildPageBoxCss(mode: WorkOrderHtmlMode, calibration: PrintCalibration)
 }`;
   }
 
-  const {
-    WIDTH_MM, HEIGHT_MM,
-    MARGIN_LEFT_MM, MARGIN_RIGHT_MM,
-    MARGIN_TOP_MM, MARGIN_BOTTOM_MM,
-  } = CONTINUOUS_PAPER;
   const offsetXMm = Number.isFinite(calibration?.offsetXMm) ? calibration.offsetXMm : 0;
   const offsetYMm = Number.isFinite(calibration?.offsetYMm) ? calibration.offsetYMm : 0;
-  const padTop = MARGIN_TOP_MM + offsetYMm;
-  const padRight = Math.max(0, MARGIN_RIGHT_MM - offsetXMm);
-  const padBottom = Math.max(0, MARGIN_BOTTOM_MM - offsetYMm);
-  const padLeft = Math.max(0, MARGIN_LEFT_MM + offsetXMm);
+  const padTop = WO_DOT_PAD_Y_MM + offsetYMm;
+  const padRight = Math.max(0, WO_DOT_PAD_X_MM - offsetXMm);
+  const padBottom = Math.max(0, WO_DOT_PAD_Y_MM - offsetYMm);
+  const padLeft = WO_DOT_PAD_X_MM + offsetXMm;
 
   return `
-/* EPSON 點陣機連續紙半張內容區：${WIDTH_MM}mm × ${HEIGHT_MM}mm（9.5×5.5in）。
-   @page size:auto — 不鎖定直向／橫向；由列印對話框自訂紙張控制方向。
-   .sheet 高度固定 ${HEIGHT_MM}mm，寬度滿版；左右送紙孔以 padding 保留。
-   .page 撐滿可印區；主要留白集中在材料清單下方手寫區；備註／收費／簽名緊湊。
-   禁止 transform:scale／zoom／自動壓縮；禁止 overflow 裁切底部。 */
+/* 內容盒 240×130mm。@page size:auto — 不覆蓋已成功的列印方向設定。 */
 @page{size:auto;margin:0}
 html,body{
   box-sizing:border-box;
-  width:${WIDTH_MM}mm;
-  height:${HEIGHT_MM}mm;
-  max-width:${WIDTH_MM}mm;
-  max-height:${HEIGHT_MM}mm;
+  width:${WO_DOT_W_MM}mm;
+  height:auto;
   margin:0;padding:0;
   background:#fff;
   transform:none;
   zoom:normal;
 }
-.sheet{
+.sheet.dot-matrix-page{
   box-sizing:border-box;
-  width:${WIDTH_MM}mm;
-  height:${HEIGHT_MM}mm;
-  max-width:${WIDTH_MM}mm;
-  max-height:${HEIGHT_MM}mm;
+  width:${WO_DOT_W_MM}mm;
+  height:${WO_DOT_H_MM}mm;
   padding:${padTop}mm ${padRight}mm ${padBottom}mm ${padLeft}mm;
   break-inside:avoid;
   page-break-inside:avoid;
-  page-break-after:avoid;
-  page-break-before:avoid;
-  break-after:avoid;
-  break-before:avoid;
+  page-break-after:auto;
+  break-after:auto;
   position:static;
   overflow:visible;
   transform:none;
   zoom:normal;
+  display:block;
 }
-.page{
-  box-sizing:border-box;
-  display:flex;
-  flex-direction:column;
-  align-items:stretch;
-  justify-content:flex-start;
-  width:100%;
-  max-width:100%;
-  height:100%;
-  min-height:100%;
-  max-height:100%;
-  margin:0;padding:0;
-  position:static;
-  overflow:visible;
-  break-inside:avoid;
-  page-break-inside:avoid;
-  transform:none;
-  zoom:normal;
-}
-/* 標題／基本資料／施工／備註／列：依內容高度，不硬撐空白 */
-.cp-title,.cp-grid,.cp-block,.cp-notes-block,.cp-mat-list,.cp-mat-row,.cp-mat-header,.cp-text,.cp-field,.cp-val,.cp-lbl,.cp-mat-name,.cp-mat-no,.cp-mat-qty,.cp-mat-pad,.cp-write-space,.cp-cust-space{
-  box-sizing:border-box;
-  position:static;
-  flex-shrink:0;
-  height:auto;
-  min-height:auto;
-  max-height:none;
-  transform:none;
-  zoom:normal;
-}
-/* 材料區吸收剩餘高度；手寫留白在清單與備註之間；不可縮到小於內容（避免壓到下方） */
-.cp-mat-block{
-  box-sizing:border-box;
-  position:static;
-  flex:1 1 auto;
-  display:flex;
-  flex-direction:column;
-  height:auto;
-  min-height:auto;
-  max-height:none;
-  transform:none;
-  zoom:normal;
-  overflow:visible;
-}
-.cp-mat-handwrite{
-  box-sizing:border-box;
-  position:static;
-  flex:1 1 auto;
-  width:100%;
-  min-height:0;
-  max-height:none;
-  transform:none;
-  zoom:normal;
-}
-/* 工程收費＋客戶備註：緊湊 */
-.cp-fee-block{
-  box-sizing:border-box;
-  position:static;
-  flex:0 0 auto;
-  height:auto;
-  min-height:auto;
-  max-height:none;
-  transform:none;
-  zoom:normal;
-}
-/* 簽名：緊接收費區，不 margin-top:auto 拉開 */
-.cp-sigs{
-  box-sizing:border-box;
-  position:static;
-  flex:0 0 auto;
-  margin-top:0;
-  height:auto;
-  min-height:auto;
-  max-height:none;
-  transform:none;
-  zoom:normal;
-}
-.cp-text,.cp-val{
-  overflow-wrap:anywhere;
-  word-break:break-word;
-  white-space:pre-wrap;
-}
-.cp-mat-name{
-  overflow-wrap:anywhere;
-  word-break:break-word;
-  white-space:normal;
+.sheet.dot-matrix-page + .sheet.dot-matrix-page{
+  page-break-before:always;
+  break-before:page;
 }`;
 }
-
 
 function buildCompactOverridesCss(mode: WorkOrderHtmlMode): string {
   if (mode !== "continuous-print") return "";
   return `
-*{
-  -webkit-print-color-adjust:economy!important;
-  print-color-adjust:economy!important;
-  box-shadow:none!important;
-  text-shadow:none!important;
-  transform:none!important;
-  zoom:normal!important;
-}
-html,body,.sheet,.page{
-  color:#000!important;
-  background:#fff!important;
-  opacity:1!important;
-}
-body{
-  font-family:${PRINT_CJK_FONT_STACK};
-  font-size:15px;
-  line-height:1.4;
+.dot-matrix-page{
+  box-sizing:border-box;
+  font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;
+  font-size:12pt;
   font-weight:500;
-  font-stretch:100%;
-  font-synthesis:none;
-  font-variation-settings:normal;
+  line-height:1.15;
+  letter-spacing:0;
+  color:#000;
+  background:#fff;
+}
+.dot-matrix-page *{
+  box-sizing:border-box;
+  font-weight:500;
   transform:none;
   zoom:normal;
+  box-shadow:none;
+  text-shadow:none;
 }
-.cp-title{
-  display:block;
+.dot-matrix-page .workorder-title{
+  font-size:15pt;
+  font-weight:600;
+  line-height:1.1;
   text-align:center;
-  font-size:24px;
-  font-weight:700;
-  color:#000!important;
-  letter-spacing:1px;
-  margin:0 0 0.3mm;
+  margin:0 0 1mm;
+}
+.dot-matrix-page .info-row{
+  display:flex;
+  align-items:baseline;
+  gap:3mm;
+  margin:0;
   padding:0;
-  border:none;
-  background:transparent!important;
-  line-height:1.25;
-  flex:0 0 auto;
+  min-height:0;
 }
-.cp-grid{
-  display:grid;
-  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
-  column-gap:4mm;
-  row-gap:0;
-  width:100%;
-  margin:0 0 0.2mm;
-  padding:0 0 0.25mm;
-  border:none;
-  border-bottom:0.3mm solid #000;
-  flex:0 0 auto;
-}
-.cp-col{display:block;min-width:0}
-.cp-field{display:flex;gap:1.2mm;align-items:baseline;min-width:0;line-height:1.35;margin:0}
-/* 技師：保留足夠手寫空間；無資料時空白（不加破折號），僅空值時顯示底線 */
-.cp-field-tech{
-  min-height:6mm;
-  align-items:flex-end;
-  margin-bottom:0.4mm;
-}
-.cp-field-tech .cp-val{
-  min-height:4.8mm;
-  padding-bottom:0.25mm;
-}
-.cp-field-tech.is-empty .cp-val{
-  border-bottom:0.25mm solid #000;
-}
-.cp-lbl{
-  flex:0 0 24mm;
-  width:24mm;
-  min-width:24mm;
-  max-width:24mm;
-  font-size:13px;font-weight:500;color:#000!important;
+.dot-matrix-page .info-field{
+  min-width:0;
+  flex:1 1 auto;
+  font-size:12pt;
+  font-weight:500;
+  line-height:1.15;
   white-space:nowrap;
-  letter-spacing:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.dot-matrix-page .info-field.wide{
+  flex:1 1 100%;
+  white-space:normal;
   overflow:visible;
-  line-height:1.35;
+  text-overflow:unset;
+  word-break:keep-all;
+  overflow-wrap:break-word;
 }
-.cp-val{
-  flex:1 1 auto;
-  font-size:16px;font-weight:600;color:#000!important;
-  min-width:0;
-  line-height:1.35;
-}
-/* 施工內容：精簡；約 1～2 行手寫補充；底部單條實線與材料分隔 */
-.cp-block{
-  display:flex;
-  flex-direction:column;
-  width:100%;
+.dot-matrix-page .print-section{
   margin:0;
-  padding:0.12mm 0 0.2mm;
+  padding:0.6mm 0;
+}
+.dot-matrix-page .section-title{
+  font-size:12pt;
+  font-weight:500;
+  margin:0 0 0.5mm;
+}
+.dot-matrix-page .work-text{
+  font-size:12pt;
+  font-weight:500;
+  line-height:1.15;
+  white-space:pre-wrap;
+  word-break:keep-all;
+  overflow-wrap:break-word;
+}
+.dot-matrix-page .material-table{
+  width:100%;
+  border-collapse:collapse;
+  table-layout:fixed;
+}
+.dot-matrix-page .material-table th,
+.dot-matrix-page .material-table td{
+  padding:0.4mm 1mm;
+  font-size:12pt;
+  font-weight:500;
+  line-height:1.15;
+  vertical-align:top;
+  overflow-wrap:anywhere;
   border:none;
+  border-bottom:0.15mm solid #888;
+}
+.dot-matrix-page .material-table th{
+  text-align:left;
   border-bottom:0.3mm solid #000;
-  overflow:visible;
-  flex:0 0 auto;
 }
-.cp-sec{
-  display:block;
-  width:100%;
-  font-size:16px;font-weight:700;color:#000!important;
-  margin:0 0 0.12mm;padding:0;
-  border:none;background:transparent!important;
-  line-height:1.35;
-  flex:0 0 auto;
-}
-.cp-text{
-  display:block;
-  width:100%;
-  font-size:16px;font-weight:500;color:#000!important;
-  margin:0;padding:0;line-height:1.4;
-  border:none;background:transparent!important;
-  flex:0 0 auto;
-}
-.cp-notes-block .cp-text{
-  font-size:15px;
-  line-height:1.4;
-}
-.cp-write-space{
-  flex:0 0 auto;
-  height:2.5mm;
-  width:100%;
-  margin-top:0.15mm;
-  border:none;
-}
-/* 材料區：可長高吸收留白，但不縮到小於材料列（避免重疊下方） */
-.cp-mat-block{
-  display:flex;
-  flex-direction:column;
-  width:100%;
-  margin:0;
-  padding:0.15mm 0 0.25mm;
-  border:none;
-  border-bottom:0.3mm solid #000;
-  overflow:visible;
-  flex:1 1 auto;
-  min-height:auto;
-}
-.cp-mat-block > .cp-sec{
-  margin:0 0 0.15mm;
-  flex:0 0 auto;
-}
-.cp-mat-header,
-.cp-mat-row{
+.dot-matrix-page .material-table .n,
+.dot-matrix-page .material-table th.n{width:12mm;text-align:center;white-space:nowrap}
+.dot-matrix-page .material-table .q,
+.dot-matrix-page .material-table th.q{width:18mm;text-align:right;white-space:nowrap}
+.dot-matrix-page .material-table .name{text-align:left}
+.dot-matrix-page .payment-notes{
   display:grid;
-  /* 數量縮窄並靠近品項；右側留白避免貼孔，但不把數量甩到紙緣 */
-  grid-template-columns:8% 58% 12% 22%;
-  column-gap:0;
-  width:100%;
-  max-width:100%;
-  align-items:center;
-  overflow:visible;
-}
-.cp-mat-header{
-  font-size:14px;font-weight:700;color:#000!important;
-  padding:0.2mm 0 0.25mm;
-  margin:0;
-  border:none;
-  border-bottom:0.18mm dotted #888;
-  line-height:1.35;
-  flex:0 0 auto;
-}
-.cp-mat-list{
-  display:block;
-  width:100%;
-  margin:0;
-  padding:0;
-  border:none;
-  overflow:visible;
-  flex:0 0 auto;
-}
-.cp-mat-row{
-  font-size:16px;font-weight:500;color:#000!important;
-  padding:0.35mm 0;
-  margin:0;
-  border:none;
-  border-bottom:0.15mm dotted #999;
-  line-height:1.4;
-  min-height:5mm;
-  flex:0 0 auto;
-}
-.cp-mat-row:last-child{
-  border-bottom:0.15mm dotted #999;
-}
-.cp-mat-no{text-align:center;font-weight:700}
-.cp-mat-name{text-align:left;min-width:0;padding-right:1.2mm;font-size:16px;font-weight:600}
-.cp-mat-qty{text-align:center;font-weight:700;font-size:16px}
-.cp-mat-pad{min-width:0}
-/* 材料下方手寫留白：0/1/2 筆較大；5/8 筆縮小；有餘高時再伸展 */
-.cp-mat-handwrite{
-  flex:1 1 auto;
-  width:100%;
-  margin:0;
-  padding:0;
-  border:none;
-  min-height:5mm;
-}
-.cp-mat-block[data-mat-count="0"] .cp-mat-handwrite{min-height:20mm}
-.cp-mat-block[data-mat-count="1"] .cp-mat-handwrite{min-height:16mm}
-.cp-mat-block[data-mat-count="2"] .cp-mat-handwrite{min-height:12mm}
-.cp-mat-block[data-mat-count="3"] .cp-mat-handwrite{min-height:8mm}
-.cp-mat-block[data-mat-count="4"] .cp-mat-handwrite{min-height:5mm}
-.cp-mat-block[data-mat-count="5"] .cp-mat-handwrite{min-height:3mm}
-.cp-mat-block[data-mat-count="6"] .cp-mat-handwrite{min-height:2mm}
-.cp-mat-block[data-mat-count="7"] .cp-mat-handwrite{min-height:1.2mm}
-.cp-mat-block[data-mat-count="8"] .cp-mat-handwrite{min-height:0.8mm}
-/* 多筆材料時略壓列高，重要欄位不得小於 15px */
-.cp-mat-block[data-mat-count="5"] .cp-mat-row,
-.cp-mat-block[data-mat-count="6"] .cp-mat-row,
-.cp-mat-block[data-mat-count="7"] .cp-mat-row,
-.cp-mat-block[data-mat-count="8"] .cp-mat-row{
-  padding:0.12mm 0;
-  min-height:4.2mm;
-  line-height:1.35;
-  font-size:15px;
-}
-.cp-mat-block[data-mat-count="7"] .cp-mat-name,
-.cp-mat-block[data-mat-count="8"] .cp-mat-name,
-.cp-mat-block[data-mat-count="7"] .cp-mat-qty,
-.cp-mat-block[data-mat-count="8"] .cp-mat-qty{
-  font-size:15px;
-}
-.page:has(.cp-mat-block[data-mat-count="8"]) .cp-write-space{height:0}
-.page:has(.cp-mat-block[data-mat-count="8"]) .cp-cust-space{min-height:0}
-.page:has(.cp-mat-block[data-mat-count="8"]) .cp-sig-date{margin-top:0.6mm}
-.page:has(.cp-mat-block[data-mat-count="7"]) .cp-write-space,
-.page:has(.cp-mat-block[data-mat-count="6"]) .cp-write-space,
-.page:has(.cp-mat-block[data-mat-count="5"]) .cp-write-space{height:1.2mm}
-.page:has(.cp-mat-block[data-mat-count="7"]) .cp-val,
-.page:has(.cp-mat-block[data-mat-count="8"]) .cp-val{font-size:15px}
-.page:has(.cp-mat-block[data-mat-count="7"]) .cp-field-tech,
-.page:has(.cp-mat-block[data-mat-count="8"]) .cp-field-tech,
-.page:has(.cp-mat-block[data-mat-count="7"]) .cp-field-tech .cp-val,
-.page:has(.cp-mat-block[data-mat-count="8"]) .cp-field-tech .cp-val{min-height:0}
-.page:has(.cp-mat-block[data-mat-count="8"]) .cp-block,
-.page:has(.cp-mat-block[data-mat-count="8"]) .cp-notes-block,
-.page:has(.cp-mat-block[data-mat-count="8"]) .cp-mat-block{padding-top:0;padding-bottom:0}
-.page:has(.cp-mat-block[data-mat-count="8"]) .cp-fee-block{padding:0 0 0.1mm}
-.page:has(.cp-mat-block[data-mat-count="8"]) .cp-grid{margin:0;padding-bottom:0.15mm}
-.page:has(.cp-mat-block[data-mat-count="8"]) .cp-fee-opt{margin:0;line-height:1.25}
-.page:has(.cp-mat-block[data-mat-count="8"]) .cp-mat-handwrite{min-height:0}
-/* 備註：僅標題＋內容；緊湊；與工程收費之間不加分隔線，僅留白銜接 */
-.cp-notes-block{
-  display:flex;
-  flex-direction:column;
-  width:100%;
-  margin:0;
-  padding:0.1mm 0 0.55mm;
-  border:none;
-  overflow:visible;
-  flex:0 0 auto;
-}
-/* 工程收費（左）＋客戶備註（右）；底部單條實線與簽名分隔 */
-.cp-fee-block{
-  display:grid;
-  grid-template-columns:minmax(0,42%) minmax(0,58%);
+  grid-template-columns:1fr 1fr;
   column-gap:4mm;
-  align-items:stretch;
   width:100%;
-  margin:0;
-  padding:0.2mm 0 0.15mm;
-  border:none;
-  border-bottom:0.3mm solid #000;
-  overflow:visible;
-  flex:0 0 auto;
+  margin-top:0.8mm;
+  padding-top:0.6mm;
+  border-top:0.3mm solid #000;
 }
-.cp-fee-left,.cp-fee-right{
-  display:flex;
-  flex-direction:column;
-  min-width:0;
-  overflow:visible;
-}
-.cp-fee-opt{
+.dot-matrix-page .payment-row{
   display:flex;
   align-items:center;
-  gap:1.4mm;
-  font-size:15px;font-weight:700;color:#000!important;
-  line-height:1.35;
-  margin:0.15mm 0 0;
+  gap:2mm;
+  margin:0 0 0.4mm;
+  white-space:nowrap;
 }
-.cp-check{
-  box-sizing:border-box;
-  flex:0 0 4mm;
-  width:4mm;
-  height:4mm;
-  min-width:4mm;
-  min-height:4mm;
-  border:0.35mm solid #000;
-  background:transparent!important;
-  display:inline-block;
-}
-.cp-fee-blank{
-  display:inline-block;
-  width:28mm;
-  max-width:28mm;
-  min-width:25mm;
-  border:none;
-  border-bottom:0.3mm solid #000;
-  height:0;
-  vertical-align:baseline;
-  margin:0 0.8mm 0 0.5mm;
-}
-/* 客戶備註：乾淨留白，不畫輔助線 */
-.cp-cust-space{
-  flex:1 1 auto;
-  min-height:3.5mm;
-  width:100%;
-  margin-top:0.1mm;
-  border:none;
-}
-/* 簽名：與上方分隔線留 2–3mm → 標題 → 12mm 留白 → 簽名線 → 短距 → 日期：（不加線） */
-.cp-sigs{
-  display:grid;
-  grid-template-columns:minmax(0,1fr) minmax(0,1fr);
-  column-gap:8mm;
-  width:100%;
-  max-width:100%;
-  margin-top:0;
-  margin-bottom:0;
-  padding-top:2.4mm;
-  border:none;
-  overflow:visible;
-  align-items:start;
+.dot-matrix-page .payment-option{
+  display:inline-flex;
+  align-items:center;
+  gap:1mm;
   flex:0 0 auto;
+  white-space:nowrap;
 }
-.page:has(.cp-mat-block[data-mat-count="8"]) .cp-sigs{padding-top:0.6mm}
-.page:has(.cp-mat-block[data-mat-count="8"]) .cp-notes-block{padding-bottom:0}
-.page:has(.cp-mat-block[data-mat-count="8"]) .cp-sig-date{margin-top:0.3mm}
-.page:has(.cp-mat-block[data-mat-count="7"]) .cp-title,
-.page:has(.cp-mat-block[data-mat-count="8"]) .cp-title{font-size:24px;line-height:1.25;margin:0}
-.page:has(.cp-mat-block[data-mat-count="7"]) .cp-field,
-.page:has(.cp-mat-block[data-mat-count="8"]) .cp-field{line-height:1.3}
-.page:has(.cp-mat-block[data-mat-count="8"]) .cp-mat-row{line-height:1.25;min-height:0}
-.cp-sig{
-  box-sizing:border-box;
+.dot-matrix-page .cust-note{
   min-width:0;
-  height:auto;
-  display:flex;
-  flex-direction:column;
-  color:#000!important;
-  background:transparent!important;
-  border:none;
-  overflow:visible;
+  font-size:12pt;
+  font-weight:500;
+  word-break:keep-all;
+  overflow-wrap:break-word;
 }
-.cp-sig-title{
-  font-size:13px;font-weight:700;
-  margin:0;padding:0;
-  flex:0 0 auto;
-  line-height:1.35;
+.dot-matrix-page .amt-blank{
+  display:inline-block;
+  min-width:16mm;
+  border-bottom:0.25mm solid #000;
+  height:3.6mm;
+  vertical-align:bottom;
 }
-.cp-sig-space{
-  flex:0 0 12mm;
-  height:12mm;
-  min-height:12mm;
-  width:100%;
+.dot-matrix-page .signature-row{
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:4mm;
+  margin-top:1.6mm;
 }
-.cp-sig-line{
-  width:100%;
-  max-width:75mm;
-  border:none;
-  border-bottom:0.3mm solid #000;
-  height:0;
-  margin:0;
-  flex:0 0 auto;
+.dot-matrix-page .signature-field{
+  min-width:0;
+  font-size:12pt;
+  font-weight:500;
+  white-space:nowrap;
 }
-.cp-sig-date{
-  font-size:12px;font-weight:700;
-  display:block;
-  margin-top:1.2mm;
-  flex:0 0 auto;
-  line-height:1.35;
-  border:none;
+.dot-matrix-page .sig-line{
+  display:inline-block;
+  border-bottom:0.25mm solid #000;
+  width:28mm;
+  height:7mm;
+  vertical-align:bottom;
+  margin:0 1.2mm;
 }
-.hdr,.co-logo,.pf,.head-row{display:none!important}
+.dot-matrix-page .sig-line-sm{
+  display:inline-block;
+  border-bottom:0.25mm solid #000;
+  width:16mm;
+  height:7mm;
+  vertical-align:bottom;
+  margin:0 1.2mm;
+}
+@media print{
+  .dot-matrix-page{
+    break-inside:avoid;
+    page-break-inside:avoid;
+  }
+  .dot-matrix-page .payment-notes,
+  .dot-matrix-page .signature-row{
+    break-inside:avoid;
+    page-break-inside:avoid;
+  }
+  .dot-matrix-page .material-table tr{
+    break-inside:avoid;
+    page-break-inside:avoid;
+  }
+}
 `;
 }
 
@@ -866,8 +578,98 @@ function dash(v: unknown): string {
   return s ? esc(s) : "—";
 }
 
+function continuousPayFlags(order: Record<string, unknown>): { cash: boolean; remit: boolean } {
+  const billing = (order as any).billing || {};
+  const resolved = resolvePaymentMethods({
+    paymentMethods: order.paymentMethods,
+    paymentMethodOther: order.paymentMethodOther as string | null,
+    receivablePaymentMethod: billing.paymentMethod,
+    paymentRecordMethods: Array.isArray(billing.payments)
+      ? billing.payments.map((p: any) => p.paymentMethod)
+      : [],
+  });
+  return {
+    cash: resolved.methods.includes("現金"),
+    remit: resolved.methods.includes("銀行匯款"),
+  };
+}
 
-/** 還原 a2c9b19 已成功列印的連續紙 HTML。不新增收款三排、不強制旋轉。 */
+function continuousMoney(n: number): string {
+  if (n > 0) return n.toLocaleString("zh-TW");
+  return `<span class="amt-blank"></span>`;
+}
+
+function estimateWorkMm(desc: string): number {
+  const text = (desc || "—").trim() || "—";
+  const lines = text.split(/\n/).reduce((n, line) => {
+    const chars = Array.from(line).length;
+    return n + Math.max(1, Math.ceil(chars / 42));
+  }, 0);
+  return 4.8 * Math.max(1, lines);
+}
+
+function maxMaterialRowsOnContinuousPage(opts: {
+  fullHeader: boolean;
+  footer: boolean;
+  desc: string;
+  contact: boolean;
+}): number {
+  const usable = WO_DOT_H_MM - WO_DOT_PAD_Y_MM * 2;
+  let used = 8;
+  if (opts.fullHeader) {
+    used += 7;
+    used += opts.contact ? 24 : 20;
+    used += 5 + estimateWorkMm(opts.desc);
+  } else {
+    used += 8;
+  }
+  if (opts.footer) used += 22;
+  used += 7;
+  return Math.max(0, Math.floor((usable - used) / 5.4));
+}
+
+type ContinuousPageKind = "single" | "first" | "mid" | "last";
+
+function paginateContinuousContent(
+  count: number,
+  desc: string,
+  contact: boolean,
+): Array<{ start: number; end: number; kind: ContinuousPageKind }> {
+  const singleRows = maxMaterialRowsOnContinuousPage({
+    fullHeader: true, footer: true, desc, contact,
+  });
+  if (count <= singleRows) return [{ start: 0, end: count, kind: "single" }];
+
+  const pages: Array<{ start: number; end: number; kind: ContinuousPageKind }> = [];
+  const firstRows = maxMaterialRowsOnContinuousPage({
+    fullHeader: true, footer: false, desc, contact,
+  });
+  const firstEnd = Math.min(Math.max(firstRows, 0), count);
+  pages.push({ start: 0, end: firstEnd, kind: "first" });
+  let i = firstEnd;
+  if (i >= count) {
+    pages.push({ start: count, end: count, kind: "last" });
+    return pages;
+  }
+  const lastRows = maxMaterialRowsOnContinuousPage({
+    fullHeader: false, footer: true, desc, contact: false,
+  });
+  const midRows = maxMaterialRowsOnContinuousPage({
+    fullHeader: false, footer: false, desc: "", contact: false,
+  });
+  while (i < count) {
+    const left = count - i;
+    if (left <= lastRows) {
+      pages.push({ start: i, end: count, kind: "last" });
+      break;
+    }
+    const take = Math.min(Math.max(midRows, 1), left - Math.max(lastRows, 0));
+    pages.push({ start: i, end: i + take, kind: "mid" });
+    i += take;
+  }
+  return pages;
+}
+
 function buildRestoredContinuousWorkOrderHtml(
   order: any,
   woNum: string,
@@ -877,23 +679,96 @@ function buildRestoredContinuousWorkOrderHtml(
   woNotes: string,
   calibration: PrintCalibration,
 ): string {
-  let techDisplay = "";
-  try {
-    const techs = order.technicians ? JSON.parse(order.technicians) : null;
-    if (Array.isArray(techs) && techs.length) techDisplay = techs.join("、");
-  } catch { /* ignore */ }
-  if (order.assignedTo) {
-    techDisplay = order.assignedTo + (order.assistantTo ? ` / ${order.assistantTo}` : "");
-  }
-  const matRows = buildContinuousMaterialRows(equipment);
-  const descText = (order.description && String(order.description).trim()) || "—";
-  const { notesText: notesBody, salesRep } = splitSalesRepFromNotes(woNotes, order);
-  const notesText = (notesBody && notesBody.trim()) || "—";
-  const matBody = `<div class="cp-mat-header"><div class="cp-mat-no">項次</div><div class="cp-mat-name">品項名稱</div><div class="cp-mat-qty">數量</div><div class="cp-mat-pad" aria-hidden="true"></div></div>
-    <div class="cp-mat-list">${matRows}</div>
-    <div class="cp-mat-handwrite" aria-hidden="true"></div>`;
+  const techResolved = printTech(order);
+  const techDisplay = techResolved.names || [order.assignedTo, order.assistantTo].filter(Boolean).join(" / ");
+  const descText = (order.description && String(order.description).trim()) || "";
+  const { salesRep } = splitSalesRepFromNotes(woNotes, order);
+  const contact = String(order.contactPerson || "").trim();
+  const custNotes = String(order.billingNotes || order.billing?.notes || "").trim();
+  const billing = order.billing || {};
+  const total = Number(billing.totalAmount ?? order.billingTotalAmount ?? 0) || 0;
+  const received = Number(billing.receivedAmount ?? 0) || 0;
+  const pay = continuousPayFlags(order);
+  const pages = paginateContinuousContent(equipment.length, descText, Boolean(contact));
+  const dateStr = dash(order.scheduledDate || printDate);
+
+  const headerFull = `
+  <div class="workorder-title">晟風空調工程｜派工單</div>
+  <div class="info-row">
+    <div class="info-field">案件編號：${esc(woNum)}</div>
+    <div class="info-field">日期：${dateStr}</div>
+  </div>
+  <div class="info-row">
+    <div class="info-field">客戶：${dash(order.customerName)}</div>
+    <div class="info-field">電話：${esc(phoneDisplay)}</div>
+  </div>
+  <div class="info-row">
+    <div class="info-field wide">工程名稱：${dash(order.title)}</div>
+  </div>
+  <div class="info-row">
+    <div class="info-field">施工技師：${esc(techDisplay || "—")}</div>
+    <div class="info-field">負責業務：${dash(salesRep)}</div>
+  </div>
+  <div class="info-row">
+    <div class="info-field wide">地址：${dash(order.installAddress)}</div>
+  </div>
+  ${contact ? `<div class="info-row"><div class="info-field wide">現場聯絡人：${esc(contact)}</div></div>` : ""}
+  <section class="print-section">
+    <div class="section-title">施工內容</div>
+    <div class="work-text">${esc(descText || "—")}</div>
+  </section>`;
+
+  const headerContinue = `
+  <div class="workorder-title">晟風空調工程｜派工單</div>
+  <div class="info-row">
+    <div class="info-field">案件編號：${esc(woNum)}</div>
+    <div class="info-field">（續頁）</div>
+  </div>`;
+
+  const footer = `
+  <div class="payment-notes">
+    <div>
+      <div class="payment-row">
+        <span>收款方式：</span>
+        <span class="payment-option">${pay.cash ? "☑" : "☐"} 現金</span>
+        <span class="payment-option">${pay.remit ? "☑" : "☐"} 匯款</span>
+      </div>
+      <div class="payment-row">
+        <span>應收：${continuousMoney(total)}</span>
+        <span>已收：${continuousMoney(received)}</span>
+      </div>
+    </div>
+    <div class="cust-note">客戶備註：${custNotes ? esc(custNotes) : ""}</div>
+  </div>
+  <div class="signature-row">
+    <div class="signature-field">客戶簽名<span class="sig-line"></span>日期<span class="sig-line-sm"></span></div>
+    <div class="signature-field">技師簽名<span class="sig-line"></span>日期<span class="sig-line-sm"></span></div>
+  </div>`;
+
+  const pageHtml = pages.map((pg, idx) => {
+    const showFullHeader = pg.kind === "single" || pg.kind === "first";
+    const showFooter = pg.kind === "single" || pg.kind === "last";
+    const heading = pages.length > 1 ? `材料／設備（${idx + 1}/${pages.length}）` : "材料／設備";
+    const showMats = pg.end > pg.start || pg.kind === "single";
+    const materials = showMats
+      ? `<section class="print-section">
+    <div class="section-title">${heading}</div>
+    <table class="material-table">
+      <colgroup><col class="n"><col><col class="q"></colgroup>
+      <thead><tr><th class="n">項次</th><th class="name">品項名稱</th><th class="q">數量</th></tr></thead>
+      <tbody>${buildContinuousMaterialRows(equipment, pg.start, pg.end)}</tbody>
+    </table>
+  </section>`
+      : "";
+    return `<div class="sheet dot-matrix-page" data-page="${idx + 1}" data-total="${pages.length}">
+  ${showFullHeader ? headerFull : headerContinue}
+  ${materials}
+  ${showFooter ? footer : ""}
+</div>`;
+  }).join("\n");
+
   return `<!DOCTYPE html>
-<html lang="zh-TW" data-wo-print="continuous-9.5x5.5-a2c9b19">
+<html lang="zh-TW" data-wo-print="continuous-240x130-compact">
 <head>
 <meta charset="UTF-8">
 <title>派工單 ${esc(woNum)}</title>
@@ -902,75 +777,11 @@ ${printFontLinksHtml()}
 *{margin:0;padding:0;box-sizing:border-box}
 ${buildPageBoxCss("continuous-print", calibration)}
 ${buildCompactOverridesCss("continuous-print")}
-${PRINT_CJK_METRIC_CSS}
 </style>
 </head>
 <body>
-<!-- wo-continuous-print restored-from-a2c9b19 9.5x5.5in -->
-<div class="sheet">
-<div class="page">
-  <div class="cp-title">晟風空調工程｜派工單</div>
-
-  <div class="cp-grid">
-    <div class="cp-col">
-      <div class="cp-field"><span class="cp-lbl">案件編號：</span><span class="cp-val">${esc(woNum)}</span></div>
-      <div class="cp-field"><span class="cp-lbl">客戶：</span><span class="cp-val">${dash(order.customerName)}</span></div>
-      <div class="cp-field cp-field-tech${techDisplay ? "" : " is-empty"}"><span class="cp-lbl">技師：</span><span class="cp-val">${esc(techDisplay)}</span></div>
-      <div class="cp-field"><span class="cp-lbl">現場聯絡人：</span><span class="cp-val">${dash(order.contactPerson)}</span></div>
-      <div class="cp-field"><span class="cp-lbl">地址：</span><span class="cp-val">${dash(order.installAddress)}</span></div>
-    </div>
-    <div class="cp-col">
-      <div class="cp-field"><span class="cp-lbl">日期：</span><span class="cp-val">${dash(order.scheduledDate || printDate)}</span></div>
-      <div class="cp-field"><span class="cp-lbl">電話：</span><span class="cp-val">${esc(phoneDisplay)}</span></div>
-      <div class="cp-field"><span class="cp-lbl">工程名稱：</span><span class="cp-val">${dash(order.title)}</span></div>
-      <div class="cp-field"><span class="cp-lbl">負責業務：</span><span class="cp-val">${dash(salesRep)}</span></div>
-    </div>
-  </div>
-
-  <section class="cp-block">
-    <h2 class="cp-sec">施工內容：</h2>
-    <div class="cp-text">${esc(descText)}</div>
-    <div class="cp-write-space" aria-hidden="true"></div>
-  </section>
-
-  <section class="cp-mat-block" data-mat-count="${equipment.length}">
-    <h2 class="cp-sec">材料／設備</h2>
-    ${matBody}
-  </section>
-
-  <section class="cp-notes-block">
-    <h2 class="cp-sec">備註：</h2>
-    <div class="cp-text">${esc(notesText)}</div>
-  </section>
-
-  <section class="cp-fee-block">
-    <div class="cp-fee-left">
-      <h2 class="cp-sec">工程收費：</h2>
-      <div class="cp-fee-opt"><span class="cp-check" aria-hidden="true"></span>收費 <span class="cp-fee-blank"></span> 元</div>
-      <div class="cp-fee-opt"><span class="cp-check" aria-hidden="true"></span>無收費</div>
-    </div>
-    <div class="cp-fee-right">
-      <h2 class="cp-sec">客戶備註：</h2>
-      <div class="cp-cust-space" aria-hidden="true"></div>
-    </div>
-  </section>
-
-  <div class="cp-sigs">
-    <div class="cp-sig">
-      <div class="cp-sig-title">客戶簽名：</div>
-      <div class="cp-sig-space"></div>
-      <div class="cp-sig-line"></div>
-      <div class="cp-sig-date">日期：</div>
-    </div>
-    <div class="cp-sig">
-      <div class="cp-sig-title">技師簽名：</div>
-      <div class="cp-sig-space"></div>
-      <div class="cp-sig-line"></div>
-      <div class="cp-sig-date">日期：</div>
-    </div>
-  </div>
-</div>
-</div>
+<!-- wo-continuous-print 240x130 compact -->
+${pageHtml}
 </body>
 </html>`;
 }
