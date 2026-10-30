@@ -15,6 +15,7 @@ import {
   buildTechniciansPayload,
   deriveProjectTypeFromJobTypes,
 } from "../../../shared/workOrderDispatch.ts";
+import { syncOrderReceivableFromPayments } from "./wholesalePaymentService.ts";
 
 export class WholesaleDeliveryError extends Error {
   status: number;
@@ -378,6 +379,7 @@ async function maybeMarkWholesaleShipped(wholesaleOrderId: number) {
       .update(wholesaleOrdersTable)
       .set({ status: "已出貨", updatedAt: new Date() })
       .where(eq(wholesaleOrdersTable.id, wholesaleOrderId));
+    await syncOrderReceivableFromPayments(wholesaleOrderId);
   }
 
   void shippedMap;

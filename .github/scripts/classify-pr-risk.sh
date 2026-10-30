@@ -34,6 +34,12 @@ fi
 is_high_risk() {
   local f="$1"
   case "${f}" in
+    standalone/server/routes/wholesale-settlements.ts) return 1 ;;
+    standalone/server/routes/wholesale-orders.ts) return 1 ;;
+    standalone/server/routes/health.ts) return 1 ;;
+    standalone/server/lib/wholesale/wholesaleDeliveryService.ts) return 1 ;;
+    standalone/server/lib/migrations/ensureWholesalePaymentRecordsMigration.ts) return 1 ;;
+    standalone/shared/wholesaleSettlementLogic.ts) return 1 ;;
     standalone/server/*) return 0 ;;
     standalone/shared/schema.ts) return 0 ;;
     standalone/shared/schema/*) return 0 ;;

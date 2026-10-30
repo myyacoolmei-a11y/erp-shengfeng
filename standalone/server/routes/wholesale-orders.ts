@@ -1,7 +1,7 @@
 import { Router, type IRouter } from "express";
 import { eq, ilike, or, and, desc, SQL } from "drizzle-orm";
 import {
-  db, wholesaleOrdersTable, wholesaleOrderItemsTable, wholesaleReceivablesTable,
+  db, wholesaleOrdersTable, wholesaleOrderItemsTable, wholesaleReceivablesTable, wholesaleCustomersTable,
 } from "@workspace/db";
 import {
   createDeliveryWorkOrder,
@@ -109,6 +109,59 @@ async function getOrderWithItems(id: number) {
   };
 }
 
+function normalizeCustomerName(name: string | null | undefined): string {
+  return (name ?? "").trim().replace(/\s+/g, "").toLowerCase();
+}
+
+async function resolveOrderCustomer(
+  customerId: number | null | undefined,
+  customerName: string | null | undefined,
+): Promise<{ customerId: number | null; customerName: string | null }> {
+  const trimmedName = (customerName ?? "").trim();
+  if (customerId != null && customerId > 0) {
+    const [cust] = await db
+      .select()
+      .from(wholesaleCustomersTable)
+      .where(eq(wholesaleCustomersTable.id, customerId))
+      .limit(1);
+    if (cust) {
+      // If user explicitly provided a different non-empty company name, match by name first
+      if (trimmedName && normalizeCustomerName(trimmedName) !== normalizeCustomerName(cust.companyName)) {
+        const allCustomers = await db.select().from(wholesaleCustomersTable);
+        const byName = allCustomers.find(
+          (c) => normalizeCustomerName(c.companyName) === normalizeCustomerName(trimmedName),
+        );
+        if (byName) {
+          return { customerId: byName.id, customerName: byName.companyName };
+        }
+      }
+      return { customerId: cust.id, customerName: trimmedName || cust.companyName };
+    }
+  }
+
+  if (trimmedName && trimmedName !== "未知客戶") {
+    const allCustomers = await db.select().from(wholesaleCustomersTable);
+    const matched = allCustomers.find(
+      (c) => normalizeCustomerName(c.companyName) === normalizeCustomerName(trimmedName),
+    );
+    if (matched) {
+      return { customerId: matched.id, customerName: matched.companyName };
+    }
+    const [created] = await db
+      .insert(wholesaleCustomersTable)
+      .values({ companyName: trimmedName, paymentTerms: "月結" })
+      .returning();
+    if (created) {
+      return { customerId: created.id, customerName: created.companyName };
+    }
+  }
+
+  return {
+    customerId: customerId ?? null,
+    customerName: trimmedName || null,
+  };
+}
+
 async function maybeCreateReceivable(order: typeof wholesaleOrdersTable.$inferSelect) {
   const existing = await db.select({ id: wholesaleReceivablesTable.id })
     .from(wholesaleReceivablesTable)
@@ -158,9 +211,12 @@ router.post("/wholesale/orders", async (req, res): Promise<void> => {
   const parsed = OrderInput.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const { items, taxRate, shippingFee, ...header } = parsed.data;
+  const resolvedCustomer = await resolveOrderCustomer(header.customerId, header.customerName);
   const { computed, subtotal, taxAmount, total } = computeTotals(items, taxRate, shippingFee);
   const [order] = await db.insert(wholesaleOrdersTable).values({
     ...header,
+    customerId: resolvedCustomer.customerId,
+    customerName: resolvedCustomer.customerName ?? undefined,
     taxRate: String(taxRate),
     shippingFee: String(shippingFee),
     subtotal: String(subtotal),
@@ -194,9 +250,12 @@ router.patch("/wholesale/orders/:id", async (req, res): Promise<void> => {
   const parsed = OrderInput.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
   const { items, taxRate, shippingFee, ...header } = parsed.data;
+  const resolvedCustomer = await resolveOrderCustomer(header.customerId, header.customerName);
   const { computed, subtotal, taxAmount, total } = computeTotals(items, taxRate, shippingFee);
   await db.update(wholesaleOrdersTable).set({
     ...header,
+    customerId: resolvedCustomer.customerId,
+    customerName: resolvedCustomer.customerName ?? undefined,
     taxRate: String(taxRate),
     shippingFee: String(shippingFee),
     subtotal: String(subtotal),

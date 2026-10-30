@@ -58,18 +58,22 @@ router.get("/wholesale/settlements/summary", requireRole(...ROLES), async (req, 
       receivedByOrder.set(rec.orderId, (receivedByOrder.get(rec.orderId) ?? 0) + Number(rec.receivedAmount ?? 0));
     }
   }
-  const receivedByCustomer = new Map<number, number>();
+  const receivedByCustomerKey = new Map<string, number>();
   for (const order of selectedOrders) {
     const cid = order.customerId ?? 0;
-    receivedByCustomer.set(cid, (receivedByCustomer.get(cid) ?? 0) + (receivedByOrder.get(order.id) ?? 0));
+    const cname = (order.customerName ?? "未知客戶").trim() || "未知客戶";
+    const key = cid > 0 ? `id:${cid}:${cname}` : `name:${cname}`;
+    receivedByCustomerKey.set(key, (receivedByCustomerKey.get(key) ?? 0) + (receivedByOrder.get(order.id) ?? 0));
   }
   const result = rows.map(r => {
     const cid = r.customerId ?? 0;
-    const received = receivedByCustomer.get(cid) ?? 0;
+    const cname = (r.customerName ?? "未知客戶").trim() || "未知客戶";
+    const key = cid > 0 ? `id:${cid}:${cname}` : `name:${cname}`;
+    const received = receivedByCustomerKey.get(key) ?? 0;
     const amount = Number(r.totalAmount ?? 0);
     return {
       customerId: cid,
-      customerName: r.customerName ?? "未知客戶",
+      customerName: cname,
       orderCount: r.orderCount,
       totalAmount: amount,
       receivableAmount: amount - received,
