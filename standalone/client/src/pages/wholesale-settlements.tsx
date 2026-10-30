@@ -6,6 +6,7 @@ import {
   getListWholesaleSettlementDetailQueryKey,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,11 +18,23 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, CreditCard, FileText, CalendarDays, Printer, MessageCircle, Pencil, Trash2 } from "lucide-react";
+import {
+  Search,
+  CreditCard,
+  FileText,
+  CalendarDays,
+  Printer,
+  MessageCircle,
+  Pencil,
+  Trash2,
+  ChevronDown,
+  ChevronUp,
+  ExternalLink,
+} from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { PdfPreviewDialog } from "@/components/pdf/pdf-preview-dialog";
 import { handlePdfAction, isMobileDevice, openPrintWindow } from "@/components/pdf/pdf-service";
-import { buildStatementHtml } from "@/components/pdf/templates/StatementTemplate";
+import { buildStatementHtml, type StatementLineItem } from "@/components/pdf/templates/StatementTemplate";
 import {
   createWholesalePayment,
   deleteWholesalePaymentRecord,
@@ -34,6 +47,9 @@ import {
   parseMoney,
   remainingAmount,
 } from "../../../shared/wholesalePaymentMath.ts";
+import { computeStatementTotalsFromOrders } from "../../../shared/wholesaleSettlementLogic.ts";
+
+export const WHOLESALE_SETTLEMENT_RELEASE_MARKER = "wholesale-settlement-fix-v2";
 
 function fmtMoney(n: number | string | null | undefined) {
   if (n == null) return "—";
@@ -48,7 +64,8 @@ function fmtDate(d: string | null | undefined) {
 }
 
 function todayStr() {
-  return new Date().toISOString().split("T")[0];
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 function firstDayOfMonthStr() {
@@ -67,29 +84,23 @@ function PaymentStatusBadge({ status }: { status: string | null | undefined }) {
   return <Badge className={STATUS_CLASS[label]}>{label}</Badge>;
 }
 
-interface DetailItem {
-  orderId: number;
-  orderNumber: string | null;
-  orderDate: string | null;
-  productName: string;
-  brand: string | null;
-  model: string | null;
-  spec: string | null;
-  unit: string | null;
-  qty: number;
-  unitPrice: string | null;
-  amount: string | null;
-  notes: string | null;
-}
-
 type SettlementOrder = {
   id: number;
   orderNumber?: string | null;
   orderDate?: string | null;
+  expectedDelivery?: string | null;
+  status?: string | null;
   customerId?: number | null;
+  customerName?: string | null;
   notes?: string | null;
+  subtotal?: string | null;
   taxRate?: string | null;
+  taxAmount?: string | null;
+  shippingFee?: string | null;
   total: string;
+  subtotalAmount?: number;
+  taxAmountNum?: number;
+  shippingFeeNum?: number;
   orderAmount?: number;
   receivedAmount?: number;
   outstandingAmount?: number;
@@ -102,6 +113,7 @@ type SettlementOrder = {
     unit?: string | null;
     qty?: number;
     unitPrice?: string | null;
+    discount?: string | null;
     amount?: string | null;
   }>;
   payments?: WholesalePaymentRecordDto[];
@@ -116,96 +128,6 @@ type PayDialogState = {
   receivedAmount: number;
 };
 
-function buildInvoiceBody(
-  customerName: string,
-  fromDate: string,
-  toDate: string,
-  flat: DetailItem[],
-  subtotal: number,
-  taxRate: number,
-  taxAmount: number,
-  total: number
-): string {
-  const rows = flat.map((it) => `
-    <tr>
-      <td style="border:1px solid #000;padding:5px;font-size:12px">${fmtDate(it.orderDate)}</td>
-      <td style="border:1px solid #000;padding:5px;font-size:12px">${it.orderNumber ?? "—"}</td>
-      <td style="border:1px solid #000;padding:5px;font-size:12px">${it.productName}</td>
-      <td style="border:1px solid #000;padding:5px;font-size:12px">${it.model ?? ""}</td>
-      <td style="border:1px solid #000;padding:5px;font-size:12px">${it.spec ?? ""}</td>
-      <td style="border:1px solid #000;padding:5px;font-size:12px;text-align:center">${it.qty}${it.unit ? " " + it.unit : ""}</td>
-      <td style="border:1px solid #000;padding:5px;font-size:12px;text-align:right">${fmtMoney(it.unitPrice)}</td>
-      <td style="border:1px solid #000;padding:5px;font-size:12px;text-align:right">${fmtMoney(it.amount)}</td>
-      <td style="border:1px solid #000;padding:5px;font-size:12px">${it.notes ?? ""}</td>
-    </tr>
-  `).join("");
-
-  return `
-    <div style="font-family:'Microsoft JhengHei','Heiti TC',sans-serif;padding:20px;max-width:720px;margin:0 auto;color:#000">
-      <div style="text-align:center;margin-bottom:24px">
-        <h1 style="font-size:20px;margin-bottom:4px;letter-spacing:2px">晟風工程有限公司</h1>
-        <p style="font-size:11px;color:#333;margin:0">冷氣工程 / 批發請款單</p>
-      </div>
-
-      <div style="display:flex;justify-content:space-between;margin-bottom:16px;font-size:12px">
-        <div>
-          <p style="margin:2px 0"><strong>客戶：</strong>${customerName}</p>
-          <p style="margin:2px 0"><strong>日期區間：</strong>${fromDate} — ${toDate}</p>
-        </div>
-        <div style="text-align:right">
-          <p style="margin:2px 0"><strong>匯款資訊</strong></p>
-          <p style="margin:2px 0">國泰世華銀行</p>
-          <p style="margin:2px 0">代號 013 / 帳號 047035012164</p>
-          <p style="margin:2px 0">戶名：晟風工程行 洪宇風</p>
-        </div>
-      </div>
-
-      <table style="width:100%;border-collapse:collapse;margin-bottom:16px">
-        <thead>
-          <tr style="background:#f0f0f0">
-            <th style="border:1px solid #000;padding:5px;font-size:12px;text-align:left;width:70px">出貨日</th>
-            <th style="border:1px solid #000;padding:5px;font-size:12px;text-align:left;width:80px">出貨單號</th>
-            <th style="border:1px solid #000;padding:5px;font-size:12px;text-align:left">商品</th>
-            <th style="border:1px solid #000;padding:5px;font-size:12px;text-align:left;width:80px">型號</th>
-            <th style="border:1px solid #000;padding:5px;font-size:12px;text-align:left;width:80px">規格</th>
-            <th style="border:1px solid #000;padding:5px;font-size:12px;text-align:center;width:50px">數量</th>
-            <th style="border:1px solid #000;padding:5px;font-size:12px;text-align:right;width:70px">單價</th>
-            <th style="border:1px solid #000;padding:5px;font-size:12px;text-align:right;width:70px">金額</th>
-            <th style="border:1px solid #000;padding:5px;font-size:12px;text-align:left;width:80px">備註</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${rows}
-        </tbody>
-      </table>
-
-      <div style="display:flex;justify-content:flex-end;margin-bottom:20px">
-        <div style="width:220px;font-size:12px">
-          <div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #ddd">
-            <span>小計</span><span>${fmtMoney(subtotal)}</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid #ddd">
-            <span>稅額 (${taxRate}%)</span><span>${fmtMoney(taxAmount)}</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;padding:4px 0;font-weight:bold;font-size:14px">
-            <span>總金額</span><span>${fmtMoney(total)}</span>
-          </div>
-        </div>
-      </div>
-
-      <div style="display:flex;justify-content:space-between;margin-top:40px;font-size:12px">
-        <div>
-          <p style="margin-bottom:4px"><strong>客戶簽收</strong></p>
-          <div style="border-bottom:1px solid #000;width:160px;height:24px"></div>
-        </div>
-        <div style="text-align:right">
-          <p>請款單日期：${todayStr()}</p>
-        </div>
-      </div>
-    </div>
-  `;
-}
-
 export default function WholesaleSettlements() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -215,6 +137,7 @@ export default function WholesaleSettlements() {
   const [search, setSearch] = useState("");
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailCustomer, setDetailCustomer] = useState<{ id: number; name: string } | null>(null);
+  const [collapsedOrderIds, setCollapsedOrderIds] = useState<Record<number, boolean>>({});
   const [pdfPreview, setPdfPreview] = useState<{ url: string; filename: string } | null>(null);
 
   const [payTarget, setPayTarget] = useState<PayDialogState | null>(null);
@@ -234,6 +157,15 @@ export default function WholesaleSettlements() {
   const [deleting, setDeleting] = useState(false);
 
   const summaryParams = { from: fromDate, to: toDate };
+  const detailParams = useMemo(
+    () => ({
+      from: fromDate,
+      to: toDate,
+      ...(detailCustomer?.name ? { customerName: detailCustomer.name } : {}),
+    }),
+    [fromDate, toDate, detailCustomer?.name],
+  );
+
   const { data: summary, isLoading } = useListWholesaleSettlementSummary(
     summaryParams,
     { query: { enabled: !!fromDate && !!toDate, queryKey: getListWholesaleSettlementSummaryQueryKey(summaryParams) } }
@@ -241,8 +173,13 @@ export default function WholesaleSettlements() {
 
   const { data: rawDetail, isLoading: detailLoading, refetch: refetchDetail } = useListWholesaleSettlementDetail(
     detailCustomer?.id ?? 0,
-    summaryParams,
-    { query: { enabled: !!detailCustomer && !!fromDate && !!toDate, queryKey: getListWholesaleSettlementDetailQueryKey(detailCustomer?.id ?? 0, summaryParams) } }
+    detailParams as any,
+    {
+      query: {
+        enabled: !!detailCustomer && !!fromDate && !!toDate,
+        queryKey: getListWholesaleSettlementDetailQueryKey(detailCustomer?.id ?? 0, detailParams as any),
+      },
+    }
   );
   const detailData = (rawDetail ?? []) as SettlementOrder[];
 
@@ -252,18 +189,12 @@ export default function WholesaleSettlements() {
     return (s.customerName ?? "").toLowerCase().includes(q);
   }) ?? [];
 
-  const totalAll = list.reduce((sum, s) => sum + (s.totalAmount ?? 0), 0);
-  const receivedAll = list.reduce((sum, s) => sum + (s.receivedAmount ?? 0), 0);
+  const totalAll = list.reduce((sum, s) => sum + parseMoney(s.totalAmount ?? 0), 0);
+  const receivedAll = list.reduce((sum, s) => sum + parseMoney(s.receivedAmount ?? 0), 0);
   const receivableAll = list.reduce((sum, s) => sum + remainingAmount(s.totalAmount ?? 0, s.receivedAmount ?? 0), 0);
 
   const detailTotals = useMemo(() => {
-    const total = detailData.reduce((sum, order) => sum + parseMoney(order.orderAmount ?? order.total), 0);
-    const received = detailData.reduce((sum, order) => sum + parseMoney(order.receivedAmount), 0);
-    return {
-      total,
-      received,
-      outstanding: remainingAmount(total, received),
-    };
+    return computeStatementTotalsFromOrders(detailData);
   }, [detailData]);
 
   const allPayments = useMemo(() => {
@@ -284,7 +215,7 @@ export default function WholesaleSettlements() {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: getListWholesaleSettlementSummaryQueryKey(summaryParams) }),
       detailCustomer
-        ? queryClient.invalidateQueries({ queryKey: getListWholesaleSettlementDetailQueryKey(detailCustomer.id, summaryParams) })
+        ? queryClient.invalidateQueries({ queryKey: getListWholesaleSettlementDetailQueryKey(detailCustomer.id, detailParams as any) })
         : Promise.resolve(),
     ]);
     if (detailCustomer) await refetchDetail();
@@ -292,12 +223,17 @@ export default function WholesaleSettlements() {
 
   function openDetail(customerId: number, customerName: string) {
     setDetailCustomer({ id: customerId, name: customerName });
+    setCollapsedOrderIds({});
     setDetailOpen(true);
   }
 
   function closeDetail() {
     setDetailOpen(false);
     setDetailCustomer(null);
+  }
+
+  function toggleOrderCollapse(orderId: number) {
+    setCollapsedOrderIds((prev) => ({ ...prev, [orderId]: !prev[orderId] }));
   }
 
   function openPayDialog(target: PayDialogState) {
@@ -309,9 +245,9 @@ export default function WholesaleSettlements() {
     setPayNote("");
   }
 
-  function flatItems(): DetailItem[] {
+  function flatItems(): StatementLineItem[] {
     if (!detailData) return [];
-    const result: DetailItem[] = [];
+    const result: StatementLineItem[] = [];
     for (const order of detailData) {
       const items = order.items ?? [];
       if (items.length === 0) {
@@ -319,23 +255,26 @@ export default function WholesaleSettlements() {
           orderId: order.id,
           orderNumber: order.orderNumber ?? null,
           orderDate: order.orderDate ?? null,
-          productName: "—",
+          productName: "（無品項明細）",
           brand: null,
           model: null,
           spec: null,
           unit: null,
-          qty: 0,
-          unitPrice: null,
-          amount: null,
+          qty: 1,
+          unitPrice: order.total ?? null,
+          amount: order.total ?? null,
           notes: order.notes ?? null,
         });
       } else {
         for (const it of items) {
+          const displayName = it.brand && it.productName && !it.productName.includes(it.brand)
+            ? `${it.brand} ${it.productName}`
+            : (it.productName ?? "");
           result.push({
             orderId: order.id,
             orderNumber: order.orderNumber ?? null,
             orderDate: order.orderDate ?? null,
-            productName: it.productName ?? "",
+            productName: displayName,
             brand: it.brand ?? null,
             model: it.model ?? null,
             spec: it.spec ?? null,
@@ -354,12 +293,20 @@ export default function WholesaleSettlements() {
   async function printInvoice() {
     if (!detailCustomer || !detailData.length) return;
     const flat = flatItems();
-    const subtotal = flat.reduce((sum, it) => sum + parseFloat(it.amount ?? "0"), 0);
-    const taxRate = detailData[0]?.taxRate ? parseFloat(detailData[0].taxRate) : 0;
-    const taxAmount = Math.round(subtotal * taxRate / 100 * 100) / 100;
-    const total = subtotal + taxAmount;
+    const { subtotal, taxAmount, total, receivedAmount, receivableAmount } = computeStatementTotalsFromOrders(detailData);
     const docNo = `${detailCustomer.name}_${fromDate}`;
-    const html = buildStatementHtml(detailCustomer.name, fromDate, toDate, flat, subtotal, taxRate, taxAmount, total, 0, total);
+    const html = buildStatementHtml(
+      detailCustomer.name,
+      fromDate,
+      toDate,
+      flat,
+      subtotal,
+      0,
+      taxAmount,
+      total,
+      receivedAmount,
+      receivableAmount,
+    );
     if (isMobileDevice()) {
       await handlePdfAction({
         html,
@@ -379,12 +326,20 @@ export default function WholesaleSettlements() {
   async function sendLinePDF() {
     if (!detailCustomer || !detailData.length) return;
     const flat = flatItems();
-    const subtotal = flat.reduce((sum, it) => sum + parseFloat(it.amount ?? "0"), 0);
-    const taxRate = detailData[0]?.taxRate ? parseFloat(detailData[0].taxRate) : 0;
-    const taxAmount = Math.round(subtotal * taxRate / 100 * 100) / 100;
-    const total = subtotal + taxAmount;
+    const { subtotal, taxAmount, total, receivedAmount, receivableAmount } = computeStatementTotalsFromOrders(detailData);
     const docNo = `${detailCustomer.name}_${fromDate}`;
-    const html = buildStatementHtml(detailCustomer.name, fromDate, toDate, flat, subtotal, taxRate, taxAmount, total, 0, total);
+    const html = buildStatementHtml(
+      detailCustomer.name,
+      fromDate,
+      toDate,
+      flat,
+      subtotal,
+      0,
+      taxAmount,
+      total,
+      receivedAmount,
+      receivableAmount,
+    );
     await handlePdfAction({
       html,
       docNo,
@@ -469,11 +424,11 @@ export default function WholesaleSettlements() {
   const payOutstanding = payTarget ? remainingAmount(payTarget.totalAmount, payTarget.receivedAmount) : 0;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-release={WHOLESALE_SETTLEMENT_RELEASE_MARKER}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold">批發月結 / 應收</h1>
-          <p className="text-sm text-muted-foreground">全部客戶應收總覽。單筆收款請在出貨單按「應收款」直接登記。</p>
+          <p className="text-sm text-muted-foreground">依訂單日期（orderDate）統計已出貨訂單，點選公司查看月結明細與列印請款單</p>
         </div>
       </div>
 
@@ -508,7 +463,7 @@ export default function WholesaleSettlements() {
           <p className="text-2xl font-bold mt-1">{list.length}</p>
         </CardContent></Card>
         <Card><CardContent className="p-4">
-          <p className="text-xs text-muted-foreground uppercase tracking-wide">訂單總金額</p>
+          <p className="text-xs text-muted-foreground uppercase tracking-wide">本期總額</p>
           <p className="text-2xl font-bold mt-1">{fmtMoney(totalAll)}</p>
         </CardContent></Card>
         <Card><CardContent className="p-4">
@@ -516,7 +471,7 @@ export default function WholesaleSettlements() {
           <p className="text-2xl font-bold mt-1 text-green-700">{fmtMoney(receivedAll)}</p>
         </CardContent></Card>
         <Card><CardContent className="p-4">
-          <p className="text-xs text-muted-foreground uppercase tracking-wide">待收總額</p>
+          <p className="text-xs text-muted-foreground uppercase tracking-wide">未收總額</p>
           <p className="text-2xl font-bold mt-1 text-red-600">{fmtMoney(receivableAll)}</p>
         </CardContent></Card>
       </div>
@@ -532,26 +487,27 @@ export default function WholesaleSettlements() {
         <div className="space-y-2">
           {list.map((s) => {
             const outstanding = remainingAmount(s.totalAmount ?? 0, s.receivedAmount ?? 0);
+            const rowKey = `${s.customerId}_${s.customerName}`;
             return (
-              <Card key={s.customerId} className="cursor-pointer hover:bg-muted/30 transition-colors" onClick={() => openDetail(s.customerId, s.customerName)}>
+              <Card key={rowKey} className="cursor-pointer hover:bg-muted/30 transition-colors" onClick={() => openDetail(s.customerId, s.customerName)}>
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between gap-4">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="font-medium truncate">{s.customerName}</p>
-                        <Badge variant="outline">{s.orderCount} 筆</Badge>
+                        <Badge variant="outline">{s.orderCount} 張出貨單</Badge>
                         <PaymentStatusBadge status={(s as { paymentStatus?: string }).paymentStatus ?? (outstanding <= 0 ? "已收清" : (s.receivedAmount ?? 0) > 0 ? "部分收款" : "未收款")} />
                       </div>
                       <div className="flex flex-wrap gap-4 mt-1 text-sm">
-                        <span className="text-muted-foreground">訂單總額 <span className="text-foreground font-medium">{fmtMoney(s.totalAmount)}</span></span>
-                        <span className="text-muted-foreground">待收 <span className="text-red-600 font-medium">{fmtMoney(outstanding)}</span></span>
-                        <span className="text-muted-foreground">已收 <span className="text-green-600 font-medium">{fmtMoney(s.receivedAmount)}</span></span>
+                        <span className="text-muted-foreground">本期總額 <span className="text-foreground font-medium">{fmtMoney(s.totalAmount)}</span></span>
+                        <span className="text-muted-foreground">已收金額 <span className="text-green-600 font-medium">{fmtMoney(s.receivedAmount)}</span></span>
+                        <span className="text-muted-foreground">未收金額 <span className="text-red-600 font-medium">{fmtMoney(outstanding)}</span></span>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
                       <Button
                         size="sm"
-                        disabled={outstanding <= 0}
+                        disabled={outstanding <= 0 || s.customerId <= 0}
                         onClick={(e) => {
                           e.stopPropagation();
                           openPayDialog({
@@ -577,7 +533,7 @@ export default function WholesaleSettlements() {
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
         <DialogContent className="max-w-5xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{detailCustomer?.name} — 出貨明細</DialogTitle>
+            <DialogTitle>{detailCustomer?.name} — 本期月結明細（{fmtDate(fromDate)} ～ {fmtDate(toDate)}）</DialogTitle>
           </DialogHeader>
           <Separator />
           {detailLoading ? (
@@ -586,78 +542,133 @@ export default function WholesaleSettlements() {
             <p className="text-muted-foreground text-center py-8">無出貨紀錄</p>
           ) : (
             <div className="space-y-4">
-              <div className="flex flex-wrap gap-4 text-sm">
-                <span>訂單總額 <strong>{fmtMoney(detailTotals.total)}</strong></span>
-                <span>已收 <strong className="text-green-700">{fmtMoney(detailTotals.received)}</strong></span>
-                <span>待收 <strong className="text-red-600">{fmtMoney(detailTotals.outstanding)}</strong></span>
+              <div className="flex flex-wrap gap-4 text-sm bg-muted/40 p-3 rounded-lg">
+                <span>出貨單數 <strong>{detailData.length} 張</strong></span>
+                <span>本期總額 <strong>{fmtMoney(detailTotals.total)}</strong></span>
+                <span>已收金額 <strong className="text-green-700">{fmtMoney(detailTotals.receivedAmount)}</strong></span>
+                <span>未收金額 <strong className="text-red-600">{fmtMoney(detailTotals.receivableAmount)}</strong></span>
               </div>
 
               {detailData.map((order) => {
                 const total = parseMoney(order.orderAmount ?? order.total);
+                const sub = parseMoney(order.subtotalAmount ?? order.subtotal ?? total);
+                const tax = parseMoney(order.taxAmountNum ?? order.taxAmount ?? 0);
+                const ship = parseMoney(order.shippingFeeNum ?? order.shippingFee ?? 0);
                 const received = parseMoney(order.receivedAmount);
                 const outstanding = remainingAmount(total, received);
+                const isCollapsed = !!collapsedOrderIds[order.id];
+                const itemList = order.items ?? [];
+
                 return (
                   <div key={order.id} className="rounded-lg border p-3 space-y-3">
                     <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
+                      <div className="space-y-1">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <p className="font-medium">{order.orderNumber ?? `出貨單 #${order.id}`}</p>
-                          <span className="text-sm text-muted-foreground">{fmtDate(order.orderDate)}</span>
+                          <span className="font-mono font-semibold text-sm bg-muted px-2 py-0.5 rounded">
+                            {order.orderNumber ?? `出貨單 #${order.id}`}
+                          </span>
+                          <Badge className="bg-indigo-100 text-indigo-700">
+                            {order.status || "已出貨"}
+                          </Badge>
                           <PaymentStatusBadge status={order.paymentStatus} />
+                          <span className="text-sm text-muted-foreground">
+                            訂單日期：{fmtDate(order.orderDate)}
+                          </span>
+                          {order.expectedDelivery && (
+                            <span className="text-sm text-muted-foreground">
+                              預計交貨：{fmtDate(order.expectedDelivery)}
+                            </span>
+                          )}
                         </div>
-                        <div className="flex flex-wrap gap-3 mt-1 text-sm">
-                          <span>出貨金額 {fmtMoney(total)}</span>
-                          <span>已收金額 {fmtMoney(received)}</span>
-                          <span>待收金額 <span className="text-red-600">{fmtMoney(outstanding)}</span></span>
+                        <div className="flex flex-wrap gap-4 text-sm">
+                          <span>該張出貨單合計：<strong>{fmtMoney(total)}</strong></span>
+                          {(tax > 0 || ship > 0) && (
+                            <span className="text-xs text-muted-foreground self-center">
+                              （小計 {fmtMoney(sub)}{tax > 0 ? `＋稅 ${fmtMoney(tax)}` : ""}{ship > 0 ? `＋運費 ${fmtMoney(ship)}` : ""}）
+                            </span>
+                          )}
+                          <span>已收款：<span className="text-green-700 font-medium">{fmtMoney(received)}</span></span>
+                          <span>未收款：<span className="text-red-600 font-medium">{fmtMoney(outstanding)}</span></span>
                         </div>
                       </div>
-                      <Button
-                        size="sm"
-                        disabled={outstanding <= 0 || !detailCustomer}
-                        onClick={() => detailCustomer && openPayDialog({
-                          customerId: detailCustomer.id,
-                          customerName: detailCustomer.name,
-                          orderId: order.id,
-                          orderNumber: order.orderNumber,
-                          totalAmount: total,
-                          receivedAmount: received,
-                        })}
-                      >
-                        登記收款
-                      </Button>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 text-xs gap-1"
+                          onClick={() => toggleOrderCollapse(order.id)}
+                        >
+                          {isCollapsed ? (
+                            <><ChevronDown className="h-3.5 w-3.5" />展開明細（{itemList.length}）</>
+                          ) : (
+                            <><ChevronUp className="h-3.5 w-3.5" />收合明細（{itemList.length}）</>
+                          )}
+                        </Button>
+                        <Link
+                          href={`/wholesale/orders?search=${encodeURIComponent(order.orderNumber || "")}`}
+                          onClick={() => setDetailOpen(false)}
+                        >
+                          <Button variant="outline" size="sm" className="h-8 text-xs gap-1">
+                            <ExternalLink className="h-3.5 w-3.5" />原始出貨單
+                          </Button>
+                        </Link>
+                        <Button
+                          size="sm"
+                          className="h-8 text-xs"
+                          disabled={outstanding <= 0 || !detailCustomer || (order.customerId ?? detailCustomer.id) <= 0}
+                          onClick={() => detailCustomer && openPayDialog({
+                            customerId: order.customerId || detailCustomer.id,
+                            customerName: detailCustomer.name,
+                            orderId: order.id,
+                            orderNumber: order.orderNumber,
+                            totalAmount: total,
+                            receivedAmount: received,
+                          })}
+                        >
+                          登記收款
+                        </Button>
+                      </div>
                     </div>
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm border-collapse">
-                        <thead>
-                          <tr className="border-b text-left text-muted-foreground text-xs">
-                            <th className="py-2 pr-3">商品</th>
-                            <th className="py-2 pr-3">型號</th>
-                            <th className="py-2 pr-3">規格</th>
-                            <th className="py-2 pr-3 text-right">數量</th>
-                            <th className="py-2 pr-3 text-right">單價</th>
-                            <th className="py-2 text-right">金額</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {(order.items ?? []).map((it, idx) => (
-                            <tr key={idx} className="border-b">
-                              <td className="py-2 pr-3">{it.productName ?? "—"}</td>
-                              <td className="py-2 pr-3">{it.model ?? "—"}</td>
-                              <td className="py-2 pr-3">{it.spec ?? "—"}</td>
-                              <td className="py-2 pr-3 text-right">{it.qty ?? 0}{it.unit ? ` ${it.unit}` : ""}</td>
-                              <td className="py-2 pr-3 text-right">{fmtMoney(it.unitPrice)}</td>
-                              <td className="py-2 text-right">{fmtMoney(it.amount)}</td>
+
+                    {!isCollapsed && (
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm border-collapse">
+                          <thead>
+                            <tr className="border-b text-left text-muted-foreground text-xs">
+                              <th className="py-2 pr-3">商品名稱</th>
+                              <th className="py-2 pr-3">型號</th>
+                              <th className="py-2 pr-3">規格</th>
+                              <th className="py-2 pr-3 text-right">數量</th>
+                              <th className="py-2 pr-3 text-right">單價</th>
+                              <th className="py-2 text-right">金額</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
+                          </thead>
+                          <tbody>
+                            {itemList.map((it, idx) => {
+                              const prodDisplay = it.brand && it.productName && !it.productName.includes(it.brand)
+                                ? `${it.brand} ${it.productName}`
+                                : (it.productName ?? "—");
+                              return (
+                                <tr key={idx} className="border-b">
+                                  <td className="py-2 pr-3">{prodDisplay}</td>
+                                  <td className="py-2 pr-3">{it.model || "—"}</td>
+                                  <td className="py-2 pr-3">{it.spec || "—"}</td>
+                                  <td className="py-2 pr-3 text-right">{it.qty ?? 0}{it.unit ? ` ${it.unit}` : ""}</td>
+                                  <td className="py-2 pr-3 text-right">{fmtMoney(it.unitPrice)}</td>
+                                  <td className="py-2 text-right">{fmtMoney(it.amount)}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </div>
                 );
               })}
 
               <div>
-                <h3 className="font-medium mb-2">收款紀錄</h3>
+                <h3 className="font-medium mb-2">本期出貨單收款紀錄</h3>
                 {allPayments.length === 0 ? (
                   <p className="text-sm text-muted-foreground">尚未登記收款</p>
                 ) : (
@@ -670,7 +681,7 @@ export default function WholesaleSettlements() {
                           <th className="py-2 pr-3">方式</th>
                           <th className="py-2 pr-3">備註</th>
                           <th className="py-2 pr-3">建立人</th>
-                          <th className="py-2 text-right">刪除</th>
+                          <th className="py-2 text-right">操作</th>
                         </tr>
                       </thead>
                       <tbody>

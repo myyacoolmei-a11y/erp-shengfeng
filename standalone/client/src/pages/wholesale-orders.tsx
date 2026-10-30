@@ -76,7 +76,7 @@ interface OForm {
 
 function emptyForm(): OForm {
   return {
-    customerId: null, customerName: "", orderDate: new Date().toISOString().split("T")[0],
+    customerId: null, customerName: "", orderDate: todayStr(),
     expectedDelivery: "", salesperson: "", notes: "", taxRate: 0, shippingFee: 0, status: "備貨中", items: [],
   };
 }
@@ -86,12 +86,13 @@ async function loadOrderForPrint(order: any, customers?: any[]): Promise<any> {
   if (!order?.id) throw new Error("找不到出貨單");
   const full = await getWholesaleOrder(order.id);
   if (!full) throw new Error("找不到出貨單");
+  const fullAny = full as any;
   const cust = (customers ?? []).find((c: any) => c.id === full.customerId);
   return {
     ...full,
     customerName: full.customerName || cust?.companyName || "",
-    customerPhone: full.customerPhone || cust?.mobile || cust?.telephone || "",
-    customerAddress: full.customerAddress || cust?.address || "",
+    customerPhone: fullAny.customerPhone || cust?.mobile || cust?.telephone || "",
+    customerAddress: fullAny.customerAddress || cust?.address || "",
   };
 }
 
@@ -157,11 +158,19 @@ async function shareOrderViaLine(
   });
 }
 
-function fromData(d: any): OForm {
+function fromData(d: any, customers?: any[]): OForm {
+  let cid: number | null = d.customerId ?? null;
+  const cname = (d.customerName ?? "").trim();
+  if (!cid && cname && Array.isArray(customers)) {
+    const matched = customers.find(
+      (c: any) => (c.companyName ?? "").trim().replace(/\s+/g, "").toLowerCase() === cname.replace(/\s+/g, "").toLowerCase(),
+    );
+    if (matched) cid = matched.id;
+  }
   return {
-    customerId: d.customerId ?? null,
+    customerId: cid,
     customerName: d.customerName ?? "",
-    orderDate: d.orderDate ?? new Date().toISOString().split("T")[0],
+    orderDate: d.orderDate ?? todayStr(),
     expectedDelivery: d.expectedDelivery ?? "",
     salesperson: d.salesperson ?? "",
     notes: d.notes ?? "",
@@ -192,7 +201,8 @@ function fmtMoneyStr(s: string | null | undefined) {
   return isNaN(n) ? "—" : `NT$ ${Math.round(n).toLocaleString()}`;
 }
 function todayStr() {
-  return new Date().toISOString().split("T")[0];
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 const PAY_STATUS_CLASS: Record<string, string> = {
@@ -218,7 +228,10 @@ export default function WholesaleOrders() {
   const qc = useQueryClient();
   const canWrite = user && ["super_admin", "owner", "admin", "sales"].includes(user.role);
 
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(() => {
+    if (typeof window === "undefined") return "";
+    return new URLSearchParams(window.location.search).get("search") ?? "";
+  });
   const [statusFilter, setStatusFilter] = useState("全部");
   const [showDialog, setShowDialog] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
@@ -264,10 +277,17 @@ export default function WholesaleOrders() {
   const receivableOrder = (orders ?? []).find((o: any) => o.id === receivableOrderId) ?? null;
 
   useEffect(() => {
-    if (editData && editId) setForm(fromData(editData));
-  }, [editData, editId]);
+    if (editData && editId) setForm(fromData(editData, customers));
+  }, [editData, editId, customers]);
 
-  const invOrders = () => qc.invalidateQueries({ queryKey: getListWholesaleOrdersQueryKey() });
+  const invOrders = () => {
+    qc.invalidateQueries({ queryKey: getListWholesaleOrdersQueryKey() });
+    qc.invalidateQueries({ queryKey: ["/api/wholesale/settlements/summary"] });
+    qc.invalidateQueries({ queryKey: ["/api/wholesale/settlements"] });
+    if (editId) {
+      qc.invalidateQueries({ queryKey: getGetWholesaleOrderQueryKey(editId) });
+    }
+  };
 
   const createMut = useCreateWholesaleOrder({ mutation: { onSuccess: () => { invOrders(); close_(); toast({ title: "批發訂單已建立" }); } } });
   const updateMut = useUpdateWholesaleOrder({ mutation: { onSuccess: () => { invOrders(); close_(); toast({ title: "已更新" }); } } });
@@ -310,7 +330,7 @@ export default function WholesaleOrders() {
 
   const recTotal = parseMoney(receivableOrder?.total);
   const recReceived = paymentsPending
-    ? parseMoney(receivableOrder?.receivedAmount)
+    ? parseMoney((receivableOrder as any)?.receivedAmount)
     : orderPayments.reduce((sum, p) => sum + parseMoney(p.amount), 0);
   const recOutstanding = remainingAmount(recTotal, recReceived);
   const recStatus = deriveWholesalePaymentStatus(recReceived, recTotal);
