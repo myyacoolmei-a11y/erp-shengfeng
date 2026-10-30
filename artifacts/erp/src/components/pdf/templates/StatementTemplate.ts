@@ -15,9 +15,9 @@ export function buildStatementHtml(
   receivedAmount: number,
   receivableAmount: number,
 ): string {
-  // Max 12 rows for A4 single page
+  // Month-end statements must list ALL matching delivery rows, never truncate to 12.
   const maxRows = 12;
-  const displayItems = items.slice(0, maxRows);
+  const displayItems = items;
   const rows = displayItems.map((it) => `
     <tr>
       <td class="tac">${fmtDate(it.orderDate)}</td>
@@ -246,7 +246,8 @@ tr{page-break-inside:avoid;break-inside:avoid}
   <!-- Amount Summary -->
   <div class="amt-box">
     <div class="amt-r"><span class="lbl">小計</span><span class="val">${fmtMoney(subtotal)}</span></div>
-    ${taxRate > 0 ? `<div class="amt-r"><span class="lbl">稅額 (${taxRate}%)</span><span class="val">${fmtMoney(taxAmount)}</span></div>` : ""}
+    ${taxAmount !== 0 ? `<div class="amt-r"><span class="lbl">稅額${taxRate > 0 ? ` (${taxRate}%)` : ""}</span><span class="val">${fmtMoney(taxAmount)}</span></div>` : ""}
+    ${Math.abs(total-subtotal-taxAmount)>0.01 ? `<div class="amt-r"><span class="lbl">運費／其他</span><span class="val">${fmtMoney(total-subtotal-taxAmount)}</span></div>` : ""}
     <div class="amt-total"><span class="lbl">應付金額</span><span class="val">${fmtMoney(total)}</span></div>
     ${receivedAmount > 0 ? `<div class="amt-r"><span class="lbl">已收金額</span><span class="val paid">${fmtMoney(receivedAmount)}</span></div>` : ""}
     ${receivableAmount > 0 ? `<div class="amt-r"><span class="lbl">未收金額</span><span class="val unpaid">${fmtMoney(receivableAmount)}</span></div>` : ""}
