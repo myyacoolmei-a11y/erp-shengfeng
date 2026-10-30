@@ -1,0 +1,71 @@
+@import "tailwindcss";
+
+:root {
+  --background: #0b0a08;
+  --foreground: #f3efe7;
+
+  --color-ink-950: #080706;
+  --color-ink-900: #0f0e0c;
+  --color-ink-800: #171512;
+  --color-ink-700: #211e19;
+  --color-ink-600: #2c2822;
+  --color-ink-500: #3d372e;
+
+  --color-warm-100: #f3efe7;
+  --color-warm-200: #e6e0d3;
+  --color-warm-300: #cec5b2;
+  --color-warm-400: #a89d89;
+  --color-warm-500: #8a7f6c;
+  --color-warm-600: #6b6152;
+
+  --color-champagne-300: #e6d3a8;
+  --color-champagne-400: #d6ba7f;
+  --color-champagne-500: #c6a25e;
+  --color-champagne-600: #a9823f;
+
+  --color-blush-300: #f0d6cd;
+  --color-blush-400: #e3b9ac;
+  --color-blush-500: #d09d8d;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  --color-ink-950: var(--color-ink-950);
+  --color-ink-900: var(--color-ink-900);
+  --color-ink-800: var(--color-ink-800);
+  --color-ink-700: var(--color-ink-700);
+  --color-ink-600: var(--color-ink-600);
+  --color-ink-500: var(--color-ink-500);
+
+  --color-warm-100: var(--color-warm-100);
+  --color-warm-200: var(--color-warm-200);
+  --color-warm-300: var(--color-warm-300);
+  --color-warm-400: var(--color-warm-400);
+  --color-warm-500: var(--color-warm-500);
+  --color-warm-600: var(--color-warm-600);
+
+  --color-champagne-300: var(--color-champagne-300);
+  --color-champagne-400: var(--color-champagne-400);
+  --color-champagne-500: var(--color-champagne-500);
+  --color-champagne-600: var(--color-champagne-600);
+
+  --color-blush-300: var(--color-blush-300);
+  --color-blush-400: var(--color-blush-400);
+  --color-blush-500: var(--color-blush-500);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+}
+
+/* 手機點擊時避免出現系統預設的藍色高亮框 */
+button,
+a {
+  -webkit-tap-highlight-color: transparent;
+}
