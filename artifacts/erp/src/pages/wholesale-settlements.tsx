@@ -33,7 +33,8 @@ function fmtDate(d: string | null | undefined) {
 }
 
 function todayStr() {
-  return new Date().toISOString().split("T")[0];
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
 }
 
 function firstDayOfMonthStr() {
@@ -241,12 +242,15 @@ export default function WholesaleSettlements() {
   async function printInvoice() {
     if (!detailCustomer || !detailData) return;
     const flat = flatItems();
-    const subtotal = flat.reduce((sum, it) => sum + parseFloat(it.amount ?? "0"), 0);
-    const taxRate = detailData[0]?.taxRate ? parseFloat(detailData[0].taxRate) : 0;
-    const taxAmount = Math.round(subtotal * taxRate / 100 * 100) / 100;
-    const total = subtotal + taxAmount;
+    // Use saved values from EACH delivery order; do not recalculate a month
+    // using the tax rate from only its first order.
+    const subtotal = detailData.reduce((sum, o) => sum + Number(o.subtotal ?? 0), 0);
+    const taxAmount = detailData.reduce((sum, o) => sum + Number(o.taxAmount ?? 0), 0);
+    const total = detailData.reduce((sum, o) => sum + Number(o.total ?? 0), 0);
+    const taxRate = 0; // Mixed rates; template labels the summed tax without a single rate.
+    const received = summary?.find(row => row.customerId === detailCustomer.id)?.receivedAmount ?? 0;
     const docNo = `${detailCustomer.name}_${fromDate}`;
-    const html = buildStatementHtml(detailCustomer.name, fromDate, toDate, flat, subtotal, taxRate, taxAmount, total, 0, total);
+    const html = buildStatementHtml(detailCustomer.name, fromDate, toDate, flat, subtotal, taxRate, taxAmount, total, received, total - received);
     if (isMobileDevice()) {
       await handlePdfAction({
         html,
@@ -266,12 +270,15 @@ export default function WholesaleSettlements() {
   async function sendLinePDF() {
     if (!detailCustomer || !detailData) return;
     const flat = flatItems();
-    const subtotal = flat.reduce((sum, it) => sum + parseFloat(it.amount ?? "0"), 0);
-    const taxRate = detailData[0]?.taxRate ? parseFloat(detailData[0].taxRate) : 0;
-    const taxAmount = Math.round(subtotal * taxRate / 100 * 100) / 100;
-    const total = subtotal + taxAmount;
+    // Use saved values from EACH delivery order; do not recalculate a month
+    // using the tax rate from only its first order.
+    const subtotal = detailData.reduce((sum, o) => sum + Number(o.subtotal ?? 0), 0);
+    const taxAmount = detailData.reduce((sum, o) => sum + Number(o.taxAmount ?? 0), 0);
+    const total = detailData.reduce((sum, o) => sum + Number(o.total ?? 0), 0);
+    const taxRate = 0; // Mixed rates; template labels the summed tax without a single rate.
+    const received = summary?.find(row => row.customerId === detailCustomer.id)?.receivedAmount ?? 0;
     const docNo = `${detailCustomer.name}_${fromDate}`;
-    const html = buildStatementHtml(detailCustomer.name, fromDate, toDate, flat, subtotal, taxRate, taxAmount, total, 0, total);
+    const html = buildStatementHtml(detailCustomer.name, fromDate, toDate, flat, subtotal, taxRate, taxAmount, total, received, total - received);
     await handlePdfAction({
       html,
       docNo,
@@ -289,7 +296,7 @@ export default function WholesaleSettlements() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold">批發月結 / 應收</h1>
-          <p className="text-sm text-muted-foreground">依日期區間統計已出貨訂單</p>
+          <p className="text-sm text-muted-foreground">依出貨單日期統計已出貨訂單，點選公司查看本期逐筆明細</p>
         </div>
       </div>
 
@@ -324,7 +331,7 @@ export default function WholesaleSettlements() {
           <p className="text-2xl font-bold mt-1">{list.length}</p>
         </CardContent></Card>
         <Card><CardContent className="p-4">
-          <p className="text-xs text-muted-foreground uppercase tracking-wide">訂單總金額</p>
+          <p className="text-xs text-muted-foreground uppercase tracking-wide">本期出貨總額</p>
           <p className="text-2xl font-bold mt-1">{fmtMoney(totalAll)}</p>
         </CardContent></Card>
         <Card><CardContent className="p-4">
@@ -352,7 +359,7 @@ export default function WholesaleSettlements() {
                       <Badge variant="outline">{s.orderCount} 筆</Badge>
                     </div>
                     <div className="flex gap-4 mt-1 text-sm">
-                      <span className="text-muted-foreground">訂單總額：<span className="text-foreground font-medium">{fmtMoney(s.totalAmount)}</span></span>
+                      <span className="text-muted-foreground">本期出貨：<span className="text-foreground font-medium">{fmtMoney(s.totalAmount)}</span></span>
                       <span className="text-muted-foreground">待收：<span className="text-red-600 font-medium">{fmtMoney(s.receivableAmount)}</span></span>
                       <span className="text-muted-foreground">已收：<span className="text-green-600 font-medium">{fmtMoney(s.receivedAmount)}</span></span>
                     </div>
@@ -368,7 +375,7 @@ export default function WholesaleSettlements() {
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
         <DialogContent className="max-w-5xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{detailCustomer?.name} — 出貨明細</DialogTitle>
+            <DialogTitle>{detailCustomer?.name} — 本期月結出貨明細</DialogTitle>
           </DialogHeader>
           <Separator />
           {detailLoading ? (
