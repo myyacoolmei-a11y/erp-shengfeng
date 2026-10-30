@@ -39,43 +39,41 @@ router.get("/wholesale/settlements/summary", requireRole(...ROLES), async (req, 
     .groupBy(wholesaleOrdersTable.customerId, wholesaleOrdersTable.customerName)
     .orderBy(desc(sql`sum(${wholesaleOrdersTable.total})`));
 
-  const customerIds = rows.map((r) => r.customerId).filter(Boolean) as number[];
-  let receivableMap = new Map<number, { totalAmount: number; receivedAmount: number }>();
-
-  if (customerIds.length > 0) {
-    const receivables = await db
-      .select({
-        customerId: wholesaleReceivablesTable.customerId,
-        totalAmount: wholesaleReceivablesTable.totalAmount,
-        receivedAmount: wholesaleReceivablesTable.receivedAmount,
-      })
-      .from(wholesaleReceivablesTable)
-      .where(inArray(wholesaleReceivablesTable.customerId, customerIds));
-
-    for (const r of receivables) {
-      if (!r.customerId) continue;
-      const existing = receivableMap.get(r.customerId);
-      const total = parseFloat(r.totalAmount ?? "0");
-      const received = parseFloat(r.receivedAmount ?? "0");
-      if (existing) {
-        existing.totalAmount += total;
-        existing.receivedAmount += received;
-      } else {
-        receivableMap.set(r.customerId, { totalAmount: total, receivedAmount: received });
-      }
+  // Only receivables tied to orders in this date range belong to this settlement.
+  // Customer-wide historical receivables must never be mixed into a monthly statement.
+  const selectedOrders = await db.select({
+    id: wholesaleOrdersTable.id,
+    customerId: wholesaleOrdersTable.customerId,
+    total: wholesaleOrdersTable.total,
+  }).from(wholesaleOrdersTable).where(and(...conditions));
+  const orderIds = selectedOrders.map(o => o.id);
+  const receivedByOrder = new Map<number, number>();
+  if (orderIds.length) {
+    const receivables = await db.select({
+      orderId: wholesaleReceivablesTable.orderId,
+      receivedAmount: wholesaleReceivablesTable.receivedAmount,
+    }).from(wholesaleReceivablesTable).where(inArray(wholesaleReceivablesTable.orderId, orderIds));
+    for (const rec of receivables) {
+      if (rec.orderId == null) continue;
+      receivedByOrder.set(rec.orderId, (receivedByOrder.get(rec.orderId) ?? 0) + Number(rec.receivedAmount ?? 0));
     }
   }
-
-  const result = rows.map((r) => {
+  const receivedByCustomer = new Map<number, number>();
+  for (const order of selectedOrders) {
+    const cid = order.customerId ?? 0;
+    receivedByCustomer.set(cid, (receivedByCustomer.get(cid) ?? 0) + (receivedByOrder.get(order.id) ?? 0));
+  }
+  const result = rows.map(r => {
     const cid = r.customerId ?? 0;
-    const rec = receivableMap.get(cid) ?? { totalAmount: 0, receivedAmount: 0 };
+    const received = receivedByCustomer.get(cid) ?? 0;
+    const amount = Number(r.totalAmount ?? 0);
     return {
       customerId: cid,
       customerName: r.customerName ?? "未知客戶",
       orderCount: r.orderCount,
-      totalAmount: r.totalAmount,
-      receivableAmount: rec.totalAmount - rec.receivedAmount,
-      receivedAmount: rec.receivedAmount,
+      totalAmount: amount,
+      receivableAmount: amount - received,
+      receivedAmount: received,
     };
   });
 
@@ -111,7 +109,7 @@ router.get("/wholesale/settlements/:customerId", requireRole(...ROLES), async (r
     .select()
     .from(wholesaleOrdersTable)
     .where(and(...conditions))
-    .orderBy(desc(wholesaleOrdersTable.orderDate));
+    .orderBy(wholesaleOrdersTable.orderDate, wholesaleOrdersTable.id);
 
   // Fetch items for each order, joining products to get spec
   const ordersWithItems = await Promise.all(
