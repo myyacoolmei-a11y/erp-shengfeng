@@ -778,6 +778,14 @@ export const CreateQuoteBody = zod.object({
   "customerPhone": zod.string().optional(),
   "taxType": zod.string().optional(),
   "salesRepId": zod.number().optional(),
+  "documentType": zod.string().optional(),
+  "workflowStage": zod.string().optional(),
+  "intentGroups": zod.array(zod.object({
+    "id": zod.string(),
+    "name": zod.string(),
+    "selectionType": zod.enum(["single", "multiple"]),
+    "required": zod.boolean()
+  })).nullish(),
   "items": zod.array(zod.object({
   "productId": zod.number().nullish(),
   "category": zod.string(),
@@ -787,7 +795,14 @@ export const CreateQuoteBody = zod.object({
   "quantity": zod.number(),
   "unit": zod.string(),
   "unitPrice": zod.number(),
+  "installFee": zod.number().optional(),
   "notes": zod.string().optional(),
+  "workContent": zod.string().optional(),
+  "optionGroupId": zod.string().nullish(),
+  "optionGroupName": zod.string().nullish(),
+  "isRequiredGroup": zod.boolean().optional(),
+  "selectionMode": zod.string().optional(),
+  "isSelected": zod.boolean().nullish(),
   "addToCatalog": zod.boolean().optional(),
   "sortOrder": zod.number().optional()
 })).optional()
@@ -900,6 +915,14 @@ export const UpdateQuoteBody = zod.object({
   "customerPhone": zod.string().optional(),
   "taxType": zod.string().optional(),
   "salesRepId": zod.number().optional(),
+  "documentType": zod.string().optional(),
+  "workflowStage": zod.string().optional(),
+  "intentGroups": zod.array(zod.object({
+    "id": zod.string(),
+    "name": zod.string(),
+    "selectionType": zod.enum(["single", "multiple"]),
+    "required": zod.boolean()
+  })).nullish(),
   "items": zod.array(zod.object({
   "productId": zod.number().nullish(),
   "category": zod.string(),
@@ -909,7 +932,14 @@ export const UpdateQuoteBody = zod.object({
   "quantity": zod.number(),
   "unit": zod.string(),
   "unitPrice": zod.number(),
+  "installFee": zod.number().optional(),
   "notes": zod.string().optional(),
+  "workContent": zod.string().optional(),
+  "optionGroupId": zod.string().nullish(),
+  "optionGroupName": zod.string().nullish(),
+  "isRequiredGroup": zod.boolean().optional(),
+  "selectionMode": zod.string().optional(),
+  "isSelected": zod.boolean().nullish(),
   "addToCatalog": zod.boolean().optional(),
   "sortOrder": zod.number().optional()
 })).optional()

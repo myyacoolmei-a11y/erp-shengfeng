@@ -11,6 +11,7 @@ export const workOrdersTable = pgTable("work_orders", {
   customerId: integer("customer_id").references(() => customersTable.id, { onDelete: "set null" }),
   customerName: text("customer_name"),
   quoteId: integer("quote_id").references(() => quotesTable.id, { onDelete: "set null" }),
+  sourceIntentQuoteId: integer("source_intent_quote_id").references(() => quotesTable.id, { onDelete: "set null" }),
   workOrderNumber: text("work_order_number"),
   title: text("title").notNull(),
   status: text("status").notNull().default("待處理"),

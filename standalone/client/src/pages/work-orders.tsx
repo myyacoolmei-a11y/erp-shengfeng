@@ -148,6 +148,7 @@ const STATUS_COLORS: Record<string, string> = {
 function normalizeWoStatus(status: string | null | undefined): string {
   if (!status) return "待施工";
   if (status === "待處理") return "待施工";
+  if (status === "待安排") return "待派工";
   if (status === "進行中") return "施工中";
   if (status === "已取消" || status === "暫停") return "異常／暫停";
   return status;
@@ -1468,22 +1469,35 @@ export default function WorkOrders() {
                       {o.completedDate && <span className="text-green-600">完成：{o.completedDate}</span>}
                     </div>
                     {o.quoteId && (o as any).quoteNumber && (
-                      <button
-                        type="button"
-                        className="text-xs font-mono text-blue-600 hover:underline mt-1"
-                        title="查看／列印原始報價單（非派工資料）"
-                        onClick={() => {
-                          void printSourceQuoteFromWorkOrder(o, setPdfPreview, toast as any).catch((err: any) => {
-                            toast({
-                              title: "無法載入來源報價單",
-                              description: String(err?.message || err),
-                              variant: "destructive",
+                      <div className="flex flex-wrap items-center gap-3 mt-1">
+                        <button
+                          type="button"
+                          className="text-xs font-mono text-blue-600 hover:underline"
+                          title="查看／列印正式確認報價單（含客戶簽名快照）"
+                          onClick={() => {
+                            void printSourceQuoteFromWorkOrder(o, setPdfPreview, toast as any).catch((err: any) => {
+                              toast({
+                                title: "無法載入來源報價單",
+                                description: String(err?.message || err),
+                                variant: "destructive",
+                              });
                             });
-                          });
-                        }}
-                      >
-                        來源報價單：{(o as any).quoteNumber}
-                      </button>
+                          }}
+                        >
+                          正式報價單：{(o as any).quoteNumber}
+                          {(o as any).quoteConfirmedVersion ? ` (v${(o as any).quoteConfirmedVersion})` : ""}
+                        </button>
+                        {(o as any).sourceIntentQuoteId && (
+                          <button
+                            type="button"
+                            className="text-xs font-mono text-purple-700 hover:underline"
+                            title="回頭查看原始意向選擇單"
+                            onClick={() => navigate(`/quotes?focusId=${(o as any).sourceIntentQuoteId}`)}
+                          >
+                            查看原始意向單 (#{(o as any).sourceIntentQuoteId})
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
 

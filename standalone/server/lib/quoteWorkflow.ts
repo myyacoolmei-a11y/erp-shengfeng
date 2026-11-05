@@ -1,10 +1,11 @@
 /**
  * Quote → Work Order workflow sync.
- * Keeps quotes.dispatchStatus aligned with quote.status + linked work order.
+ * Keeps quotes.dispatchStatus and quotes.workflowStage aligned with quote.status + linked work order.
  */
 import { eq, inArray, desc, or } from "drizzle-orm";
 import { db, quotesTable, workOrdersTable } from "@workspace/db";
 import { isQuoteWon } from "./quoteStatus";
+import { deriveQuoteWorkflowStage } from "../../shared/quoteIntentLogic.ts";
 
 export const DISPATCH_STATUSES = ["未派工", "待派工", "已派工", "施工中", "已完工", "已結案"] as const;
 export type DispatchStatus = typeof DISPATCH_STATUSES[number];
@@ -12,6 +13,8 @@ export type DispatchStatus = typeof DISPATCH_STATUSES[number];
 export function deriveDispatchStatus(
   quoteStatus: string,
   workOrderStatus: string | null | undefined,
+  scheduledDate?: string | null,
+  assignedTo?: string | null,
 ): DispatchStatus {
   if (!workOrderStatus) {
     return isQuoteWon(quoteStatus) ? "待派工" : "未派工";
@@ -26,7 +29,13 @@ export function deriveDispatchStatus(
   ) {
     return "施工中";
   }
-  // 待派工、待施工，以及其他尚未開始施工的狀態
+  if (
+    (workOrderStatus === "待派工" || workOrderStatus === "待安排") &&
+    !scheduledDate &&
+    !assignedTo
+  ) {
+    return "待派工";
+  }
   return "已派工";
 }
 
@@ -34,6 +43,8 @@ export type LinkedWorkOrder = {
   id: number;
   workOrderNumber: string | null;
   status: string;
+  scheduledDate: string | null;
+  assignedTo: string | null;
 };
 
 export async function loadLatestWorkOrdersByQuoteIds(
@@ -48,6 +59,8 @@ export async function loadLatestWorkOrdersByQuoteIds(
       id: workOrdersTable.id,
       workOrderNumber: workOrdersTable.workOrderNumber,
       status: workOrdersTable.status,
+      scheduledDate: workOrdersTable.scheduledDate,
+      assignedTo: workOrdersTable.assignedTo,
       createdAt: workOrdersTable.createdAt,
     })
     .from(workOrdersTable)
@@ -60,55 +73,118 @@ export async function loadLatestWorkOrdersByQuoteIds(
         id: row.id,
         workOrderNumber: row.workOrderNumber,
         status: row.status,
+        scheduledDate: row.scheduledDate ?? null,
+        assignedTo: row.assignedTo ?? null,
       });
     }
   }
   return map;
 }
 
-/** Recompute and persist dispatchStatus for one quote. */
+/** Recompute and persist dispatchStatus & workflowStage for one quote. */
 export async function syncQuoteDispatchStatus(quoteId: number): Promise<{
   dispatchStatus: DispatchStatus;
+  workflowStage: string;
   workOrderId: number | null;
   workOrderNumber: string | null;
 } | null> {
   const [quote] = await db
-    .select({ id: quotesTable.id, status: quotesTable.status, dispatchStatus: quotesTable.dispatchStatus })
+    .select({
+      id: quotesTable.id,
+      status: quotesTable.status,
+      dispatchStatus: quotesTable.dispatchStatus,
+      workflowStage: quotesTable.workflowStage,
+      documentType: quotesTable.documentType,
+      customerSelectedAt: quotesTable.customerSelectedAt,
+      customerConfirmedAt: quotesTable.customerConfirmedAt,
+      convertedFormalQuoteId: quotesTable.convertedFormalQuoteId,
+    })
     .from(quotesTable)
     .where(eq(quotesTable.id, quoteId));
   if (!quote) return null;
 
   const woMap = await loadLatestWorkOrdersByQuoteIds([quoteId]);
   const wo = woMap.get(quoteId);
-  const dispatchStatus = deriveDispatchStatus(quote.status, wo?.status);
+  const dispatchStatus = deriveDispatchStatus(quote.status, wo?.status, wo?.scheduledDate, wo?.assignedTo);
+  const workflowStage = deriveQuoteWorkflowStage(
+    {
+      ...quote,
+      workOrderId: wo?.id ?? null,
+      dispatchStatus,
+    },
+    wo,
+  );
 
-  if (dispatchStatus !== quote.dispatchStatus) {
-    await db.update(quotesTable).set({ dispatchStatus }).where(eq(quotesTable.id, quoteId));
+  if (dispatchStatus !== quote.dispatchStatus || workflowStage !== quote.workflowStage) {
+    await db
+      .update(quotesTable)
+      .set({ dispatchStatus, workflowStage })
+      .where(eq(quotesTable.id, quoteId));
   }
 
   return {
     dispatchStatus,
+    workflowStage,
     workOrderId: wo?.id ?? null,
     workOrderNumber: wo?.workOrderNumber ?? null,
   };
 }
 
-/** Batch-sync dispatchStatus for listed quotes (list API). */
+/** Batch-sync dispatchStatus & workflowStage for listed quotes (list API). */
 export async function syncQuoteDispatchBatch(
-  quotes: Array<{ id: number; status: string; dispatchStatus?: string | null }>,
-): Promise<Map<number, { dispatchStatus: DispatchStatus; workOrderId: number | null; workOrderNumber: string | null }>> {
-  const quoteIds = quotes.map(q => q.id);
+  quotes: Array<{
+    id: number;
+    status: string;
+    dispatchStatus?: string | null;
+    workflowStage?: string | null;
+    documentType?: string | null;
+    customerSelectedAt?: Date | string | null;
+    customerConfirmedAt?: Date | string | null;
+    convertedFormalQuoteId?: number | null;
+  }>,
+): Promise<
+  Map<
+    number,
+    {
+      dispatchStatus: DispatchStatus;
+      workflowStage: string;
+      workOrderId: number | null;
+      workOrderNumber: string | null;
+    }
+  >
+> {
+  const quoteIds = quotes.map((q) => q.id);
   const woMap = await loadLatestWorkOrdersByQuoteIds(quoteIds);
-  const result = new Map<number, { dispatchStatus: DispatchStatus; workOrderId: number | null; workOrderNumber: string | null }>();
+  const result = new Map<
+    number,
+    {
+      dispatchStatus: DispatchStatus;
+      workflowStage: string;
+      workOrderId: number | null;
+      workOrderNumber: string | null;
+    }
+  >();
 
   for (const q of quotes) {
     const wo = woMap.get(q.id);
-    const dispatchStatus = deriveDispatchStatus(q.status, wo?.status);
-    if (dispatchStatus !== (q.dispatchStatus ?? "未派工")) {
-      await db.update(quotesTable).set({ dispatchStatus }).where(eq(quotesTable.id, q.id));
+    const dispatchStatus = deriveDispatchStatus(q.status, wo?.status, wo?.scheduledDate, wo?.assignedTo);
+    const workflowStage = deriveQuoteWorkflowStage(
+      {
+        ...q,
+        workOrderId: wo?.id ?? null,
+        dispatchStatus,
+      },
+      wo,
+    );
+    if (dispatchStatus !== (q.dispatchStatus ?? "未派工") || workflowStage !== (q.workflowStage ?? "")) {
+      await db
+        .update(quotesTable)
+        .set({ dispatchStatus, workflowStage })
+        .where(eq(quotesTable.id, q.id));
     }
     result.set(q.id, {
       dispatchStatus,
+      workflowStage,
       workOrderId: wo?.id ?? null,
       workOrderNumber: wo?.workOrderNumber ?? null,
     });
@@ -131,7 +207,7 @@ export async function listPendingDispatchQuotes(limit = 15) {
     .where(or(eq(quotesTable.status, "已成交"), eq(quotesTable.status, "已接受")))
     .orderBy(desc(quotesTable.createdAt));
 
-  const ids = rows.map(r => r.id);
+  const ids = rows.map((r) => r.id);
   const woMap = await loadLatestWorkOrdersByQuoteIds(ids);
   const pending: Array<{
     id: number;
@@ -143,7 +219,7 @@ export async function listPendingDispatchQuotes(limit = 15) {
 
   for (const q of rows) {
     const wo = woMap.get(q.id);
-    const dispatchStatus = deriveDispatchStatus(q.status, wo?.status);
+    const dispatchStatus = deriveDispatchStatus(q.status, wo?.status, wo?.scheduledDate, wo?.assignedTo);
     if (dispatchStatus !== q.dispatchStatus) {
       await db.update(quotesTable).set({ dispatchStatus }).where(eq(quotesTable.id, q.id));
     }

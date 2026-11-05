@@ -53,6 +53,14 @@ import {
   normalizeQuoteItemCategoryBrand,
   QUOTE_CATEGORY_SUGGESTIONS,
 } from "../../../shared/quoteItemDisplay";
+import {
+  QUOTE_WORKFLOW_STAGES,
+  normalizeQuoteDocumentType,
+  quoteDocumentTypeLabel,
+  type QuoteDocumentType,
+} from "../../../shared/quoteIntentLogic.ts";
+
+export const QUOTE_INTENT_ESIGN_RELEASE_MARKER = "quote-intent-esign-dispatch-v1";
 
 const AUTH_TOKEN_KEY = "erp_auth_token";
 
@@ -121,7 +129,25 @@ const STATUS_COLORS: Record<string, string> = {
   "尚未成交": "bg-sky-100 text-sky-800",
   "已成交": "bg-emerald-100 text-emerald-800",
   "未成交": "bg-slate-100 text-slate-600",
+  "草稿": "bg-gray-100 text-gray-700",
+  "已傳送": "bg-blue-100 text-blue-800",
+  "待客戶選擇": "bg-amber-100 text-amber-800",
+  "待客戶確認": "bg-sky-100 text-sky-800",
+  "已確認": "bg-emerald-100 text-emerald-800",
+  "待安排派工": "bg-purple-100 text-purple-800",
+  "已派工": "bg-indigo-100 text-indigo-800",
+  "已取消": "bg-slate-100 text-slate-600",
 };
+
+const ROOM_GROUP_SUGGESTIONS = [
+  "客廳方案",
+  "主臥室方案",
+  "次臥室方案",
+  "書房方案",
+  "孝親房方案",
+  "餐廳方案",
+  "全室冷氣方案",
+] as const;
 
 function quoteCategory(q: any): QuoteFilterTab {
   return quoteListTab(q.status);
@@ -153,10 +179,18 @@ interface QuoteItem {
   quantity: number;
   unit: string;
   unitPrice: number;
+  installFee: number;
   notes: string;
+  workContent: string;
+  optionGroupId: string;
+  optionGroupName: string;
+  isRequiredGroup: boolean;
+  selectionMode: "single" | "multiple" | "fixed";
   sortOrder: number;
 }
 interface QuoteForm {
+  documentType: QuoteDocumentType;
+  workflowStage: string;
   customerId: number;
   customerName: string;
   contactPerson: string;
@@ -172,12 +206,20 @@ interface QuoteForm {
   items: QuoteItem[];
 }
 
-const DEFAULT_ITEM = (): QuoteItem => ({
+const DEFAULT_ITEM = (docType: QuoteDocumentType = "formal"): QuoteItem => ({
   productId: null, inputMode: "catalog", addToCatalog: false,
-  category: "", itemName: "", brand: "", model: "",
-  quantity: 1, unit: "台", unitPrice: 0, notes: "", sortOrder: 0,
+  category: docType === "intent" ? "裝新機" : "", itemName: "", brand: "", model: "",
+  quantity: 1, unit: "台", unitPrice: 0, installFee: 0,
+  notes: "", workContent: "",
+  optionGroupId: docType === "intent" ? "客廳方案" : "",
+  optionGroupName: docType === "intent" ? "客廳方案" : "",
+  isRequiredGroup: true,
+  selectionMode: docType === "intent" ? "single" : "fixed",
+  sortOrder: 0,
 });
-const emptyForm = (): QuoteForm => ({
+const emptyForm = (docType: QuoteDocumentType = "formal"): QuoteForm => ({
+  documentType: docType,
+  workflowStage: docType === "intent" ? "待客戶選擇" : "待客戶確認",
   customerId: 0, customerName: "", contactPerson: "", customerPhone: "",
   address: "", title: "", description: "", taxType: "未稅", salesRepId: 0,
   status: "客戶確認中", notes: "", discountAmount: 0, items: [],
@@ -185,15 +227,17 @@ const emptyForm = (): QuoteForm => ({
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function computeTotals(items: QuoteItem[], discountAmount: number, taxType: string) {
-  const rawTotal = items.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
+  const rawTotal = items.reduce((s, i) => s + i.quantity * i.unitPrice + Math.max(0, i.installFee || 0), 0);
   return computeQuoteAmounts(rawTotal, discountAmount, taxType);
 }
 
 function formToApi(f: QuoteForm) {
-  const rawTotal = f.items.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
+  const rawTotal = f.items.reduce((s, i) => s + i.quantity * i.unitPrice + Math.max(0, i.installFee || 0), 0);
   const discAmt = Math.max(0, f.discountAmount || 0);
   return {
     ...(f.customerId > 0 ? { customerId: f.customerId } : {}),
+    documentType: f.documentType,
+    workflowStage: f.workflowStage || (f.documentType === "intent" ? "待客戶選擇" : "待客戶確認"),
     customerName: f.customerName || undefined,
     contactPerson: f.contactPerson || undefined,
     title: f.title,
@@ -208,6 +252,7 @@ function formToApi(f: QuoteForm) {
     ...(f.salesRepId > 0 ? { salesRepId: f.salesRepId } : {}),
     items: f.items.map((item, idx) => {
       const { category, brand } = normalizeQuoteItemCategoryBrand(item);
+      const groupName = (item.optionGroupName || item.optionGroupId || "").trim();
       return {
         productId: item.productId ?? undefined,
         category,
@@ -217,7 +262,13 @@ function formToApi(f: QuoteForm) {
         quantity: item.quantity,
         unit: item.unit,
         unitPrice: item.unitPrice,
+        installFee: f.documentType === "intent" ? Math.max(0, item.installFee || 0) : 0,
         notes: item.notes || undefined,
+        workContent: f.documentType === "intent" ? (item.workContent || undefined) : undefined,
+        optionGroupId: f.documentType === "intent" ? (groupName || undefined) : undefined,
+        optionGroupName: f.documentType === "intent" ? (groupName || undefined) : undefined,
+        isRequiredGroup: f.documentType === "intent" ? item.isRequiredGroup : true,
+        selectionMode: f.documentType === "intent" ? item.selectionMode : "fixed",
         addToCatalog: item.inputMode === "manual" && !item.productId ? item.addToCatalog : undefined,
         sortOrder: idx,
       };
@@ -226,7 +277,10 @@ function formToApi(f: QuoteForm) {
 }
 
 function quoteToForm(q: any): QuoteForm {
+  const docType = normalizeQuoteDocumentType(q.documentType);
   return {
+    documentType: docType,
+    workflowStage: q.workflowStage || (docType === "intent" ? "待客戶選擇" : "待客戶確認"),
     customerId: q.customerId ?? 0,
     customerName: q.customerName ?? "",
     contactPerson: q.contactPerson ?? "",
@@ -250,7 +304,13 @@ function quoteToForm(q: any): QuoteForm {
       quantity: Number(item.quantity ?? 1),
       unit: item.unit ?? "台",
       unitPrice: Number(item.unitPrice ?? 0),
+      installFee: Number(item.installFee ?? 0),
       notes: item.notes ?? "",
+      workContent: item.workContent ?? "",
+      optionGroupId: item.optionGroupId ?? item.optionGroupName ?? (docType === "intent" ? "客廳方案" : ""),
+      optionGroupName: item.optionGroupName ?? item.optionGroupId ?? (docType === "intent" ? "客廳方案" : ""),
+      isRequiredGroup: item.isRequiredGroup !== false,
+      selectionMode: (item.selectionMode === "multiple" || item.selectionMode === "fixed" ? item.selectionMode : "single"),
       sortOrder: idx,
     })),
   };
@@ -259,13 +319,16 @@ function quoteToForm(q: any): QuoteForm {
 function buildLineShareMessage(quote: any, shareUrl: string): string {
   const quoteNo = getQuoteNo(quote);
   const name = quote.customerName || quote.title || "客戶";
+  const isIntent = normalizeQuoteDocumentType(quote.documentType) === "intent";
   return [
-    "【晟風工程報價單】",
+    isIntent ? "【晟風工程｜冷氣工程意向選擇單】" : "【晟風工程報價單】",
     `客戶／案件：${name}`,
-    `報價單號：${quoteNo}`,
+    `單號：${quoteNo}`,
     `案件：${quote.title || "—"}`,
     "",
-    "查看報價單（無需登入）：",
+    isIntent
+      ? "請點選下方連結選擇您偏好的品牌與機型方案（無需登入）："
+      : "查看報價單並可線上確認簽名（無需登入）：",
     shareUrl,
   ].join("\n");
 }
@@ -297,9 +360,22 @@ async function createQuoteShareUrl(quoteId: number): Promise<string> {
 }
 
 // ── ItemCard ───────────────────────────────────────────────────────────────
-function ItemCard({ item, index, products, onChange, onDelete }: {
-  item: QuoteItem; index: number; products: any[];
-  onChange: (u: QuoteItem) => void; onDelete: () => void;
+function ItemCard({
+  item,
+  index,
+  products,
+  documentType,
+  onChange,
+  onDelete,
+  onCloneInGroup,
+}: {
+  item: QuoteItem;
+  index: number;
+  products: any[];
+  documentType: QuoteDocumentType;
+  onChange: (u: QuoteItem) => void;
+  onDelete: () => void;
+  onCloneInGroup?: () => void;
 }) {
   const [productSearch, setProductSearch] = useState("");
   const productOptions = products ?? [];
@@ -315,11 +391,15 @@ function ItemCard({ item, index, products, onChange, onDelete }: {
     if (mode === item.inputMode) return;
     if (mode === "catalog") {
       onChange({
-        ...DEFAULT_ITEM(),
+        ...DEFAULT_ITEM(documentType),
         inputMode: "catalog",
         sortOrder: item.sortOrder,
         quantity: item.quantity,
         notes: item.notes,
+        optionGroupId: item.optionGroupId,
+        optionGroupName: item.optionGroupName,
+        isRequiredGroup: item.isRequiredGroup,
+        selectionMode: item.selectionMode,
       });
     } else {
       onChange({
@@ -392,7 +472,56 @@ function ItemCard({ item, index, products, onChange, onDelete }: {
             {QUOTE_CATEGORY_SUGGESTIONS.map((c) => <option key={c} value={c} />)}
           </datalist>
         </div>
+
+        {documentType === "intent" && (
+          <>
+            <div className="space-y-1">
+              <Label className="text-xs">房間／選擇群組名稱 *</Label>
+              <Input
+                className="h-8 text-xs"
+                list={`room-group-suggestions-${index}`}
+                value={item.optionGroupName}
+                onChange={e => onChange({ ...item, optionGroupName: e.target.value, optionGroupId: e.target.value })}
+                placeholder="例：客廳方案、主臥室方案"
+              />
+              <datalist id={`room-group-suggestions-${index}`}>
+                {ROOM_GROUP_SUGGESTIONS.map((g) => <option key={g} value={g} />)}
+              </datalist>
+            </div>
+            <div className="space-y-1">
+              <Label className="text-xs">群組選擇方式</Label>
+              <Select
+                value={item.selectionMode}
+                onValueChange={v => onChange({ ...item, selectionMode: v as "single" | "multiple" | "fixed" })}
+              >
+                <SelectTrigger className="h-8 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="single">單選方案（同群組多選一）</SelectItem>
+                  <SelectItem value="multiple">可複選方案</SelectItem>
+                  <SelectItem value="fixed">固定必含施工項目</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </>
+        )}
       </div>
+
+      {documentType === "intent" && item.selectionMode !== "fixed" && (
+        <div className="flex flex-wrap items-center justify-between gap-2 bg-amber-50/70 border border-amber-200/80 rounded-md px-2.5 py-1.5 text-xs">
+          <label className="flex items-center gap-2 cursor-pointer font-medium text-amber-900">
+            <Checkbox
+              checked={item.isRequiredGroup}
+              onCheckedChange={v => onChange({ ...item, isRequiredGroup: v === true })}
+            />
+            此群組為客戶必選項目
+          </label>
+          {onCloneInGroup && (
+            <Button type="button" variant="outline" size="sm" className="h-7 text-xs border-amber-300 bg-white" onClick={onCloneInGroup}>
+              ＋同群組新增另一品牌候選方案
+            </Button>
+          )}
+        </div>
+      )}
 
       {item.inputMode === "catalog" ? (
         <div className="space-y-2">
@@ -492,7 +621,7 @@ function ItemCard({ item, index, products, onChange, onDelete }: {
         <div className="space-y-1">
           <Label className="text-xs text-muted-foreground">小計</Label>
           <div className="h-8 flex items-center px-2 bg-muted/50 rounded-md border text-xs font-semibold">
-            NT${(item.quantity * item.unitPrice).toLocaleString()}
+            NT${(item.quantity * item.unitPrice + Math.max(0, item.installFee || 0)).toLocaleString()}
           </div>
         </div>
         <div className="space-y-1 col-span-2 sm:col-span-1">
@@ -500,6 +629,31 @@ function ItemCard({ item, index, products, onChange, onDelete }: {
           <Input className="h-8 text-xs" value={item.notes} onChange={e => onChange({ ...item, notes: e.target.value })} placeholder="選填" />
         </div>
       </div>
+
+      {documentType === "intent" && (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 border-t border-dashed">
+          <div className="space-y-1">
+            <Label className="text-xs">方案安裝／施工費（選填）</Label>
+            <Input
+              className="h-8 text-xs"
+              type="number"
+              min="0"
+              value={item.installFee || 0}
+              onChange={e => onChange({ ...item, installFee: parseFloat(e.target.value) || 0 })}
+              placeholder="0"
+            />
+          </div>
+          <div className="space-y-1 sm:col-span-2">
+            <Label className="text-xs">此方案施工內容說明（選填）</Label>
+            <Input
+              className="h-8 text-xs"
+              value={item.workContent}
+              onChange={e => onChange({ ...item, workContent: e.target.value })}
+              placeholder="例：含基本銅管 5 米、標準室外機架、排水配管"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -524,6 +678,9 @@ export default function QuotesPage() {
   const [markingLost, setMarkingLost] = useState(false);
 
   const [statusFilter, setStatusFilter] = useState<QuoteFilterTab>("尚未成交");
+  const [docTypeFilter, setDocTypeFilter] = useState<"all" | "formal" | "intent">("all");
+  const [stageFilter, setStageFilter] = useState<string>("all");
+  const [creatingRevision, setCreatingRevision] = useState(false);
   const [listSearch, setListSearch] = useState("");
   const [listPage, setListPage] = useState(1);
   const [pdfPreview, setPdfPreview] = useState<{ url: string; filename: string } | null>(null);
@@ -587,10 +744,12 @@ export default function QuotesPage() {
   const filtered = (quotes ?? [])
     .filter((q: any) => {
       if (!quoteMatchesFilter(q, statusFilter)) return false;
+      if (docTypeFilter !== "all" && normalizeQuoteDocumentType(q.documentType) !== docTypeFilter) return false;
+      if (stageFilter !== "all" && (q.workflowStage || "") !== stageFilter) return false;
       if (filterCustomerName && !q.customerName?.toLowerCase().includes(filterCustomerName.toLowerCase())) return false;
       const qSearch = listSearch.trim().toLowerCase();
       if (qSearch) {
-        const hay = [q.title, q.customerName, q.customerPhone, q.address, formatQuoteNumber(q)]
+        const hay = [q.title, q.customerName, q.customerPhone, q.address, formatQuoteNumber(q), q.workflowStage]
           .filter(Boolean)
           .join(" ")
           .toLowerCase();
@@ -616,7 +775,7 @@ export default function QuotesPage() {
 
   useEffect(() => {
     setListPage(1);
-  }, [statusFilter, listSearch, filterCustomerName]);
+  }, [statusFilter, docTypeFilter, stageFilter, listSearch, filterCustomerName]);
 
   useEffect(() => {
     if (listPage > totalPages) setListPage(totalPages);
@@ -823,7 +982,7 @@ export default function QuotesPage() {
 
   function handleVoiceApply({ parsed }: VoiceAssistantApplyPayload) {
     if (parsed.formType !== "quote") return;
-    setForm(applyVoiceToQuoteForm(emptyForm, parsed));
+    setForm(applyVoiceToQuoteForm(() => emptyForm("formal") as any, parsed) as any);
     setEditItem(null);
     setShowCreate(true);
   }
@@ -850,7 +1009,72 @@ export default function QuotesPage() {
     return () => { cancelled = true; };
   }, [focusQuoteId]);
 
-  function addItem() { setForm(f => ({ ...f, items: [...f.items, { ...DEFAULT_ITEM(), sortOrder: f.items.length }] })); }
+  async function openPublicLinkInNewTab(quoteId: number) {
+    try {
+      const url = await createQuoteShareUrl(quoteId);
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch (e: any) {
+      toast({
+        title: "無法開啟公開連結",
+        description: String(e?.message || e),
+        variant: "destructive",
+      });
+    }
+  }
+
+  async function handleCreateRevision(quoteId: number) {
+    if (creatingRevision) return;
+    setCreatingRevision(true);
+    try {
+      const res = await authFetch(`/api/quotes/${quoteId}/create-revision`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.error || data?.message || `建立新版失敗（HTTP ${res.status}）`);
+      }
+      invQuotes();
+      if (data.quote) {
+        setEditItem(data.quote);
+        setForm(quoteToForm(data.quote));
+      }
+      toast({
+        title: `已建立新版報價（v${data.confirmedVersion ?? ""}）`,
+        description: "現在可修改價格或施工內容，儲存後再傳送給客戶重新確認",
+      });
+    } catch (err: any) {
+      toast({
+        title: "建立新版報價失敗",
+        description: String(err?.message || err),
+        variant: "destructive",
+      });
+    } finally {
+      setCreatingRevision(false);
+    }
+  }
+
+  function addItem() { setForm(f => ({ ...f, items: [...f.items, { ...DEFAULT_ITEM(f.documentType), sortOrder: f.items.length }] })); }
+  function cloneItemInGroup(idx: number) {
+    setForm(f => {
+      const src = f.items[idx];
+      if (!src) return f;
+      const cloned: QuoteItem = {
+        ...DEFAULT_ITEM("intent"),
+        inputMode: src.inputMode,
+        category: src.category,
+        quantity: src.quantity,
+        unit: src.unit,
+        installFee: src.installFee,
+        workContent: src.workContent,
+        optionGroupId: src.optionGroupId || "客廳方案",
+        optionGroupName: src.optionGroupName || "客廳方案",
+        isRequiredGroup: src.isRequiredGroup,
+        selectionMode: src.selectionMode,
+        sortOrder: f.items.length,
+      };
+      const next = [...f.items];
+      next.splice(idx + 1, 0, cloned);
+      return { ...f, items: next.map((it, i) => ({ ...it, sortOrder: i })) };
+    });
+  }
   function removeItem(idx: number) { setForm(f => ({ ...f, items: f.items.filter((_, i) => i !== idx) })); }
   function updateItem(idx: number, updated: QuoteItem) { setForm(f => ({ ...f, items: f.items.map((item, i) => i === idx ? updated : item) })); }
 
@@ -860,13 +1084,34 @@ export default function QuotesPage() {
   const dialogOpen = showCreate || !!editItem;
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-release={QUOTE_INTENT_ESIGN_RELEASE_MARKER}>
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div><h1 className="text-2xl font-bold">報價單管理</h1><p className="text-sm text-muted-foreground mt-0.5">管理所有客戶報價單</p></div>
-        <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h1 className="text-2xl font-bold">報價單管理</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">支援意向選擇單（多方案客戶自選）與正式報價單（線上電子簽名確認自動派工）</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
           <VoiceAssistantButton formType="quote" onApply={handleVoiceApply} />
-          <Button size="sm" onClick={() => { setForm(emptyForm()); setShowCreate(true); }}><Plus className="h-4 w-4 mr-1" />新增報價單</Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              setForm(emptyForm("intent"));
+              setShowCreate(true);
+            }}
+          >
+            <Plus className="h-4 w-4 mr-1" />新增意向選擇單
+          </Button>
+          <Button
+            size="sm"
+            onClick={() => {
+              setForm(emptyForm("formal"));
+              setShowCreate(true);
+            }}
+          >
+            <Plus className="h-4 w-4 mr-1" />新增正式報價單
+          </Button>
         </div>
       </div>
 
@@ -879,13 +1124,33 @@ export default function QuotesPage() {
         </div>
       )}
 
-      <div className="sticky top-0 z-10 -mx-1 px-1 py-2 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
+      <div className="sticky top-0 z-10 -mx-1 px-1 py-2 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 space-y-2">
         <Input
           value={listSearch}
           onChange={(e) => setListSearch(e.target.value)}
-          placeholder="搜尋報價單、客戶、電話…"
+          placeholder="搜尋報價單號、客戶、電話、工程名稱…"
           className="h-10"
         />
+        <div className="flex flex-wrap items-center gap-2">
+          <Select value={docTypeFilter} onValueChange={(v) => setDocTypeFilter(v as "all" | "formal" | "intent")}>
+            <SelectTrigger className="h-8 w-36 text-xs"><SelectValue placeholder="單據類型" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">全部單據類型</SelectItem>
+              <SelectItem value="formal">正式報價單</SelectItem>
+              <SelectItem value="intent">意向選擇單</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={stageFilter} onValueChange={setStageFilter}>
+            <SelectTrigger className="h-8 w-40 text-xs"><SelectValue placeholder="報價流程狀態" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">全部流程狀態</SelectItem>
+              {QUOTE_WORKFLOW_STAGES.map((st) => (
+                <SelectItem key={st} value={st}>{st}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* Status filter — horizontal scroll; counts from mutually exclusive mapping */}
@@ -907,35 +1172,109 @@ export default function QuotesPage() {
         <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-24 w-full" />)}</div>
       ) : filtered.length > 0 ? (
         <div className="grid grid-cols-1 gap-3 max-w-3xl">
-          {paged.map(q => {
+          {paged.map((q: any) => {
             const qItems = (q.items ?? []) as any[];
             const qRaw = qItems.length > 0 ? qItems.reduce((s: number, i: any) => s + Number(i.subtotal ?? 0), 0) : Number(q.finalAmount ?? q.amount ?? 0);
             const qDisc = Number(q.discountAmount ?? 0);
             const { total: qTotal } = computeQuoteAmounts(qRaw, qDisc, q.taxType ?? "未稅");
             const hasWo = quoteHasLinkedWorkOrder(q);
-            const canWin = canWinQuoteAndCreateWorkOrder(q);
+            const isIntent = normalizeQuoteDocumentType(q.documentType) === "intent";
+            const canWin = !isIntent && canWinQuoteAndCreateWorkOrder(q);
             const statusLabel = quoteStatusLabel(q.status);
             const won = statusLabel === "已成交";
+            const stageLabel = q.workflowStage || (isIntent ? "待客戶選擇" : statusLabel);
+            const confirmedDateStr = q.customerConfirmedAt
+              ? new Date(q.customerConfirmedAt).toLocaleString("zh-TW", { hour12: false })
+              : q.wonAt
+                ? new Date(q.wonAt).toLocaleString("zh-TW", { hour12: false })
+                : null;
+            const selectedDateStr = q.customerSelectedAt
+              ? new Date(q.customerSelectedAt).toLocaleString("zh-TW", { hour12: false })
+              : null;
+
             return (
               <Card key={q.id}>
                 <CardContent className="p-3 sm:p-4 space-y-3">
                   <div className="flex items-center gap-1.5 flex-wrap">
-                    <span className="font-medium text-sm">{q.title}</span>
-                    <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${STATUS_COLORS[statusLabel] ?? "bg-gray-100 text-gray-700"}`}>
-                      {won ? "✓ 已成交" : statusLabel}
+                    <span
+                      className={`text-xs px-2 py-0.5 rounded font-semibold ${
+                        isIntent ? "bg-amber-100 text-amber-900" : "bg-slate-900 text-white"
+                      }`}
+                    >
+                      {quoteDocumentTypeLabel(q.documentType)}
                     </span>
+                    <span className="text-xs font-mono text-muted-foreground">
+                      {formatQuoteNumber(q)} (v{q.confirmedVersion ?? 1})
+                    </span>
+                    <span className="font-medium text-sm">{q.title}</span>
+                    <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${STATUS_COLORS[stageLabel] ?? STATUS_COLORS[statusLabel] ?? "bg-gray-100 text-gray-700"}`}>
+                      {stageLabel}
+                    </span>
+                    {won && (
+                      <span className="text-xs px-1.5 py-0.5 rounded font-medium bg-emerald-100 text-emerald-800">
+                        ✓ 已成交
+                      </span>
+                    )}
                     {hasWo && (
                       <span className="text-xs px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 font-mono">
-                        派工單 {q.workOrderNumber || `#${q.workOrderId}`}
+                        派工單 {q.workOrderNumber || `#${q.workOrderId}`}（{q.dispatchStatus || "待派工"}）
                       </span>
                     )}
                   </div>
                   <div className="text-xs text-muted-foreground flex gap-3 flex-wrap">
-                    {q.customerName && <span>{q.customerName}</span>}
+                    <span>客戶：<strong className="text-foreground">{q.customerName || "—"}</strong></span>
                     {q.customerPhone && <span>{q.customerPhone}</span>}
                     {q.salesRepName && <span>業務：{q.salesRepName}</span>}
-                    <span>含稅 NT${qTotal.toLocaleString()}</span>
+                    <span>
+                      {isIntent ? `方案合計試算 NT$${qTotal.toLocaleString()}` : `報價金額（含稅）NT$${qTotal.toLocaleString()}`}
+                    </span>
                   </div>
+                  <div className="flex flex-wrap gap-2 text-xs">
+                    {isIntent ? (
+                      <span className={`px-2 py-0.5 rounded border ${q.customerSelectedAt ? "bg-emerald-50 border-emerald-200 text-emerald-800" : "bg-amber-50 border-amber-200 text-amber-800"}`}>
+                        客戶選擇：{q.customerSelectedAt ? `✓ 已選擇（${selectedDateStr}）` : "待客戶選擇"}
+                      </span>
+                    ) : (
+                      <span className={`px-2 py-0.5 rounded border ${q.customerConfirmedAt || won ? "bg-emerald-50 border-emerald-200 text-emerald-800" : "bg-sky-50 border-sky-200 text-sky-800"}`}>
+                        客戶確認：
+                        {q.customerConfirmedAt
+                          ? `✓ 已確認${q.signatureDataUrl ? "（含手寫簽名）" : ""}`
+                          : won
+                            ? "✓ 已確認成交"
+                            : "待客戶確認"}
+                      </span>
+                    )}
+                    <span className={`px-2 py-0.5 rounded border ${hasWo ? "bg-indigo-50 border-indigo-200 text-indigo-800" : "bg-muted/40 border-border text-muted-foreground"}`}>
+                      轉派工：{hasWo ? `✓ 已轉派工（${q.workOrderNumber || `#${q.workOrderId}`}）` : "尚未轉派工"}
+                    </span>
+                    {confirmedDateStr && (
+                      <span className="px-2 py-0.5 rounded border bg-muted/40 border-border text-muted-foreground">
+                        確認日期：{confirmedDateStr}
+                      </span>
+                    )}
+                  </div>
+                  {(q.convertedFormalQuoteId || q.sourceIntentQuoteId) && (
+                    <div className="flex flex-wrap gap-3 text-xs">
+                      {q.convertedFormalQuoteId && (
+                        <button
+                          type="button"
+                          className="text-emerald-700 font-medium hover:underline"
+                          onClick={() => navigate(`/quotes?focusId=${q.convertedFormalQuoteId}`)}
+                        >
+                          → 查看客戶選定產生之正式報價單 (#{q.convertedFormalQuoteId})
+                        </button>
+                      )}
+                      {q.sourceIntentQuoteId && (
+                        <button
+                          type="button"
+                          className="text-purple-700 font-medium hover:underline"
+                          onClick={() => navigate(`/quotes?focusId=${q.sourceIntentQuoteId}`)}
+                        >
+                          ← 查看原始意向選擇單 (#{q.sourceIntentQuoteId})
+                        </button>
+                      )}
+                    </div>
+                  )}
                   {q.address && <div className="text-xs text-muted-foreground">{q.address}</div>}
 
                   {/* Compact action bar: 查看 + icon ops; ⋯ for rare/dangerous */}
@@ -1029,6 +1368,9 @@ export default function QuotesPage() {
                             </button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => void openPublicLinkInNewTab(q.id)}>
+                              <Eye className="h-3.5 w-3.5 mr-2" />開啟客戶公開連結
+                            </DropdownMenuItem>
                             <DropdownMenuItem
                               disabled={pdfBusyId != null}
                               onClick={() =>
@@ -1114,13 +1456,24 @@ export default function QuotesPage() {
       <Dialog open={dialogOpen} onOpenChange={open => !open && closeDialog()}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editItem ? "編輯報價單" : "新增報價單"}</DialogTitle>
+            <DialogTitle>
+              {editItem
+                ? `編輯${quoteDocumentTypeLabel(form.documentType)}（v${editItem.confirmedVersion ?? 1}）`
+                : `新增${quoteDocumentTypeLabel(form.documentType)}`}
+            </DialogTitle>
           </DialogHeader>
           {editItem && (
             <div className="space-y-2 rounded-lg border bg-muted/30 p-3">
               <div className="flex flex-wrap items-center gap-2">
-                <span className={`text-xs px-2 py-0.5 rounded font-medium ${STATUS_COLORS[quoteStatusLabel(editItem.status)] ?? "bg-gray-100 text-gray-700"}`}>
-                  {quoteStatusLabel(editItem.status) === "已成交" ? "✓ 已成交" : quoteStatusLabel(editItem.status)}
+                <span
+                  className={`text-xs px-2 py-0.5 rounded font-semibold ${
+                    form.documentType === "intent" ? "bg-amber-100 text-amber-900" : "bg-slate-900 text-white"
+                  }`}
+                >
+                  {quoteDocumentTypeLabel(form.documentType)}
+                </span>
+                <span className={`text-xs px-2 py-0.5 rounded font-medium ${STATUS_COLORS[editItem.workflowStage || quoteStatusLabel(editItem.status)] ?? "bg-gray-100 text-gray-700"}`}>
+                  {editItem.workflowStage || quoteStatusLabel(editItem.status)}
                 </span>
                 {isQuoteWon(editItem.status) && (
                   <Button
@@ -1139,8 +1492,43 @@ export default function QuotesPage() {
                     派工單 {editItem.workOrderNumber || `#${editItem.workOrderId}`}
                   </span>
                 )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 px-2.5 text-xs ml-auto"
+                  onClick={() => void openPublicLinkInNewTab(editItem.id)}
+                >
+                  開啟客戶公開連結
+                </Button>
               </div>
-              {canWinQuoteAndCreateWorkOrder(editItem) && (
+              {editItem.customerConfirmedAt && (
+                <div className="rounded-md border border-emerald-300 bg-emerald-50 p-2.5 text-xs text-emerald-950 space-y-1.5">
+                  <div className="font-semibold">
+                    ✓ 客戶已於 {new Date(editItem.customerConfirmedAt).toLocaleString("zh-TW", { hour12: false })} 完成正式確認（版本 v{editItem.confirmedVersion ?? 1}）
+                  </div>
+                  {editItem.signatureDataUrl && (
+                    <div className="flex items-center gap-3">
+                      <span>客戶手寫簽名：</span>
+                      <img src={editItem.signatureDataUrl} alt="客戶簽名" className="h-12 bg-white border rounded px-2 py-0.5 object-contain" />
+                    </div>
+                  )}
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                    <span className="text-emerald-800">正式確認後已鎖定版本。若需變更價格或施工內容，請建立新版報價再次請客戶確認。</span>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="default"
+                      className="h-7 text-xs bg-amber-600 hover:bg-amber-700 text-white"
+                      disabled={creatingRevision}
+                      onClick={() => void handleCreateRevision(editItem.id)}
+                    >
+                      {creatingRevision ? "建立中…" : `建立新版報價（v${(editItem.confirmedVersion ?? 1) + 1}）`}
+                    </Button>
+                  </div>
+                </div>
+              )}
+              {form.documentType !== "intent" && canWinQuoteAndCreateWorkOrder(editItem) && (
                 <Button
                   type="button"
                   size="lg"
@@ -1182,6 +1570,71 @@ export default function QuotesPage() {
             if (editItem) updateMutation.mutate({ id: editItem.id, data });
             else createMutation.mutate({ data });
           }} className="space-y-4">
+
+            {/* Section: 單據模式與狀態 */}
+            <div className="space-y-3">
+              <h3 className="text-xs font-bold uppercase tracking-widest text-muted-foreground border-b pb-1">單據模式</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>單據類型 *</Label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setForm(f => ({
+                          ...f,
+                          documentType: "formal",
+                          workflowStage: f.workflowStage === "待客戶選擇" ? "待客戶確認" : f.workflowStage,
+                        }))
+                      }
+                      className={`px-3 py-2 rounded-md border text-xs font-semibold text-left transition-colors ${
+                        form.documentType === "formal"
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "bg-background hover:bg-muted"
+                      }`}
+                    >
+                      <div>B. 正式報價單</div>
+                      <div className="text-[11px] font-normal opacity-80">直接報價 → 客戶確認簽名 → 自動派工</div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setForm(f => ({
+                          ...f,
+                          documentType: "intent",
+                          workflowStage: f.workflowStage === "待客戶確認" ? "待客戶選擇" : f.workflowStage,
+                          items: f.items.map(it => ({
+                            ...it,
+                            optionGroupName: it.optionGroupName || "客廳方案",
+                            optionGroupId: it.optionGroupId || "客廳方案",
+                            selectionMode: it.selectionMode === "fixed" ? "single" : it.selectionMode,
+                          })),
+                        }))
+                      }
+                      className={`px-3 py-2 rounded-md border text-xs font-semibold text-left transition-colors ${
+                        form.documentType === "intent"
+                          ? "bg-amber-600 text-white border-amber-600"
+                          : "bg-background hover:bg-muted"
+                      }`}
+                    >
+                      <div>A. 意向選擇單</div>
+                      <div className="text-[11px] font-normal opacity-85">多品牌機型方案 → 客戶自選 → 產生正式報價</div>
+                    </button>
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>報價流程階段</Label>
+                  <Select value={form.workflowStage} onValueChange={v => setForm(f => ({ ...f, workflowStage: v }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {QUOTE_WORKFLOW_STAGES.map(st => (
+                        <SelectItem key={st} value={st}>{st}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
 
             {/* Section: 客戶資訊 */}
             <div className="space-y-3">
@@ -1270,9 +1723,16 @@ export default function QuotesPage() {
               ) : (
                 <div className="space-y-2">
                   {form.items.map((item, idx) => (
-                    <ItemCard key={idx} item={item} index={idx} products={quoteProducts ?? []}
+                    <ItemCard
+                      key={idx}
+                      item={item}
+                      index={idx}
+                      products={quoteProducts ?? []}
+                      documentType={form.documentType}
                       onChange={updated => updateItem(idx, updated)}
-                      onDelete={() => removeItem(idx)} />
+                      onDelete={() => removeItem(idx)}
+                      onCloneInGroup={() => cloneItemInGroup(idx)}
+                    />
                   ))}
                 </div>
               )}
@@ -1317,7 +1777,13 @@ export default function QuotesPage() {
 
             <DialogFooter className="gap-2">
               <Button type="button" variant="outline" onClick={closeDialog}>取消</Button>
-              <Button type="submit" disabled={createMutation.isPending || updateMutation.isPending}>儲存</Button>
+              <Button
+                type="submit"
+                disabled={createMutation.isPending || updateMutation.isPending || Boolean(editItem?.customerConfirmedAt)}
+                title={editItem?.customerConfirmedAt ? "此版本已由客戶確認鎖定，請先點選上方「建立新版報價」" : undefined}
+              >
+                {editItem?.customerConfirmedAt ? "已確認鎖定（請建立新版）" : "儲存"}
+              </Button>
             </DialogFooter>
           </form>
         </DialogContent>

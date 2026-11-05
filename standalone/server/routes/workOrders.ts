@@ -83,7 +83,11 @@ const WO_SELECT = {
   storedCustomerName: workOrdersTable.customerName,
   linkedCustomerName: customersTable.name,
   quoteId: workOrdersTable.quoteId,
+  sourceIntentQuoteId: workOrdersTable.sourceIntentQuoteId,
   linkedQuoteCreatedAt: quotesTable.createdAt,
+  linkedQuoteSourceIntentId: quotesTable.sourceIntentQuoteId,
+  linkedQuoteConfirmedVersion: quotesTable.confirmedVersion,
+  linkedQuoteConfirmedAt: quotesTable.customerConfirmedAt,
   workOrderNumber: workOrdersTable.workOrderNumber,
   title: workOrdersTable.title,
   status: workOrdersTable.status,
@@ -236,8 +240,20 @@ function formatOrder(
   equipmentItems: ReturnType<typeof serializeEquipmentItem>[] = [],
   receivableId: number | null = null,
 ) {
-  const { storedCustomerName, linkedCustomerName, linkedQuoteCreatedAt, ...rest } = o as any;
+  const {
+    storedCustomerName,
+    linkedCustomerName,
+    linkedQuoteCreatedAt,
+    linkedQuoteSourceIntentId,
+    linkedQuoteConfirmedVersion,
+    linkedQuoteConfirmedAt,
+    ...rest
+  } = o as any;
   const quoteId = rest.quoteId as number | null | undefined;
+  const sourceIntentQuoteId =
+    (rest.sourceIntentQuoteId as number | null | undefined) ??
+    (linkedQuoteSourceIntentId as number | null | undefined) ??
+    null;
   return {
     ...rest,
     ...deserializeAiReminderFields(rest),
@@ -245,6 +261,9 @@ function formatOrder(
     quoteNumber: quoteId != null
       ? formatQuoteNumber(quoteId, linkedQuoteCreatedAt ?? rest.createdAt)
       : null,
+    sourceIntentQuoteId,
+    quoteConfirmedVersion: linkedQuoteConfirmedVersion != null ? Number(linkedQuoteConfirmedVersion) : null,
+    quoteConfirmedAt: isoStr(linkedQuoteConfirmedAt),
     receivableId: receivableId ?? (rest.receivableId as number | null | undefined) ?? null,
     equipmentItems: resolveEquipmentItems(o, equipmentItems),
     notes: stripQuotePricingFromNotes(rest.notes as string | null | undefined) || null,
@@ -650,6 +669,7 @@ router.get("/work-orders/:id/source-quote", async (req, res): Promise<void> => {
     .select({
       id: workOrdersTable.id,
       quoteId: workOrdersTable.quoteId,
+      sourceIntentQuoteId: workOrdersTable.sourceIntentQuoteId,
       assignedTo: workOrdersTable.assignedTo,
       assistantTo: workOrdersTable.assistantTo,
       technicians: workOrdersTable.technicians,
@@ -667,12 +687,17 @@ router.get("/work-orders/:id/source-quote", async (req, res): Promise<void> => {
     }
   }
 
-  if (order.quoteId == null) {
+  const targetQuoteId =
+    req.query.type === "intent" && order.sourceIntentQuoteId != null
+      ? order.sourceIntentQuoteId
+      : order.quoteId;
+
+  if (targetQuoteId == null) {
     res.status(404).json({ error: "此派工單沒有來源報價單" });
     return;
   }
 
-  const quote = await loadQuoteDocument(order.quoteId);
+  const quote = await loadQuoteDocument(targetQuoteId);
   if (!quote) {
     res.status(404).json({ error: "找不到來源報價單" });
     return;
