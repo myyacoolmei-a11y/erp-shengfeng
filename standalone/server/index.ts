@@ -31,6 +31,7 @@ import { ensureSubsidyAcceptanceMigration } from "./lib/migrations/ensureSubsidy
 import { ensureWholesalePaymentRecordsMigration } from "./lib/migrations/ensureWholesalePaymentRecordsMigration";
 import { ensureWorkOrderCategorySubsidySyncMigration } from "./lib/migrations/ensureWorkOrderCategorySubsidySyncMigration";
 import { ensureQuoteWinDispatchMigration } from "./lib/migrations/ensureQuoteWinDispatchMigration";
+import { ensureQuoteIntentAndSignatureMigration } from "./lib/migrations/ensureQuoteIntentAndSignatureMigration";
 import { ensureRepairCaseSalesUserMigration } from "./lib/migrations/ensureRepairCaseSalesUserMigration";
 import { ensureWorkOrderDispatchUpgradeMigration } from "./lib/migrations/ensureWorkOrderDispatchUpgradeMigration";
 import { startReminderScheduler } from "./lib/reminders/scheduler.ts";
@@ -100,6 +101,7 @@ app.listen(port, async (err) => {
   await ensureWholesalePaymentRecordsMigration();
   await ensureWorkOrderCategorySubsidySyncMigration();
   await ensureQuoteWinDispatchMigration();
+  await ensureQuoteIntentAndSignatureMigration();
   await ensureRepairCaseSalesUserMigration();
   await ensureWorkOrderDispatchUpgradeMigration();
   startReminderScheduler();

@@ -2,6 +2,10 @@ import { eq } from "drizzle-orm";
 import { db, quotesTable, customersTable, employeesTable, quoteItemsTable } from "@workspace/db";
 import { syncQuoteDispatchStatus } from "./quoteWorkflow";
 import { normalizeQuoteStatus } from "./quoteStatus";
+import {
+  deriveQuoteWorkflowStage,
+  normalizeQuoteDocumentType,
+} from "../../shared/quoteIntentLogic.ts";
 
 /**
  * Canonical quotation document loader.
@@ -22,6 +26,19 @@ export const QUOTE_DOCUMENT_SELECT = {
   status: quotesTable.status,
   lostReason: quotesTable.lostReason,
   dispatchStatus: quotesTable.dispatchStatus,
+  documentType: quotesTable.documentType,
+  workflowStage: quotesTable.workflowStage,
+  sourceIntentQuoteId: quotesTable.sourceIntentQuoteId,
+  convertedFormalQuoteId: quotesTable.convertedFormalQuoteId,
+  intentGroups: quotesTable.intentGroups,
+  customerSelectedAt: quotesTable.customerSelectedAt,
+  customerSelections: quotesTable.customerSelections,
+  customerConfirmedAt: quotesTable.customerConfirmedAt,
+  confirmationMethod: quotesTable.confirmationMethod,
+  agreedTerms: quotesTable.agreedTerms,
+  signatureDataUrl: quotesTable.signatureDataUrl,
+  confirmedVersion: quotesTable.confirmedVersion,
+  confirmedSnapshot: quotesTable.confirmedSnapshot,
   notes: quotesTable.notes,
   address: quotesTable.address,
   customerPhone: quotesTable.customerPhone,
@@ -38,6 +55,12 @@ export const QUOTE_DOCUMENT_SELECT = {
   updatedAt: quotesTable.updatedAt,
 };
 
+function toIso(d: unknown): string | null {
+  if (!d) return null;
+  if (d instanceof Date) return d.toISOString();
+  return String(d);
+}
+
 export function serializeQuoteItem(item: typeof quoteItemsTable.$inferSelect) {
   return {
     id: item.id,
@@ -47,11 +70,18 @@ export function serializeQuoteItem(item: typeof quoteItemsTable.$inferSelect) {
     itemName: item.itemName,
     brand: item.brand ?? null,
     model: item.model ?? null,
-    quantity: parseFloat(item.quantity as string),
+    quantity: parseFloat(String(item.quantity ?? 1)),
     unit: item.unit,
-    unitPrice: parseFloat(item.unitPrice as string),
-    subtotal: parseFloat(item.subtotal as string),
+    unitPrice: parseFloat(String(item.unitPrice ?? 0)),
+    installFee: parseFloat(String(item.installFee ?? 0)),
+    subtotal: parseFloat(String(item.subtotal ?? 0)),
     notes: item.notes ?? null,
+    workContent: item.workContent ?? null,
+    optionGroupId: item.optionGroupId ?? null,
+    optionGroupName: item.optionGroupName ?? null,
+    isRequiredGroup: item.isRequiredGroup !== false,
+    selectionMode: item.selectionMode ?? "single",
+    isSelected: item.isSelected ?? null,
     sortOrder: item.sortOrder,
   };
 }
@@ -59,8 +89,23 @@ export function serializeQuoteItem(item: typeof quoteItemsTable.$inferSelect) {
 export function serializeQuoteDocument(
   q: any,
   items: ReturnType<typeof serializeQuoteItem>[] = [],
-  workflow?: { dispatchStatus: string; workOrderId: number | null; workOrderNumber: string | null },
+  workflow?: {
+    dispatchStatus: string;
+    workflowStage?: string;
+    workOrderId: number | null;
+    workOrderNumber: string | null;
+  },
 ) {
+  const dispatchStatus = workflow?.dispatchStatus ?? q.dispatchStatus ?? "未派工";
+  const workOrderId = workflow?.workOrderId ?? null;
+  const workflowStage =
+    workflow?.workflowStage ??
+    deriveQuoteWorkflowStage({
+      ...q,
+      dispatchStatus,
+      workOrderId,
+    });
+
   return {
     id: q.id,
     customerId: q.customerId ?? null,
@@ -68,13 +113,26 @@ export function serializeQuoteDocument(
     contactPerson: q.contactPerson ?? null,
     title: q.title,
     description: q.description ?? null,
-    amount: parseFloat(q.amount as string),
-    discountAmount: q.discountAmount != null ? parseFloat(q.discountAmount as string) : null,
-    finalAmount: q.finalAmount != null ? parseFloat(q.finalAmount as string) : null,
+    amount: parseFloat(String(q.amount ?? 0)),
+    discountAmount: q.discountAmount != null ? parseFloat(String(q.discountAmount)) : null,
+    finalAmount: q.finalAmount != null ? parseFloat(String(q.finalAmount)) : null,
     status: normalizeQuoteStatus(q.status),
     lostReason: q.lostReason ?? null,
-    dispatchStatus: workflow?.dispatchStatus ?? q.dispatchStatus ?? "未派工",
-    workOrderId: workflow?.workOrderId ?? null,
+    dispatchStatus,
+    documentType: normalizeQuoteDocumentType(q.documentType),
+    workflowStage,
+    sourceIntentQuoteId: q.sourceIntentQuoteId ?? null,
+    convertedFormalQuoteId: q.convertedFormalQuoteId ?? null,
+    intentGroups: q.intentGroups ?? null,
+    customerSelectedAt: toIso(q.customerSelectedAt),
+    customerSelections: q.customerSelections ?? null,
+    customerConfirmedAt: toIso(q.customerConfirmedAt),
+    confirmationMethod: q.confirmationMethod ?? null,
+    agreedTerms: Boolean(q.agreedTerms),
+    signatureDataUrl: q.signatureDataUrl ?? null,
+    confirmedVersion: Number(q.confirmedVersion ?? 1),
+    confirmedSnapshot: q.confirmedSnapshot ?? null,
+    workOrderId,
     workOrderNumber: workflow?.workOrderNumber ?? null,
     notes: q.notes ?? null,
     address: q.address ?? null,
@@ -82,15 +140,15 @@ export function serializeQuoteDocument(
     taxType: q.taxType ?? "未稅",
     salesRepId: q.salesRepId ?? null,
     salesRepName: q.salesRepName ?? null,
-    wonAt: q.wonAt instanceof Date ? q.wonAt.toISOString() : q.wonAt ?? null,
+    wonAt: toIso(q.wonAt),
     wonBy: q.wonBy ?? null,
     wonByName: q.wonByName ?? null,
-    winCanceledAt: q.winCanceledAt instanceof Date ? q.winCanceledAt.toISOString() : q.winCanceledAt ?? null,
+    winCanceledAt: toIso(q.winCanceledAt),
     winCanceledBy: q.winCanceledBy ?? null,
     winCanceledByName: q.winCanceledByName ?? null,
     items,
-    createdAt: q.createdAt instanceof Date ? q.createdAt.toISOString() : q.createdAt,
-    updatedAt: q.updatedAt instanceof Date ? q.updatedAt.toISOString() : q.updatedAt,
+    createdAt: toIso(q.createdAt) ?? new Date().toISOString(),
+    updatedAt: toIso(q.updatedAt) ?? new Date().toISOString(),
   };
 }
 

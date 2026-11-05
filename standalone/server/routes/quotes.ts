@@ -7,6 +7,7 @@ import { syncQuoteDispatchBatch, syncQuoteDispatchStatus } from "../lib/quoteWor
 import { QUOTE_STATUS_PENDING } from "../lib/quoteStatus";
 import { resolveQuoteItemsForSave } from "../lib/productCatalog";
 import { normalizeQuoteItemCategoryBrand } from "../../shared/quoteItemDisplay";
+import { normalizeQuoteDocumentType } from "../../shared/quoteIntentLogic.ts";
 import { signQuoteShareToken } from "../lib/quoteShareToken";
 import { winQuoteAndCreateWorkOrder, markQuoteLost, cancelQuoteWin } from "../lib/quoteWinDispatch";
 import {
@@ -19,7 +20,6 @@ import {
 const router: IRouter = Router();
 router.use("/quotes", requireFeature("quotations"));
 
-
 const DISPATCH_FILTER_VALUES = new Set(["待派工", "已派工", "施工中", "已完工"]);
 
 const serializeItem = serializeQuoteItem;
@@ -29,6 +29,9 @@ const QUOTE_SELECT = QUOTE_DOCUMENT_SELECT;
 async function buildItemsInsert(itemInputs: any[], quoteId: number) {
   return itemInputs.map((item: any, idx: number) => {
     const { category, brand } = normalizeQuoteItemCategoryBrand(item);
+    const qty = Number(item.quantity ?? 1) || 1;
+    const price = Number(item.unitPrice ?? 0) || 0;
+    const installFee = Math.max(0, Number(item.installFee ?? 0) || 0);
     return {
       quoteId,
       productId: item.productId ?? null,
@@ -36,21 +39,30 @@ async function buildItemsInsert(itemInputs: any[], quoteId: number) {
       itemName: item.itemName ?? "",
       brand: brand || null,
       model: item.model || null,
-      quantity: String(item.quantity ?? 1),
+      quantity: String(qty),
       unit: item.unit ?? "台",
-      unitPrice: String(item.unitPrice ?? 0),
-      subtotal: String((item.quantity ?? 1) * (item.unitPrice ?? 0)),
+      unitPrice: String(price),
+      installFee: String(installFee),
+      subtotal: String(qty * price + installFee),
       notes: item.notes || null,
+      workContent: item.workContent || null,
+      optionGroupId: item.optionGroupId || null,
+      optionGroupName: item.optionGroupName || null,
+      isRequiredGroup: item.isRequiredGroup !== false,
+      selectionMode: item.selectionMode || "single",
+      isSelected: item.isSelected ?? null,
       sortOrder: item.sortOrder ?? idx,
     };
   });
 }
 
 router.get("/quotes", async (req, res): Promise<void> => {
-  const { customerId, status, dispatchStatus } = req.query as {
+  const { customerId, status, dispatchStatus, documentType, workflowStage } = req.query as {
     customerId?: string;
     status?: string;
     dispatchStatus?: string;
+    documentType?: string;
+    workflowStage?: string;
   };
   const conditions = [];
   if (customerId) {
@@ -63,6 +75,12 @@ router.get("/quotes", async (req, res): Promise<void> => {
   if (dispatchStatus || (status && DISPATCH_FILTER_VALUES.has(status))) {
     conditions.push(eq(quotesTable.dispatchStatus, dispatchStatus ?? status!));
   }
+  if (documentType === "intent" || documentType === "formal") {
+    conditions.push(eq(quotesTable.documentType, documentType));
+  }
+  if (workflowStage) {
+    conditions.push(eq(quotesTable.workflowStage, workflowStage));
+  }
 
   const quoteRows = await db
     .select(QUOTE_SELECT)
@@ -72,12 +90,17 @@ router.get("/quotes", async (req, res): Promise<void> => {
     .where(conditions.length > 0 ? and(...conditions) : undefined)
     .orderBy(desc(quotesTable.createdAt), desc(quotesTable.id));
 
-  if (quoteRows.length === 0) { res.json([]); return; }
+  if (quoteRows.length === 0) {
+    res.json([]);
+    return;
+  }
 
   const workflowMap = await syncQuoteDispatchBatch(quoteRows);
 
-  const quoteIds = quoteRows.map(q => q.id);
-  const allItems = await db.select().from(quoteItemsTable)
+  const quoteIds = quoteRows.map((q) => q.id);
+  const allItems = await db
+    .select()
+    .from(quoteItemsTable)
     .where(inArray(quoteItemsTable.quoteId, quoteIds))
     .orderBy(quoteItemsTable.quoteId, quoteItemsTable.sortOrder);
 
@@ -88,30 +111,43 @@ router.get("/quotes", async (req, res): Promise<void> => {
     itemsByQuote[item.quoteId] = arr;
   }
 
-  res.json(quoteRows.map(q => serializeQuote(q, itemsByQuote[q.id] ?? [], workflowMap.get(q.id))));
+  res.json(quoteRows.map((q) => serializeQuote(q, itemsByQuote[q.id] ?? [], workflowMap.get(q.id))));
 });
 
 router.post("/quotes", async (req, res): Promise<void> => {
   const parsed = CreateQuoteBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
 
-  const { items: itemInputs = [], ...quoteFields } = parsed.data as any;
+  const { items: itemInputs = [], documentType: rawDocType, workflowStage: rawStage, intentGroups, ...quoteFields } = parsed.data as any;
+  const documentType = normalizeQuoteDocumentType(rawDocType);
 
   let amount = Number(quoteFields.amount ?? 0);
   if (itemInputs.length > 0) {
-    amount = itemInputs.reduce((sum: number, item: any) => sum + (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0), 0);
+    amount = itemInputs.reduce(
+      (sum: number, item: any) =>
+        sum + (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0) + Math.max(0, Number(item.installFee) || 0),
+      0,
+    );
   }
   const discountAmount = Number(quoteFields.discountAmount ?? 0);
   const finalAmount = Math.max(0, amount - discountAmount);
+  const defaultStage = documentType === "intent" ? "待客戶選擇" : "待客戶確認";
 
   const data: any = {
     ...quoteFields,
+    documentType,
+    workflowStage: rawStage || defaultStage,
+    intentGroups: intentGroups ?? null,
     amount: String(amount),
     discountAmount: discountAmount >= 0 ? String(discountAmount) : "0",
     finalAmount: String(finalAmount),
     dispatchStatus: "未派工",
     lostReason: null,
     status: QUOTE_STATUS_PENDING,
+    confirmedVersion: 1,
   };
 
   const [quote] = await db.insert(quotesTable).values(data).returning();
@@ -125,20 +161,28 @@ router.post("/quotes", async (req, res): Promise<void> => {
 
   const workflow = await syncQuoteDispatchStatus(quote.id);
 
-  res.status(201).json(serializeQuote(
-    { ...quote, joinedCustomerName: null, salesRepName: null },
-    insertedItems.map(serializeItem),
-    workflow ?? undefined,
-  ));
+  res.status(201).json(
+    serializeQuote(
+      { ...quote, joinedCustomerName: null, salesRepName: null },
+      insertedItems.map(serializeItem),
+      workflow ?? undefined,
+    ),
+  );
 });
 
 router.get("/quotes/:id", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
-  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
 
   const quote = await loadQuoteDocument(id);
-  if (!quote) { res.status(404).json({ error: "找不到報價單" }); return; }
+  if (!quote) {
+    res.status(404).json({ error: "找不到報價單" });
+    return;
+  }
 
   res.json(quote);
 });
@@ -146,14 +190,59 @@ router.get("/quotes/:id", async (req, res): Promise<void> => {
 router.patch("/quotes/:id", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
-  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+
+  const [existing] = await db
+    .select()
+    .from(quotesTable)
+    .where(eq(quotesTable.id, id))
+    .limit(1);
+  if (!existing) {
+    res.status(404).json({ error: "找不到報價單" });
+    return;
+  }
+
+  // Requirement IV.7 & IV.8: Once a formal quotation is confirmed by customer, prevent direct overwriting of the confirmed version.
+  if (existing.customerConfirmedAt != null) {
+    res.status(409).json({
+      error: `此正式報價單（v${existing.confirmedVersion ?? 1}）已由客戶簽署確認，不得直接修改已確認版本。如需變更價格或施工內容，請點選「建立新版報價」再次請客戶確認。`,
+    });
+    return;
+  }
 
   const parsed = UpdateQuoteBody.safeParse(req.body);
-  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.message });
+    return;
+  }
 
-  const { items: itemInputs, dispatchStatus: _ignoredDispatch, status: _ignoredStatus, ...quoteFields } = parsed.data as any;
+  const {
+    items: itemInputs,
+    dispatchStatus: _ignoredDispatch,
+    status: _ignoredStatus,
+    documentType: rawDocType,
+    workflowStage: rawStage,
+    intentGroups,
+    ...quoteFields
+  } = parsed.data as any;
 
-  const data: Record<string, unknown> = { ...quoteFields };
+  const data: Record<string, unknown> = {
+    ...quoteFields,
+    confirmedVersion: Number(existing.confirmedVersion ?? 1) + 1,
+    updatedAt: new Date(),
+  };
+  if (rawDocType === "intent" || rawDocType === "formal") {
+    data["documentType"] = rawDocType;
+  }
+  if (rawStage) {
+    data["workflowStage"] = rawStage;
+  }
+  if (intentGroups !== undefined) {
+    data["intentGroups"] = intentGroups;
+  }
   if (quoteFields.amount != null) data["amount"] = String(quoteFields.amount);
   if (quoteFields.discountAmount != null) {
     const d = Math.max(0, Number(quoteFields.discountAmount));
@@ -163,8 +252,12 @@ router.patch("/quotes/:id", async (req, res): Promise<void> => {
 
   if (itemInputs !== undefined) {
     const itemArr: any[] = Array.isArray(itemInputs) ? itemInputs : [];
-    const amount = itemArr.reduce((sum: number, item: any) => sum + (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0), 0);
-    const discountAmount = Number(data["discountAmount"] ?? 0);
+    const amount = itemArr.reduce(
+      (sum: number, item: any) =>
+        sum + (Number(item.quantity) || 0) * (Number(item.unitPrice) || 0) + Math.max(0, Number(item.installFee) || 0),
+      0,
+    );
+    const discountAmount = Number(data["discountAmount"] ?? existing.discountAmount ?? 0);
     const finalAmount = Math.max(0, amount - discountAmount);
     data["amount"] = String(amount);
     data["finalAmount"] = String(finalAmount);
@@ -179,28 +272,89 @@ router.patch("/quotes/:id", async (req, res): Promise<void> => {
   }
 
   const [quote] = await db.update(quotesTable).set(data).where(eq(quotesTable.id, id)).returning();
-  if (!quote) { res.status(404).json({ error: "找不到報價單" }); return; }
+  if (!quote) {
+    res.status(404).json({ error: "找不到報價單" });
+    return;
+  }
 
   const workflow = await syncQuoteDispatchStatus(id);
 
-  const items = await db.select().from(quoteItemsTable)
+  const items = await db
+    .select()
+    .from(quoteItemsTable)
     .where(eq(quoteItemsTable.quoteId, id))
     .orderBy(quoteItemsTable.sortOrder);
 
-  res.json(serializeQuote(
-    { ...quote, joinedCustomerName: null, salesRepName: null },
-    items.map(serializeItem),
-    workflow ?? undefined,
-  ));
+  res.json(
+    serializeQuote(
+      { ...quote, joinedCustomerName: null, salesRepName: null },
+      items.map(serializeItem),
+      workflow ?? undefined,
+    ),
+  );
+});
+
+/**
+ * POST /api/quotes/:id/create-revision
+ * Creates a new revision (v+1) when sales needs to modify price or work content after customer confirmation,
+ * requiring the customer to confirm again.
+ */
+router.post("/quotes/:id/create-revision", async (req, res): Promise<void> => {
+  const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+  const id = parseInt(raw, 10);
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
+
+  const [existing] = await db
+    .select()
+    .from(quotesTable)
+    .where(eq(quotesTable.id, id))
+    .limit(1);
+  if (!existing) {
+    res.status(404).json({ error: "找不到報價單" });
+    return;
+  }
+
+  const nextVersion = Number(existing.confirmedVersion ?? 1) + 1;
+  await db
+    .update(quotesTable)
+    .set({
+      status: QUOTE_STATUS_PENDING,
+      workflowStage: existing.documentType === "intent" ? "待客戶選擇" : "待客戶確認",
+      customerConfirmedAt: null,
+      confirmationMethod: null,
+      agreedTerms: false,
+      signatureDataUrl: null,
+      confirmedSnapshot: null,
+      confirmedHtmlSnapshot: null,
+      confirmedVersion: nextVersion,
+      updatedAt: new Date(),
+    })
+    .where(eq(quotesTable.id, id));
+
+  const updated = await loadQuoteDocument(id);
+  res.json({
+    ok: true,
+    confirmedVersion: nextVersion,
+    quote: updated,
+  });
 });
 
 router.delete("/quotes/:id", async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
-  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  if (isNaN(id)) {
+    res.status(400).json({ error: "Invalid id" });
+    return;
+  }
 
   const [quote] = await db.delete(quotesTable).where(eq(quotesTable.id, id)).returning();
-  if (!quote) { res.status(404).json({ error: "找不到報價單" }); return; }
+  if (!quote) {
+    res.status(404).json({ error: "找不到報價單" });
+    return;
+  }
   res.sendStatus(204);
 });
 
@@ -218,7 +372,14 @@ router.post("/quotes/:id/share-link", async (req, res): Promise<void> => {
     }
 
     const [quote] = await db
-      .select({ id: quotesTable.id, title: quotesTable.title })
+      .select({
+        id: quotesTable.id,
+        title: quotesTable.title,
+        documentType: quotesTable.documentType,
+        workflowStage: quotesTable.workflowStage,
+        customerSelectedAt: quotesTable.customerSelectedAt,
+        customerConfirmedAt: quotesTable.customerConfirmedAt,
+      })
       .from(quotesTable)
       .where(eq(quotesTable.id, id))
       .limit(1);
@@ -226,6 +387,12 @@ router.post("/quotes/:id/share-link", async (req, res): Promise<void> => {
     if (!quote) {
       res.status(404).json({ success: false, message: "找不到報價單" });
       return;
+    }
+
+    // Update workflowStage from 草稿 to 待客戶選擇 / 待客戶確認 when share link is generated
+    if (!quote.customerConfirmedAt && !quote.customerSelectedAt && quote.workflowStage === "草稿") {
+      const nextStage = quote.documentType === "intent" ? "待客戶選擇" : "待客戶確認";
+      await db.update(quotesTable).set({ workflowStage: nextStage }).where(eq(quotesTable.id, id));
     }
 
     const token = signQuoteShareToken(id);
@@ -240,6 +407,7 @@ router.post("/quotes/:id/share-link", async (req, res): Promise<void> => {
       url,
       token,
       quoteId: id,
+      documentType: quote.documentType,
       title: quote.title,
       expiresInDays: 30,
     });
@@ -263,9 +431,7 @@ router.post("/quotes/:id/win-and-dispatch", async (req, res): Promise<void> => {
     return;
   }
 
-  const actor = req.user
-    ? { id: req.user.id, displayName: req.user.displayName }
-    : null;
+  const actor = req.user ? { id: req.user.id, displayName: req.user.displayName } : null;
   const result = await winQuoteAndCreateWorkOrder(id, actor);
   if (!result.ok) {
     res.status(result.status).json({
@@ -291,9 +457,7 @@ router.post("/quotes/:id/cancel-win", async (req, res): Promise<void> => {
     return;
   }
 
-  const actor = req.user
-    ? { id: req.user.id, displayName: req.user.displayName }
-    : null;
+  const actor = req.user ? { id: req.user.id, displayName: req.user.displayName } : null;
   const result = await cancelQuoteWin(id, actor);
   if (!result.ok) {
     res.status(result.status).json({

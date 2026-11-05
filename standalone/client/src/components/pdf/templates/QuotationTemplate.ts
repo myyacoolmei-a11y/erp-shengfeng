@@ -25,17 +25,51 @@ function quoteEqColWidthCss(prefix: string): string {
   }).join("\n");
 }
 
-export function buildQuotationHtml(quote: any, baseOrigin?: string): string {
+export function buildQuotationHtml(rawQuote: any, baseOrigin?: string): string {
+  // If quote has an immutable confirmedSnapshot, render from the snapshot so confirmed PDFs never change.
+  const snap = rawQuote?.confirmedSnapshot;
+  const quote = snap
+    ? {
+        ...rawQuote,
+        customerName: snap.customerName ?? rawQuote.customerName,
+        customerPhone: snap.customerPhone ?? rawQuote.customerPhone,
+        contactPerson: snap.contactPerson ?? rawQuote.contactPerson,
+        address: snap.address ?? rawQuote.address,
+        salesRepName: snap.salesRepName ?? rawQuote.salesRepName,
+        title: snap.title ?? rawQuote.title,
+        description: snap.description ?? rawQuote.description,
+        notes: snap.notes ?? rawQuote.notes,
+        taxType: snap.taxType ?? rawQuote.taxType,
+        amount: snap.amount ?? rawQuote.amount,
+        discountAmount: snap.discountAmount ?? rawQuote.discountAmount,
+        finalAmount: snap.finalAmount ?? rawQuote.finalAmount,
+        items: Array.isArray(snap.items) ? snap.items : rawQuote.items,
+        confirmedVersion: snap.version ?? rawQuote.confirmedVersion ?? 1,
+        customerConfirmedAt: snap.confirmedAt ?? rawQuote.customerConfirmedAt,
+        confirmationMethod: snap.confirmationMethod ?? rawQuote.confirmationMethod,
+        signatureDataUrl: snap.signatureDataUrl ?? rawQuote.signatureDataUrl,
+      }
+    : rawQuote;
+
   // Line items come only from quotation.items (quotes / quote_items).
   // Never fall back to work-order equipmentItems or other dispatch fields.
   const items: any[] = Array.isArray(quote?.items) ? quote.items : [];
   const d = quote.createdAt ? new Date(quote.createdAt) : new Date();
   const ymd = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}${String(d.getDate()).padStart(2, "0")}`;
-  const quoteNo = `Q-${ymd}-${String(quote.id).padStart(4, "0")}`;
+  const quoteNo = snap?.quoteNumber || `Q-${ymd}-${String(quote.id).padStart(4, "0")}`;
   const quoteDate = d.toLocaleDateString("zh-TW");
   const validDate = new Date(d.getTime() + 30 * 86400000).toLocaleDateString("zh-TW");
   const printDate = new Date().toLocaleDateString("zh-TW");
   const taxType = quote.taxType || "未稅";
+  const versionNo = Number(quote.confirmedVersion ?? 1);
+  const confirmedAtRaw = quote.customerConfirmedAt || quote.wonAt || null;
+  const confirmedAtDisplay = confirmedAtRaw
+    ? new Date(confirmedAtRaw).toLocaleString("zh-TW", { hour12: false })
+    : "";
+  const sigDataUrl =
+    typeof quote.signatureDataUrl === "string" && quote.signatureDataUrl.startsWith("data:image/")
+      ? quote.signatureDataUrl
+      : "";
 
   const rawTotal = items.length > 0
     ? items.reduce((s: number, i: any) => s + Number(i.subtotal || 0), 0)
@@ -552,8 +586,15 @@ body,.quotation-print-page{
 .sig-box{
   text-align:center;border-top:1px solid #111;
   font-size:13px;font-weight:500;color:#555;line-height:1.4;
-  padding-top:3mm;padding-bottom:8mm;
+  padding-top:3mm;padding-bottom:4mm;
+  min-height:22mm;
 }
+.sig-img{
+  display:block;margin:1mm auto 0;
+  max-width:48mm;max-height:15mm;
+  object-fit:contain;
+}
+.sig-meta{font-size:11px;color:#444;margin-top:1mm}
 .sig-date{font-size:12px;font-weight:400;color:#888}
 
 .pf{
@@ -618,12 +659,12 @@ ${EQ_TABLE_FLOW_CSS}
     <div class="doc-r">
       <div class="doc-label">報價單</div>
       <div class="doc-en">QUOTATION</div>
-      <div class="doc-no">${quoteNo}</div>
+      <div class="doc-no">${quoteNo}（v${versionNo}）</div>
       <div class="doc-dates">
-        狀態：${esc(quote.status || "待確認")}<br>
+        狀態：${esc(quote.workflowStage || quote.status || "待確認")}<br>
         報價日期：${quoteDate}<br>
         有效期限：${validDate}<br>
-        列印：${printDate}
+        ${confirmedAtDisplay ? `確認時間：${esc(confirmedAtDisplay)}<br>` : ""}列印：${printDate}
       </div>
     </div>
   </header>
@@ -707,13 +748,16 @@ ${EQ_TABLE_FLOW_CSS}
 
   <footer class="quotation-signature-section">
     <div class="sig-row">
-      <div class="sig-box">客戶簽名</div>
-      <div class="sig-box">業務簽名</div>
-      <div class="sig-box">日期</div>
+      <div class="sig-box">
+        客戶簽名
+        ${sigDataUrl ? `<img src="${sigDataUrl}" class="sig-img" alt="客戶簽名">` : confirmedAtDisplay ? `<div class="sig-meta">✓ 已電子確認同意</div>` : ""}
+      </div>
+      <div class="sig-box">業務簽名${quote.salesRepName ? `<div class="sig-meta">${esc(quote.salesRepName)}</div>` : ""}</div>
+      <div class="sig-box">日期${confirmedAtDisplay ? `<div class="sig-meta">${esc(confirmedAtDisplay)}</div>` : ""}</div>
     </div>
     <div class="pf">
       <div>${COMPANY.name}　${COMPANY.phone}　${COMPANY.address}</div>
-      <div>列印：${printDate}</div>
+      <div>版本 v${versionNo}　列印：${printDate}</div>
     </div>
   </footer>
 </div>
