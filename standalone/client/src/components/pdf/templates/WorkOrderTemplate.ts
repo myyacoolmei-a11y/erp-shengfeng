@@ -369,7 +369,8 @@ html,body{
   overflow:visible;
   transform:none;
   zoom:normal;
-  display:block;
+  display:flex;
+  flex-direction:column;
 }
 .sheet.dot-matrix-page + .sheet.dot-matrix-page{
   page-break-before:always;
@@ -538,11 +539,26 @@ function buildCompactOverridesCss(mode: WorkOrderHtmlMode): string {
   vertical-align:bottom;
   margin:0 1.2mm;
 }
+.dot-matrix-page .dot-matrix-main{
+  flex:0 0 auto;
+  min-height:0;
+}
+.dot-matrix-page .dot-matrix-spacer{
+  flex:1 1 auto;
+  min-height:0;
+}
+.dot-matrix-page .dot-matrix-footer{
+  flex:0 0 auto;
+  margin-top:auto;
+  break-inside:avoid;
+  page-break-inside:avoid;
+}
 @media print{
   .dot-matrix-page{
     break-inside:avoid;
     page-break-inside:avoid;
   }
+  .dot-matrix-page .dot-matrix-footer,
   .dot-matrix-page .payment-notes,
   .dot-matrix-page .signature-row{
     break-inside:avoid;
@@ -759,14 +775,17 @@ function buildRestoredContinuousWorkOrderHtml(
   </section>`
       : "";
     return `<div class="sheet dot-matrix-page" data-page="${idx + 1}" data-total="${pages.length}">
+  <div class="dot-matrix-main">
   ${showFullHeader ? headerFull : headerContinue}
   ${materials}
-  ${showFooter ? footer : ""}
+  </div>
+  <div class="dot-matrix-spacer"></div>
+  ${showFooter ? `<div class="dot-matrix-footer">${footer}</div>` : ""}
 </div>`;
   }).join("\n");
 
   return `<!DOCTYPE html>
-<html lang="zh-TW" data-wo-print="continuous-240x130-onesheet">
+<html lang="zh-TW" data-wo-print="continuous-240x130-footer-bottom">
 <head>
 <meta charset="UTF-8">
 <title>派工單 ${esc(woNum)}</title>
@@ -778,7 +797,7 @@ ${buildCompactOverridesCss("continuous-print")}
 </style>
 </head>
 <body>
-<!-- wo-continuous-print 240x130 onesheet -->
+<!-- wo-continuous-print 240x130 footer-bottom -->
 ${pageHtml}
 </body>
 </html>`;
