@@ -1,0 +1,48 @@
+export const NOTIFICATION_CHANNELS = ["in_app", "web_push", "line"] as const;
+export type NotificationChannel = (typeof NOTIFICATION_CHANNELS)[number];
+
+export const NOTIFICATION_TYPES = {
+  WORK_ORDER_ASSIGNED: "work_order_assigned",
+  WORK_ORDER_ENGINEER_ADDED: "work_order_engineer_added",
+  WORK_ORDER_SCHEDULE_CHANGED: "work_order_schedule_changed",
+  WORK_ORDER_ADDRESS_CHANGED: "work_order_address_changed",
+  WORK_ORDER_RESCHEDULED: "work_order_rescheduled",
+  WORK_ORDER_CANCELLED: "work_order_cancelled",
+  WORK_ORDER_ADMIN_NOTE: "work_order_admin_note",
+  WORK_ORDER_REOPENED: "work_order_reopened",
+  WORK_ORDER_RETAKE_PHOTOS: "work_order_retake_photos",
+  WORK_ORDER_RETURNED: "work_order_returned",
+  WORK_ORDER_REMINDER_DAY_BEFORE: "work_order_reminder_day_before",
+  WORK_ORDER_REMINDER_TWO_HOURS: "work_order_reminder_two_hours",
+  FIELD_PROGRESS: "field_progress",
+  AI_WORK_REMINDER_60: "ai_work_reminder_60",
+  AI_WORK_REMINDER_30: "ai_work_reminder_30",
+  AI_WORK_REMINDER_15: "ai_work_reminder_15",
+  AI_WORK_REMINDER_5: "ai_work_reminder_5",
+  AI_WORK_REMINDER_PAST_APPOINTMENT: "ai_work_reminder_past_appointment",
+  AI_WORK_REMINDER_PREVIOUS_INCOMPLETE: "ai_work_reminder_previous_incomplete",
+  AI_WORK_REMINDER_READY_NEXT: "ai_work_reminder_ready_next",
+  AI_WORK_REMINDER_SUPERVISOR_ALERT: "ai_work_reminder_supervisor_alert",
+  COMPANY_ANNOUNCEMENT: "company_announcement",
+} as const;
+
+export type NotificationType = (typeof NOTIFICATION_TYPES)[keyof typeof NOTIFICATION_TYPES];
+
+export function workOrderOpenUrl(workOrderId: number): string {
+  return `/work-orders?open=${workOrderId}`;
+}
+
+/** @deprecated Prefer server `absoluteWorkOrderViewUrl()` for LINE / external links */
+export function absoluteWorkOrderUrl(workOrderId: number): string {
+  const base = (
+    process.env.APP_URL?.trim()
+    ?? process.env.PUBLIC_APP_URL?.trim()
+    ?? process.env.APP_BASE_URL?.trim()
+    ?? ""
+  ).replace(/\/+$/, "");
+  if (!base) {
+    throw new Error("APP_URL / PUBLIC_APP_URL / APP_BASE_URL 未設定");
+  }
+  const normalized = /^https?:\/\//i.test(base) ? base : `https://${base}`;
+  return `${normalized}${workOrderOpenUrl(workOrderId)}`;
+}

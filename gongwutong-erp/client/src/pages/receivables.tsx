@@ -1,0 +1,1088 @@
+import { useState, useEffect } from "react";
+import { useSearch, useLocation } from "wouter";
+import {
+  useListReceivables, useCreateReceivable, useUpdateReceivable, useDeleteReceivable,
+  useRecordReceivablePayment, useListCustomers, getListReceivablesQueryKey,
+  useGetWorkOrder, useGetQuote,
+} from "@workspace/api-client-react";
+import type { Receivable } from "@workspace/api-client-react";
+import { equipmentItemsFromOrder } from "@/components/work-order-form";
+import { buildReceivableSummaryHtml } from "@/components/pdf/templates/ReceivableSummaryTemplate";
+import { openPrintWindow, isMobileDevice, handlePdfAction } from "@/components/pdf/pdf-service";
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from "@/components/ui/table";
+import { useQueryClient, useMutation } from "@tanstack/react-query";
+import { invalidateStatistics } from "@/lib/invalidateStatistics";
+import { reverseReceivablePayment } from "@/lib/receivablesApi";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Card, CardContent } from "@/components/ui/card";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { Plus, Pencil, Trash2, CreditCard, FileText, Bell, Copy, X, Undo2, Printer, ExternalLink, Loader2 } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { useAuth, hasRole, userHasFeature } from "@/contexts/auth-context";
+import { openLineShareText } from "@/components/pdf/pdf-service";
+import { SUBSIDY_DISPLAY_COLORS } from "../../../shared/subsidyDocs.ts";
+
+const PAYMENT_STATUSES = ["未收款", "部分收款", "已收款"];
+const PAYMENT_METHODS = ["現金", "銀行轉帳", "支票", "信用卡", "LINE Pay", "其他"];
+const INVOICE_STATUSES = ["未開立", "已開立", "免開立", "待確認"];
+const INVOICE_TYPES = ["二聯式發票", "三聯式發票", "電子發票", "免發票"];
+const FILTER_TABS = ["全部", "未收款", "部分收款", "已收款", "逾期", "發票未開立"];
+
+const STATUS_COLORS: Record<string, string> = {
+  "未收款": "bg-red-100 text-red-700",
+  "部分收款": "bg-amber-100 text-amber-700",
+  "已收款": "bg-green-100 text-green-700",
+};
+const INVOICE_COLORS: Record<string, string> = {
+  "未開立": "bg-orange-100 text-orange-700",
+  "已開立": "bg-green-100 text-green-700",
+  "免開立": "bg-gray-100 text-gray-600",
+  "待確認": "bg-blue-100 text-blue-700",
+};
+
+type ReceivableSubsidyFields = {
+  subsidyRequired?: boolean;
+  subsidyStatus?: string | null;
+  subsidyType?: string | null;
+  subsidyDisplayStatus?: string | null;
+  subsidyDisplayLabel?: string | null;
+  subsidyDisplayColor?: string | null;
+  missingDocLabels?: string[] | null;
+  appliedAt?: string | null;
+  canMarkSubsidyApplied?: boolean;
+  needsManualReview?: boolean;
+  uploadUrl?: string | null;
+  uploadLinkToken?: string | null;
+  uploadedDocCount?: number | null;
+  customerDocuments?: Array<{
+    id: number;
+    docType: string | null;
+    docTypeLabel?: string | null;
+    fileName: string | null;
+    fileUrl: string | null;
+    status: string;
+    uploadedAt: string | null;
+  }> | null;
+};
+
+function absoluteUploadUrl(path: string | null | undefined): string | null {
+  const p = path?.trim();
+  if (!p) return null;
+  if (p.startsWith("http")) return p;
+  return `${window.location.origin}${p.startsWith("/") ? "" : "/"}${p}`;
+}
+
+function subsidyShareText(item: ReceivableSubsidyFields & { customerName?: string | null; workOrderNumber?: string | null }) {
+  const url = absoluteUploadUrl(item.uploadUrl);
+  const lines = [
+    "【晟風工程】補助資料上傳",
+    `客戶：${item.customerName ?? "—"}`,
+    `案件：${item.workOrderNumber ?? "—"}`,
+  ];
+  if (url) {
+    lines.push("請點此上傳（無需登入）：", url);
+  }
+  return lines.join("\n");
+}
+
+function fmtAmt(n: number) {
+  return "NT$" + n.toLocaleString("zh-TW", { minimumFractionDigits: 0 });
+}
+
+function overdueDays(expectedDate: string | null | undefined): number {
+  if (!expectedDate) return 0;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const exp = new Date(expectedDate);
+  exp.setHours(0, 0, 0, 0);
+  const diff = Math.floor((today.getTime() - exp.getTime()) / 86400000);
+  return diff > 0 ? diff : 0;
+}
+
+type TabFilter = typeof FILTER_TABS[number];
+
+export default function Receivables() {
+  const { toast } = useToast();
+  const { user } = useAuth();
+  const canWrite = userHasFeature(user, "receivables");
+  const canDelete = hasRole(user, "owner", "admin", "super_admin") || userHasFeature(user, "receivables");
+  const canReverse = hasRole(user, "owner", "admin", "super_admin") || userHasFeature(user, "receivables");
+  const queryClient = useQueryClient();
+
+  const search = useSearch();
+  const [, navigate] = useLocation();
+  const urlParams = new URLSearchParams(search);
+  const filterCustomerId = parseInt(urlParams.get("customerId") ?? "0", 10) || null;
+  const filterCustomerName = urlParams.get("customerName") ?? "";
+  const focusReceivableId = parseInt(urlParams.get("receivableId") ?? "0", 10) || null;
+
+  const [tabFilter, setTabFilter] = useState<TabFilter>("全部");
+  const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [viewItem, setViewItem] = useState<Receivable | null>(null);
+  const [paymentModal, setPaymentModal] = useState<Receivable | null>(null);
+  const [invoiceModal, setInvoiceModal] = useState<Receivable | null>(null);
+  const [lineModal, setLineModal] = useState<Receivable | null>(null);
+  const [subsidyDocsItem, setSubsidyDocsItem] = useState<(Receivable & ReceivableSubsidyFields) | null>(null);
+  const [reverseItem, setReverseItem] = useState<Receivable | null>(null);
+  const [reverseReason, setReverseReason] = useState("");
+  const [showCreate, setShowCreate] = useState(false);
+  const [editItem, setEditItem] = useState<Receivable | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const [form, setForm] = useState(makeEmptyForm());
+  const [payForm, setPayForm] = useState({ amount: "", paymentDate: new Date().toISOString().split("T")[0], paymentMethod: "", notes: "" });
+  const [invForm, setInvForm] = useState(makeInvForm());
+
+  const apiFilter: Record<string, string | number | undefined> = {};
+  if (filterCustomerId) apiFilter.customerId = filterCustomerId;
+  if (tabFilter === "逾期") apiFilter.status = "逾期";
+  else if (tabFilter === "發票未開立") apiFilter.status = "發票未開立";
+  else if (tabFilter !== "全部") apiFilter.status = tabFilter;
+
+  const { data: items = [], isLoading } = useListReceivables(apiFilter as any);
+  const { data: customers = [] } = useListCustomers({ includeOld: "true" });
+
+  useEffect(() => {
+    if (!focusReceivableId || !items.length || viewItem) return;
+    const target = items.find(i => i.id === focusReceivableId);
+    if (target) setViewItem(target);
+  }, [focusReceivableId, items, viewItem]);
+
+  const invalidate = () => {
+    invalidateStatistics(queryClient);
+    void queryClient.invalidateQueries({ queryKey: getListReceivablesQueryKey() });
+    void queryClient.invalidateQueries({ queryKey: ["admin-workbench"] });
+  };
+
+  const createMutation = useCreateReceivable({ mutation: { onSuccess: () => { invalidate(); setShowCreate(false); toast({ title: "應收帳款已建立" }); } } });
+  const updateMutation = useUpdateReceivable({
+    mutation: {
+      onSuccess: (_data, variables) => {
+        invalidate();
+        setEditItem(null);
+        if (variables.data.subsidyStatus !== undefined) {
+          toast({
+            title: variables.data.subsidyStatus === "已申請補助" ? "補助已完成" : "未申請補助",
+          });
+        } else {
+          toast({ title: "已更新" });
+        }
+      },
+    },
+  });
+  const deleteMutation = useDeleteReceivable({ mutation: { onSuccess: () => { invalidate(); setDeleteId(null); toast({ title: "已刪除" }); } } });
+  const paymentMutation = useRecordReceivablePayment({
+    mutation: {
+      onSuccess: (_data, variables) => {
+        invalidate();
+        setPaymentModal(null);
+        setViewItem(prev => (prev?.id === variables.id ? { ...prev, ..._data } : prev));
+        toast({ title: "收款已記錄" });
+      },
+      onError: (err: Error) => {
+        toast({ title: "收款失敗", description: err.message, variant: "destructive" });
+      },
+    },
+  });
+  const reverseMutation = useMutation({
+    mutationFn: ({ id, reason }: { id: number; reason: string }) => reverseReceivablePayment(id, { reason }),
+    onSuccess: (updated, variables) => {
+      invalidate();
+      setReverseItem(null);
+      setReverseReason("");
+      setViewItem(prev => (prev?.id === variables.id ? updated : prev));
+      toast({ title: "已撤銷收款" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "撤銷失敗", description: err.message, variant: "destructive" });
+    },
+  });
+
+  function openCreate() { setForm(makeEmptyForm()); setShowCreate(true); }
+  function openEdit(item: Receivable) {
+    setForm({
+      customerId: item.customerId,
+      projectName: item.projectName ?? "",
+      projectType: item.projectType ?? "",
+      completionDate: item.completionDate ?? "",
+      totalAmount: String(item.totalAmount ?? ""),
+      expectedPaymentDate: item.expectedPaymentDate ?? "",
+      paymentMethod: item.paymentMethod ?? "",
+      notes: item.notes ?? "",
+    });
+    setEditItem(item);
+  }
+
+  function openInvoice(item: Receivable) {
+    setInvForm({
+      invoiceStatus: item.invoiceStatus ?? "未開立",
+      invoiceType: item.invoiceType ?? "",
+      taxId: item.taxId ?? "",
+      invoiceTitle: item.invoiceTitle ?? "",
+      invoiceNumber: item.invoiceNumber ?? "",
+      invoiceDate: item.invoiceDate ?? "",
+      invoiceNotes: item.invoiceNotes ?? "",
+    });
+    setInvoiceModal(item);
+  }
+
+  function openPayment(item: Receivable) {
+    const remaining = Math.max(0, item.totalAmount - item.receivedAmount);
+    setPayForm({
+      amount: remaining > 0 ? String(remaining) : "",
+      paymentDate: new Date().toISOString().split("T")[0],
+      paymentMethod: item.paymentMethod ?? "",
+      notes: "",
+    });
+    setPaymentModal(item);
+  }
+
+  function handleCreate(e: React.FormEvent) {
+    e.preventDefault();
+    if (!form.customerId) { toast({ title: "請選擇客戶", variant: "destructive" }); return; }
+    createMutation.mutate({ data: {
+      customerId: form.customerId,
+      projectName: form.projectName || undefined,
+      projectType: form.projectType || undefined,
+      completionDate: form.completionDate || undefined,
+      totalAmount: parseFloat(form.totalAmount) || 0,
+      expectedPaymentDate: form.expectedPaymentDate || undefined,
+      paymentMethod: form.paymentMethod || undefined,
+      notes: form.notes || undefined,
+    }});
+  }
+
+  function handleEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editItem) return;
+    updateMutation.mutate({ id: editItem.id, data: {
+      totalAmount: parseFloat(form.totalAmount) || undefined,
+      expectedPaymentDate: form.expectedPaymentDate || undefined,
+      paymentMethod: form.paymentMethod || undefined,
+      notes: form.notes || undefined,
+    }});
+  }
+
+  function handlePayment(e: React.FormEvent) {
+    e.preventDefault();
+    if (!paymentModal) return;
+    const amount = parseFloat(payForm.amount);
+    const remaining = paymentModal.totalAmount - paymentModal.receivedAmount;
+    if (!amount || amount <= 0) { toast({ title: "請輸入有效金額", variant: "destructive" }); return; }
+    if (amount > remaining) {
+      toast({ title: "收款金額不可超過未收金額", description: fmtAmt(remaining), variant: "destructive" });
+      return;
+    }
+    paymentMutation.mutate({ id: paymentModal.id, data: {
+      amount,
+      paymentDate: payForm.paymentDate,
+      paymentMethod: payForm.paymentMethod || undefined,
+      notes: payForm.notes || undefined,
+    }});
+  }
+
+  function handleReverseConfirm() {
+    if (!reverseItem) return;
+    const reason = reverseReason.trim();
+    if (!reason) { toast({ title: "請填寫撤銷原因", variant: "destructive" }); return; }
+    reverseMutation.mutate({ id: reverseItem.id, reason });
+  }
+
+  function handleInvoice(e: React.FormEvent) {
+    e.preventDefault();
+    if (!invoiceModal) return;
+    updateMutation.mutate({ id: invoiceModal.id, data: {
+      invoiceStatus: invForm.invoiceStatus,
+      invoiceType: invForm.invoiceType || undefined,
+      taxId: invForm.taxId || undefined,
+      invoiceTitle: invForm.invoiceTitle || undefined,
+      invoiceNumber: invForm.invoiceNumber || undefined,
+      invoiceDate: invForm.invoiceDate || undefined,
+      invoiceNotes: invForm.invoiceNotes || undefined,
+    } as any }, { onSuccess: () => { invalidate(); setInvoiceModal(null); toast({ title: "發票資料已更新" }); } });
+  }
+
+  function buildLineMessage(item: Receivable): string {
+    const today = new Date().toISOString().split("T")[0];
+    const od = overdueDays(item.expectedPaymentDate);
+    const remaining = item.totalAmount - item.receivedAmount;
+    return `【晟風工程收款提醒】
+客戶：${item.customerName ?? "—"}
+派工單號：${item.workOrderNumber ?? "—"}
+工程名稱：${item.projectName ?? "—"}
+完工日期：${item.completionDate ?? "—"}
+應收金額：${fmtAmt(item.totalAmount)}
+已收金額：${fmtAmt(item.receivedAmount)}
+未收金額：${fmtAmt(remaining)}
+預計收款日：${item.expectedPaymentDate ?? "—"}
+逾期天數：${od > 0 ? `${od} 天` : "未逾期"}
+發票狀態：${item.invoiceStatus ?? "—"}
+備註：${item.notes ?? "—"}`;
+  }
+
+  function copyLine(item: Receivable) {
+    navigator.clipboard.writeText(buildLineMessage(item)).then(() => {
+      setCopied(true);
+      toast({ title: "訊息已複製" });
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  function shareToLine(item: Receivable) {
+    const msg = encodeURIComponent(buildLineMessage(item));
+    window.open(`https://line.me/R/share?text=${msg}`, "_blank");
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold">應收帳款</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">收款追蹤與發票管理</p>
+        </div>
+        {canWrite && (
+          <Button size="sm" onClick={openCreate} className="shrink-0">
+            <Plus className="h-4 w-4 mr-1" />新增帳款
+          </Button>
+        )}
+      </div>
+
+      {filterCustomerName && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-lg text-sm">
+          <span className="text-blue-800">篩選客戶：<strong>{filterCustomerName}</strong></span>
+          <button className="ml-auto flex items-center gap-1 text-blue-600 hover:text-blue-800 text-xs" onClick={() => navigate("/receivables")}>
+            <X className="h-3 w-3" />清除篩選
+          </button>
+        </div>
+      )}
+
+      {/* Filter tabs */}
+      <div className="flex gap-1.5 flex-wrap">
+        {FILTER_TABS.map(t => (
+          <button key={t} onClick={() => setTabFilter(t)}
+            className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${tabFilter === t ? "bg-primary text-primary-foreground border-primary" : "bg-background border-border hover:bg-muted"}`}>
+            {t}
+          </button>
+        ))}
+      </div>
+
+      {/* List */}
+      {isLoading ? (
+        <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-24 w-full" />)}</div>
+      ) : items.length > 0 ? (
+        <div className="space-y-2">
+          {items.map(item => {
+            const remaining = item.totalAmount - item.receivedAmount;
+            const od = overdueDays(item.expectedPaymentDate);
+            const isOverdue = od > 0 && item.paymentStatus !== "已收款";
+            const sub = item as Receivable & ReceivableSubsidyFields;
+            const subDisplay = sub.subsidyDisplayStatus;
+            const subColor =
+              (subDisplay && SUBSIDY_DISPLAY_COLORS[subDisplay as keyof typeof SUBSIDY_DISPLAY_COLORS]) ||
+              sub.subsidyDisplayColor ||
+              "bg-gray-100 text-gray-600";
+            return (
+              <Card key={item.id} className={isOverdue ? "border-red-200" : ""}>
+                <CardContent className="p-3 sm:p-4">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex flex-wrap items-center gap-1.5 mb-1">
+                        <span className="font-semibold text-sm truncate">{item.customerName ?? "—"}</span>
+                        {item.workOrderNumber && <span className="text-xs text-muted-foreground">#{item.workOrderNumber}</span>}
+                        <Badge className={`text-xs px-1.5 py-0 ${STATUS_COLORS[item.paymentStatus] ?? "bg-gray-100 text-gray-700"}`}>
+                          收款：{item.paymentStatus}
+                          {!item.expectedPaymentDate && item.paymentStatus === "未收款" ? "／未設定收款日" : ""}
+                        </Badge>
+                        <Badge className={`text-xs px-1.5 py-0 ${INVOICE_COLORS[item.invoiceStatus] ?? "bg-gray-100 text-gray-600"}`}>
+                          發票：{item.invoiceStatus}
+                        </Badge>
+                        {sub.subsidyRequired && (
+                          <Badge className={`text-xs px-1.5 py-0 border-0 ${subColor}`}>
+                            補助：{sub.subsidyDisplayLabel ?? "等待客戶上傳"}
+                          </Badge>
+                        )}
+                      </div>
+                      {item.projectName && <p className="text-xs text-muted-foreground mb-1">{item.projectName}{item.projectType ? ` · ${item.projectType}` : ""}</p>}
+                      <div className="grid grid-cols-3 gap-x-3 gap-y-0.5 text-xs mt-1">
+                        <div><span className="text-muted-foreground">應收：</span><span className="font-medium">{fmtAmt(item.totalAmount)}</span></div>
+                        <div><span className="text-muted-foreground">已收：</span><span className="font-medium text-green-700">{fmtAmt(item.receivedAmount)}</span></div>
+                        <div><span className="text-muted-foreground">未收：</span><span className={`font-medium ${remaining > 0 ? "text-red-600" : "text-gray-500"}`}>{fmtAmt(remaining)}</span></div>
+                      </div>
+                      <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs mt-1 text-muted-foreground">
+                        {item.expectedPaymentDate && <span>預計收款：{item.expectedPaymentDate}</span>}
+                        {isOverdue && <span className="text-red-600 font-medium">逾期 {od} 天</span>}
+                        {item.invoiceNumber && <span>發票號：{item.invoiceNumber}</span>}
+                      </div>
+                    </div>
+                  </div>
+                  {/* Quick actions */}
+                  <div className="flex flex-wrap gap-1.5 mt-2.5 pt-2 border-t">
+                    <Button size="sm" variant="outline" className="h-7 text-xs px-2" onClick={() => setViewItem(item)}>
+                      詳情
+                    </Button>
+                    {canWrite && item.paymentStatus !== "已收款" && (
+                      <Button size="sm" variant="outline" className="h-7 text-xs px-2 text-green-700 border-green-300 hover:bg-green-50" onClick={() => openPayment(item)}>
+                        <CreditCard className="h-3 w-3 mr-1" />收款
+                      </Button>
+                    )}
+                    {canReverse && item.paymentStatus === "已收款" && (
+                      <Button size="sm" variant="outline" className="h-7 text-xs px-2 text-orange-700 border-orange-300 hover:bg-orange-50" onClick={() => { setReverseItem(item); setReverseReason(""); }}>
+                        <Undo2 className="h-3 w-3 mr-1" />↩ 撤銷收款
+                      </Button>
+                    )}
+                    {canWrite && (
+                      <Button size="sm" variant="outline" className="h-7 text-xs px-2 text-blue-700 border-blue-300 hover:bg-blue-50" onClick={() => openInvoice(item)}>
+                        <FileText className="h-3 w-3 mr-1" />發票
+                      </Button>
+                    )}
+                    {sub.subsidyRequired && (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs px-2"
+                          onClick={() => setSubsidyDocsItem(sub)}
+                        >
+                          補助資料
+                          {(sub.uploadedDocCount ?? 0) > 0 ? `（${sub.uploadedDocCount}）` : ""}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs px-2 text-emerald-700 border-emerald-300 hover:bg-emerald-50"
+                          onClick={() => {
+                            const text = subsidyShareText(sub);
+                            const win = openLineShareText(text);
+                            if (!win) {
+                              void navigator.clipboard.writeText(text).then(() =>
+                                toast({ title: "已複製分享內容", description: "請貼到 LINE" }),
+                              );
+                            }
+                          }}
+                        >
+                          <Bell className="h-3 w-3 mr-1" />LINE 提醒
+                        </Button>
+                      </>
+                    )}
+                    {canWrite && (
+                      <Button size="sm" variant="ghost" className="h-7 text-xs px-2" onClick={() => openEdit(item)}>
+                        <Pencil className="h-3 w-3" />
+                      </Button>
+                    )}
+                    {canDelete && (
+                      <Button size="sm" variant="ghost" className="h-7 text-xs px-2 text-destructive hover:text-destructive" onClick={() => setDeleteId(item.id)}>
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      ) : (
+        <Card><CardContent className="py-12 text-center text-muted-foreground">
+          {tabFilter === "全部" ? "尚無應收帳款紀錄" : `無「${tabFilter}」帳款`}
+        </CardContent></Card>
+      )}
+
+      {/* Create/Edit Dialog */}
+      <Dialog open={showCreate || !!editItem} onOpenChange={open => { if (!open) { setShowCreate(false); setEditItem(null); } }}>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editItem ? "編輯應收帳款" : "新增應收帳款"}</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={editItem ? handleEdit : handleCreate} className="space-y-3 mt-1">
+            {!editItem && (
+              <div className="space-y-1">
+                <Label>客戶 *</Label>
+                <Select value={String(form.customerId || "")} onValueChange={v => setForm(f => ({ ...f, customerId: parseInt(v) }))}>
+                  <SelectTrigger><SelectValue placeholder="選擇客戶" /></SelectTrigger>
+                  <SelectContent>
+                    {customers.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+            <div className="space-y-1">
+              <Label>工程名稱</Label>
+              <Input value={form.projectName} onChange={e => setForm(f => ({ ...f, projectName: e.target.value }))} placeholder="例：新裝冷氣工程" />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label>工程類別</Label>
+                <Input
+                  value={form.projectType}
+                  onChange={e => setForm(f => ({ ...f, projectType: e.target.value }))}
+                  placeholder="例：新裝"
+                  readOnly={!!editItem?.workOrderId}
+                  className={editItem?.workOrderId ? "bg-muted" : undefined}
+                  title={editItem?.workOrderId ? "工程類別以派工單為準" : undefined}
+                />
+              </div>
+              <div className="space-y-1">
+                <Label>完工日期</Label>
+                <Input type="date" value={form.completionDate} onChange={e => setForm(f => ({ ...f, completionDate: e.target.value }))} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label>應收金額 *</Label>
+                <Input type="number" value={form.totalAmount} onChange={e => setForm(f => ({ ...f, totalAmount: e.target.value }))} placeholder="0" required />
+              </div>
+              <div className="space-y-1">
+                <Label>預計收款日</Label>
+                <Input type="date" value={form.expectedPaymentDate} onChange={e => setForm(f => ({ ...f, expectedPaymentDate: e.target.value }))} />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label>備註</Label>
+              <Textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={2} />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => { setShowCreate(false); setEditItem(null); }}>取消</Button>
+              <Button type="submit">{editItem ? "儲存" : "新增"}</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Record Payment Dialog */}
+      <Dialog open={!!paymentModal} onOpenChange={open => { if (!open) setPaymentModal(null); }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>收款</DialogTitle>
+          </DialogHeader>
+          {paymentModal && (
+            <div className="text-xs text-muted-foreground mb-2 space-y-1">
+              <div><span>{paymentModal.customerName}</span>{paymentModal.projectName && <span> · {paymentModal.projectName}</span>}</div>
+              <div>應收：<strong>{fmtAmt(paymentModal.totalAmount)}</strong> · 已收：<strong className="text-green-700">{fmtAmt(paymentModal.receivedAmount)}</strong></div>
+              <div>未收金額：<strong className="text-red-600">{fmtAmt(paymentModal.totalAmount - paymentModal.receivedAmount)}</strong></div>
+            </div>
+          )}
+          <form onSubmit={handlePayment} className="space-y-3">
+            <div className="space-y-1">
+              <Label>收款金額 *</Label>
+              <Input
+                type="number"
+                min="0"
+                step="1"
+                value={payForm.amount}
+                onChange={e => setPayForm(f => ({ ...f, amount: e.target.value }))}
+                placeholder="0"
+                required
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>收款日期 *</Label>
+              <Input type="date" value={payForm.paymentDate} onChange={e => setPayForm(f => ({ ...f, paymentDate: e.target.value }))} required />
+            </div>
+            <div className="space-y-1">
+              <Label>付款方式</Label>
+              <Select value={payForm.paymentMethod} onValueChange={v => setPayForm(f => ({ ...f, paymentMethod: v }))}>
+                <SelectTrigger><SelectValue placeholder="選擇方式" /></SelectTrigger>
+                <SelectContent>{PAYMENT_METHODS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label>備註（選填）</Label>
+              <Input value={payForm.notes} onChange={e => setPayForm(f => ({ ...f, notes: e.target.value }))} />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setPaymentModal(null)}>取消</Button>
+              <Button type="submit" disabled={paymentMutation.isPending}>確認收款</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reverse Payment Dialog */}
+      <AlertDialog open={!!reverseItem} onOpenChange={open => { if (!open) { setReverseItem(null); setReverseReason(""); } }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>確定撤銷收款？</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-sm">
+                <p>此操作會沖銷收款紀錄並重新計算應收狀態，AI 收款提醒也會重新納入此案件。</p>
+                {reverseItem && (
+                  <div className="rounded-md border bg-muted/40 p-3 text-xs space-y-1">
+                    <p><span className="text-muted-foreground">客戶：</span>{reverseItem.customerName ?? "—"}</p>
+                    <p><span className="text-muted-foreground">已收：</span>{fmtAmt(reverseItem.receivedAmount)}</p>
+                    <p><span className="text-muted-foreground">狀態：</span>{reverseItem.paymentStatus}</p>
+                  </div>
+                )}
+                <div className="space-y-1">
+                  <Label htmlFor="reverseReason">撤銷原因 *</Label>
+                  <Textarea
+                    id="reverseReason"
+                    value={reverseReason}
+                    onChange={e => setReverseReason(e.target.value)}
+                    placeholder="例：誤登收款、客戶退刷"
+                    rows={3}
+                  />
+                </div>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-orange-600 hover:bg-orange-700"
+              disabled={reverseMutation.isPending}
+              onClick={e => { e.preventDefault(); handleReverseConfirm(); }}
+            >
+              確認撤銷
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Edit Invoice Dialog */}
+      <Dialog open={!!invoiceModal} onOpenChange={open => { if (!open) setInvoiceModal(null); }}>
+        <DialogContent className="max-w-sm max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>發票資料</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleInvoice} className="space-y-3 mt-1">
+            <div className="space-y-1">
+              <Label>發票狀態</Label>
+              <Select value={invForm.invoiceStatus} onValueChange={v => setInvForm(f => ({ ...f, invoiceStatus: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>{INVOICE_STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <Label>發票類型</Label>
+              <Select value={invForm.invoiceType} onValueChange={v => setInvForm(f => ({ ...f, invoiceType: v }))}>
+                <SelectTrigger><SelectValue placeholder="選擇類型" /></SelectTrigger>
+                <SelectContent>{INVOICE_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label>統一編號</Label>
+                <Input value={invForm.taxId} onChange={e => setInvForm(f => ({ ...f, taxId: e.target.value }))} placeholder="買方統編" />
+              </div>
+              <div className="space-y-1">
+                <Label>發票抬頭</Label>
+                <Input value={invForm.invoiceTitle} onChange={e => setInvForm(f => ({ ...f, invoiceTitle: e.target.value }))} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label>發票號碼</Label>
+                <Input value={invForm.invoiceNumber} onChange={e => setInvForm(f => ({ ...f, invoiceNumber: e.target.value }))} placeholder="AB-12345678" />
+              </div>
+              <div className="space-y-1">
+                <Label>開立日期</Label>
+                <Input type="date" value={invForm.invoiceDate} onChange={e => setInvForm(f => ({ ...f, invoiceDate: e.target.value }))} />
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label>發票備註</Label>
+              <Textarea value={invForm.invoiceNotes} onChange={e => setInvForm(f => ({ ...f, invoiceNotes: e.target.value }))} rows={2} />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setInvoiceModal(null)}>取消</Button>
+              <Button type="submit">儲存</Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* LINE Reminder Dialog */}
+      <Dialog open={!!lineModal} onOpenChange={open => { if (!open) { setLineModal(null); setCopied(false); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Bell className="h-4 w-4 text-emerald-600" />LINE 收款提醒</DialogTitle>
+          </DialogHeader>
+          {lineModal && (
+            <div className="space-y-3">
+              <pre className="text-xs bg-muted rounded-lg p-3 whitespace-pre-wrap leading-relaxed font-sans">
+                {buildLineMessage(lineModal)}
+              </pre>
+              <div className="flex gap-2">
+                <Button className="flex-1" variant="outline" onClick={() => copyLine(lineModal)}>
+                  <Copy className="h-4 w-4 mr-1.5" />{copied ? "已複製！" : "複製訊息"}
+                </Button>
+                <Button className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white" onClick={() => shareToLine(lineModal)}>
+                  分享至 LINE
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* View Details Dialog */}
+      {viewItem && (
+        <ReceivableDetailDialog
+          item={viewItem}
+          onClose={() => setViewItem(null)}
+        />
+      )}
+
+      {/* Delete confirm */}
+      <Dialog open={!!subsidyDocsItem} onOpenChange={(open) => { if (!open) setSubsidyDocsItem(null); }}>
+        <DialogContent className="max-w-md w-[calc(100vw-1.5rem)]">
+          <DialogHeader>
+            <DialogTitle>補助資料</DialogTitle>
+          </DialogHeader>
+          {subsidyDocsItem && (
+            <div className="space-y-3 text-sm">
+              <p className="text-xs text-muted-foreground">
+                {subsidyDocsItem.customerName} · {subsidyDocsItem.workOrderNumber ?? "—"}
+              </p>
+              <Badge className={`border-0 ${subsidyDocsItem.subsidyDisplayColor ?? "bg-gray-100 text-gray-600"}`}>
+                {subsidyDocsItem.subsidyDisplayLabel ?? "—"}
+              </Badge>
+              {absoluteUploadUrl(subsidyDocsItem.uploadUrl) && (
+                <p className="text-xs break-all">
+                  <span className="text-muted-foreground">客戶上傳網址：</span>
+                  {absoluteUploadUrl(subsidyDocsItem.uploadUrl)}
+                </p>
+              )}
+              {(subsidyDocsItem.missingDocLabels?.length ?? 0) > 0 && (
+                <p className="text-xs text-orange-800">缺少：{subsidyDocsItem.missingDocLabels!.join("、")}</p>
+              )}
+              {(subsidyDocsItem.customerDocuments?.length ?? 0) === 0 ? (
+                <p className="text-muted-foreground text-center py-4">尚無客戶上傳紀錄</p>
+              ) : (
+                <ul className="space-y-2">
+                  {subsidyDocsItem.customerDocuments!.map((d) => (
+                    <li key={d.id} className="rounded-md border p-2">
+                      <p className="font-medium">{d.docTypeLabel || d.fileName || d.docType || "文件"}</p>
+                      {d.uploadedAt && (
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(d.uploadedAt).toLocaleString("zh-TW")}
+                        </p>
+                      )}
+                      {d.fileUrl && (
+                        <a href={d.fileUrl} target="_blank" rel="noreferrer" className="text-xs text-primary underline">
+                          預覽／下載
+                        </a>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setSubsidyDocsItem(null)}>關閉</Button>
+                {subsidyDocsItem.uploadUrl && (
+                  <Button
+                    onClick={() => {
+                      const url = absoluteUploadUrl(subsidyDocsItem.uploadUrl);
+                      if (!url) return;
+                      void navigator.clipboard.writeText(url).then(() => toast({ title: "已複製上傳網址" }));
+                    }}
+                  >
+                    複製上傳網址
+                  </Button>
+                )}
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={!!deleteId} onOpenChange={open => { if (!open) setDeleteId(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>確定刪除？</AlertDialogTitle>
+            <AlertDialogDescription>此操作無法復原，應收帳款紀錄將永久刪除。</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction className="bg-destructive hover:bg-destructive/90" onClick={() => deleteId && deleteMutation.mutate({ id: deleteId })}>刪除</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
+function equipmentModelCells(it: ReturnType<typeof equipmentItemsFromOrder>[number]): { indoor: string; outdoor: string } {
+  const modelText = it.model || it.itemName || "—";
+  const hasIndoor = it.indoorUnits != null && it.indoorUnits > 0;
+  const hasOutdoor = it.outdoorUnits != null && it.outdoorUnits > 0;
+  if (hasIndoor || hasOutdoor) {
+    return {
+      indoor: hasIndoor ? modelText : "—",
+      outdoor: hasOutdoor ? (it.model || "—") : "—",
+    };
+  }
+  if (it.model || it.itemName) {
+    return { indoor: modelText, outdoor: "—" };
+  }
+  return { indoor: "—", outdoor: "—" };
+}
+
+function ReceivableDetailDialog({ item, onClose }: { item: Receivable; onClose: () => void }) {
+  const { toast } = useToast();
+  const [, navigate] = useLocation();
+  const workOrderId = item.workOrderId ?? 0;
+
+  const { data: workOrder, isLoading: woLoading } = useGetWorkOrder(workOrderId, {
+    query: { enabled: workOrderId > 0 },
+  });
+  const quoteId = workOrder?.quoteId ?? 0;
+  const { data: quote, isLoading: quoteLoading } = useGetQuote(quoteId, {
+    query: { enabled: quoteId > 0 },
+  });
+
+  const equipment = workOrder ? equipmentItemsFromOrder(workOrder) : [];
+  const visibleEquipment = equipment.filter(it => it.brand || it.itemName || it.model || it.quantity);
+  const quoteItems = quote?.items ?? [];
+  const relatedLoading = (workOrderId > 0 && woLoading) || (quoteId > 0 && quoteLoading);
+
+  const projectType = workOrder?.projectType || item.projectType || "—";
+  const projectName = workOrder?.title || item.projectName || "—";
+  const installAddress = workOrder?.installAddress || quote?.address || "—";
+
+  async function handlePrintSummary() {
+    const html = buildReceivableSummaryHtml({ receivable: item, workOrder, quote, equipment });
+    const title = `施工摘要 — ${item.customerName ?? ""}`;
+    if (isMobileDevice()) {
+      await handlePdfAction({
+        html,
+        docNo: String(item.id),
+        filename: `施工摘要_${item.id}.pdf`,
+        title,
+        action: "download",
+        setPdfPreview: () => {},
+        toast,
+        pageFormat: "a4",
+      });
+    } else {
+      openPrintWindow(html, title);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={open => { if (!open) onClose(); }}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <div className="flex items-start justify-between gap-3 pr-6">
+            <DialogTitle>應收帳款詳情</DialogTitle>
+            <Button variant="outline" size="sm" className="shrink-0" onClick={() => void handlePrintSummary()}>
+              <Printer className="h-4 w-4 mr-1.5" />
+              列印施工摘要
+            </Button>
+          </div>
+        </DialogHeader>
+
+        <div className="space-y-4 text-sm">
+          <div className="grid grid-cols-2 gap-y-2 gap-x-4">
+            <DetailRow label="客戶" value={item.customerName ?? "—"} />
+            <DetailRow label="派工單號" value={item.workOrderNumber ?? "—"} />
+            <DetailRow label="完工日期" value={item.completionDate ?? "—"} />
+            <DetailRow label="預計收款" value={item.expectedPaymentDate ?? "—"} />
+          </div>
+
+          <div className="rounded-lg border bg-muted/20 p-3 space-y-2">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">施工內容</p>
+            {relatedLoading ? (
+              <p className="text-xs text-muted-foreground flex items-center gap-2">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />載入施工資料…
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-2 gap-x-4">
+                <DetailRow label="工程類型" value={projectType} />
+                <DetailRow label="工程名稱" value={projectName} />
+                <div className="sm:col-span-2">
+                  <DetailRow label="施工地址" value={installAddress} />
+                </div>
+                {workOrder?.description && (
+                  <div className="sm:col-span-2">
+                    <p className="text-xs text-muted-foreground">施工說明</p>
+                    <p className="text-sm whitespace-pre-wrap mt-0.5">{workOrder.description}</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">設備明細</p>
+            {relatedLoading ? (
+              <p className="text-xs text-muted-foreground flex items-center gap-2">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />載入設備資料…
+              </p>
+            ) : visibleEquipment.length === 0 ? (
+              <p className="text-xs text-muted-foreground">無設備明細</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>品牌</TableHead>
+                    <TableHead>室內機型號</TableHead>
+                    <TableHead>室外機型號</TableHead>
+                    <TableHead className="text-right">數量</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {visibleEquipment.map((it, i) => {
+                    const { indoor, outdoor } = equipmentModelCells(it);
+                    const qty = it.quantity != null ? `${it.quantity}${it.unit ? ` ${it.unit}` : ""}` : "—";
+                    return (
+                      <TableRow key={i}>
+                        <TableCell>{it.brand || "—"}</TableCell>
+                        <TableCell>{indoor}</TableCell>
+                        <TableCell>{outdoor}</TableCell>
+                        <TableCell className="text-right">{qty}</TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">報價明細</p>
+            {quoteId <= 0 ? (
+              <p className="text-xs text-muted-foreground">無關聯報價單</p>
+            ) : quoteLoading ? (
+              <p className="text-xs text-muted-foreground flex items-center gap-2">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />載入報價資料…
+              </p>
+            ) : quoteItems.length === 0 ? (
+              <p className="text-xs text-muted-foreground">無報價明細</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>品項</TableHead>
+                    <TableHead className="text-right">數量</TableHead>
+                    <TableHead className="text-right">單價</TableHead>
+                    <TableHead className="text-right">小計</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {quoteItems.map(it => (
+                    <TableRow key={it.id}>
+                      <TableCell>{it.itemName}</TableCell>
+                      <TableCell className="text-right">{it.quantity}{it.unit ? ` ${it.unit}` : ""}</TableCell>
+                      <TableCell className="text-right">{fmtAmt(it.unitPrice)}</TableCell>
+                      <TableCell className="text-right">{fmtAmt(it.subtotal)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </div>
+
+          <Separator />
+
+          <div className="grid grid-cols-3 gap-2">
+            <AmtCard label="應收金額" amount={item.totalAmount} color="text-foreground" />
+            <AmtCard label="已收金額" amount={item.receivedAmount} color="text-green-700" />
+            <AmtCard label="未收金額" amount={item.totalAmount - item.receivedAmount} color="text-red-600" />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Badge className={STATUS_COLORS[item.paymentStatus] ?? "bg-gray-100"}>{item.paymentStatus}</Badge>
+            {item.paymentMethod && <Badge variant="outline">{item.paymentMethod}</Badge>}
+            {item.actualPaymentDate && <span className="text-xs text-muted-foreground self-center">完款：{item.actualPaymentDate}</span>}
+          </div>
+          {overdueDays(item.expectedPaymentDate) > 0 && item.paymentStatus !== "已收款" && (
+            <div className="text-xs text-red-600 font-medium">⚠ 已逾期 {overdueDays(item.expectedPaymentDate)} 天</div>
+          )}
+          {item.notes && <div className="text-xs text-muted-foreground bg-muted rounded p-2">{item.notes}</div>}
+
+          <Separator />
+
+          <div className="grid grid-cols-2 gap-y-2 gap-x-4">
+            <DetailRow label="發票狀態" value={item.invoiceStatus} />
+            <DetailRow label="發票類型" value={item.invoiceType ?? "—"} />
+            <DetailRow label="統一編號" value={item.taxId ?? "—"} />
+            <DetailRow label="發票抬頭" value={item.invoiceTitle ?? "—"} />
+            <DetailRow label="發票號碼" value={item.invoiceNumber ?? "—"} />
+            <DetailRow label="開立日期" value={item.invoiceDate ?? "—"} />
+          </div>
+          {item.invoiceNotes && <div className="text-xs text-muted-foreground bg-muted rounded p-2">{item.invoiceNotes}</div>}
+
+          <div className="flex flex-wrap gap-2 pt-1">
+            <Button
+              variant="outline"
+              className="flex-1 min-w-[140px]"
+              disabled={quoteId <= 0}
+              onClick={() => {
+                onClose();
+                navigate(`/quotes?focusId=${quoteId}`);
+              }}
+            >
+              <ExternalLink className="h-4 w-4 mr-1.5" />
+              查看報價單
+            </Button>
+            <Button
+              variant="outline"
+              className="flex-1 min-w-[140px]"
+              disabled={workOrderId <= 0}
+              onClick={() => {
+                onClose();
+                navigate(`/work-orders?expand=${workOrderId}`);
+              }}
+            >
+              <ExternalLink className="h-4 w-4 mr-1.5" />
+              查看派工單
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="font-medium text-sm">{value}</p>
+    </div>
+  );
+}
+
+function AmtCard({ label, amount, color }: { label: string; amount: number; color: string }) {
+  return (
+    <div className="bg-muted/50 rounded-lg p-2 text-center">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className={`text-sm font-bold ${color}`}>{"NT$" + amount.toLocaleString("zh-TW")}</p>
+    </div>
+  );
+}
+
+function makeEmptyForm() {
+  return {
+    customerId: 0,
+    projectName: "",
+    projectType: "",
+    completionDate: "",
+    totalAmount: "",
+    expectedPaymentDate: "",
+    paymentMethod: "",
+    notes: "",
+  };
+}
+
+function makeInvForm() {
+  return {
+    invoiceStatus: "未開立",
+    invoiceType: "",
+    taxId: "",
+    invoiceTitle: "",
+    invoiceNumber: "",
+    invoiceDate: "",
+    invoiceNotes: "",
+  };
+}

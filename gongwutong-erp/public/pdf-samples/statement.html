@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>請款單 — 林記冷氣行</title>
+<style>
+/* ===== Base ===== */
+*{margin:0;padding:0;box-sizing:border-box}
+body{
+  font-family:'Microsoft JhengHei','微軟正黑體',Arial,sans-serif;
+  font-size:10pt;color:#111111;background:#fff;
+}
+
+/* ===== Page setup ===== */
+@page{size:A4 portrait;margin:12mm}
+.page{
+  width:186mm;min-height:273mm;
+  padding:0;position:relative;
+}
+
+/* ===== Header ===== */
+.hdr{
+  display:flex;justify-content:space-between;align-items:flex-start;
+  border-bottom:2.5px solid #111111;
+  padding-bottom:4mm;margin-bottom:3mm;
+}
+.co{display:flex;align-items:center;gap:3mm}
+.co-logo{
+  width:55px;height:55px;max-width:55px;max-height:55px;
+  object-fit:contain;flex-shrink:0;
+  border:1px solid #e0e0e0;border-radius:3px;
+}
+.co-name{font-size:13pt;font-weight:700;letter-spacing:0.5px}
+.co-sub{font-size:7.5pt;color:#555555;margin-top:1px}
+.co-info{font-size:7pt;color:#888888;margin-top:2px;line-height:1.6}
+.doc-r{text-align:right}
+.doc-label{font-size:16pt;font-weight:700;color:#9ACD32;letter-spacing:4px}
+.doc-en{font-size:7pt;color:#aaa;letter-spacing:1px}
+.doc-no{font-size:9pt;font-weight:700;font-family:monospace;margin-top:2px}
+.doc-dates{font-size:7.5pt;color:#555555;line-height:1.6;margin-top:1px}
+
+/* ===== Section titles ===== */
+.stitle{
+  font-size:7.5pt;font-weight:700;
+  background:#111111;color:#9ACD32;
+  padding:1mm 2.5mm;letter-spacing:2px;margin-bottom:1.5mm;
+  display:inline-block;
+}
+
+/* ===== Table ===== */
+table{
+  width:100%;border-collapse:collapse;
+  table-layout:fixed;font-size:9pt;
+}
+.head-row{background:#111111;color:#9ACD32}
+.head-row th{
+  border:1px solid #111111;
+  font-size:8.5pt;font-weight:700;text-align:center;
+}
+tbody td{
+  border:1px solid #111111;
+  vertical-align:middle;font-size:9pt;
+}
+tr{page-break-inside:avoid;break-inside:avoid}
+
+/* Text align helpers */
+.tac{text-align:center}
+.tar{text-align:right}
+.tal{text-align:left}
+.fw7{font-weight:700}
+.small{font-size:7.5pt}
+
+/* Column widths */
+.col-w12{width:12%}
+.col-w14{width:14%}
+.col-w10{width:10%}
+
+/* ===== Info grid ===== */
+.info-grid{
+  display:grid;grid-template-columns:1fr 1fr;
+  gap:1mm 6mm;font-size:8.5pt;margin-bottom:2mm;
+  padding-bottom:2mm;border-bottom:1px solid #e0e0e0;
+}
+.info-label{font-size:7pt;color:#888888}
+
+/* ===== Amount box ===== */
+.amt-box{
+  position:absolute;bottom:58mm;right:0;width:72mm;
+  border:2px solid #9ACD32;overflow:hidden;
+}
+.amt-r{
+  display:flex;justify-content:space-between;align-items:center;
+  border-bottom:1px solid #ebebeb;
+  font-size:9pt;
+}
+.amt-r .lbl{color:#888888;padding-right:3mm}
+.amt-r .val{font-weight:600;text-align:right}
+.amt-total{
+  background:#111111;
+  display:flex;justify-content:space-between;align-items:center;
+}
+.amt-total .lbl{color:#9ACD32;font-size:9pt;font-weight:700;letter-spacing:1px}
+.amt-total .val{color:#fff;font-size:12pt;font-weight:700;font-family:monospace}
+.paid{color:#15803d;font-weight:600}
+.unpaid{color:#dc2626;font-weight:700}
+
+/* ===== Bank info ===== */
+.bank-box{
+  position:absolute;bottom:36mm;left:0;right:80mm;
+  border:1px solid #e0e0e0;padding:2mm 3mm;
+}
+.bank-title{
+  font-size:7pt;font-weight:700;
+  background:#111111;color:#9ACD32;
+  padding:1mm 2mm;display:inline-block;margin-bottom:1.5mm;
+}
+.bank-row{
+  display:flex;gap:6mm;font-size:8pt;
+  color:#333333;line-height:1.6;flex-wrap:wrap;
+}
+.bank-row span{white-space:nowrap}
+
+/* ===== Notice ===== */
+.notice{
+  position:absolute;bottom:20mm;left:0;right:82mm;
+  font-size:8pt;color:#555555;line-height:1.6;
+  padding:2mm 3mm;
+}
+
+/* ===== Signature ===== */
+.sig-row{
+  position:absolute;bottom:12mm;left:0;right:0;
+  display:grid;grid-template-columns:1fr 1fr;gap:20mm;
+}
+.sig-box{
+  text-align:center;border-top:1.5px solid #111111;
+  font-size:8.5pt;color:#555555;
+}
+
+/* ===== Footer ===== */
+.pf{
+  position:absolute;bottom:2mm;left:0;right:0;
+  display:flex;justify-content:space-between;align-items:center;
+  font-size:6.5pt;color:#888888;
+  border-top:1px solid #e0e0e0;padding-top:1mm;
+}
+
+/* ===== Shared PDF readability ===== */
+body{line-height:1.55}
+table{font-size:9pt;line-height:1.55}
+.head-row th{
+  padding:6px 8px;
+  min-height:40px;
+  line-height:1.55;
+  vertical-align:middle;
+}
+tbody td{
+  padding:6px 8px;
+  min-height:40px;
+  line-height:1.55;
+  vertical-align:middle;
+}
+tbody tr{min-height:40px}
+.col-item{
+  word-wrap:break-word;
+  word-break:break-word;
+  white-space:normal;
+}
+.col-notes{
+  padding-left:10px!important;
+  padding-right:10px!important;
+}
+.notes-box,.remarks-box{
+  border:1px solid #e0e0e0;
+  padding:3mm 4mm;
+  font-size:9pt;
+  line-height:1.6;
+  min-height:18mm;
+  background:#fafafa;
+}
+.note-line{
+  font-size:8.5pt;
+  line-height:1.6;
+  padding:1px 0;
+  color:#333333;
+}
+.amt-r{
+  padding:2.5mm 5mm!important;
+}
+.amt-r .val{
+  text-align:right;
+  min-width:28mm;
+  padding-left:4mm;
+  font-variant-numeric:tabular-nums;
+}
+.amt-total{
+  padding:3mm 5mm!important;
+}
+.amt-total .val{
+  text-align:right;
+  padding-left:4mm;
+  font-variant-numeric:tabular-nums;
+}
+.sig-box,.sig{
+  padding-top:3mm;
+  padding-bottom:10mm;
+  min-height:18mm;
+}
+
+</style>
+</head>
+<body>
+<div class="page">
+  <!-- Header -->
+  <div class="hdr">
+    <div class="co">
+      <img src="../logo.png" class="co-logo" alt="">
+      <div>
+        <div class="co-name">晟風工程有限公司</div>
+        <div class="co-sub">冷氣安裝｜保養｜維修｜設計</div>
+        <div class="co-info">
+          統編：93388506　Tel：0955-980-798<br>
+          cfac07151025@gmail.com<br>
+          彰化縣花壇鄉花南路212號
+        </div>
+      </div>
+    </div>
+    <div class="doc-r">
+      <div class="doc-label">請款單</div>
+      <div class="doc-en">PAYMENT REQUEST</div>
+      <div class="doc-no">林記冷氣行_2025-06-01</div>
+      <div class="doc-dates">
+        請款日期：2026/7/7<br>
+        請款期間：2025-06-01 — 2025-06-30<br>
+        列印：2026/7/7
+      </div>
+    </div>
+  </div>
+
+  <!-- Client Info -->
+  <div class="info-grid">
+    <div><span class="info-label">客戶</span> <strong>林記冷氣行</strong></div>
+    <div><span class="info-label">匯款資訊</span> <strong>國泰世華</strong></div>
+    <div><span class="info-label">銀行代碼</span> <strong>013</strong></div>
+    <div><span class="info-label">帳號</span> <strong>047035012164</strong></div>
+  </div>
+
+  <!-- Statement Detail -->
+  <div class="sec">
+    <div class="stitle">月結明細 Statement Detail</div>
+    <table>
+      <thead><tr class="head-row">
+        <th class="col-w12">出貨日</th>
+        <th class="col-w14">出貨單號</th>
+        <th>商品</th>
+        <th class="col-w12">型號</th>
+        <th class="col-w10">數量</th>
+        <th class="col-w12">單價</th>
+        <th class="col-w12">金額</th>
+        <th class="col-w12">備註</th>
+      </tr></thead>
+      <tbody>
+    <tr>
+      <td class="tac">2025-06-01</td>
+      <td class="tac">DO-20250601-0101</td>
+      <td class="tal col-item">壁掛分離式 3.5kW 超長商品名稱換行測試</td>
+      <td class="tac">MSZ-AP35VG</td>
+      <td class="tac">2 台</td>
+      <td class="tar">NT$ 22,500</td>
+      <td class="tar">NT$ 45,000</td>
+      <td class="tal small col-notes">含安裝</td>
+    </tr>
+  
+    <tr>
+      <td class="tac">2025-06-05</td>
+      <td class="tac">DO-20250605-0102</td>
+      <td class="tal col-item">室外機支架</td>
+      <td class="tac">JFK-01</td>
+      <td class="tac">2 組</td>
+      <td class="tar">NT$ 1,200</td>
+      <td class="tar">NT$ 2,400</td>
+      <td class="tal small col-notes"></td>
+    </tr>
+  
+    <tr>
+      <td class="tac">2025-06-10</td>
+      <td class="tac">DO-20250610-0103</td>
+      <td class="tal col-item">銅管配管 5公尺</td>
+      <td class="tac">JFP-5M</td>
+      <td class="tac">1 式</td>
+      <td class="tar">NT$ 8,000</td>
+      <td class="tar">NT$ 8,000</td>
+      <td class="tal small col-notes">含吸排管</td>
+    </tr>
+  
+    <tr>
+      <td class="tac">&nbsp;</td>
+      <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
+      <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
+    </tr>
+    <tr>
+      <td class="tac">&nbsp;</td>
+      <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
+      <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
+    </tr>
+    <tr>
+      <td class="tac">&nbsp;</td>
+      <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
+      <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
+    </tr>
+    <tr>
+      <td class="tac">&nbsp;</td>
+      <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
+      <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
+    </tr>
+    <tr>
+      <td class="tac">&nbsp;</td>
+      <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
+      <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
+    </tr>
+    <tr>
+      <td class="tac">&nbsp;</td>
+      <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
+      <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
+    </tr>
+    <tr>
+      <td class="tac">&nbsp;</td>
+      <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
+      <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
+    </tr>
+    <tr>
+      <td class="tac">&nbsp;</td>
+      <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
+      <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
+    </tr>
+    <tr>
+      <td class="tac">&nbsp;</td>
+      <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
+      <td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>
+    </tr></tbody>
+    </table>
+  </div>
+
+  <!-- Amount Summary -->
+  <div class="amt-box">
+    <div class="amt-r"><span class="lbl">小計</span><span class="val">NT$ 55,400</span></div>
+    
+    <div class="amt-total"><span class="lbl">應付金額</span><span class="val">NT$ 55,400</span></div>
+    
+    <div class="amt-r"><span class="lbl">未收金額</span><span class="val unpaid">NT$ 55,400</span></div>
+  </div>
+
+  <!-- Bank Info -->
+  <div class="bank-box">
+    <div class="bank-title">付款資訊</div>
+    <div class="bank-row">
+      <span><strong>銀行代碼：</strong>013</span>
+      <span><strong>帳號：</strong>047035012164</span>
+      <span><strong>戶名：</strong>晟風工程行 洪宇風</span>
+    </div>
+  </div>
+
+  <!-- Notice -->
+  <div class="notice">
+    <strong>注意事項：</strong><br>
+    1. 請於請款單發出後 7 日內完成付款。<br>
+    2. 付款後請傳送匯款明細以便對帳。<br>
+    3. 如有問題請聯絡業務人員。
+  </div>
+
+  <!-- Signature -->
+  <div class="sig-row">
+    <div class="sig-box">客戶簽章<br><span style="font-size:6.5pt;color:#aaa">日期：________</span></div>
+    <div class="sig-box">製單日期：2026/7/7<br><span style="font-size:6.5pt;color:#aaa">&nbsp;</span></div>
+  </div>
+
+  <!-- Footer -->
+  <div class="pf">
+    <div>晟風工程有限公司　統編：93388506　Tel：0955-980-798</div>
+    <div>列印：2026/7/7</div>
+  </div>
+</div>
+</body>
+</html>
