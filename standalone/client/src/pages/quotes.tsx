@@ -221,7 +221,7 @@ const emptyForm = (docType: QuoteDocumentType = "formal"): QuoteForm => ({
   documentType: docType,
   workflowStage: docType === "intent" ? "待客戶選擇" : "待客戶確認",
   customerId: 0, customerName: "", contactPerson: "", customerPhone: "",
-  address: "", title: "", description: "", taxType: "未稅", salesRepId: 0,
+  address: "", title: "", description: "", taxType: "不另加稅", salesRepId: 0,
   status: "客戶確認中", notes: "", discountAmount: 0, items: [],
 });
 
@@ -1695,12 +1695,13 @@ export default function QuotesPage() {
                   </Select>
                 </div>
                 <div className="space-y-1.5">
-                  <Label>稅別</Label>
+                  <Label>報價稅額方式</Label>
                   <Select value={form.taxType} onValueChange={v => setForm(f => ({ ...f, taxType: v }))}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="未稅">○ 未稅（加計 5% 稅額）</SelectItem>
-                      <SelectItem value="含稅">○ 含稅（已含 5% 稅額）</SelectItem>
+                      <SelectItem value="不另加稅">○ 報價總額（不另加 5%）</SelectItem>
+                      <SelectItem value="未稅">○ 未稅報價（另外加計 5%）</SelectItem>
+                      <SelectItem value="含稅">○ 含稅報價（價格已含 5%）</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -1752,10 +1753,12 @@ export default function QuotesPage() {
                   <div className="bg-muted/40 rounded-md px-3 py-2 text-xs space-y-1">
                     <div className="flex justify-between text-muted-foreground"><span>項目小計</span><span>NT$ {rawTotal.toLocaleString()}</span></div>
                     <div className="flex justify-between text-muted-foreground"><span>折扣</span><span>{form.discountAmount > 0 ? `－ NT$ ${form.discountAmount.toLocaleString()}` : `NT$ 0`}</span></div>
-                    <div className="flex justify-between text-muted-foreground"><span>未稅小計</span><span>NT$ {preTax.toLocaleString()}</span></div>
-                    <div className="flex justify-between text-muted-foreground"><span>稅額 5%</span><span>NT$ {taxAmt.toLocaleString()}</span></div>
+                    {form.taxType !== "不另加稅" && (<>
+                      <div className="flex justify-between text-muted-foreground"><span>未稅小計</span><span>NT$ {preTax.toLocaleString()}</span></div>
+                      <div className="flex justify-between text-muted-foreground"><span>稅額 5%</span><span>NT$ {taxAmt.toLocaleString()}</span></div>
+                    </>)}
                     <div className="flex justify-between font-bold border-t pt-1 text-sm">
-                      <span>含稅總計</span><span>NT$ {total.toLocaleString()}</span>
+                      <span>{form.taxType === "不另加稅" ? "報價總計" : "含稅總計"}</span><span>NT$ {total.toLocaleString()}</span>
                     </div>
                   </div>
                 </div>
