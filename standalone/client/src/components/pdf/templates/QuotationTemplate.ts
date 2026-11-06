@@ -694,7 +694,7 @@ ${EQ_TABLE_FLOW_CSS}
           </div>
           <div class="info-item">
             <span class="info-label">稅別</span>
-            <span class="info-value">${esc(taxType)}</span>
+            <span class="info-value">${esc(taxType === "不另加稅" ? "不另加 5%" : taxType)}</span>
           </div>
         </div>
       </div>
@@ -729,9 +729,9 @@ ${EQ_TABLE_FLOW_CSS}
         <div class="amt-box">
           <div class="amt-r"><span class="lbl">項目小計</span><span class="val">${fmtMoney(rawTotal)}</span></div>
           <div class="amt-r"><span class="lbl">折扣</span>${discountVal}</div>
-          <div class="amt-r"><span class="lbl">未稅小計</span><span class="val">${fmtMoney(preTax)}</span></div>
-          <div class="amt-r"><span class="lbl">稅額 5%</span><span class="val">${fmtMoney(taxAmt)}</span></div>
-          <div class="amt-total"><span class="lbl">含稅總計</span><span class="val">${fmtMoney(total)}</span></div>
+          ${taxType === "不另加稅" ? "" : `<div class="amt-r"><span class="lbl">未稅小計</span><span class="val">${fmtMoney(preTax)}</span></div>
+          <div class="amt-r"><span class="lbl">稅額 5%</span><span class="val">${fmtMoney(taxAmt)}</span></div>`}
+          <div class="amt-total"><span class="lbl">${taxType === "不另加稅" ? "報價總計" : "含稅總計"}</span><span class="val">${fmtMoney(total)}</span></div>
         </div>
       </div>
     </div>

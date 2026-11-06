@@ -284,9 +284,9 @@ body{
       <div id="selectedListText" style="font-size:13px;color:#9ca3af;margin-bottom:8px">請勾選上方方案…</div>
       <div class="summary-row"><span>所選設備與施工小計</span><span id="sumRaw">NT$ 0</span></div>
       ${discountAmount > 0 ? `<div class="summary-row"><span>優惠折扣</span><span>- NT$ ${discountAmount.toLocaleString()}</span></div>` : ""}
-      <div class="summary-row"><span>未稅金額</span><span id="sumPreTax">NT$ 0</span></div>
-      <div class="summary-row"><span>營業稅 (5%)</span><span id="sumTax">NT$ 0</span></div>
-      <div class="summary-total"><span>含稅總計</span><span class="val" id="sumTotal">NT$ 0</span></div>
+      ${taxType === "不另加稅" ? "" : `<div class="summary-row"><span>未稅金額</span><span id="sumPreTax">NT$ 0</span></div>
+      <div class="summary-row"><span>營業稅 (5%)</span><span id="sumTax">NT$ 0</span></div>`}
+      <div class="summary-total"><span>${taxType === "不另加稅" ? "報價總計" : "含稅總計"}</span><span class="val" id="sumTotal">NT$ 0</span></div>
       <div id="errorMsg" class="error-msg"></div>
       <button type="button" id="submitBtn" class="btn-submit">確認選擇並產生正式報價</button>
     </div>
@@ -304,6 +304,7 @@ body{
   function computeTax(rawTotal, disc, taxType) {
     var d = Math.max(0, Number(disc) || 0);
     var afterDisc = Math.max(0, rawTotal - d);
+    if (taxType === "不另加稅") return { preTax: afterDisc, taxAmt: 0, total: afterDisc };
     if (taxType === "含稅") {
       var pre = Math.round(afterDisc / 1.05);
       return { preTax: pre, taxAmt: afterDisc - pre, total: afterDisc };
@@ -334,8 +335,8 @@ body{
     var rawTotal = selectedSum + FIXED_TOTAL;
     var res = computeTax(rawTotal, DISCOUNT, TAX_TYPE);
     document.getElementById("sumRaw").textContent = fmt(rawTotal);
-    document.getElementById("sumPreTax").textContent = fmt(res.preTax);
-    document.getElementById("sumTax").textContent = fmt(res.taxAmt);
+    if (document.getElementById("sumPreTax")) document.getElementById("sumPreTax").textContent = fmt(res.preTax);
+    if (document.getElementById("sumTax")) document.getElementById("sumTax").textContent = fmt(res.taxAmt);
     document.getElementById("sumTotal").textContent = fmt(res.total);
 
     var missingGroups = [];
