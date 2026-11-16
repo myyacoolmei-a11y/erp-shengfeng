@@ -15,6 +15,7 @@ export const FEATURE_KEYS = [
   "inventory",
   "warranty_maintenance",
   "employees",
+  "attendance",
   "users",
   "work_hours",
   "sales_stats",
@@ -45,6 +46,7 @@ export const FEATURE_LABELS: Record<FeatureKey, string> = {
   inventory: "庫存管理",
   warranty_maintenance: "保固保養",
   employees: "員工管理",
+  attendance: "出勤管理",
   users: "使用者管理",
   work_hours: "工時統計",
   sales_stats: "業務統計",
@@ -241,6 +243,15 @@ export const NAV_ITEMS: NavItemDef[] = [
 
   // 公司內部
   {
+    key: "attendance",
+    label: "出勤管理",
+    path: "/attendance",
+    group: "company_internal",
+    icon: "Clock",
+    visibleInSidebar: true,
+    visibleInPermissionEditor: true,
+  },
+  {
     key: "employees",
     label: "員工管理",
     path: "/employees",
@@ -366,6 +377,7 @@ export const LEGACY_FEATURE_MAP: Record<string, FeatureKey[]> = {
   maintenance: ["warranty_maintenance"],
   warranty_maintenance: ["warranty_maintenance"],
   employees: ["employees"],
+  attendance: ["attendance"],
   users: ["users"],
   work_hours: ["work_hours", "sales_stats"],
   sales_stats: ["sales_stats"],

@@ -136,7 +136,6 @@ export default function Employees() {
 
   const { user } = useAuth();
   const payrollOwner = hasRole(user, "owner", "super_admin");
-  const attendanceAdmin = hasRole(user, "owner", "super_admin", "admin");
   const { data: employees, isLoading } = useListEmployees({});
   const { data: performanceList } = useListEmployeesPerformance(perfParams, {
     query: { enabled: perfEnabled } as any,
@@ -191,7 +190,6 @@ export default function Employees() {
       </div>
 
       <div className="flex flex-wrap gap-2">
-        {attendanceAdmin && <Link href="/employees/attendance"><Button variant="outline">每日出勤登記</Button></Link>}
         {payrollOwner && <Link href="/employees/settings"><Button variant="outline">員工薪資設定</Button></Link>}
         {payrollOwner && <Link href="/employees/payroll"><Button variant="outline">每月薪資結算</Button></Link>}
       </div>

@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { useListEmployees } from "@workspace/api-client-react";
 import { useAuth, hasRole } from "@/contexts/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -95,9 +94,9 @@ function PayrollTab({employees}:{employees:{id:number;name:string}[]}){
  <Card><CardHeader><CardTitle>{month} 已建立薪資草稿／結算單</CardTitle></CardHeader><CardContent className="space-y-3">{payroll.length===0?<p className="text-sm text-muted-foreground">還沒有建立薪資草稿。</p>:payroll.map(p=><div key={p.id} className="border rounded-lg p-3 flex flex-wrap items-center justify-between gap-3"><div><p className="font-semibold">{p.employeeName} · {p.status==="draft"?"草稿":p.status==="approved"?"已核准":"已付款"}</p><p className="text-sm">出勤 {p.work_days} 天 · 實領 NT$ {asMoney(p.net_cents)}</p></div><div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" onClick={()=>statement(p)}>列印明細</Button>{p.status==="draft"&&<Button size="sm" onClick={()=>void action(p.id,"approve")}>核准</Button>}{p.status==="approved"&&<Button size="sm" onClick={()=>void action(p.id,"paid")}>標記已付款</Button>}</div></div>)}</CardContent></Card></div>;
 }
 export default function EmployeeAttendancePayroll({tab}:{tab:"attendance"|"settings"|"payroll"}){
- const {user}=useAuth();const boss=hasRole(user,"super_admin","owner");const {data:employees=[]}=useListEmployees({});
- const active=useMemo(()=>employees.filter(e=>e.status!=="離職").map(e=>({id:e.id,name:e.name})),[employees]);
- return <div className="space-y-4"><div><h1 className="text-2xl font-bold">員工管理｜{tab==="attendance"?"出勤登記":tab==="settings"?"薪資設定":"每月薪資結算"}</h1><p className="text-sm text-muted-foreground">出勤與薪資分開授權，所有資料儲存在正式 PostgreSQL 資料庫。</p></div>
- <div className="flex flex-wrap gap-2"><Link href="/employees"><Button variant="outline">員工名單</Button></Link><Link href="/employees/attendance"><Button variant={tab==="attendance"?"default":"outline"}>出勤登記</Button></Link>{boss&&<><Link href="/employees/settings"><Button variant={tab==="settings"?"default":"outline"}>薪資設定</Button></Link><Link href="/employees/payroll"><Button variant={tab==="payroll"?"default":"outline"}>薪資結算</Button></Link></>}</div>
+ const {user}=useAuth();const boss=hasRole(user,"super_admin","owner");
+ const {data:active=[]}=useQuery({queryKey:["attendance-employee-list"],queryFn:()=>api<{id:number;name:string}[]>("/employee-attendance/employees")});
+ return <div className="space-y-4"><div><h1 className="text-2xl font-bold">{tab==="attendance"?"出勤管理":tab==="settings"?"員工薪資設定":"每月薪資結算"}</h1><p className="text-sm text-muted-foreground">出勤與薪資分開授權，所有資料儲存在正式 PostgreSQL 資料庫。</p></div>
+ <div className="flex flex-wrap gap-2">{boss&&<Link href="/employees"><Button variant="outline">員工管理</Button></Link>}<Link href="/attendance"><Button variant={tab==="attendance"?"default":"outline"}>出勤登記</Button></Link>{boss&&<><Link href="/employees/settings"><Button variant={tab==="settings"?"default":"outline"}>薪資設定</Button></Link><Link href="/employees/payroll"><Button variant={tab==="payroll"?"default":"outline"}>薪資結算</Button></Link></>}</div>
  {tab==="attendance"?<AttendanceTab employees={active}/>:!boss?<div className="p-5 border rounded-lg">只有老闆帳號可以查看薪資資料。</div>:tab==="settings"?<SettingsTab employees={active}/>:<PayrollTab employees={active}/>}</div>;
 }

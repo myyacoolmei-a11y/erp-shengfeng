@@ -14,6 +14,15 @@ const int = (n: unknown) => Number(n);
 const error = (res: Response, e: unknown) => res.status(400).json({ error: e instanceof Error ? e.message : "資料格式錯誤" });
 const employeeExists = async (id: number) => (await pool.query("SELECT 1 FROM employees WHERE id=$1", [id])).rowCount === 1;
 
+// Attendance roster: only the minimum fields needed for daily check-in.
+// Never reuse the employee-management response in administrative attendance pages.
+router.get("/employee-attendance/employees", attendanceRoles, async(_req,res)=>{
+  try {
+    const result = await pool.query(`SELECT id, name FROM employees WHERE status <> '離職' ORDER BY id`);
+    res.json(result.rows);
+  } catch(e) { error(res,e); }
+});
+
 // Attendance API never selects or returns compensation columns; no sensitive data in admin responses.
 router.get("/employee-attendance", attendanceRoles, async (req, res) => {
   try {

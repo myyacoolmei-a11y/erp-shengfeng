@@ -71,6 +71,7 @@ const ROLE_FEATURES: Record<string, FeatureKey[]> = {
   super_admin: ALL_FEATURES,
   owner: ALL_FEATURES,
   admin: [
+    "attendance",
     "dashboard",
     "customers",
     "quotations",
@@ -125,6 +126,7 @@ export const PERMISSION_TEMPLATES: Record<PermissionTemplateKey, PermissionTempl
     label: "行政",
     roles: ["admin"],
     features: [
+      "attendance",
       "dashboard",
       "customers",
       "quotations",
@@ -282,6 +284,9 @@ export function looksLikeAdminFeatureSet(features: string[]): boolean {
 export function navHrefAllowed(user: PermissionUserLike, href: string): boolean {
   const roles = effectiveRolesFromUser(user);
   if (roles.includes("super_admin") || roles.includes("owner")) return true;
+  // Existing administrative accounts may have an explicit legacy feature list.
+  // Attendance is allowed by admin role, without granting employees management.
+  if (href === "/attendance" && roles.includes("admin")) return true;
   const required = featureForPath(href);
   if (!required) return true;
   return hasFeaturePermission(user, required);

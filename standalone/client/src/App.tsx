@@ -328,11 +328,12 @@ function AppRoutes() {
             <Route path="/inventory">
               <Guard feature="inventory"><Inventory /></Guard>
             </Route>
-            <Route path="/employees/attendance"><Guard feature="employees" roles={["super_admin","owner","admin"]}><EmployeeAttendancePayroll tab="attendance" /></Guard></Route>
+            <Route path="/attendance"><RoleGuard roles={["super_admin","owner","admin"]}><EmployeeAttendancePayroll tab="attendance" /></RoleGuard></Route>
+            <Route path="/employees/attendance"><Redirect to="/attendance" /></Route>
             <Route path="/employees/settings"><Guard feature="employees" roles={["super_admin","owner"]}><EmployeeAttendancePayroll tab="settings" /></Guard></Route>
             <Route path="/employees/payroll"><Guard feature="employees" roles={["super_admin","owner"]}><EmployeeAttendancePayroll tab="payroll" /></Guard></Route>
             <Route path="/employees">
-              <Guard feature="employees"><Employees /></Guard>
+              <Guard feature="employees" roles={["super_admin","owner"]}><Employees /></Guard>
             </Route>
             <Route path="/partner-culture">
               <Guard feature="company_culture"><PartnerCultureRoute /></Guard>
