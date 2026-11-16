@@ -1,4 +1,6 @@
 import { useState, useMemo } from "react";
+import { Link } from "wouter";
+import { useAuth, hasRole } from "@/contexts/auth-context";
 import {
   useListEmployees, useCreateEmployee, useUpdateEmployee,
   useListEmployeesPerformance, useGetEmployeePerformance,
@@ -132,6 +134,9 @@ export default function Employees() {
 
   const perfEnabled = periodMode !== "custom" || (customFrom.length > 0 && customTo.length > 0);
 
+  const { user } = useAuth();
+  const payrollOwner = hasRole(user, "owner", "super_admin");
+  const attendanceAdmin = hasRole(user, "owner", "super_admin", "admin");
   const { data: employees, isLoading } = useListEmployees({});
   const { data: performanceList } = useListEmployeesPerformance(perfParams, {
     query: { enabled: perfEnabled } as any,
@@ -185,6 +190,11 @@ export default function Employees() {
         </Button>
       </div>
 
+      <div className="flex flex-wrap gap-2">
+        {attendanceAdmin && <Link href="/employees/attendance"><Button variant="outline">每日出勤登記</Button></Link>}
+        {payrollOwner && <Link href="/employees/settings"><Button variant="outline">員工薪資設定</Button></Link>}
+        {payrollOwner && <Link href="/employees/payroll"><Button variant="outline">每月薪資結算</Button></Link>}
+      </div>
       <div className="flex gap-2 flex-wrap items-center">
         {["全部", "在職", "配合", "離職"].map(s => (
           <button
