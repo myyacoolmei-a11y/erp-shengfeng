@@ -1,6 +1,9 @@
 /**
  * Quotation A4 table flow — run: npx tsx scripts/test-quote-a4-row-flow.ts
  */
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { buildQuotationHtml } from "../client/src/components/pdf/templates/QuotationTemplate.ts";
 
 function assert(cond: unknown, msg: string) {
@@ -97,10 +100,15 @@ assert(html.includes("table-layout:fixed"), "table-layout fixed");
 assert(html.includes("font-weight:500"), "medium table weight");
 assert(html.includes("line-height:1.4"), "line-height 1.4");
 assert(html.includes("overflow:visible"), "cells must not clip");
-assert(html.includes("font-size:12px"), "header/item 12px");
-assert(html.includes("font-size:11.5px"), "category/qty/price 11.5px");
+assert(html.includes("font-size:14px"), "header/item 14px");
+assert(html.includes("font-size:13.5px"), "category/qty/price 13.5px");
+assert(html.includes("font-size:13px!important;font-weight:500!important"), "notes 13px medium");
+assert(html.includes(".quotation-print-page .eq-table tbody td{\n  font-size:14px!important"), "tbody 14px override");
 assert(!html.includes("font-size:8px"), "do not use 8px table type");
-assert(!html.includes("font-size:10px!important"), "notes must not stay at 10px");
+assert(!html.includes("font-size:11px!important"), "eq-table must not stay at 11px");
+assert(!html.includes("font-size:11.5px"), "no leftover 11.5px compact size");
+assert(!html.includes(".quotation-print-page .eq-table tbody td{\n  font-size:12px"), "tbody must not stay 12px");
+assert(!html.includes("font-weight:600!important;font-size:12px!important"), "header must not stay 12px");
 assert(!/\.eq-table tbody td\{[^}]*overflow:hidden/.test(html), "td must not overflow:hidden");
 assert(!/\.eq-table tbody td \.cell-text\{[^}]*overflow:hidden/.test(html), "cell-text must not overflow:hidden");
 assert(!/quotation-print-page \.eq-table[\s\S]{0,400}font-weight:700/.test(html), "eq-table must not use 700");
@@ -130,6 +138,19 @@ for (const text of ["安裝新機", "冰點冷氣變頻1級吊隱式", "FD/FU-73
   assert(html98.includes(text), `0098 missing ${text}`);
 }
 assert(!/<th[^>]*>品牌<\/th>/.test(html98), "0098 no brand header");
+
+const pdfService = readFileSync(
+  join(dirname(fileURLToPath(import.meta.url)), "../client/src/components/pdf/pdf-service.ts"),
+  "utf8",
+);
+assert(pdfService.includes('? "14px" : isNotes ? "13px" : "13.5px"'), "PDF clone inline font sizes");
+assert(pdfService.includes("font-size:14px!important"), "PDF clone CSS 14px");
+assert(pdfService.includes("font-size:13.5px!important"), "PDF clone CSS 13.5px");
+assert(pdfService.includes("font-size:13px!important"), "PDF clone CSS 13px notes");
+assert(!pdfService.includes('? "12px" : isNotes ? "11px" : "11.5px"'), "PDF clone must not keep 12px setter");
+assert(!pdfService.includes("font-size:11.5px!important"), "PDF clone must not keep 11.5px");
+assert(!pdfService.includes("font-size:12px!important"), "PDF clone must not keep 12px table type");
+assert(!pdfService.includes("font-size:11px!important"), "PDF clone must not keep 11px notes");
 
 if (process.exitCode) {
   console.error("quote A4 row-flow tests failed");
