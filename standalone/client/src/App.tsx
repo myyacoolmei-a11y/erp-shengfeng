@@ -27,6 +27,7 @@ import AdminWorkbench from "@/pages/admin-workbench";
 import OperationCenterPage from "@/pages/operation-center";
 import SubsidyUploadPage from "@/pages/subsidy-upload";
 import Employees from "@/pages/employees";
+import EmployeeAttendancePayroll from "@/pages/employee-attendance-payroll";
 import Products from "@/pages/products";
 import WholesaleCustomers from "@/pages/wholesale-customers";
 import WholesaleProducts from "@/pages/wholesale-products";
@@ -327,6 +328,9 @@ function AppRoutes() {
             <Route path="/inventory">
               <Guard feature="inventory"><Inventory /></Guard>
             </Route>
+            <Route path="/employees/attendance"><Guard feature="employees" roles={["super_admin","owner","admin"]}><EmployeeAttendancePayroll tab="attendance" /></Guard></Route>
+            <Route path="/employees/settings"><Guard feature="employees" roles={["super_admin","owner"]}><EmployeeAttendancePayroll tab="settings" /></Guard></Route>
+            <Route path="/employees/payroll"><Guard feature="employees" roles={["super_admin","owner"]}><EmployeeAttendancePayroll tab="payroll" /></Guard></Route>
             <Route path="/employees">
               <Guard feature="employees"><Employees /></Guard>
             </Route>
