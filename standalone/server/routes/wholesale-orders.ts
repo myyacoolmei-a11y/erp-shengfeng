@@ -8,9 +8,10 @@ import {
   listDeliveryWorkOrders,
   shippedQtyByWholesaleItem,
   WholesaleDeliveryError,
+  updateDeliveryWorkOrder,
 } from "../lib/wholesale/wholesaleDeliveryService.ts";
 import { z } from "zod/v4";
-import { requireFeature } from "../lib/auth";
+import { requireFeature, requireRole } from "../lib/auth";
 import {
   deriveWholesalePaymentStatus,
   parseMoney,
@@ -321,6 +322,36 @@ router.post("/wholesale/orders/:id/deliveries", async (req, res): Promise<void> 
       return;
     }
     res.status(500).json({ error: "建立出貨單失敗" });
+  }
+});
+
+router.patch("/wholesale/orders/:id/deliveries/:deliveryId", requireRole("super_admin", "owner", "admin", "sales"), async (req, res): Promise<void> => {
+  const id = parseId(req.params.id);
+  const deliveryId = parseId(req.params.deliveryId);
+  if (!Number.isInteger(id) || !Number.isInteger(deliveryId) || id < 1 || deliveryId < 1) {
+    res.status(400).json({ error: "無效的出貨單編號" }); return;
+  }
+  const body = z.object({
+    items: z.array(z.object({ wholesaleOrderItemId: z.number().int().positive(), shipQty: z.number().int().min(0) })),
+    technicians: z.array(z.string().trim().min(1)).default([]),
+    primaryTechnician: z.string().optional(),
+    extraTechnician: z.string().optional(),
+    scheduledDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    notes: z.string().optional(),
+  }).safeParse(req.body);
+  if (!body.success) { res.status(400).json({ error: "出貨資料格式有誤" }); return; }
+  try {
+    const updated = await updateDeliveryWorkOrder({
+      wholesaleOrderId: id,
+      workOrderId: deliveryId,
+      ...body.data,
+    });
+    res.json(updated);
+  } catch (err) {
+    if (err instanceof WholesaleDeliveryError) {
+      res.status(err.status).json({ error: err.message }); return;
+    }
+    res.status(500).json({ error: "出貨單修改儲存失敗" });
   }
 });
 

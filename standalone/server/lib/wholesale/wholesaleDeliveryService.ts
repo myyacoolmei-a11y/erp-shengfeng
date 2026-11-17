@@ -54,6 +54,9 @@ export async function listDeliveryWorkOrders(wholesaleOrderId: number) {
       scheduledDate: workOrdersTable.scheduledDate,
       assignedTo: workOrdersTable.assignedTo,
       primaryTechnician: workOrdersTable.primaryTechnician,
+      technicians: workOrdersTable.technicians,
+      extraTechnician: workOrdersTable.extraTechnician,
+      notes: workOrdersTable.notes,
       deliveryConfirmedAt: workOrdersTable.deliveryConfirmedAt,
       parentWorkOrderId: workOrdersTable.parentWorkOrderId,
     })
@@ -204,6 +207,125 @@ export async function createDeliveryWorkOrder(opts: {
   if (deliveryRows.length) await db.insert(workOrderDeliveryItemsTable).values(deliveryRows);
 
   return { workOrderId: wo.id, workOrderNumber };
+}
+
+/** 修改尚未確認的批發出貨派工單，連動出貨數量及派工設備清單。 */
+export async function updateDeliveryWorkOrder(opts: {
+  wholesaleOrderId: number;
+  workOrderId: number;
+  items: Array<{ wholesaleOrderItemId: number; shipQty: number }>;
+  technicians?: string[];
+  primaryTechnician?: string;
+  extraTechnician?: string;
+  scheduledDate?: string;
+  notes?: string;
+}) {
+  return await db.transaction(async (tx) => {
+    const [wo] = await tx.select().from(workOrdersTable).where(and(
+      eq(workOrdersTable.id, opts.workOrderId),
+      eq(workOrdersTable.wholesaleOrderId, opts.wholesaleOrderId),
+    ));
+    if (!wo) throw new WholesaleDeliveryError("找不到這筆批發出貨單", 404);
+    if (wo.deliveryConfirmedAt) throw new WholesaleDeliveryError("已確認出貨，無法直接修改，請依退貨／更正流程處理", 409);
+
+    const existing = await tx.select().from(workOrderDeliveryItemsTable)
+      .where(eq(workOrderDeliveryItemsTable.workOrderId, wo.id));
+    if (existing.some((line) => line.inventoryDeductedAt)) {
+      throw new WholesaleDeliveryError("此單已扣庫存，請先依庫存更正流程處理", 409);
+    }
+    const orderLines = await tx.select().from(wholesaleOrderItemsTable)
+      .where(eq(wholesaleOrderItemsTable.orderId, opts.wholesaleOrderId));
+    const sourceById = new Map(orderLines.map((line) => [line.id, line]));
+    const nextQty = new Map<number, number>();
+    for (const line of opts.items) {
+      if (!Number.isInteger(line.wholesaleOrderItemId) || !Number.isInteger(line.shipQty) || line.shipQty < 0) {
+        throw new WholesaleDeliveryError("出貨數量必須為非負整數");
+      }
+      if (!sourceById.has(line.wholesaleOrderItemId) || nextQty.has(line.wholesaleOrderItemId)) {
+        throw new WholesaleDeliveryError("出貨品項不存在或重複");
+      }
+      nextQty.set(line.wholesaleOrderItemId, line.shipQty);
+    }
+    if (![...nextQty.values()].some((n) => n > 0)) {
+      throw new WholesaleDeliveryError("請至少保留一筆出貨數量");
+    }
+    const allDeliveryLines = await tx.select({
+      workOrderId: workOrderDeliveryItemsTable.workOrderId,
+      wholesaleOrderItemId: workOrderDeliveryItemsTable.wholesaleOrderItemId,
+      shipQty: workOrderDeliveryItemsTable.shipQty,
+    }).from(workOrderDeliveryItemsTable)
+      .where(eq(workOrderDeliveryItemsTable.wholesaleOrderId, opts.wholesaleOrderId));
+    for (const [itemId, qty] of nextQty) {
+      const alreadyElsewhere = allDeliveryLines.filter((line) =>
+        line.workOrderId !== wo.id && line.wholesaleOrderItemId === itemId,
+      ).reduce((sum, line) => sum + line.shipQty, 0);
+      const ordered = sourceById.get(itemId)!.qty;
+      if (qty + alreadyElsewhere > ordered) {
+        throw new WholesaleDeliveryError(`${sourceById.get(itemId)!.productName} 超過剩餘可出貨數量（最多 ${ordered - alreadyElsewhere}）`);
+      }
+    }
+    const extra = (opts.extraTechnician ?? "").trim();
+    const names = [...new Set((opts.technicians ?? []).map((n) => n.trim()).filter(Boolean))];
+    const techPayload = buildTechniciansPayload(names, extra);
+    const primaryCandidate = (opts.primaryTechnician ?? "").trim();
+    const primary = primaryCandidate && [ ...names, extra ].includes(primaryCandidate)
+      ? primaryCandidate : techPayload.assignedTo || null;
+    const validLines = [...nextQty].filter(([, qty]) => qty > 0);
+    const description = validLines.map(([itemId, qty]) => {
+      const src = sourceById.get(itemId)!;
+      return `${src.productName}${src.model ? ` ${src.model}` : ""} × ${qty}${src.unit || ""}`;
+    }).join("\n");
+
+    await tx.update(workOrdersTable).set({
+      technicians: techPayload.technicians ?? null,
+      assignedTo: primary,
+      assistantTo: [...names, ...(extra ? [extra] : [])].find((n) => n !== primary) ?? null,
+      primaryTechnician: primary,
+      extraTechnician: extra || null,
+      scheduledDate: opts.scheduledDate || wo.scheduledDate,
+      description,
+      notes: opts.notes ?? wo.notes,
+    }).where(eq(workOrdersTable.id, wo.id));
+
+    // 出貨數量及派工單顯示商品必須同步，且不觸碰批發原始訂單品項。
+    await tx.delete(workOrderDeliveryItemsTable).where(eq(workOrderDeliveryItemsTable.workOrderId, wo.id));
+    await tx.delete(workOrderEquipmentItemsTable).where(and(
+      eq(workOrderEquipmentItemsTable.workOrderId, wo.id),
+      eq(workOrderEquipmentItemsTable.category, "批發出貨"),
+    ));
+    const shipmentRows = validLines.map(([itemId, qty], idx) => {
+      const src = sourceById.get(itemId)!;
+      return {
+        workOrderId: wo.id,
+        wholesaleOrderId: opts.wholesaleOrderId,
+        wholesaleOrderItemId: itemId,
+        productId: src.productId ?? null,
+        productName: src.productName,
+        brand: src.brand ?? null,
+        model: src.model ?? null,
+        unit: src.unit || "台",
+        orderedQty: src.qty,
+        shipQty: qty,
+        sortOrder: idx,
+      };
+    });
+    await tx.insert(workOrderDeliveryItemsTable).values(shipmentRows);
+    await tx.insert(workOrderEquipmentItemsTable).values(validLines.map(([itemId, qty], idx) => {
+      const src = sourceById.get(itemId)!;
+      return {
+        workOrderId: wo.id,
+        productId: src.productId ?? null,
+        category: "批發出貨",
+        itemName: src.productName,
+        brand: src.brand ?? null,
+        model: src.model ?? null,
+        quantity: qty,
+        unit: src.unit || "台",
+        sortOrder: idx,
+      };
+    }));
+    return { workOrderId: wo.id, workOrderNumber: wo.workOrderNumber };
+  });
 }
 
 export async function createRelatedInstallWorkOrder(parentWorkOrderId: number) {

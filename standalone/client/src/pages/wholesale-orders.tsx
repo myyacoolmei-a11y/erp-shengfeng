@@ -246,6 +246,7 @@ export default function WholesaleOrders() {
   const [paying, setPaying] = useState(false);
   const [deletingPaymentId, setDeletingPaymentId] = useState<number | null>(null);
   const [deliveryOrder, setDeliveryOrder] = useState<any | null>(null);
+  const [editingDelivery, setEditingDelivery] = useState<any | null>(null);
   const [deliveryQtys, setDeliveryQtys] = useState<Record<number, number>>({});
   const [deliveryTechs, setDeliveryTechs] = useState<string[]>([]);
   const [deliveryPrimary, setDeliveryPrimary] = useState("");
@@ -267,7 +268,11 @@ export default function WholesaleOrders() {
   const { data: customers } = useListWholesaleCustomers({});
   const { data: products } = useListWholesaleProducts({ forSelection: "true" });
   const { data: employees } = useListEmployees();
-  const technicianOptions = (employees ?? []).filter((e: any) => e.position?.includes("技師") && e.status !== "離職");
+  // 配送不限「技師」職位：兼任業務、行政的同仁也可能負責送貨。
+  // 依姓名去重，防止舊資料同一人以多種職位重複出現。
+  const technicianOptions = Array.from(new Map((employees ?? [])
+    .filter((e: any) => e.status !== "離職" && String(e.name ?? "").trim())
+    .map((e: any) => [String(e.name).trim(), e])).values());
   const { data: orderPayments = [], isPending: paymentsPending, refetch: refetchOrderPayments } = useQuery({
     queryKey: ["wholesale-order-payments", receivableOrderId],
     queryFn: () => listWholesalePaymentsByOrder(receivableOrderId!),
@@ -466,6 +471,7 @@ export default function WholesaleOrders() {
                               qtys[it.id] = it.pendingQty ?? Math.max(0, (it.qty ?? 0) - (it.shippedQty ?? 0));
                             }
                             setDeliveryQtys(qtys);
+                            setEditingDelivery(null);
                             setDeliveryTechs([]);
                             setDeliveryPrimary("");
                             setDeliveryExtra("");
@@ -803,10 +809,10 @@ export default function WholesaleOrders() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <Dialog open={!!deliveryOrder} onOpenChange={(open) => { if (!open) setDeliveryOrder(null); }}>
+      <Dialog open={!!deliveryOrder} onOpenChange={(open) => { if (!open) { setDeliveryOrder(null); setEditingDelivery(null); } }}>
         <DialogContent className="max-w-lg w-[calc(100vw-1rem)]">
           <DialogHeader>
-            <DialogTitle>建立出貨單（派工單）</DialogTitle>
+            <DialogTitle>{editingDelivery ? "修改出貨單（派工單）" : "建立出貨單（派工單）"}</DialogTitle>
           </DialogHeader>
           {deliveryOrder && (
             <div className="space-y-3">
@@ -815,7 +821,8 @@ export default function WholesaleOrders() {
               </p>
               <div className="border rounded-md divide-y text-sm">
                 {(deliveryOrder.items ?? []).map((it: any) => {
-                  const pending = it.pendingQty ?? Math.max(0, (it.qty ?? 0) - (it.shippedQty ?? 0));
+                  const oldQty = editingDelivery?.items?.find((line: any) => line.wholesaleOrderItemId === it.id)?.shipQty ?? 0;
+                  const pending = (it.pendingQty ?? Math.max(0, (it.qty ?? 0) - (it.shippedQty ?? 0))) + oldQty;
                   return (
                     <div key={it.id} className="p-2 space-y-1">
                       <p className="font-medium">{it.productName} {it.model || ""}</p>
@@ -837,11 +844,28 @@ export default function WholesaleOrders() {
               </div>
               {(deliveryOrder.deliveries ?? []).length > 0 && (
                 <div className="text-xs space-y-1">
-                  <p className="font-medium">已建立出貨單</p>
+                  <p className="font-medium">已建立出貨單（未確認的單據可按「修改」）</p>
                   {deliveryOrder.deliveries.map((d: any) => (
-                    <Link key={d.id} href="/work-orders" className="block text-blue-600 hover:underline">
-                      {d.workOrderNumber || `#${d.id}`} {d.deliveryConfirmedAt ? "（已確認出貨）" : "（未確認）"}
-                    </Link>
+                    <div key={d.id} className="flex items-center justify-between gap-2 rounded border p-2">
+                      <div className="min-w-0">
+                        <p>{d.workOrderNumber || `#${d.id}`} {d.deliveryConfirmedAt ? "（已確認出貨）" : "（未確認）"}</p>
+                        <p className="text-muted-foreground">{d.primaryTechnician || d.assignedTo || "尚未指定配送人員"} · {d.scheduledDate || "未指定日期"}</p>
+                      </div>
+                      {!d.deliveryConfirmedAt && (
+                        <Button type="button" size="sm" variant="outline" onClick={() => {
+                          setEditingDelivery(d);
+                          setDeliveryQtys(Object.fromEntries((d.items ?? []).map((it: any) => [it.wholesaleOrderItemId, it.shipQty])));
+                          let names: string[] = [];
+                          try { const parsed = JSON.parse(d.technicians || "[]"); if (Array.isArray(parsed)) names = parsed.filter((n: any) => typeof n === "string"); } catch { /* 舊資料可用主要人員回填 */ }
+                          if (!names.length) names = [d.primaryTechnician, d.assignedTo].filter(Boolean);
+                          setDeliveryTechs(Array.from(new Set(names.filter((n) => n !== d.extraTechnician))));
+                          setDeliveryPrimary(d.primaryTechnician || d.assignedTo || "");
+                          setDeliveryExtra(d.extraTechnician || "");
+                          setDeliveryDate((d.scheduledDate || todayStr()).slice(0, 10));
+                          setDeliveryNotes(d.notes || "");
+                        }}>修改</Button>
+                      )}
+                    </div>
                   ))}
                 </div>
               )}
@@ -853,10 +877,11 @@ export default function WholesaleOrders() {
                       <Checkbox
                         checked={deliveryTechs.includes(emp.name)}
                         onCheckedChange={() => {
-                          setDeliveryTechs((list) =>
-                            list.includes(emp.name) ? list.filter((n) => n !== emp.name) : [...list, emp.name],
-                          );
-                          if (!deliveryPrimary) setDeliveryPrimary(emp.name);
+                          const selected = deliveryTechs.includes(emp.name);
+                          const next = selected ? deliveryTechs.filter((n) => n !== emp.name) : [...deliveryTechs, emp.name];
+                          setDeliveryTechs(next);
+                          if (!selected && !deliveryPrimary) setDeliveryPrimary(emp.name);
+                          if (selected && deliveryPrimary === emp.name) setDeliveryPrimary(next[0] || "");
                         }}
                       />
                       <span className="text-sm flex-1">{emp.name}</span>
@@ -882,7 +907,7 @@ export default function WholesaleOrders() {
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeliveryOrder(null)}>取消</Button>
+            <Button variant="outline" onClick={() => { setEditingDelivery(null); setDeliveryOrder(null); }}>取消</Button>
             <Button
               disabled={deliverySaving}
               onClick={async () => {
@@ -890,8 +915,10 @@ export default function WholesaleOrders() {
                 setDeliverySaving(true);
                 try {
                   const token = localStorage.getItem("erp_auth_token");
-                  const res = await fetch(`/api/wholesale/orders/${deliveryOrder.id}/deliveries`, {
-                    method: "POST",
+                  const res = await fetch(editingDelivery
+                    ? `/api/wholesale/orders/${deliveryOrder.id}/deliveries/${editingDelivery.id}`
+                    : `/api/wholesale/orders/${deliveryOrder.id}/deliveries`, {
+                    method: editingDelivery ? "PATCH" : "POST",
                     headers: {
                       "Content-Type": "application/json",
                       ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -910,8 +937,14 @@ export default function WholesaleOrders() {
                   });
                   const data = await res.json().catch(() => ({}));
                   if (!res.ok) throw new Error(data.error || "建立失敗");
-                  toast({ title: `已建立出貨派工單 ${data.workOrderNumber || ""}` });
-                  setDeliveryOrder(null);
+                  toast({ title: editingDelivery ? "出貨單修改已儲存" : `已建立出貨派工單 ${data.workOrderNumber || ""}` });
+                  const currentId = deliveryOrder.id;
+                  const updated = await getWholesaleOrder(currentId);
+                  setEditingDelivery(null);
+                  setDeliveryOrder(updated);
+                  const nextQtys: Record<number, number> = {};
+                  for (const it of (updated as any).items ?? []) nextQtys[it.id] = it.pendingQty ?? 0;
+                  setDeliveryQtys(nextQtys);
                   invOrders();
                 } catch (err: any) {
                   toast({ title: err.message || "建立出貨單失敗", variant: "destructive" });
@@ -919,7 +952,7 @@ export default function WholesaleOrders() {
                   setDeliverySaving(false);
                 }
               }}
-            >建立出貨單</Button>
+            >{editingDelivery ? "儲存修改" : "建立出貨單"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
