@@ -28,6 +28,7 @@ const api=async <T,>(path:string,method="GET",body?:unknown):Promise<T>=>{
 type Attendance={employeeId:number;date:string;status:string;startTime:string|null;endTime:string|null;breakMinutes:number;workedMinutes:number;leaveMinutes:number;leaveType:string|null;note:string};
 type PaySetting={employeeId:number;employmentType:string;payType:string;baseCents:number;laborCents:number;healthCents:number;fixedAllowanceCents:number;dayHours:number;effectiveFrom:string};
 type Payroll={id:number;employee_id:number;employeeName:string;status:string;work_days:string;leave_hours:string;base_cents:string;allowance_cents:string;bonus_cents:string;overtime_cents:string;leave_deduct_cents:string;labor_cents:string;health_cents:string;other_deduct_cents:string;gross_cents:string;net_cents:string;source_mode:string};
+type AttendancePreference={employeeId:number;name:string;requiresAttendance:boolean};
 type Monthly={employeeId:number;attendanceDays:number;workedMinutes:number;leaveMinutes:number;exceptions:number};
 const blankSetting=(employeeId:number):PaySetting=>({employeeId,employmentType:"full_time",payType:"monthly",baseCents:0,laborCents:0,healthCents:0,fixedAllowanceCents:0,dayHours:8,effectiveFrom:todayTaiwan()});
 const blankAttendance=(employeeId:number,date:string):Attendance=>({employeeId,date,status:"unrecorded",startTime:null,endTime:null,breakMinutes:0,workedMinutes:0,leaveMinutes:0,leaveType:null,note:""});
@@ -36,7 +37,7 @@ function MoneyField({label,value,onChange}:{label:string;value:number;onChange:(
 function AttendanceTab({employees}:{employees:{id:number;name:string}[]}){
  const qc=useQueryClient();const {toast}=useToast();const [date,setDate]=useState(todayTaiwan());const [employeeId,setEmployeeId]=useState(0);
  const {data=[],isLoading}=useQuery({queryKey:["attendance",date],queryFn:()=>api<Attendance[]>(`/employee-attendance?date=${date}`)});
- useEffect(()=>{if(!employeeId&&employees.length)setEmployeeId(employees[0].id);},[employeeId,employees]);
+ useEffect(()=>{if(employees.length&&!employees.some(e=>e.id===employeeId))setEmployeeId(employees[0].id);},[employeeId,employees]);
  const saved=data.find(r=>r.employeeId===employeeId);
  const [form,setForm]=useState<Attendance>(blankAttendance(employeeId,date));
  useEffect(()=>{setForm(saved??blankAttendance(employeeId,date));},[saved?.employeeId,saved?.date,saved?.status,saved?.startTime,saved?.endTime,saved?.workedMinutes,saved?.leaveMinutes,employeeId,date]);
@@ -53,38 +54,55 @@ function AttendanceTab({employees}:{employees:{id:number;name:string}[]}){
  <Button onClick={()=>void save()} disabled={busy||!employeeId}>{busy?"儲存中…":"儲存今日出勤"}</Button></>}
  </CardContent></Card><p className="text-xs text-muted-foreground">行政只能記錄實際出勤，不會在這裡顯示任何底薪或薪資金額。未登記不代表曠職，也不會自動扣薪。</p></div>;
 }
+function AttendanceExemptionSettings(){
+ const qc=useQueryClient();const {toast}=useToast();const [busyId,setBusyId]=useState<number|null>(null);
+ const {data:preferences=[]}=useQuery({queryKey:["attendance-preferences"],queryFn:()=>api<AttendancePreference[]>("/employee-attendance/preferences")});
+ async function change(item:AttendancePreference){try{setBusyId(item.employeeId);
+  await api(`/employee-attendance/preferences/${item.employeeId}`,"PUT",{requiresAttendance:!item.requiresAttendance});
+  await qc.invalidateQueries({queryKey:["attendance-preferences"]});
+  await qc.invalidateQueries({queryKey:["attendance-employee-list"]});
+  await qc.invalidateQueries({queryKey:["attendance-month"]});
+  toast({title:`${item.name} 已設為${item.requiresAttendance?"免出勤登記":"需要出勤登記"}`});
+ }catch(e){toast({title:"設定失敗",description:String(e),variant:"destructive"});}finally{setBusyId(null);}}
+ return <Card><CardHeader><CardTitle>出勤登記設定（僅老闆）</CardTitle></CardHeader><CardContent className="space-y-3">
+ <p className="text-sm text-muted-foreground">設定哪些人需要行政每日點名；免登記者不會出現在行政點名清單，也不會被算成未出勤。與職位、系統權限、薪資結算分開。</p>
+ <div className="grid sm:grid-cols-2 gap-2">{preferences.map(item=><div key={item.employeeId} className="border rounded-lg px-3 py-2 flex items-center justify-between gap-3"><div className="min-w-0"><p className="font-medium truncate">{item.name}</p><p className="text-xs text-muted-foreground">{item.requiresAttendance?"需要點名":"免出勤登記"}</p></div><Button type="button" size="sm" variant={item.requiresAttendance?"outline":"default"} disabled={busyId===item.employeeId} onClick={()=>void change(item)}>{item.requiresAttendance?"改為免登記":"改為需登記"}</Button></div>)}</div>
+ </CardContent></Card>;
+}
 function SettingsTab({employees}:{employees:{id:number;name:string}[]}){
  const qc=useQueryClient();const {toast}=useToast();const [employeeId,setEmployeeId]=useState(0);
  const {data=[]}=useQuery({queryKey:["pay-settings"],queryFn:()=>api<PaySetting[]>("/employee-pay-settings")});
- useEffect(()=>{if(!employeeId&&employees.length)setEmployeeId(employees[0].id);},[employeeId,employees]);
+ useEffect(()=>{if(employees.length&&!employees.some(e=>e.id===employeeId))setEmployeeId(employees[0].id);},[employeeId,employees]);
  const selected=data.find(s=>s.employeeId===employeeId);
  const [form,setForm]=useState<PaySetting>(blankSetting(0));
  useEffect(()=>{setForm(selected??blankSetting(employeeId));},[employeeId,selected?.employeeId,selected?.baseCents,selected?.effectiveFrom]);
  const [busy,setBusy]=useState(false);const update=(field:keyof PaySetting,value:string|number)=>setForm(f=>({...f,[field]:value}));
  async function save(){try{setBusy(true);await api("/employee-pay-settings","PUT",{...form,employeeId});await qc.invalidateQueries({queryKey:["pay-settings"]});toast({title:"薪資設定已儲存"});}catch(e){toast({title:"無法儲存",description:String(e),variant:"destructive"});}finally{setBusy(false);}}
- return <Card><CardHeader><CardTitle>員工固定薪資設定（限老闆）</CardTitle></CardHeader><CardContent className="space-y-4"><div><Label>員工</Label><Choice value={String(employeeId)} onChange={v=>setEmployeeId(Number(v))} options={employees.map(e=>({value:String(e.id),label:e.name}))}/></div>
+ return <div className="space-y-4"><AttendanceExemptionSettings/><Card><CardHeader><CardTitle>員工固定薪資設定（限老闆）</CardTitle></CardHeader><CardContent className="space-y-4"><div><Label>員工</Label><Choice value={String(employeeId)} onChange={v=>setEmployeeId(Number(v))} options={employees.map(e=>({value:String(e.id),label:e.name}))}/></div>
  <div className="grid md:grid-cols-2 gap-3"><div><Label>雇用類型</Label><Choice value={form.employmentType} onChange={v=>update("employmentType",v)} options={workTypes}/></div><div><Label>計薪方式</Label><Choice value={form.payType} onChange={v=>update("payType",v)} options={payTypes}/></div>
  <MoneyField label="底薪／計薪單價" value={form.baseCents} onChange={v=>update("baseCents",v)}/><MoneyField label="固定津貼" value={form.fixedAllowanceCents} onChange={v=>update("fixedAllowanceCents",v)}/><MoneyField label="勞保個人負擔" value={form.laborCents} onChange={v=>update("laborCents",v)}/><MoneyField label="健保個人負擔" value={form.healthCents} onChange={v=>update("healthCents",v)}/>
  <div><Label>標準每日工時</Label><Input type="number" min="1" max="24" value={form.dayHours} onChange={e=>update("dayHours",Number(e.target.value))}/></div><div><Label>薪資設定生效日</Label><Input type="date" value={form.effectiveFrom} onChange={e=>update("effectiveFrom",e.target.value)}/></div></div>
- <p className="text-xs text-amber-700">勞健保請填員工個人負擔，不可填雇主負擔。外包計價不應自動套用正職的勞健保。</p><Button disabled={busy||!employeeId} onClick={()=>void save()}>{busy?"儲存中…":"儲存薪資設定"}</Button></CardContent></Card>;
+ <p className="text-xs text-amber-700">勞健保請填員工個人負擔，不可填雇主負擔。外包計價不應自動套用正職的勞健保。</p><Button disabled={busy||!employeeId} onClick={()=>void save()}>{busy?"儲存中…":"儲存薪資設定"}</Button></CardContent></Card></div>;
 }
 function PayrollTab({employees}:{employees:{id:number;name:string}[]}){
  const qc=useQueryClient();const {toast}=useToast();const [month,setMonth]=useState(todayTaiwan().slice(0,7));const [employeeId,setEmployeeId]=useState(0);
  const {data:settings=[]}=useQuery({queryKey:["pay-settings"],queryFn:()=>api<PaySetting[]>("/employee-pay-settings")});
+ const {data:preferences=[]}=useQuery({queryKey:["attendance-preferences"],queryFn:()=>api<AttendancePreference[]>("/employee-attendance/preferences")});
+ const exempt=preferences.find(p=>p.employeeId===employeeId)?.requiresAttendance===false;
  const {data:monthly=[]}=useQuery({queryKey:["attendance-month",month],queryFn:()=>api<Monthly[]>(`/employee-attendance/month?month=${month}`)});
  const {data:payroll=[]}=useQuery({queryKey:["payroll",month],queryFn:()=>api<Payroll[]>(`/employee-payroll?month=${month}`)});
- useEffect(()=>{if(!employeeId&&employees.length)setEmployeeId(employees[0].id);},[employeeId,employees]);
+ useEffect(()=>{if(employees.length&&!employees.some(e=>e.id===employeeId))setEmployeeId(employees[0].id);},[employeeId,employees]);
  const attendance=monthly.find(a=>a.employeeId===employeeId);const saved=payroll.find(p=>p.employee_id===employeeId);const setting=settings.find(s=>s.employeeId===employeeId);
  const [mode,setMode]=useState("attendance");const [workDays,setWorkDays]=useState("0");const [leaveHours,setLeaveHours]=useState("0");
  const [bonus,setBonus]=useState("0"),[overtime,setOvertime]=useState("0"),[leaveDeduct,setLeaveDeduct]=useState("0"),[otherDeduct,setOtherDeduct]=useState("0"),[notes,setNotes]=useState(""),[reason,setReason]=useState("");
- useEffect(()=>{setMode(saved?.source_mode||"attendance");setWorkDays(String(saved?Number(saved.work_days):attendance?.attendanceDays||0));setLeaveHours(String(saved?Number(saved.leave_hours):(attendance?.leaveMinutes||0)/60));setBonus(yuan(saved?.bonus_cents));setOvertime(yuan(saved?.overtime_cents));setLeaveDeduct(yuan(saved?.leave_deduct_cents));setOtherDeduct(yuan(saved?.other_deduct_cents));setNotes("");setReason("");},[employeeId,month,saved?.id,attendance?.attendanceDays]);
+ useEffect(()=>{setMode(saved?.source_mode||(exempt?"manual":"attendance"));setWorkDays(String(saved?Number(saved.work_days):attendance?.attendanceDays||0));setLeaveHours(String(saved?Number(saved.leave_hours):(attendance?.leaveMinutes||0)/60));setBonus(yuan(saved?.bonus_cents));setOvertime(yuan(saved?.overtime_cents));setLeaveDeduct(yuan(saved?.leave_deduct_cents));setOtherDeduct(yuan(saved?.other_deduct_cents));setNotes("");setReason("");},[employeeId,month,saved?.id,attendance?.attendanceDays,exempt]);
  const [busy,setBusy]=useState(false);
  async function save(){try{setBusy(true);await api("/employee-payroll/draft","PUT",{employeeId,month,sourceMode:mode,workDays:Number(workDays),leaveHours:Number(leaveHours),bonusCents:cents(bonus),overtimeCents:cents(overtime),leaveDeductCents:cents(leaveDeduct),otherDeductCents:cents(otherDeduct),notes,adjustmentReason:reason});await qc.invalidateQueries({queryKey:["payroll",month]});toast({title:"薪資草稿已儲存"});}catch(e){toast({title:"薪資計算失敗",description:String(e),variant:"destructive"});}finally{setBusy(false);}}
  async function action(id:number,type:"approve"|"paid"){try{await api(`/employee-payroll/${id}/${type}`,"POST");await qc.invalidateQueries({queryKey:["payroll",month]});toast({title:type==="approve"?"已核准":"已記錄付款"});}catch(e){toast({title:"操作失敗",description:String(e),variant:"destructive"});}}
  const statement=(p:Payroll)=>{const lines=["晟風工程｜個人薪資明細",`員工：${p.employeeName}`,`月份：${month}`,`出勤：${p.work_days} 天`, `請假：${p.leave_hours} 小時`, `底薪／計價：${asMoney(p.base_cents)}`,`津貼：${asMoney(p.allowance_cents)}`,`獎金：${asMoney(p.bonus_cents)}`,`加班：${asMoney(p.overtime_cents)}`,`請假扣款：${asMoney(p.leave_deduct_cents)}`,`勞保：${asMoney(p.labor_cents)}`,`健保：${asMoney(p.health_cents)}`,`其他扣款：${asMoney(p.other_deduct_cents)}`,`應發：${asMoney(p.gross_cents)}`,`實領：${asMoney(p.net_cents)}`,`狀態：${p.status}`];const w=window.open("","_blank");if(!w)return;w.document.write(`<html><head><meta charset="utf-8"><title>薪資明細</title><style>body{font:16px sans-serif;max-width:700px;margin:36px auto;line-height:2;white-space:pre-line}@media print{body{margin:24px}}</style></head><body>${lines.map(x=>x.replaceAll("&","&amp;").replaceAll("<","&lt;")).join("\n")}<script>window.print()</script></body></html>`);w.document.close();};
  return <div className="space-y-4"><Card><CardHeader><CardTitle>每月薪資結算（僅老闆）</CardTitle></CardHeader><CardContent className="space-y-4"><div className="grid md:grid-cols-2 gap-3"><div><Label>結算月份</Label><Input type="month" value={month} onChange={e=>setMonth(e.target.value)}/></div><div><Label>員工</Label><Choice value={String(employeeId)} onChange={v=>setEmployeeId(Number(v))} options={employees.map(e=>({value:String(e.id),label:e.name}))}/></div></div>
- <div className="rounded-lg border bg-muted/30 p-3 text-sm">行政已登記：{attendance?.attendanceDays||0} 天，請假 {(Number(attendance?.leaveMinutes||0)/60).toFixed(1)} 小時，異常 {attendance?.exceptions||0} 筆。薪資設定：{setting?`${payTypes.find(t=>t.value===setting.payType)?.label} ${asMoney(setting.baseCents)} 元` : "尚未建立"}。</div>
- <div><Label>結算來源</Label><Choice value={mode} onChange={setMode} options={[{value:"attendance",label:"自動帶入出勤"},{value:"manual",label:"老闆手動輸入"}]}/></div>
+ <div className="rounded-lg border bg-muted/30 p-3 text-sm">{exempt?"免出勤登記（薪資使用手動結算）":`行政已登記：${attendance?.attendanceDays||0} 天`}，請假 {(Number(attendance?.leaveMinutes||0)/60).toFixed(1)} 小時，異常 {attendance?.exceptions||0} 筆。薪資設定：{setting?`${payTypes.find(t=>t.value===setting.payType)?.label} ${asMoney(setting.baseCents)} 元` : "尚未建立"}。</div>
+ <div><Label>結算來源</Label><Choice value={mode} onChange={setMode} options={exempt?[{value:"manual",label:"免登記／老闆手動結算"}]:[{value:"attendance",label:"自動帶入出勤"},{value:"manual",label:"老闆手動輸入"}]}/></div>
  <div className="grid md:grid-cols-2 gap-3"><div><Label>出勤天數</Label><Input type="number" step="0.5" min="0" max="31" disabled={mode==="attendance"} value={mode==="attendance"?String(attendance?.attendanceDays||0):workDays} onChange={e=>setWorkDays(e.target.value)}/></div><div><Label>請假時數</Label><Input type="number" step="0.5" min="0" disabled={mode==="attendance"} value={mode==="attendance"?String(Number(attendance?.leaveMinutes||0)/60):leaveHours} onChange={e=>setLeaveHours(e.target.value)}/></div>
  <div><Label>本月獎金（元）</Label><Input type="number" min="0" value={bonus} onChange={e=>setBonus(e.target.value)}/></div><div><Label>加班費（元）</Label><Input type="number" min="0" value={overtime} onChange={e=>setOvertime(e.target.value)}/></div>
  <div><Label>依法核算請假扣款（元）</Label><Input type="number" min="0" value={leaveDeduct} onChange={e=>setLeaveDeduct(e.target.value)}/></div><div><Label>其他合法扣款（元）</Label><Input type="number" min="0" value={otherDeduct} onChange={e=>setOtherDeduct(e.target.value)}/></div></div>
@@ -96,7 +114,9 @@ function PayrollTab({employees}:{employees:{id:number;name:string}[]}){
 export default function EmployeeAttendancePayroll({tab}:{tab:"attendance"|"settings"|"payroll"}){
  const {user}=useAuth();const boss=hasRole(user,"super_admin","owner");
  const {data:active=[]}=useQuery({queryKey:["attendance-employee-list"],queryFn:()=>api<{id:number;name:string}[]>("/employee-attendance/employees")});
+ const {data:allPeople=[]}=useQuery({queryKey:["attendance-preferences"],enabled:boss,queryFn:()=>api<AttendancePreference[]>("/employee-attendance/preferences")});
+ const payrollPeople=allPeople.map(e=>({id:e.employeeId,name:e.name}));
  return <div className="space-y-4"><div><h1 className="text-2xl font-bold">{tab==="attendance"?"出勤管理":tab==="settings"?"員工薪資設定":"每月薪資結算"}</h1><p className="text-sm text-muted-foreground">出勤與薪資分開授權，所有資料儲存在正式 PostgreSQL 資料庫。</p></div>
  <div className="flex flex-wrap gap-2">{boss&&<Link href="/employees"><Button variant="outline">員工管理</Button></Link>}<Link href="/attendance"><Button variant={tab==="attendance"?"default":"outline"}>出勤登記</Button></Link>{boss&&<><Link href="/employees/settings"><Button variant={tab==="settings"?"default":"outline"}>薪資設定</Button></Link><Link href="/employees/payroll"><Button variant={tab==="payroll"?"default":"outline"}>薪資結算</Button></Link></>}</div>
- {tab==="attendance"?<AttendanceTab employees={active}/>:!boss?<div className="p-5 border rounded-lg">只有老闆帳號可以查看薪資資料。</div>:tab==="settings"?<SettingsTab employees={active}/>:<PayrollTab employees={active}/>}</div>;
+ {tab==="attendance"?<AttendanceTab employees={active}/>:!boss?<div className="p-5 border rounded-lg">只有老闆帳號可以查看薪資資料。</div>:tab==="settings"?<SettingsTab employees={payrollPeople}/>:<PayrollTab employees={payrollPeople}/>}</div>;
 }

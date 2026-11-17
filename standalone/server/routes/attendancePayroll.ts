@@ -14,11 +14,30 @@ const int = (n: unknown) => Number(n);
 const error = (res: Response, e: unknown) => res.status(400).json({ error: e instanceof Error ? e.message : "資料格式錯誤" });
 const employeeExists = async (id: number) => (await pool.query("SELECT 1 FROM employees WHERE id=$1", [id])).rowCount === 1;
 
+// Only owner can decide who needs attendance registration; role/title does not control this.
+router.get("/employee-attendance/preferences", ownerOnly, async (_req,res)=>{
+ try {const result=await pool.query(`SELECT e.id AS "employeeId",e.name,
+  COALESCE(p.requires_attendance,true) AS "requiresAttendance"
+  FROM employees e LEFT JOIN employee_attendance_preferences p ON p.employee_id=e.id
+  WHERE e.status <> '離職' ORDER BY e.id`);res.json(result.rows);}
+ catch(e){error(res,e);}
+});
+router.put("/employee-attendance/preferences/:id",ownerOnly,async(req,res)=>{
+ try {const employeeId=z.coerce.number().int().positive().parse(req.params.id);
+  const {requiresAttendance}=z.object({requiresAttendance:z.boolean()}).parse(req.body);
+  if(!await employeeExists(employeeId)){res.status(404).json({error:"員工不存在"});return;}
+  await pool.query(`INSERT INTO employee_attendance_preferences(employee_id,requires_attendance,updated_by)
+  VALUES($1,$2,$3) ON CONFLICT(employee_id) DO UPDATE SET
+  requires_attendance=EXCLUDED.requires_attendance,updated_by=EXCLUDED.updated_by,updated_at=now()`,
+  [employeeId,requiresAttendance,req.user!.id]);res.json({ok:true});
+ }catch(e){error(res,e);}
+});
+
 // Attendance roster: only the minimum fields needed for daily check-in.
 // Never reuse the employee-management response in administrative attendance pages.
 router.get("/employee-attendance/employees", attendanceRoles, async(_req,res)=>{
   try {
-    const result = await pool.query(`SELECT id, name FROM employees WHERE status <> '離職' ORDER BY id`);
+    const result = await pool.query(`SELECT e.id,e.name FROM employees e LEFT JOIN employee_attendance_preferences p ON p.employee_id=e.id WHERE e.status <> '離職' AND COALESCE(p.requires_attendance,true) ORDER BY e.id`);
     res.json(result.rows);
   } catch(e) { error(res,e); }
 });
@@ -49,6 +68,8 @@ router.put("/employee-attendance", attendanceRoles, async (req, res) => {
   try {
     const v = attendanceInput.parse(req.body);
     if (!await employeeExists(v.employeeId)) { res.status(404).json({ error: "員工不存在" }); return; }
+    const pref=await pool.query("SELECT requires_attendance FROM employee_attendance_preferences WHERE employee_id=$1",[v.employeeId]);
+    if(pref.rows[0]?.requires_attendance===false){res.status(403).json({error:"此人已設定免出勤登記，請由老闆調整設定"});return;}
     if (v.status === "unrecorded" && (v.workedMinutes || v.leaveMinutes)) throw new Error("未登記不可填寫工作或請假時數");
     if (v.segments?.length) {
       const minutes = (t: string) => Number(t.slice(0,2))*60+Number(t.slice(3));
@@ -79,10 +100,12 @@ router.put("/employee-attendance", attendanceRoles, async (req, res) => {
 });
 router.get("/employee-attendance/month", attendanceRoles, async(req,res)=>{
   try { const month = monthSchema.parse(req.query.month);
-    const rows = await pool.query(`SELECT employee_id AS "employeeId",COUNT(*) FILTER (WHERE status IN ('present','half','late','early','official'))::int AS "attendanceDays",
+    const rows = await pool.query(`SELECT a.employee_id AS "employeeId",COUNT(*) FILTER (WHERE status IN ('present','half','late','early','official'))::int AS "attendanceDays",
     COALESCE(sum(worked_minutes),0)::int AS "workedMinutes",COALESCE(sum(leave_minutes),0)::int AS "leaveMinutes",
     COUNT(*) FILTER (WHERE status IN ('early','late','half') OR leave_minutes>0)::int AS "exceptions"
-    FROM employee_attendance WHERE work_date >= $1::date AND work_date < ($1::date + interval '1 month') GROUP BY employee_id`,[month+'-01']);
+    FROM employee_attendance a
+    LEFT JOIN employee_attendance_preferences p ON p.employee_id=a.employee_id
+    WHERE COALESCE(p.requires_attendance,true) AND a.work_date >= $1::date AND a.work_date < ($1::date + interval '1 month') GROUP BY a.employee_id`,[month+'-01']);
     res.json(rows.rows);
   } catch(e){error(res,e);} });
 
@@ -105,6 +128,8 @@ const s=await c.query(`SELECT * FROM employee_pay_settings_history WHERE employe
 if(!s.rows[0]) {res.status(400).json({error:"請先設定員工薪資與生效日期"});await c.query("ROLLBACK");return;}
 const setting=s.rows[0];
 const attendance=await c.query(`SELECT COUNT(*) FILTER(WHERE status IN ('present','half','late','early','official'))::int AS days,COALESCE(SUM(worked_minutes),0)::int AS worked,COALESCE(SUM(leave_minutes),0)::int AS leave FROM employee_attendance WHERE employee_id=$1 AND work_date >= $2::date AND work_date < ($2::date + interval '1 month')`,[v.employeeId,v.month+'-01']);
+const pref=await c.query("SELECT requires_attendance FROM employee_attendance_preferences WHERE employee_id=$1",[v.employeeId]);
+if(pref.rows[0]?.requires_attendance===false && v.sourceMode==='attendance') {res.status(400).json({error:"此員工免登記出勤，請改用手動結算"});await c.query("ROLLBACK");return;}
 const workDays=v.sourceMode==='attendance' ? Number(attendance.rows[0].days) : v.workDays;
 const leaveHours=v.sourceMode==='attendance' ? Number(attendance.rows[0].leave)/60 : v.leaveHours;
 // Manual leave deduction is deliberate: no unsafe one-size-fits-all statutory leave-pay assumption.

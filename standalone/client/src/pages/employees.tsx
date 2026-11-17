@@ -22,6 +22,22 @@ import { useToast } from "@/hooks/use-toast";
 
 const POSITIONS = ["業務", "師傅技師", "行政", "會計", "老闆"];
 
+// The existing database stores a text position. Multiple responsibilities are
+// encoded as a comma-separated value for backward compatibility. They are NOT
+// login permissions; permissions remain in the user-account subsystem.
+function splitPositions(value: string | null | undefined): string[] {
+  return (value ?? "").split(/[、,，/]+/).map(v => v.trim()).filter(Boolean);
+}
+function uniquePositions(values: string[]): string[] {
+  return [...new Set(values.filter(Boolean))];
+}
+function samePersonKey(e: { name: string; phone?: string | null; id: number }): string {
+  // Only collapse records with the SAME normalized name AND SAME nonempty phone.
+  // Names without a phone may belong to different people; retain those records.
+  const phone = (e.phone ?? "").replace(/[^0-9]/g, "");
+  return phone ? `${e.name.trim().replace(/\s+/g, "").toLocaleLowerCase()}|${phone}` : `id:${e.id}`;
+}
+
 const POSITION_COLORS: Record<string, string> = {
   "業務": "bg-blue-100 text-blue-700",
   "師傅技師": "bg-purple-100 text-purple-700",
@@ -171,8 +187,24 @@ export default function Employees() {
   const emptyForm = { name: "", phone: "", position: "業務", status: "在職", notes: "" };
   const [form, setForm] = useState(emptyForm);
 
-  const filtered = (employees ?? []).filter(
-    e => statusFilter === "全部" || e.status === statusFilter
+  const groupedEmployees = useMemo(() => {
+    const groups = new Map<string, { employee: NonNullable<typeof employees>[number]; records: NonNullable<typeof employees>; positions: string[] }>();
+    for (const employee of employees ?? []) {
+      const key = samePersonKey(employee);
+      const group = groups.get(key);
+      if (!group) {
+        groups.set(key, { employee, records: [employee], positions: splitPositions(employee.position) });
+      } else {
+        group.records.push(employee);
+        group.positions = uniquePositions([...group.positions, ...splitPositions(employee.position)]);
+        // Prioritize active record for display, while retaining all original IDs.
+        if (group.employee.status !== "在職" && employee.status === "在職") group.employee = employee;
+      }
+    }
+    return [...groups.values()];
+  }, [employees]);
+  const filtered = groupedEmployees.filter(
+    g => statusFilter === "全部" || g.records.some(e => e.status === statusFilter)
   );
 
   return (
@@ -181,7 +213,7 @@ export default function Employees() {
         <div>
           <h1 className="text-2xl font-bold">員工管理</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            管理公司正式員工的人事資料（職位、聯絡方式、在職狀態與績效）。不含登入帳號與系統權限，請至「用戶管理」設定。
+            每人一張名片，可兼任多個職務；登入角色和權限仍在「用戶管理」設定。相同姓名與電話的舊紀錄先合併顯示，原始員工 ID 不會自動刪除。
           </p>
         </div>
         <Button size="sm" onClick={() => { setForm(emptyForm); setShowCreate(true); }}>
@@ -269,14 +301,16 @@ export default function Employees() {
         <Card>
           <CardContent className="p-0">
             <div className="divide-y">
-              {filtered.map(e => (
+              {filtered.map(({ employee: e, records, positions }) => (
                 <div key={e.id} className="px-4 py-3 flex items-center justify-between">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-medium text-sm">{e.name}</span>
-                      <span className={`text-xs px-2 py-0.5 rounded font-medium ${POSITION_COLORS[e.position] ?? "bg-gray-100 text-gray-700"}`}>
-                        {e.position}
-                      </span>
+                      {positions.map(position => (
+                        <span key={position} className={`text-xs px-2 py-0.5 rounded font-medium ${POSITION_COLORS[position] ?? "bg-gray-100 text-gray-700"}`}>
+                          {position}
+                        </span>
+                      ))}
                       <span className={`text-xs px-2 py-0.5 rounded font-medium ${
                         e.status === "在職" ? "bg-green-100 text-green-700"
                         : e.status === "配合" ? "bg-yellow-100 text-yellow-700"
@@ -288,6 +322,11 @@ export default function Employees() {
                     <div className="text-xs text-muted-foreground mt-0.5 flex gap-3 flex-wrap">
                       {e.phone && <span>{e.phone}</span>}
                       {e.notes && <span className="truncate max-w-xs">{e.notes}</span>}
+                      {records.length > 1 && (
+                        <span className="text-amber-700 font-medium" title="原始資料仍有多個員工 ID，未自動合併以保護派工、績效和出勤紀錄">
+                          ⚠ {records.length} 筆舊資料待核對合併
+                        </span>
+                      )}
                     </div>
                     <PerformanceSummary perf={perfByEmployeeId.get(e.id)} />
                   </div>
@@ -295,7 +334,7 @@ export default function Employees() {
                     <Button
                       variant="ghost" size="icon" className="h-7 w-7"
                       onClick={() => {
-                        setForm({ name: e.name, phone: e.phone ?? "", position: e.position, status: e.status, notes: e.notes ?? "" });
+                        setForm({ name: e.name, phone: e.phone ?? "", position: positions.join("、"), status: e.status, notes: e.notes ?? "" });
                         setEditItem(e);
                       }}
                     >
@@ -334,7 +373,16 @@ export default function Employees() {
             <form
               onSubmit={e => {
                 e.preventDefault();
+                if (!splitPositions(form.position).length) {
+                  toast({ title: "請至少選擇一個職位", variant: "destructive" });
+                  return;
+                }
                 if (mode === "create") {
+                  const duplicate = (employees ?? []).find(e => samePersonKey(e) === samePersonKey({ ...form, id: -1 }));
+                  if (duplicate && (form.phone ?? "").trim()) {
+                    toast({ title: "已有相同姓名與電話的員工", description: "請編輯現有員工並勾選兼任職務，不需新增第二筆。", variant: "destructive" });
+                    return;
+                  }
                   createMutation.mutate({ data: form });
                 } else {
                   updateMutation.mutate({ id: editItem.id, data: form });
@@ -353,12 +401,20 @@ export default function Employees() {
               <div className="grid grid-cols-2 gap-2">
                 <div className="space-y-1.5">
                   <Label>職務</Label>
-                  <Select value={form.position} onValueChange={v => setForm(f => ({ ...f, position: v }))}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {POSITIONS.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                  <div className="space-y-2 rounded-md border p-2">
+                    <p className="text-xs text-muted-foreground">可勾選兼任職務，與系統登入權限分開</p>
+                    {POSITIONS.map(position => (
+                      <label key={position} className="flex items-center gap-2 text-sm cursor-pointer">
+                        <input type="checkbox" checked={splitPositions(form.position).includes(position)}
+                          onChange={event => setForm(f => {
+                            const existing = splitPositions(f.position);
+                            const next = event.target.checked ? uniquePositions([...existing, position]) : existing.filter(v => v !== position);
+                            return { ...f, position: next.join("、") };
+                          })} />
+                        {position}
+                      </label>
+                    ))}
+                  </div>
                 </div>
                 <div className="space-y-1.5">
                   <Label>狀態</Label>

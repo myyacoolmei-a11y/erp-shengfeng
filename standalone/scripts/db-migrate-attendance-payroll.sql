@@ -22,6 +22,13 @@ CREATE TABLE IF NOT EXISTS employee_pay_settings_history (
  effective_from date NOT NULL, created_at timestamptz NOT NULL DEFAULT now(), changed_by integer
 );
 CREATE INDEX IF NOT EXISTS idx_pay_settings_history_employee_date ON employee_pay_settings_history(employee_id,effective_from DESC,id DESC);
+-- 出勤免登記設定與薪資設定分開；預設所有人需要登記。
+CREATE TABLE IF NOT EXISTS employee_attendance_preferences (
+ employee_id integer PRIMARY KEY REFERENCES employees(id) ON DELETE RESTRICT,
+ requires_attendance boolean NOT NULL DEFAULT true,
+ updated_by integer,
+ updated_at timestamptz NOT NULL DEFAULT now()
+);
 CREATE TABLE IF NOT EXISTS employee_attendance (
  id bigserial PRIMARY KEY, employee_id integer NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
  work_date date NOT NULL, status text NOT NULL DEFAULT 'unrecorded',
