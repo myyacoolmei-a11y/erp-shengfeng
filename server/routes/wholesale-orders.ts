@@ -1,0 +1,358 @@
+import { Router, type IRouter } from "express";
+import { eq, ilike, or, and, desc, SQL } from "drizzle-orm";
+import {
+  db, wholesaleOrdersTable, wholesaleOrderItemsTable, wholesaleReceivablesTable, wholesaleCustomersTable,
+} from "@workspace/db";
+import {
+  createDeliveryWorkOrder,
+  listDeliveryWorkOrders,
+  shippedQtyByWholesaleItem,
+  WholesaleDeliveryError,
+  updateDeliveryWorkOrder,
+} from "../lib/wholesale/wholesaleDeliveryService.ts";
+import { z } from "zod/v4";
+import { requireFeature, requireRole } from "../lib/auth";
+import {
+  deriveWholesalePaymentStatus,
+  parseMoney,
+  remainingAmount,
+} from "../../shared/wholesalePaymentMath.ts";
+import { sumPaymentsForOrderIds } from "../lib/wholesale/wholesalePaymentService.ts";
+
+const router: IRouter = Router();
+router.use("/wholesale/orders", requireFeature("wholesale"));
+
+
+const ItemInput = z.object({
+  productId: z.number().int().nullable().optional(),
+  productName: z.string().min(1),
+  brand: z.string().optional(),
+  model: z.string().optional(),
+  unit: z.string().optional(),
+  qty: z.number().int().min(1),
+  unitPrice: z.number().min(0),
+  discount: z.number().min(0).max(100).default(0),
+  sortOrder: z.number().int().optional(),
+});
+
+const OrderInput = z.object({
+  quoteId: z.number().int().nullable().optional(),
+  quoteNumber: z.string().optional().nullable(),
+  customerId: z.number().int().nullable().optional(),
+  customerName: z.string().optional(),
+  orderDate: z.string(),
+  expectedDelivery: z.string().optional().nullable(),
+  salesperson: z.string().optional(),
+  notes: z.string().optional(),
+  taxRate: z.number().min(0).default(0),
+  shippingFee: z.number().min(0).default(0),
+  status: z.string().optional(),
+  items: z.array(ItemInput).default([]),
+});
+
+function parseId(raw: string | string[]): number {
+  return parseInt(Array.isArray(raw) ? raw[0] : raw, 10);
+}
+
+function round2(n: number): number {
+  return Math.round(n * 100) / 100;
+}
+
+function computeTotals(items: z.infer<typeof ItemInput>[], taxRate: number, shippingFee: number) {
+  let subtotal = 0;
+  const computed = items.map((item, idx) => {
+    const discPct = item.discount ?? 0;
+    const amount = round2(item.qty * item.unitPrice * (1 - discPct / 100));
+    subtotal += amount;
+    return { ...item, amount, sortOrder: item.sortOrder ?? idx };
+  });
+  subtotal = round2(subtotal);
+  const taxAmount = round2(subtotal * taxRate / 100);
+  const total = round2(subtotal + taxAmount + shippingFee);
+  return { computed, subtotal, taxAmount, total };
+}
+
+function orderItemRow(item: z.infer<typeof ItemInput> & { amount: number }, orderId: number, idx: number) {
+  return {
+    orderId,
+    productId: item.productId ?? null,
+    productName: item.productName,
+    brand: item.brand ?? null,
+    model: item.model ?? null,
+    unit: item.unit ?? null,
+    qty: item.qty,
+    unitPrice: String(item.unitPrice),
+    discount: String(item.discount ?? 0),
+    amount: String(item.amount),
+    sortOrder: item.sortOrder ?? idx,
+  };
+}
+
+async function getOrderWithItems(id: number) {
+  const [order] = await db.select().from(wholesaleOrdersTable).where(eq(wholesaleOrdersTable.id, id));
+  if (!order) return null;
+  const items = await db.select().from(wholesaleOrderItemsTable)
+    .where(eq(wholesaleOrderItemsTable.orderId, id))
+    .orderBy(wholesaleOrderItemsTable.sortOrder);
+  const shippedMap = await shippedQtyByWholesaleItem(id);
+  const deliveries = await listDeliveryWorkOrders(id);
+  return {
+    ...order,
+    items: items.map((it) => {
+      const shippedQty = shippedMap.get(it.id) ?? 0;
+      return {
+        ...it,
+        shippedQty,
+        pendingQty: Math.max(0, it.qty - shippedQty),
+      };
+    }),
+    deliveries,
+  };
+}
+
+function normalizeCustomerName(name: string | null | undefined): string {
+  return (name ?? "").trim().replace(/\s+/g, "").toLowerCase();
+}
+
+async function resolveOrderCustomer(
+  customerId: number | null | undefined,
+  customerName: string | null | undefined,
+): Promise<{ customerId: number | null; customerName: string | null }> {
+  const trimmedName = (customerName ?? "").trim();
+  if (customerId != null && customerId > 0) {
+    const [cust] = await db
+      .select()
+      .from(wholesaleCustomersTable)
+      .where(eq(wholesaleCustomersTable.id, customerId))
+      .limit(1);
+    if (cust) {
+      // If user explicitly provided a different non-empty company name, match by name first
+      if (trimmedName && normalizeCustomerName(trimmedName) !== normalizeCustomerName(cust.companyName)) {
+        const allCustomers = await db.select().from(wholesaleCustomersTable);
+        const byName = allCustomers.find(
+          (c) => normalizeCustomerName(c.companyName) === normalizeCustomerName(trimmedName),
+        );
+        if (byName) {
+          return { customerId: byName.id, customerName: byName.companyName };
+        }
+      }
+      return { customerId: cust.id, customerName: trimmedName || cust.companyName };
+    }
+  }
+
+  if (trimmedName && trimmedName !== "未知客戶") {
+    const allCustomers = await db.select().from(wholesaleCustomersTable);
+    const matched = allCustomers.find(
+      (c) => normalizeCustomerName(c.companyName) === normalizeCustomerName(trimmedName),
+    );
+    if (matched) {
+      return { customerId: matched.id, customerName: matched.companyName };
+    }
+    const [created] = await db
+      .insert(wholesaleCustomersTable)
+      .values({ companyName: trimmedName, paymentTerms: "月結" })
+      .returning();
+    if (created) {
+      return { customerId: created.id, customerName: created.companyName };
+    }
+  }
+
+  return {
+    customerId: customerId ?? null,
+    customerName: trimmedName || null,
+  };
+}
+
+async function maybeCreateReceivable(order: typeof wholesaleOrdersTable.$inferSelect) {
+  const existing = await db.select({ id: wholesaleReceivablesTable.id })
+    .from(wholesaleReceivablesTable)
+    .where(eq(wholesaleReceivablesTable.orderId, order.id));
+  if (existing.length === 0) {
+    await db.insert(wholesaleReceivablesTable).values({
+      orderId: order.id,
+      orderNumber: order.orderNumber,
+      customerId: order.customerId,
+      customerName: order.customerName,
+      totalAmount: order.total,
+      receivedAmount: "0",
+      paymentStatus: "未收款",
+    });
+  }
+}
+
+router.get("/wholesale/orders", async (req, res): Promise<void> => {
+  const search = typeof req.query.search === "string" ? req.query.search : undefined;
+  const status = typeof req.query.status === "string" ? req.query.status : undefined;
+  const conditions: SQL[] = [];
+  if (search) {
+    conditions.push(or(
+      ilike(wholesaleOrdersTable.orderNumber, `%${search}%`),
+      ilike(wholesaleOrdersTable.customerName, `%${search}%`),
+    )!);
+  }
+  if (status && status !== "全部") conditions.push(eq(wholesaleOrdersTable.status, status));
+  const rows = await db.select().from(wholesaleOrdersTable)
+    .where(conditions.length ? and(...conditions) : undefined)
+    .orderBy(desc(wholesaleOrdersTable.createdAt));
+  const receivedMap = await sumPaymentsForOrderIds(rows.map((r) => r.id));
+  res.json(rows.map((r) => {
+    const totalAmount = parseMoney(r.total);
+    const receivedAmount = receivedMap.get(r.id) ?? 0;
+    return {
+      ...r,
+      items: [],
+      receivedAmount,
+      outstandingAmount: remainingAmount(totalAmount, receivedAmount),
+      paymentStatus: deriveWholesalePaymentStatus(receivedAmount, totalAmount),
+    };
+  }));
+});
+
+router.post("/wholesale/orders", async (req, res): Promise<void> => {
+  const parsed = OrderInput.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  const { items, taxRate, shippingFee, ...header } = parsed.data;
+  const resolvedCustomer = await resolveOrderCustomer(header.customerId, header.customerName);
+  const { computed, subtotal, taxAmount, total } = computeTotals(items, taxRate, shippingFee);
+  const [order] = await db.insert(wholesaleOrdersTable).values({
+    ...header,
+    customerId: resolvedCustomer.customerId,
+    customerName: resolvedCustomer.customerName ?? undefined,
+    taxRate: String(taxRate),
+    shippingFee: String(shippingFee),
+    subtotal: String(subtotal),
+    taxAmount: String(taxAmount),
+    total: String(total),
+  }).returning();
+  const orderNumber = `WO-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, "0")}-${String(order.id).padStart(4, "0")}`;
+  await db.update(wholesaleOrdersTable).set({ orderNumber }).where(eq(wholesaleOrdersTable.id, order.id));
+  if (computed.length) {
+    await db.insert(wholesaleOrderItemsTable).values(computed.map((item, idx) => orderItemRow(item, order.id, idx)));
+  }
+  const [final] = await db.select().from(wholesaleOrdersTable).where(eq(wholesaleOrdersTable.id, order.id));
+  if (final && (parsed.data.status === "已出貨")) {
+    await maybeCreateReceivable(final);
+  }
+  const result = await getOrderWithItems(order.id);
+  res.status(201).json(result);
+});
+
+router.get("/wholesale/orders/:id", async (req, res): Promise<void> => {
+  const id = parseId(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const result = await getOrderWithItems(id);
+  if (!result) { res.status(404).json({ error: "找不到批發訂單" }); return; }
+  res.json(result);
+});
+
+router.patch("/wholesale/orders/:id", async (req, res): Promise<void> => {
+  const id = parseId(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const parsed = OrderInput.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  const { items, taxRate, shippingFee, ...header } = parsed.data;
+  const resolvedCustomer = await resolveOrderCustomer(header.customerId, header.customerName);
+  const { computed, subtotal, taxAmount, total } = computeTotals(items, taxRate, shippingFee);
+  await db.update(wholesaleOrdersTable).set({
+    ...header,
+    customerId: resolvedCustomer.customerId,
+    customerName: resolvedCustomer.customerName ?? undefined,
+    taxRate: String(taxRate),
+    shippingFee: String(shippingFee),
+    subtotal: String(subtotal),
+    taxAmount: String(taxAmount),
+    total: String(total),
+    updatedAt: new Date(),
+  }).where(eq(wholesaleOrdersTable.id, id));
+  await db.delete(wholesaleOrderItemsTable).where(eq(wholesaleOrderItemsTable.orderId, id));
+  if (computed.length) {
+    await db.insert(wholesaleOrderItemsTable).values(computed.map((item, idx) => orderItemRow(item, id, idx)));
+  }
+  if (parsed.data.status === "已出貨") {
+    const [updatedOrder] = await db.select().from(wholesaleOrdersTable).where(eq(wholesaleOrdersTable.id, id));
+    if (updatedOrder) await maybeCreateReceivable(updatedOrder);
+  }
+  const result = await getOrderWithItems(id);
+  if (!result) { res.status(404).json({ error: "找不到批發訂單" }); return; }
+  res.json(result);
+});
+
+router.delete("/wholesale/orders/:id", async (req, res): Promise<void> => {
+  const id = parseId(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  await db.delete(wholesaleOrdersTable).where(eq(wholesaleOrdersTable.id, id));
+  res.status(204).send();
+});
+
+router.get("/wholesale/orders/:id/deliveries", async (req, res): Promise<void> => {
+  const id = parseId(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const result = await getOrderWithItems(id);
+  if (!result) { res.status(404).json({ error: "找不到批發訂單" }); return; }
+  res.json({
+    orderId: id,
+    orderNumber: result.orderNumber,
+    items: result.items,
+    deliveries: result.deliveries,
+  });
+});
+
+router.post("/wholesale/orders/:id/deliveries", async (req, res): Promise<void> => {
+  const id = parseId(req.params.id);
+  if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const items = Array.isArray(req.body?.items) ? req.body.items : [];
+  try {
+    const created = await createDeliveryWorkOrder({
+      wholesaleOrderId: id,
+      items: items.map((it: any) => ({
+        wholesaleOrderItemId: Number(it.wholesaleOrderItemId ?? it.id),
+        shipQty: Number(it.shipQty ?? 0),
+      })),
+      technicians: Array.isArray(req.body?.technicians) ? req.body.technicians : [],
+      primaryTechnician: req.body?.primaryTechnician,
+      extraTechnician: req.body?.extraTechnician,
+      scheduledDate: req.body?.scheduledDate,
+      notes: req.body?.notes,
+      user: req.user,
+    });
+    res.status(201).json(created);
+  } catch (err) {
+    if (err instanceof WholesaleDeliveryError) {
+      res.status(err.status).json({ error: err.message });
+      return;
+    }
+    res.status(500).json({ error: "建立出貨單失敗" });
+  }
+});
+
+router.patch("/wholesale/orders/:id/deliveries/:deliveryId", requireRole("super_admin", "owner", "admin", "sales"), async (req, res): Promise<void> => {
+  const id = parseId(req.params.id);
+  const deliveryId = parseId(req.params.deliveryId);
+  if (!Number.isInteger(id) || !Number.isInteger(deliveryId) || id < 1 || deliveryId < 1) {
+    res.status(400).json({ error: "無效的出貨單編號" }); return;
+  }
+  const body = z.object({
+    items: z.array(z.object({ wholesaleOrderItemId: z.number().int().positive(), shipQty: z.number().int().min(0) })),
+    technicians: z.array(z.string().trim().min(1)).default([]),
+    primaryTechnician: z.string().optional(),
+    extraTechnician: z.string().optional(),
+    scheduledDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+    notes: z.string().optional(),
+  }).safeParse(req.body);
+  if (!body.success) { res.status(400).json({ error: "出貨資料格式有誤" }); return; }
+  try {
+    const updated = await updateDeliveryWorkOrder({
+      wholesaleOrderId: id,
+      workOrderId: deliveryId,
+      ...body.data,
+    });
+    res.json(updated);
+  } catch (err) {
+    if (err instanceof WholesaleDeliveryError) {
+      res.status(err.status).json({ error: err.message }); return;
+    }
+    res.status(500).json({ error: "出貨單修改儲存失敗" });
+  }
+});
+
+export default router;
