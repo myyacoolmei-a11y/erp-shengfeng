@@ -73,4 +73,10 @@ CREATE TABLE IF NOT EXISTS employee_payroll_audit (
  old_value jsonb, new_value jsonb NOT NULL, changed_by integer,
  changed_at timestamptz NOT NULL DEFAULT now()
 );
+CREATE TABLE IF NOT EXISTS employee_identity_reviews (
+ group_key text PRIMARY KEY,
+ primary_employee_id integer NOT NULL REFERENCES employees(id) ON DELETE RESTRICT,
+ reviewed_by integer,
+ reviewed_at timestamptz NOT NULL DEFAULT now()
+);
 COMMIT;

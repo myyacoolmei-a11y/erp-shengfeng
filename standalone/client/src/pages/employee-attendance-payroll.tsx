@@ -32,7 +32,12 @@ type AttendancePreference={employeeId:number;name:string;requiresAttendance:bool
 type Monthly={employeeId:number;attendanceDays:number;workedMinutes:number;leaveMinutes:number;exceptions:number};
 const blankSetting=(employeeId:number):PaySetting=>({employeeId,employmentType:"full_time",payType:"monthly",baseCents:0,laborCents:0,healthCents:0,fixedAllowanceCents:0,dayHours:8,effectiveFrom:todayTaiwan()});
 const blankAttendance=(employeeId:number,date:string):Attendance=>({employeeId,date,status:"unrecorded",startTime:null,endTime:null,breakMinutes:0,workedMinutes:0,leaveMinutes:0,leaveType:null,note:""});
-function Choice({value,onChange,options}:{value:string;onChange:(v:string)=>void;options:{value:string;label:string}[]}) { return <Select value={value} onValueChange={onChange}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{options.map(o=><SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent></Select>; }
+function Choice({value,onChange,options}:{value:string;onChange:(v:string)=>void;options:{value:string;label:string}[]}) {
+ // Native select avoids a Radix menu being hidden/clipped by existing ERP layout layers.
+ return <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground disabled:opacity-50" value={options.some(o=>o.value===value)?value:""} onChange={e=>onChange(e.target.value)} disabled={!options.length}>
+  {!options.length?<option value="">沒有可選的人員</option>:<><option value="" disabled>請選擇</option>{options.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}</>}
+ </select>;
+}
 function MoneyField({label,value,onChange}:{label:string;value:number;onChange:(v:number)=>void}) {return <div className="space-y-1"><Label>{label}（元）</Label><Input type="number" min="0" step="1" value={yuan(value)} onChange={e=>onChange(cents(e.target.value))}/></div>;}
 function AttendanceTab({employees}:{employees:{id:number;name:string}[]}){
  const qc=useQueryClient();const {toast}=useToast();const [date,setDate]=useState(todayTaiwan());const [employeeId,setEmployeeId]=useState(0);
@@ -56,7 +61,7 @@ function AttendanceTab({employees}:{employees:{id:number;name:string}[]}){
 }
 function AttendanceExemptionSettings(){
  const qc=useQueryClient();const {toast}=useToast();const [busyId,setBusyId]=useState<number|null>(null);
- const {data:preferences=[]}=useQuery({queryKey:["attendance-preferences"],queryFn:()=>api<AttendancePreference[]>("/employee-attendance/preferences")});
+ const {data:preferences=[],error:preferenceError}=useQuery({queryKey:["attendance-preferences"],queryFn:()=>api<AttendancePreference[]>("/employee-attendance/preferences")});
  async function change(item:AttendancePreference){try{setBusyId(item.employeeId);
   await api(`/employee-attendance/preferences/${item.employeeId}`,"PUT",{requiresAttendance:!item.requiresAttendance});
   await qc.invalidateQueries({queryKey:["attendance-preferences"]});
@@ -66,7 +71,7 @@ function AttendanceExemptionSettings(){
  }catch(e){toast({title:"設定失敗",description:String(e),variant:"destructive"});}finally{setBusyId(null);}}
  return <Card><CardHeader><CardTitle>出勤登記設定（僅老闆）</CardTitle></CardHeader><CardContent className="space-y-3">
  <p className="text-sm text-muted-foreground">設定哪些人需要行政每日點名；免登記者不會出現在行政點名清單，也不會被算成未出勤。與職位、系統權限、薪資結算分開。</p>
- <div className="grid sm:grid-cols-2 gap-2">{preferences.map(item=><div key={item.employeeId} className="border rounded-lg px-3 py-2 flex items-center justify-between gap-3"><div className="min-w-0"><p className="font-medium truncate">{item.name}</p><p className="text-xs text-muted-foreground">{item.requiresAttendance?"需要點名":"免出勤登記"}</p></div><Button type="button" size="sm" variant={item.requiresAttendance?"outline":"default"} disabled={busyId===item.employeeId} onClick={()=>void change(item)}>{item.requiresAttendance?"改為免登記":"改為需登記"}</Button></div>)}</div>
+ {preferenceError&&<p className="text-sm text-red-600">無法讀取出勤設定：{String(preferenceError)}。請檢查資料庫 migration 是否已執行。</p>}<div className="grid sm:grid-cols-2 gap-2">{preferences.map(item=><div key={item.employeeId} className="border rounded-lg px-3 py-2 flex items-center justify-between gap-3"><div className="min-w-0"><p className="font-medium truncate">{item.name}</p><p className="text-xs text-muted-foreground">{item.requiresAttendance?"需要點名":"免出勤登記"}</p></div><Button type="button" size="sm" variant={item.requiresAttendance?"outline":"default"} disabled={busyId===item.employeeId} onClick={()=>void change(item)}>{item.requiresAttendance?"改為免登記":"改為需登記"}</Button></div>)}</div>
  </CardContent></Card>;
 }
 function SettingsTab({employees}:{employees:{id:number;name:string}[]}){
@@ -113,10 +118,10 @@ function PayrollTab({employees}:{employees:{id:number;name:string}[]}){
 }
 export default function EmployeeAttendancePayroll({tab}:{tab:"attendance"|"settings"|"payroll"}){
  const {user}=useAuth();const boss=hasRole(user,"super_admin","owner");
- const {data:active=[]}=useQuery({queryKey:["attendance-employee-list"],queryFn:()=>api<{id:number;name:string}[]>("/employee-attendance/employees")});
- const {data:allPeople=[]}=useQuery({queryKey:["attendance-preferences"],enabled:boss,queryFn:()=>api<AttendancePreference[]>("/employee-attendance/preferences")});
+ const {data:active=[],isLoading:rosterLoading,error:rosterError}=useQuery({queryKey:["attendance-employee-list"],queryFn:()=>api<{id:number;name:string}[]>("/employee-attendance/employees")});
+ const {data:allPeople=[],isLoading:peopleLoading,error:peopleError}=useQuery({queryKey:["attendance-preferences"],enabled:boss,queryFn:()=>api<AttendancePreference[]>("/employee-attendance/preferences")});
  const payrollPeople=allPeople.map(e=>({id:e.employeeId,name:e.name}));
  return <div className="space-y-4"><div><h1 className="text-2xl font-bold">{tab==="attendance"?"出勤管理":tab==="settings"?"員工薪資設定":"每月薪資結算"}</h1><p className="text-sm text-muted-foreground">出勤與薪資分開授權，所有資料儲存在正式 PostgreSQL 資料庫。</p></div>
  <div className="flex flex-wrap gap-2">{boss&&<Link href="/employees"><Button variant="outline">員工管理</Button></Link>}<Link href="/attendance"><Button variant={tab==="attendance"?"default":"outline"}>出勤登記</Button></Link>{boss&&<><Link href="/employees/settings"><Button variant={tab==="settings"?"default":"outline"}>薪資設定</Button></Link><Link href="/employees/payroll"><Button variant={tab==="payroll"?"default":"outline"}>薪資結算</Button></Link></>}</div>
- {tab==="attendance"?<AttendanceTab employees={active}/>:!boss?<div className="p-5 border rounded-lg">只有老闆帳號可以查看薪資資料。</div>:tab==="settings"?<SettingsTab employees={payrollPeople}/>:<PayrollTab employees={payrollPeople}/>}</div>;
+ {tab==="attendance"?(rosterError?<div className="border border-red-300 rounded-lg p-4 text-red-700">讀取出勤人員失敗：{String(rosterError)}。請確認已完成出勤／薪資資料庫 migration。</div>:rosterLoading?<p>正在讀取員工名單…</p>:active.length===0?<div className="border rounded-lg p-4">目前沒有需要點名的在職人員。請由老闆檢查「出勤登記設定」。</div>:<AttendanceTab employees={active}/>):!boss?<div className="p-5 border rounded-lg">只有老闆帳號可以查看薪資資料。</div>:peopleError?<div className="border border-red-300 rounded-lg p-4 text-red-700">無法取得員工名單：{String(peopleError)}。請確認已執行資料庫 migration，並檢查老闆帳號權限。</div>:peopleLoading?<p>正在讀取員工名單…</p>:payrollPeople.length===0?<div className="border rounded-lg p-4">目前沒有可設定薪資的在職員工。</div>:tab==="settings"?<SettingsTab employees={payrollPeople}/>:<PayrollTab employees={payrollPeople}/>}</div>;
 }

@@ -10,7 +10,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogBody, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -302,6 +302,53 @@ export default function WholesaleOrders() {
   function openCreate() { setForm(emptyForm()); setEditId(null); setShowDialog(true); }
   function openEdit(id: number) { setEditId(id); setShowDialog(true); }
 
+  // 「編輯批發訂單」與「編輯出貨配送」是不同單據；從訂單編輯可直接進入配送修改。
+  async function openDeliveryFromOrder(orderId: number, preferEdit = false) {
+    try {
+      const full = await getWholesaleOrder(orderId);
+      const qtys: Record<number, number> = {};
+      for (const it of (full as any).items ?? []) {
+        qtys[it.id] = it.pendingQty ?? Math.max(0, (it.qty ?? 0) - (it.shippedQty ?? 0));
+      }
+      setDeliveryQtys(qtys);
+      setEditingDelivery(null);
+      setDeliveryTechs([]);
+      setDeliveryPrimary("");
+      setDeliveryExtra("");
+      setDeliveryDate((full as any).expectedDelivery || todayStr());
+      setDeliveryNotes("");
+      setShowDialog(false);
+      setEditId(null);
+      setDeliveryOrder(full);
+      if (preferEdit) {
+        const editableDeliveries = ((full as any).deliveries ?? []).filter((d: any) => !d.deliveryConfirmedAt);
+        if (editableDeliveries.length === 1) beginEditDelivery(editableDeliveries[0]);
+      }
+    } catch {
+      toast({ title: "無法載入出貨配送資料", description: "請確認網路連線後重試", variant: "destructive" });
+    }
+  }
+
+  function beginEditDelivery(d: any) {
+    if (d.deliveryConfirmedAt) {
+      toast({ title: "此單已確認出貨，不能直接修改配送數量", variant: "destructive" });
+      return;
+    }
+    setEditingDelivery(d);
+    setDeliveryQtys(Object.fromEntries((d.items ?? []).map((it: any) => [it.wholesaleOrderItemId, it.shipQty])));
+    let names: string[] = [];
+    try {
+      const parsed = JSON.parse(d.technicians || "[]");
+      if (Array.isArray(parsed)) names = parsed.filter((n: any) => typeof n === "string");
+    } catch { /* 舊資料沒有 technicians 時以主要配送人員回填 */ }
+    if (!names.length) names = [d.primaryTechnician, d.assignedTo].filter(Boolean);
+    setDeliveryTechs(Array.from(new Set(names.filter((n) => n !== d.extraTechnician))));
+    setDeliveryPrimary(d.primaryTechnician || d.assignedTo || "");
+    setDeliveryExtra(d.extraTechnician || "");
+    setDeliveryDate((d.scheduledDate || todayStr()).slice(0, 10));
+    setDeliveryNotes(d.notes || "");
+  }
+
   function updateItem(idx: number, patch: Partial<OItem>) {
     setForm(f => ({ ...f, items: f.items.map((it, i) => i === idx ? { ...it, ...patch } : it) }));
   }
@@ -463,25 +510,7 @@ export default function WholesaleOrders() {
                         variant="outline"
                         size="sm"
                         className="h-7 gap-1 text-xs"
-                        onClick={async () => {
-                          try {
-                            const full = await getWholesaleOrder(o.id);
-                            const qtys: Record<number, number> = {};
-                            for (const it of (full as any).items ?? []) {
-                              qtys[it.id] = it.pendingQty ?? Math.max(0, (it.qty ?? 0) - (it.shippedQty ?? 0));
-                            }
-                            setDeliveryQtys(qtys);
-                            setEditingDelivery(null);
-                            setDeliveryTechs([]);
-                            setDeliveryPrimary("");
-                            setDeliveryExtra("");
-                            setDeliveryDate((full as any).expectedDelivery || todayStr());
-                            setDeliveryNotes("");
-                            setDeliveryOrder(full);
-                          } catch {
-                            toast({ title: "無法載入訂單", variant: "destructive" });
-                          }
-                        }}
+                        onClick={() => void openDeliveryFromOrder(o.id)}
                       >
                         <Truck className="h-3 w-3" />建立出貨單
                       </Button>
@@ -564,6 +593,16 @@ export default function WholesaleOrders() {
                   </Select>
                 </div>
               </div>
+
+              {editId && (
+                <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 space-y-2">
+                  <p className="text-sm font-semibold text-blue-900">配送司機／出貨單</p>
+                  <p className="text-xs text-blue-800">配送人員屬於實際出貨單資料，不是批發訂單的業務欄位。請點下方按鈕修改已建立出貨單的司機、日期與備註。</p>
+                  <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => void openDeliveryFromOrder(editId, true)}>
+                    <Truck className="h-4 w-4 mr-2" />修改配送人員／出貨單
+                  </Button>
+                </div>
+              )}
 
               {/* Items */}
               <div>
@@ -810,12 +849,12 @@ export default function WholesaleOrders() {
       </AlertDialog>
 
       <Dialog open={!!deliveryOrder} onOpenChange={(open) => { if (!open) { setDeliveryOrder(null); setEditingDelivery(null); } }}>
-        <DialogContent className="max-w-lg w-[calc(100vw-1rem)]">
+        <DialogContent className="max-w-lg w-[calc(100vw-1rem)] max-h-[92dvh] overflow-hidden">
           <DialogHeader>
             <DialogTitle>{editingDelivery ? "修改出貨單（派工單）" : "建立出貨單（派工單）"}</DialogTitle>
           </DialogHeader>
           {deliveryOrder && (
-            <div className="space-y-3">
+            <DialogBody className="space-y-3">
               <p className="text-sm text-muted-foreground">
                 客戶：{deliveryOrder.customerName || "—"}　訂單：{deliveryOrder.orderNumber}
               </p>
@@ -852,26 +891,16 @@ export default function WholesaleOrders() {
                         <p className="text-muted-foreground">{d.primaryTechnician || d.assignedTo || "尚未指定配送人員"} · {d.scheduledDate || "未指定日期"}</p>
                       </div>
                       {!d.deliveryConfirmedAt && (
-                        <Button type="button" size="sm" variant="outline" onClick={() => {
-                          setEditingDelivery(d);
-                          setDeliveryQtys(Object.fromEntries((d.items ?? []).map((it: any) => [it.wholesaleOrderItemId, it.shipQty])));
-                          let names: string[] = [];
-                          try { const parsed = JSON.parse(d.technicians || "[]"); if (Array.isArray(parsed)) names = parsed.filter((n: any) => typeof n === "string"); } catch { /* 舊資料可用主要人員回填 */ }
-                          if (!names.length) names = [d.primaryTechnician, d.assignedTo].filter(Boolean);
-                          setDeliveryTechs(Array.from(new Set(names.filter((n) => n !== d.extraTechnician))));
-                          setDeliveryPrimary(d.primaryTechnician || d.assignedTo || "");
-                          setDeliveryExtra(d.extraTechnician || "");
-                          setDeliveryDate((d.scheduledDate || todayStr()).slice(0, 10));
-                          setDeliveryNotes(d.notes || "");
-                        }}>修改</Button>
+                        <Button type="button" size="sm" variant="outline" onClick={() => beginEditDelivery(d)}>修改配送</Button>
                       )}
                     </div>
                   ))}
                 </div>
               )}
               <div className="space-y-1">
-                <Label>配送師傅</Label>
+                <Label>配送司機／師傅（可複選）</Label>
                 <div className="border rounded-md p-2 max-h-32 overflow-y-auto space-y-1">
+                  {technicianOptions.length === 0 && <p className="text-xs text-amber-700">沒有可選在職人員，請先確認員工名單。</p>}
                   {technicianOptions.map((emp: any) => (
                     <div key={emp.id} className="flex items-center gap-2">
                       <Checkbox
@@ -904,12 +933,12 @@ export default function WholesaleOrders() {
                 <Label>備註</Label>
                 <Textarea rows={2} value={deliveryNotes} onChange={(e) => setDeliveryNotes(e.target.value)} />
               </div>
-            </div>
+            </DialogBody>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setEditingDelivery(null); setDeliveryOrder(null); }}>取消</Button>
+            <Button variant="outline" onClick={() => { setEditingDelivery(null); setDeliveryOrder(null); }}>關閉</Button>
             <Button
-              disabled={deliverySaving}
+              disabled={deliverySaving || !deliveryOrder}
               onClick={async () => {
                 if (!deliveryOrder) return;
                 setDeliverySaving(true);
@@ -952,7 +981,7 @@ export default function WholesaleOrders() {
                   setDeliverySaving(false);
                 }
               }}
-            >{editingDelivery ? "儲存修改" : "建立出貨單"}</Button>
+            >{deliverySaving ? "儲存中…" : editingDelivery ? "儲存配送修改" : "確認建立出貨單"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

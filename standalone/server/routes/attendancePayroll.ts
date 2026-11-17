@@ -14,12 +14,43 @@ const int = (n: unknown) => Number(n);
 const error = (res: Response, e: unknown) => res.status(400).json({ error: e instanceof Error ? e.message : "資料格式錯誤" });
 const employeeExists = async (id: number) => (await pool.query("SELECT 1 FROM employees WHERE id=$1", [id])).rowCount === 1;
 
+// Keep legacy employee IDs intact. A single preferred ID represents a person in new attendance/payroll pickers.
+function identityKey(e:{id:number;name:string;phone:string|null}):string {
+ const phone=(e.phone||"").replace(/\D/g,"");
+ return phone?`${e.name.trim().replace(/\s+/g,"").toLocaleLowerCase()}|${phone}`:`id:${e.id}`;
+}
+async function canonicalPeople() {
+ const r=await pool.query(`SELECT id,name,phone,status FROM employees WHERE status <> '離職' ORDER BY id`);
+ const map=new Map<string,{id:number;name:string;phone:string|null;status:string;legacyIds:number[]}>();
+ for(const e of r.rows){const key=identityKey(e);const old=map.get(key);
+  if(!old)map.set(key,{...e,legacyIds:[e.id]});
+  else{old.legacyIds.push(e.id);if(old.status!=='在職'&&e.status==='在職'){old.id=e.id;old.name=e.name;old.status=e.status;}}
+ }
+ const reviews=await pool.query(`SELECT group_key,primary_employee_id FROM employee_identity_reviews`);
+ for(const rev of reviews.rows){const item=map.get(rev.group_key);if(item&&item.legacyIds.includes(rev.primary_employee_id)){const selected=r.rows.find(e=>e.id===rev.primary_employee_id);if(selected){item.id=selected.id;item.name=selected.name;}}}
+ return [...map.entries()].map(([key,e])=>({...e,key}));
+}
+router.get("/employee-identity/reviews",ownerOnly,async(_req,res)=>{try{
+ const people=await canonicalPeople();const existing=await pool.query(`SELECT group_key,primary_employee_id,reviewed_at FROM employee_identity_reviews`);
+ const confirmed=new Map(existing.rows.map(r=>[r.group_key,r]));
+ res.json(people.filter(e=>e.legacyIds.length>1).map(e=>({key:e.key,name:e.name,ids:e.legacyIds,primaryEmployeeId:e.id,confirmed:confirmed.has(e.key),reviewedAt:confirmed.get(e.key)?.reviewed_at??null})));
+}catch(e){error(res,e);}});
+router.put("/employee-identity/reviews",ownerOnly,async(req,res)=>{try{
+ const v=z.object({key:z.string().min(1).max(300),primaryEmployeeId:z.number().int().positive()}).parse(req.body);
+ const people=await canonicalPeople();const person=people.find(e=>e.key===v.key&&e.legacyIds.length>1);
+ if(!person||!person.legacyIds.includes(v.primaryEmployeeId)){res.status(400).json({error:"人員資料已變動，請重新整理後核對"});return;}
+ await pool.query(`INSERT INTO employee_identity_reviews(group_key,primary_employee_id,reviewed_by) VALUES($1,$2,$3) ON CONFLICT(group_key) DO UPDATE SET primary_employee_id=EXCLUDED.primary_employee_id,reviewed_by=EXCLUDED.reviewed_by,reviewed_at=now()`,[v.key,v.primaryEmployeeId,req.user!.id]);
+ res.json({ok:true});
+}catch(e){error(res,e);}});
+
 // Only owner can decide who needs attendance registration; role/title does not control this.
 router.get("/employee-attendance/preferences", ownerOnly, async (_req,res)=>{
  try {const result=await pool.query(`SELECT e.id AS "employeeId",e.name,
   COALESCE(p.requires_attendance,true) AS "requiresAttendance"
   FROM employees e LEFT JOIN employee_attendance_preferences p ON p.employee_id=e.id
-  WHERE e.status <> '離職' ORDER BY e.id`);res.json(result.rows);}
+  WHERE e.status <> '離職' ORDER BY e.id`);
+  const byId=new Map(result.rows.map(e=>[e.employeeId,e]));
+  res.json((await canonicalPeople()).map(p=>byId.get(p.id)).filter(Boolean));}
  catch(e){error(res,e);}
 });
 router.put("/employee-attendance/preferences/:id",ownerOnly,async(req,res)=>{
@@ -38,7 +69,8 @@ router.put("/employee-attendance/preferences/:id",ownerOnly,async(req,res)=>{
 router.get("/employee-attendance/employees", attendanceRoles, async(_req,res)=>{
   try {
     const result = await pool.query(`SELECT e.id,e.name FROM employees e LEFT JOIN employee_attendance_preferences p ON p.employee_id=e.id WHERE e.status <> '離職' AND COALESCE(p.requires_attendance,true) ORDER BY e.id`);
-    res.json(result.rows);
+    const allowed=new Set(result.rows.map(e=>e.id));
+    res.json((await canonicalPeople()).filter(p=>allowed.has(p.id)).map(p=>({id:p.id,name:p.name})));
   } catch(e) { error(res,e); }
 });
 

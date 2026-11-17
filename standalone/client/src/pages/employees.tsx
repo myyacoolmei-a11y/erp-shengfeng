@@ -7,7 +7,7 @@ import {
   getListEmployeesQueryKey,
 } from "@workspace/api-client-react";
 import type { ListEmployeesPerformanceParams } from "@workspace/api-client-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
@@ -20,6 +20,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Plus, Pencil, UserX } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
+type IdentityReview = {key:string;name:string;ids:number[];primaryEmployeeId:number;confirmed:boolean;reviewedAt:string|null};
+async function identityApi<T>(path:string,method="GET",body?:unknown):Promise<T>{
+ const token=localStorage.getItem("erp_auth_token");
+ const r=await fetch("/api"+path,{method,headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json"},body:body===undefined?undefined:JSON.stringify(body)});
+ const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.error||`操作失敗 (${r.status})`);return data as T;
+}
 const POSITIONS = ["業務", "師傅技師", "行政", "會計", "老闆"];
 
 // The existing database stores a text position. Multiple responsibilities are
@@ -141,6 +147,7 @@ export default function Employees() {
   const [editItem, setEditItem] = useState<any>(null);
   const [disableId, setDisableId] = useState<number | null>(null);
 
+
   const perfParams = useMemo((): ListEmployeesPerformanceParams => {
     if (periodMode === "month") return { period: "month", month };
     if (periodMode === "quarter") return { period: "quarter", quarter };
@@ -152,6 +159,10 @@ export default function Employees() {
 
   const { user } = useAuth();
   const payrollOwner = hasRole(user, "owner", "super_admin");
+  const [reviewKey,setReviewKey]=useState<string|null>(null);
+  const [reviewPrimary,setReviewPrimary]=useState(0);
+  const [reviewBusy,setReviewBusy]=useState(false);
+  const {data:reviewGroups=[],error:reviewError}=useQuery({queryKey:["employee-identity-reviews"],enabled:hasRole(user,"owner","super_admin"),queryFn:()=>identityApi<IdentityReview[]>("/employee-identity/reviews")});
   const { data: employees, isLoading } = useListEmployees({});
   const { data: performanceList } = useListEmployeesPerformance(perfParams, {
     query: { enabled: perfEnabled } as any,
@@ -322,11 +333,13 @@ export default function Employees() {
                     <div className="text-xs text-muted-foreground mt-0.5 flex gap-3 flex-wrap">
                       {e.phone && <span>{e.phone}</span>}
                       {e.notes && <span className="truncate max-w-xs">{e.notes}</span>}
-                      {records.length > 1 && (
-                        <span className="text-amber-700 font-medium" title="原始資料仍有多個員工 ID，未自動合併以保護派工、績效和出勤紀錄">
-                          ⚠ {records.length} 筆舊資料待核對合併
-                        </span>
-                      )}
+                      {records.length > 1 && (()=>{
+                        const review=reviewGroups.find(g=>g.ids.includes(e.id) && g.ids.length===records.length);
+                        return <span className="text-amber-700 font-medium flex gap-2 items-center">
+                          {review?.confirmed?"✓ 舊資料已核對（保留原始 ID）":`⚠ ${records.length} 筆舊資料待核對`}
+                          {payrollOwner&&<Button type="button" size="sm" variant="outline" className="h-7" onClick={()=>{setReviewKey(review?.key??null);setReviewPrimary(review?.primaryEmployeeId??e.id);if(!review)toast({title:"核對資料尚未載入",description:"請檢查 migration 和權限",variant:"destructive"});}}>核對資料</Button>}
+                        </span>;
+                      })()}
                     </div>
                     <PerformanceSummary perf={perfByEmployeeId.get(e.id)} />
                   </div>
@@ -442,6 +455,23 @@ export default function Employees() {
         </Dialog>
       ))}
 
+      <Dialog open={Boolean(reviewKey)} onOpenChange={open=>!open&&setReviewKey(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle>確認同一人的歷史員工資料</DialogTitle></DialogHeader>
+          {(()=>{const group=reviewGroups.find(g=>g.key===reviewKey);if(!group)return null;
+            const entries=(employees??[]).filter(e=>group.ids.includes(e.id));
+            return <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">這裡只確認哪一筆是未來出勤、薪資設定使用的主要員工 ID。其他舊資料不會刪除或轉移；歷史派工與績效依然保留原本關聯。</p>
+              <div className="space-y-2">{entries.map(e=><label key={e.id} className="flex items-start gap-2 rounded-md border p-3 cursor-pointer">
+                <input type="radio" className="mt-1" checked={reviewPrimary===e.id} onChange={()=>setReviewPrimary(e.id)}/>
+                <span className="text-sm">員工 ID：{e.id}｜{e.name}｜{e.position}｜{e.status}<br/><span className="text-muted-foreground">{e.phone??"未填電話"}</span></span>
+              </label>)}</div>
+              <p className="text-xs text-amber-700">注意：舊的出勤或薪資若已記錄在另一個 ID，不會自動搬到主要 ID；請先核對歷史資料再正式結算。</p>
+              <DialogFooter><Button variant="outline" onClick={()=>setReviewKey(null)}>取消</Button><Button disabled={reviewBusy} onClick={async()=>{try{setReviewBusy(true);await identityApi("/employee-identity/reviews","PUT",{key:group.key,primaryEmployeeId:reviewPrimary});await Promise.all([queryClient.invalidateQueries({queryKey:["employee-identity-reviews"]}),queryClient.invalidateQueries({queryKey:["attendance-employee-list"]}),queryClient.invalidateQueries({queryKey:["attendance-preferences"]})]);setReviewKey(null);toast({title:"已保存主要員工 ID",description:"舊資料未刪除，歷史關聯未更動"});}catch(e){toast({title:"核對儲存失敗",description:String(e),variant:"destructive"});}finally{setReviewBusy(false);}}}>{reviewBusy?"儲存中…":"確認並儲存"}</Button></DialogFooter>
+            </div>})()}
+        </DialogContent>
+      </Dialog>
+      {reviewError&&payrollOwner&&<p className="text-xs text-red-700">舊員工資料核對服務讀取失敗：{String(reviewError)}。請確認資料庫已升級。</p>}
       <AlertDialog open={disableId !== null} onOpenChange={open => !open && setDisableId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
