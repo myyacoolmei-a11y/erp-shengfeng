@@ -26,23 +26,11 @@ async function canonicalPeople() {
   if(!old)map.set(key,{...e,legacyIds:[e.id]});
   else{old.legacyIds.push(e.id);if(old.status!=='在職'&&e.status==='在職'){old.id=e.id;old.name=e.name;old.status=e.status;}}
  }
- const reviews=await pool.query(`SELECT group_key,primary_employee_id FROM employee_identity_reviews`);
- for(const rev of reviews.rows){const item=map.get(rev.group_key);if(item&&item.legacyIds.includes(rev.primary_employee_id)){const selected=r.rows.find(e=>e.id===rev.primary_employee_id);if(selected){item.id=selected.id;item.name=selected.name;}}}
+ // A person is represented by one stable employee ID in new attendance/payroll lists.
+ // Legacy employee records are retained untouched for historical references.
+ // No manual identity review or review-table dependency is required.
  return [...map.entries()].map(([key,e])=>({...e,key}));
 }
-router.get("/employee-identity/reviews",ownerOnly,async(_req,res)=>{try{
- const people=await canonicalPeople();const existing=await pool.query(`SELECT group_key,primary_employee_id,reviewed_at FROM employee_identity_reviews`);
- const confirmed=new Map(existing.rows.map(r=>[r.group_key,r]));
- res.json(people.filter(e=>e.legacyIds.length>1).map(e=>({key:e.key,name:e.name,ids:e.legacyIds,primaryEmployeeId:e.id,confirmed:confirmed.has(e.key),reviewedAt:confirmed.get(e.key)?.reviewed_at??null})));
-}catch(e){error(res,e);}});
-router.put("/employee-identity/reviews",ownerOnly,async(req,res)=>{try{
- const v=z.object({key:z.string().min(1).max(300),primaryEmployeeId:z.number().int().positive()}).parse(req.body);
- const people=await canonicalPeople();const person=people.find(e=>e.key===v.key&&e.legacyIds.length>1);
- if(!person||!person.legacyIds.includes(v.primaryEmployeeId)){res.status(400).json({error:"人員資料已變動，請重新整理後核對"});return;}
- await pool.query(`INSERT INTO employee_identity_reviews(group_key,primary_employee_id,reviewed_by) VALUES($1,$2,$3) ON CONFLICT(group_key) DO UPDATE SET primary_employee_id=EXCLUDED.primary_employee_id,reviewed_by=EXCLUDED.reviewed_by,reviewed_at=now()`,[v.key,v.primaryEmployeeId,req.user!.id]);
- res.json({ok:true});
-}catch(e){error(res,e);}});
-
 // Only owner can decide who needs attendance registration; role/title does not control this.
 router.get("/employee-attendance/preferences", ownerOnly, async (_req,res)=>{
  try {const result=await pool.query(`SELECT e.id AS "employeeId",e.name,
