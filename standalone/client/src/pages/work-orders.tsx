@@ -1,4 +1,4 @@
-import { StockShipmentButton } from "@/components/stock-shipment-button";
+import { StockShipmentButton, StockShipmentHistory } from "@/components/stock-shipment-button";
 import { employeeOptions } from "../../../shared/employeePositions";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useSearch, useLocation, Link } from "wouter";
@@ -1676,6 +1676,7 @@ export default function WorkOrders() {
                   {expandedId === o.id && (
                     <div className="space-y-3 border-t pt-3">
                       <WorkOrderDetailSummary order={o} />
+                      <StockShipmentHistory id={o.id} />
                       <WorkOrderSubsidyPanel order={o} />
                       <FieldProgressDetailSection workOrderId={o.id} />
                       <ProgressPanel workOrderId={o.id} customerId={o.customerId ?? 0} workOrderTitle={o.workOrderNumber || o.title} />

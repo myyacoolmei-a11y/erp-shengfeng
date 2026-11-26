@@ -1,6 +1,6 @@
 import { Router, type IRouter } from "express";
 import { z } from "zod/v4";
-import { eq, and, inArray, desc, sql } from "drizzle-orm";
+import { eq, and, inArray, desc, sql, or, like } from "drizzle-orm";
 import {
   db,
   workOrdersTable,
@@ -904,7 +904,7 @@ router.delete("/work-orders/:id", async (req, res): Promise<void> => {
     if (!access.ok) { res.status(403).json({ error: access.message }); return; }
   }
 
-  const [shipment] = await db.select({id:inventoryTransactionsTable.id}).from(inventoryTransactionsTable).where(eq(inventoryTransactionsTable.shipmentKey,`work-order:${id}`)).limit(1);
+  const [shipment] = await db.select({id:inventoryTransactionsTable.id}).from(inventoryTransactionsTable).where(or(eq(inventoryTransactionsTable.shipmentKey,`work-order:${id}`),like(inventoryTransactionsTable.shipmentKey,`work-order:${id}:%`))).limit(1);
   const [deducted] = await db.select({id:workOrderDeliveryItemsTable.id}).from(workOrderDeliveryItemsTable).where(and(eq(workOrderDeliveryItemsTable.workOrderId,id),sql`${workOrderDeliveryItemsTable.inventoryDeductedAt} is not null`)).limit(1);
   if(shipment||deducted){res.status(409).json({error:"已有庫存出貨紀錄，不可刪除派工單"});return;}
   const [order] = await db.delete(workOrdersTable).where(eq(workOrdersTable.id, id)).returning();
@@ -972,7 +972,7 @@ router.post("/work-orders/:workOrderId/progress", async (req, res): Promise<void
   res.status(201).json({ ...entry, createdAt: isoStr(entry.createdAt) });
 });
 
-const ShipmentInput = z.object({items:z.array(z.object({inventoryItemId:z.number().int().positive(),quantity:z.number().int().positive().max(100000)})).min(1).max(100)});
+const ShipmentInput = z.object({requestId:z.string().uuid(),items:z.array(z.object({inventoryItemId:z.number().int().positive(),quantity:z.number().int().positive().max(100000)})).min(1).max(100)});
 const WholesaleSelection = z.object({selections:z.array(z.object({lineId:z.number().int().positive(),inventoryItemId:z.number().int().positive()})).max(100)});
 router.get("/work-orders/:id/stock-shipment", requireFeature("inventory"), async(req,res):Promise<void>=>{
   const id=Number(req.params.id); if (!Number.isInteger(id)||id<1) {res.status(400).json({error:"無效派工單"});return;}
@@ -980,8 +980,9 @@ router.get("/work-orders/:id/stock-shipment", requireFeature("inventory"), async
   if(!wo){res.status(404).json({error:"找不到派工單"});return;}
   if(req.user && !(await assertWorkOrderDataAccess(req.user,wo)).ok){res.status(403).json({error:"無權限"});return;}
   const lines=await db.select().from(workOrderDeliveryItemsTable).where(eq(workOrderDeliveryItemsTable.workOrderId,id));
-  const history=await db.select().from(inventoryTransactionsTable).where(eq(inventoryTransactionsTable.shipmentKey,`work-order:${id}`));
-  res.json({wholesale:!!wo.wholesaleOrderId, parent:!!wo.parentWorkOrderId, confirmed:!!wo.deliveryConfirmedAt||history.length>0, lines,history});
+  const sourceId=wo.parentWorkOrderId || id;
+  const history=await db.select({id:inventoryTransactionsTable.id,inventoryItemId:inventoryTransactionsTable.inventoryItemId,quantityChange:inventoryTransactionsTable.quantityChange,notes:inventoryTransactionsTable.notes,occurredAt:inventoryTransactionsTable.occurredAt,createdAt:inventoryTransactionsTable.createdAt,brand:inventoryItemsTable.brand,itemName:inventoryItemsTable.itemName,model:inventoryItemsTable.model,serialNumber:inventoryItemsTable.serialNumber,unit:inventoryItemsTable.unit}).from(inventoryTransactionsTable).leftJoin(inventoryItemsTable,eq(inventoryItemsTable.id,inventoryTransactionsTable.inventoryItemId)).where(or(eq(inventoryTransactionsTable.shipmentKey,`work-order:${sourceId}`),like(inventoryTransactionsTable.shipmentKey,`work-order:${sourceId}:%`))).orderBy(desc(inventoryTransactionsTable.createdAt),desc(inventoryTransactionsTable.id));
+  res.json({wholesale:!!wo.wholesaleOrderId, parent:!!wo.parentWorkOrderId, confirmed:!!wo.deliveryConfirmedAt, lines,history});
 });
 router.post("/work-orders/:id/stock-shipment", requireFeature("inventory"), async(req,res):Promise<void>=>{
   const id=Number(req.params.id), parsed=ShipmentInput.safeParse(req.body);
@@ -991,7 +992,8 @@ router.post("/work-orders/:id/stock-shipment", requireFeature("inventory"), asyn
       const [wo]=await tx.select().from(workOrdersTable).where(eq(workOrdersTable.id,id)).for("update");
       if(!wo||wo.wholesaleOrderId||wo.parentWorkOrderId) throw new WholesaleDeliveryError("此單須使用批發出貨流程");
       if(req.user && !(await assertWorkOrderDataAccess(req.user,wo)).ok) throw new WholesaleDeliveryError("無權限",403);
-      const [existing]=await tx.select().from(inventoryTransactionsTable).where(eq(inventoryTransactionsTable.shipmentKey,`work-order:${id}`)).limit(1);
+      const shipmentKey=`work-order:${id}:${parsed.data.requestId}`;
+      const [existing]=await tx.select().from(inventoryTransactionsTable).where(eq(inventoryTransactionsTable.shipmentKey,shipmentKey)).limit(1);
       if(existing) return {alreadyConfirmed:true};
       const totals=new Map<number,number>();
       for(const line of parsed.data.items) totals.set(line.inventoryItemId,(totals.get(line.inventoryItemId)||0)+line.quantity);
@@ -1000,7 +1002,7 @@ router.post("/work-orders/:id/stock-shipment", requireFeature("inventory"), asyn
         if(!item||!["庫存中","待出貨"].includes(item.status)) throw new WholesaleDeliveryError("庫存品項不可出貨");
         const [{qty}]=await tx.select({qty:sql<number>`coalesce(sum(${inventoryTransactionsTable.quantityChange}),0)::int`}).from(inventoryTransactionsTable).where(eq(inventoryTransactionsTable.inventoryItemId,itemId));
         if(Number(qty)<n) throw new WholesaleDeliveryError(`${item.itemName} ${item.model||""} 庫存不足（剩 ${qty}，需 ${n}）`);
-        await tx.insert(inventoryTransactionsTable).values({inventoryItemId:itemId,quantityChange:-n,reason:"派工領料",notes:`派工單 ${wo.workOrderNumber||wo.id}｜${wo.customerName||""}`,shipmentKey:`work-order:${id}`,occurredAt:new Date(),createdBy:req.user?.id??null});
+        await tx.insert(inventoryTransactionsTable).values({inventoryItemId:itemId,quantityChange:-n,reason:"派工領料",notes:`派工單 ${wo.workOrderNumber||wo.id}｜${wo.customerName||""}`,shipmentKey,occurredAt:new Date(),createdBy:req.user?.id??null});
       }
       return {alreadyConfirmed:false};
     });res.json(result);
