@@ -211,6 +211,7 @@ router.get("/wholesale/orders", async (req, res): Promise<void> => {
 router.post("/wholesale/orders", async (req, res): Promise<void> => {
   const parsed = OrderInput.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  if (parsed.data.status === "已出貨") {res.status(400).json({error:"請先建立出貨單，再確認庫存出貨"});return;}
   const { items, taxRate, shippingFee, ...header } = parsed.data;
   const resolvedCustomer = await resolveOrderCustomer(header.customerId, header.customerName);
   const { computed, subtotal, taxAmount, total } = computeTotals(items, taxRate, shippingFee);
@@ -250,6 +251,12 @@ router.patch("/wholesale/orders/:id", async (req, res): Promise<void> => {
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   const parsed = OrderInput.safeParse(req.body);
   if (!parsed.success) { res.status(400).json({ error: parsed.error.message }); return; }
+  const [existing] = await db.select().from(wholesaleOrdersTable).where(eq(wholesaleOrdersTable.id,id));
+  if(!existing){res.status(404).json({error:"找不到批發訂單"});return;}
+  const deliveries = await listDeliveryWorkOrders(id);
+  if(deliveries.length){res.status(409).json({error:"已有出貨單，請由配送／出貨管理修改；不可重建訂單品項"});return;}
+  if(parsed.data.status === "已出貨" && existing.status !== "已出貨"){res.status(400).json({error:"請先建立出貨單，再確認庫存出貨"});return;}
+  if(existing.status === "已出貨"){res.status(409).json({error:"歷史已出貨單不可直接修改，請先核對"});return;}
   const { items, taxRate, shippingFee, ...header } = parsed.data;
   const resolvedCustomer = await resolveOrderCustomer(header.customerId, header.customerName);
   const { computed, subtotal, taxAmount, total } = computeTotals(items, taxRate, shippingFee);
@@ -280,6 +287,8 @@ router.patch("/wholesale/orders/:id", async (req, res): Promise<void> => {
 router.delete("/wholesale/orders/:id", async (req, res): Promise<void> => {
   const id = parseId(req.params.id);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
+  const [existing] = await db.select().from(wholesaleOrdersTable).where(eq(wholesaleOrdersTable.id,id));
+  if(existing?.status === "已出貨" || (await listDeliveryWorkOrders(id)).length){res.status(409).json({error:"已有出貨紀錄，不可刪除訂單"});return;}
   await db.delete(wholesaleOrdersTable).where(eq(wholesaleOrdersTable.id, id));
   res.status(204).send();
 });

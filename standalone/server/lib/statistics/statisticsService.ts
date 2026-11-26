@@ -15,7 +15,12 @@ import {
   receivablesTable,
   repairCasesTable,
   employeesTable,
+  usersTable,
 } from "@workspace/db";
+import { computeSalesStats } from "./salesStatsService";
+import { buildEmployeeReportingIndex } from "../../../shared/employeeReporting.ts";
+import { mapSalesCaseCategory } from "../../../shared/salesStats.ts";
+import { isQuoteWon } from "../../../shared/quoteStatus.ts";
 import { computeQuoteDisplayTotal } from "../quoteTotals";
 import { listPendingDispatchQuotes } from "../quoteWorkflow";
 import {
@@ -44,28 +49,6 @@ function isFullyPaidStatus(status: string | null | undefined): boolean {
 
 export function remainingAmount(total: unknown, received: unknown): number {
   return Math.max(0, toAmount(total) - toAmount(received));
-}
-
-function isWorkOrderAssignedTo(
-  wo: { assignedTo: string | null; assistantTo: string | null; technicians: string | null },
-  employeeName: string,
-): boolean {
-  if (wo.assignedTo === employeeName || wo.assistantTo === employeeName) return true;
-  if (!wo.technicians) return false;
-  try {
-    const techs = JSON.parse(wo.technicians);
-    return Array.isArray(techs) && techs.includes(employeeName);
-  } catch {
-    return false;
-  }
-}
-
-function isInstallType(projectType: string | null | undefined): boolean {
-  return projectType === "新裝" || projectType === "安裝";
-}
-
-function isMaintenanceType(projectType: string | null | undefined): boolean {
-  return projectType === "保養" || projectType === "保固服務";
 }
 
 const QUOTE_SUMMARY_SELECT = {
@@ -337,6 +320,12 @@ export async function getDashboardSummary() {
 // ── Employee KPI ─────────────────────────────────────────────────────────────
 
 export interface SalesKpi {
+  caseCount: number;
+  salesInstallCount: number;
+  salesMaintenanceCount: number;
+  salesRepairCount: number;
+  salesOtherCount: number;
+  quoteWonInCohort: number;
   quoteCount: number;
   quoteAmount: number;
   wonCount: number;
@@ -368,6 +357,7 @@ export interface EmployeeKpiRow {
 
 function emptySales(): SalesKpi {
   return {
+    caseCount: 0, salesInstallCount: 0, salesMaintenanceCount: 0, salesRepairCount: 0, salesOtherCount: 0, quoteWonInCohort: 0,
     quoteCount: 0,
     quoteAmount: 0,
     wonCount: 0,
@@ -387,154 +377,106 @@ function emptyTechnician(): TechnicianKpi {
 
 /** Batch-compute KPI for all employees in one pass (shared statistics core). */
 export async function computeAllEmployeeKpis(range: StatsDateRange): Promise<EmployeeKpiRow[]> {
-  const employees = await db.select().from(employeesTable).orderBy(employeesTable.name);
-
-  const [
-    monthQuotes,
-    receivableRows,
-    paymentRows,
-    completedWorkOrders,
-    repairRows,
-    workOrdersForQuotes,
-    quotesForLookup,
-    customerRows,
-  ] = await Promise.all([
-    db.select(QUOTE_SUMMARY_SELECT).from(quotesTable).where(and(
-      gte(quotesTable.createdAt, range.startTs),
-      lt(quotesTable.createdAt, range.endTsExclusive),
+  // Use Taipei calendar dates for both pages, independent of server timezone.
+  const startTs = new Date(`${range.startDate}T00:00:00+08:00`);
+  const endTsExclusive = new Date(new Date(`${range.endDate}T00:00:00+08:00`).getTime() + 86400000);
+  const [employees, users, monthQuotes, completedWorkOrders, repairRows, customerRows, salesStats] = await Promise.all([
+    db.select().from(employeesTable).orderBy(employeesTable.name, employeesTable.id),
+    db.select({ id: usersTable.id, linkedEmployeeId: usersTable.linkedEmployeeId, displayName: usersTable.displayName }).from(usersTable),
+    db.select({ ...QUOTE_SUMMARY_SELECT, status: quotesTable.status }).from(quotesTable).where(and(
+      gte(quotesTable.createdAt, startTs), lt(quotesTable.createdAt, endTsExclusive),
+      ne(quotesTable.documentType, "intent"),
     )),
     db.select({
-      id: receivablesTable.id,
-      customerId: receivablesTable.customerId,
-      totalAmount: receivablesTable.totalAmount,
-      workOrderId: receivablesTable.workOrderId,
-    }).from(receivablesTable).where(and(
-      gte(receivablesTable.createdAt, range.startTs),
-      lt(receivablesTable.createdAt, range.endTsExclusive),
-    )),
-    db.select({
-      amount: paymentsTable.amount,
-      customerId: paymentsTable.customerId,
-      quoteId: paymentsTable.quoteId,
-      workOrderId: paymentsTable.workOrderId,
-    }).from(paymentsTable).where(and(
-      gte(paymentsTable.paymentDate, range.startDate),
-      lte(paymentsTable.paymentDate, range.endDate),
-    )),
-    db.select({
-      id: workOrdersTable.id,
-      quoteId: workOrdersTable.quoteId,
-      projectType: workOrdersTable.projectType,
-      assignedTo: workOrdersTable.assignedTo,
-      assistantTo: workOrdersTable.assistantTo,
-      technicians: workOrdersTable.technicians,
-      completedDate: workOrdersTable.completedDate,
+      id: workOrdersTable.id, projectType: workOrdersTable.projectType,
+      assignedTo: workOrdersTable.assignedTo, assistantTo: workOrdersTable.assistantTo,
+      technicians: workOrdersTable.technicians, primaryTechnician: workOrdersTable.primaryTechnician,
+      extraTechnician: workOrdersTable.extraTechnician, jobTypes: workOrdersTable.jobTypes,
     }).from(workOrdersTable).where(and(
       eq(workOrdersTable.status, "已完成"),
-      gte(workOrdersTable.completedDate, range.startDate),
-      lte(workOrdersTable.completedDate, range.endDate),
+      gte(workOrdersTable.completedDate, range.startDate), lte(workOrdersTable.completedDate, range.endDate),
     )),
-    db.select({
-      employeeId: repairCasesTable.employeeId,
-    }).from(repairCasesTable).where(and(
+    db.select({ employeeId: repairCasesTable.employeeId }).from(repairCasesTable).where(and(
       eq(repairCasesTable.status, "已完工"),
-      gte(repairCasesTable.createdAt, range.startTs),
-      lt(repairCasesTable.createdAt, range.endTsExclusive),
+      gte(repairCasesTable.createdAt, startTs), lt(repairCasesTable.createdAt, endTsExclusive),
     )),
-    db.select({ id: workOrdersTable.id, quoteId: workOrdersTable.quoteId }).from(workOrdersTable),
-    db.select({ id: quotesTable.id, salesRepId: quotesTable.salesRepId }).from(quotesTable),
     db.select({ id: customersTable.id, primarySalesRepId: customersTable.primarySalesRepId }).from(customersTable),
+    computeSalesStats({ from: range.startDate, to: range.endDate }),
   ]);
-
+  const reporting = buildEmployeeReportingIndex(employees, users);
   const itemsByQuoteId = await loadQuoteItemsByQuoteId(monthQuotes.map(q => q.id));
-
-  const quoteSalesRep = new Map<number, number | null>();
-  for (const q of quotesForLookup) quoteSalesRep.set(q.id, q.salesRepId);
-
-  const woQuoteId = new Map<number, number | null>();
-  for (const wo of workOrdersForQuotes) woQuoteId.set(wo.id, wo.quoteId);
-
-  const customerSalesRep = new Map<number, number | null>();
-  for (const c of customerRows) customerSalesRep.set(c.id, c.primarySalesRepId);
-
-  function resolveSalesRepId(
-    quoteId: number | null | undefined,
-    workOrderId: number | null | undefined,
-    customerId?: number | null,
-  ): number | null {
-    if (quoteId != null) {
-      const rep = quoteSalesRep.get(quoteId);
-      if (rep != null) return rep;
-    }
-    if (workOrderId != null) {
-      const qid = woQuoteId.get(workOrderId);
-      if (qid != null) {
-        const rep = quoteSalesRep.get(qid);
-        if (rep != null) return rep;
-      }
-    }
-    if (customerId != null) {
-      const rep = customerSalesRep.get(customerId);
-      if (rep != null) return rep;
-    }
-    return null;
-  }
-
+  const customerSalesRep = new Map(customerRows.map(c => [c.id, c.primarySalesRepId]));
   const salesByEmp = new Map<number, SalesKpi>();
   const techByEmp = new Map<number, TechnicianKpi>();
-
   for (const emp of employees) {
-    salesByEmp.set(emp.id, emptySales());
-    techByEmp.set(emp.id, emptyTechnician());
+    const id = reporting.employeeId(emp.id)!;
+    if (!salesByEmp.has(id)) salesByEmp.set(id, emptySales());
+    if (!techByEmp.has(id)) techByEmp.set(id, emptyTechnician());
   }
-
   for (const q of monthQuotes) {
-    const repId = q.salesRepId ?? (q.customerId != null ? customerSalesRep.get(q.customerId) ?? null : null);
+    const repId = reporting.employeeId(q.salesRepId) ?? reporting.employeeId(q.customerId != null ? customerSalesRep.get(q.customerId) : null);
     if (repId == null) continue;
-    const s = salesByEmp.get(repId);
-    if (!s) continue;
-    s.quoteCount += 1;
-    s.quoteAmount += quoteDisplayTotal(q, itemsByQuoteId);
+    const sales = salesByEmp.get(repId)!;
+    sales.quoteCount += 1;
+    sales.quoteAmount += quoteDisplayTotal(q, itemsByQuoteId);
+    if (isQuoteWon(q.status)) sales.quoteWonInCohort += 1;
   }
-
-  for (const r of receivableRows) {
-    const repId = resolveSalesRepId(null, r.workOrderId, r.customerId);
-    if (repId == null) continue;
-    const s = salesByEmp.get(repId);
-    if (!s) continue;
-    s.wonCount += 1;
-    s.wonAmount += toAmount(r.totalAmount);
-  }
-
-  for (const p of paymentRows) {
-    const repId = resolveSalesRepId(p.quoteId, p.workOrderId, p.customerId);
-    if (repId == null) continue;
-    const s = salesByEmp.get(repId);
-    if (!s) continue;
-    s.collectedAmount += toAmount(p.amount);
-  }
-
-  for (const wo of completedWorkOrders) {
-    for (const emp of employees) {
-      if (!isWorkOrderAssignedTo(wo, emp.name)) continue;
-      const t = techByEmp.get(emp.id)!;
-      t.completedWorkOrderCount += 1;
-      if (isInstallType(wo.projectType)) t.installCount += 1;
-      if (isMaintenanceType(wo.projectType)) t.maintenanceCount += 1;
+  // The exact same case list/amounts as 業務統計, not a separate receivable count.
+  for (const row of salesStats.rows) {
+    for (const item of row.cases) {
+      const id = reporting.employeeId(item.salesEmployeeId);
+      if (id == null) continue; // Unlinked login remains visible in sales statistics, not guessed.
+      const sales = salesByEmp.get(id)!;
+      sales.caseCount += 1;
+      if (item.category === "安裝") sales.salesInstallCount += 1;
+      else if (item.category === "保養") sales.salesMaintenanceCount += 1;
+      else if (item.category === "維修") sales.salesRepairCount += 1;
+      else sales.salesOtherCount += 1;
+      if (item.caseKey.startsWith("quote:") || item.wonAmount > 0) sales.wonCount += 1;
+      sales.wonAmount += item.wonAmount;
+      sales.collectedAmount += item.receivedAmount;
+      sales.unpaidAmount += Math.max(0, item.wonAmount - item.receivedAmount);
     }
   }
-
+  // Old technician assignments are stored as names. Resolve only unique employee
+  // identities, and deduplicate each completed work order across multiple roles.
+  const names = new Map<string, Set<number>>();
+  for (const emp of employees) {
+    const name = emp.name.trim();
+    if (!name) continue;
+    const ids = names.get(name) ?? new Set<number>();
+    ids.add(reporting.employeeId(emp.id)!); names.set(name, ids);
+  }
+  for (const wo of completedWorkOrders) {
+    const assigned = new Set<number>();
+    const labels = [wo.assignedTo, wo.assistantTo, wo.primaryTechnician, wo.extraTechnician];
+    try {
+      const parsed = JSON.parse(wo.technicians ?? "[]");
+      if (Array.isArray(parsed)) labels.push(...parsed.filter((v): v is string => typeof v === "string"));
+    } catch { /* legacy non-JSON field: retain explicit assignments */ }
+    for (const label of labels) {
+      const ids = names.get((label ?? "").trim());
+      if (ids?.size === 1) assigned.add([...ids][0]);
+    }
+    const categories = new Set([wo.projectType, ...(Array.isArray(wo.jobTypes) ? wo.jobTypes : [])].map(v => mapSalesCaseCategory(v, "work_order")));
+    for (const id of assigned) {
+      const tech = techByEmp.get(id)!;
+      tech.completedWorkOrderCount += 1;
+      if (categories.has("安裝")) tech.installCount += 1;
+      if (categories.has("保養")) tech.maintenanceCount += 1;
+      // Repair case table is the existing source for completed repair count.
+    }
+  }
   for (const rc of repairRows) {
-    if (rc.employeeId == null) continue;
-    const t = techByEmp.get(rc.employeeId);
-    if (!t) continue;
-    t.repairCount += 1;
+    const id = reporting.employeeId(rc.employeeId);
+    if (id != null) techByEmp.get(id)!.repairCount += 1;
   }
 
   return employees.map(emp => {
-    const sales = salesByEmp.get(emp.id)!;
-    sales.winRate = sales.quoteCount > 0 ? sales.wonCount / sales.quoteCount : 0;
-    sales.unpaidAmount = Math.max(0, sales.wonAmount - sales.collectedAmount);
+    const id = reporting.employeeId(emp.id)!;
+    // Only the canonical row owns the totals. Historical records remain intact.
+    const sales = id === emp.id ? salesByEmp.get(id)! : emptySales();
+    sales.winRate = sales.quoteCount > 0 ? sales.quoteWonInCohort / sales.quoteCount : 0;
     sales.collectionRate = sales.wonAmount > 0 ? sales.collectedAmount / sales.wonAmount : 0;
     sales.avgTicket = sales.wonCount > 0 ? sales.wonAmount / sales.wonCount : 0;
     sales.performanceAmount = sales.wonAmount;
@@ -545,7 +487,7 @@ export async function computeAllEmployeeKpis(range: StatsDateRange): Promise<Emp
       month: range.label,
       period: range.preset,
       sales,
-      technician: techByEmp.get(emp.id)!,
+      technician: id === emp.id ? techByEmp.get(id)! : emptyTechnician(),
     };
   });
 }

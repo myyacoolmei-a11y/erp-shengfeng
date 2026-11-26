@@ -1,3 +1,4 @@
+import { invalidateStatistics } from "@/lib/invalidateStatistics";
 import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useListEmployees } from "@workspace/api-client-react";
@@ -202,6 +203,7 @@ export default function UsersPage() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["users"] });
+        invalidateStatistics(qc);
       setCreateOpen(false);
       setCreateForm(defaultCreateForm());
       setCreateError(null);
@@ -224,6 +226,7 @@ export default function UsersPage() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["users"] });
+        invalidateStatistics(qc);
       setEditTarget(null);
       setEditError(null);
       toast({ title: "用戶已更新" });
@@ -241,6 +244,7 @@ export default function UsersPage() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["users"] });
+        invalidateStatistics(qc);
       setDeleteTarget(null);
       toast({ title: "用戶已刪除" });
     },

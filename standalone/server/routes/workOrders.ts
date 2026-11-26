@@ -1,4 +1,5 @@
 import { Router, type IRouter } from "express";
+import { z } from "zod/v4";
 import { eq, and, inArray, desc, sql } from "drizzle-orm";
 import {
   db,
@@ -9,9 +10,10 @@ import {
   quotesTable,
   receivablesTable,
   wholesaleOrdersTable,
+  inventoryItemsTable, inventoryTransactionsTable, workOrderDeliveryItemsTable,
 } from "@workspace/db";
 import { CreateWorkOrderBody, UpdateWorkOrderBody, CreateProgressBody } from "@workspace/api-zod";
-import { requireRoleOrFeature, effectiveRoles } from "../lib/auth";
+import { requireRoleOrFeature, effectiveRoles, requireFeature } from "../lib/auth";
 import { syncQuoteDispatchStatus, loadLatestWorkOrdersByQuoteIds } from "../lib/quoteWorkflow";
 import { formatQuoteNumber, QUOTE_STATUS_WON } from "../lib/quoteStatus";
 import { loadQuoteDocument } from "../lib/quoteDocument";
@@ -902,6 +904,9 @@ router.delete("/work-orders/:id", async (req, res): Promise<void> => {
     if (!access.ok) { res.status(403).json({ error: access.message }); return; }
   }
 
+  const [shipment] = await db.select({id:inventoryTransactionsTable.id}).from(inventoryTransactionsTable).where(eq(inventoryTransactionsTable.shipmentKey,`work-order:${id}`)).limit(1);
+  const [deducted] = await db.select({id:workOrderDeliveryItemsTable.id}).from(workOrderDeliveryItemsTable).where(and(eq(workOrderDeliveryItemsTable.workOrderId,id),sql`${workOrderDeliveryItemsTable.inventoryDeductedAt} is not null`)).limit(1);
+  if(shipment||deducted){res.status(409).json({error:"已有庫存出貨紀錄，不可刪除派工單"});return;}
   const [order] = await db.delete(workOrdersTable).where(eq(workOrdersTable.id, id)).returning();
   if (!order) { res.status(404).json({ error: "找不到派工單" }); return; }
   if (order.quoteId) {
@@ -967,12 +972,51 @@ router.post("/work-orders/:workOrderId/progress", async (req, res): Promise<void
   res.status(201).json({ ...entry, createdAt: isoStr(entry.createdAt) });
 });
 
-router.post("/work-orders/:id/confirm-delivery", async (req, res): Promise<void> => {
+const ShipmentInput = z.object({items:z.array(z.object({inventoryItemId:z.number().int().positive(),quantity:z.number().int().positive().max(100000)})).min(1).max(100)});
+const WholesaleSelection = z.object({selections:z.array(z.object({lineId:z.number().int().positive(),inventoryItemId:z.number().int().positive()})).max(100)});
+router.get("/work-orders/:id/stock-shipment", requireFeature("inventory"), async(req,res):Promise<void>=>{
+  const id=Number(req.params.id); if (!Number.isInteger(id)||id<1) {res.status(400).json({error:"無效派工單"});return;}
+  const [wo]=await db.select().from(workOrdersTable).where(eq(workOrdersTable.id,id));
+  if(!wo){res.status(404).json({error:"找不到派工單"});return;}
+  if(req.user && !(await assertWorkOrderDataAccess(req.user,wo)).ok){res.status(403).json({error:"無權限"});return;}
+  const lines=await db.select().from(workOrderDeliveryItemsTable).where(eq(workOrderDeliveryItemsTable.workOrderId,id));
+  const history=await db.select().from(inventoryTransactionsTable).where(eq(inventoryTransactionsTable.shipmentKey,`work-order:${id}`));
+  res.json({wholesale:!!wo.wholesaleOrderId, parent:!!wo.parentWorkOrderId, confirmed:!!wo.deliveryConfirmedAt||history.length>0, lines,history});
+});
+router.post("/work-orders/:id/stock-shipment", requireFeature("inventory"), async(req,res):Promise<void>=>{
+  const id=Number(req.params.id), parsed=ShipmentInput.safeParse(req.body);
+  if(!Number.isInteger(id)||id<1||!parsed.success){res.status(400).json({error:"請選擇出貨品項與正整數數量"});return;}
+  try {
+    const result=await db.transaction(async tx=>{
+      const [wo]=await tx.select().from(workOrdersTable).where(eq(workOrdersTable.id,id)).for("update");
+      if(!wo||wo.wholesaleOrderId||wo.parentWorkOrderId) throw new WholesaleDeliveryError("此單須使用批發出貨流程");
+      if(req.user && !(await assertWorkOrderDataAccess(req.user,wo)).ok) throw new WholesaleDeliveryError("無權限",403);
+      const [existing]=await tx.select().from(inventoryTransactionsTable).where(eq(inventoryTransactionsTable.shipmentKey,`work-order:${id}`)).limit(1);
+      if(existing) return {alreadyConfirmed:true};
+      const totals=new Map<number,number>();
+      for(const line of parsed.data.items) totals.set(line.inventoryItemId,(totals.get(line.inventoryItemId)||0)+line.quantity);
+      for(const [itemId,n] of [...totals].sort((a,b)=>a[0]-b[0])){
+        const [item]=await tx.select().from(inventoryItemsTable).where(eq(inventoryItemsTable.id,itemId)).for("update");
+        if(!item||!["庫存中","待出貨"].includes(item.status)) throw new WholesaleDeliveryError("庫存品項不可出貨");
+        const [{qty}]=await tx.select({qty:sql<number>`coalesce(sum(${inventoryTransactionsTable.quantityChange}),0)::int`}).from(inventoryTransactionsTable).where(eq(inventoryTransactionsTable.inventoryItemId,itemId));
+        if(Number(qty)<n) throw new WholesaleDeliveryError(`${item.itemName} ${item.model||""} 庫存不足（剩 ${qty}，需 ${n}）`);
+        await tx.insert(inventoryTransactionsTable).values({inventoryItemId:itemId,quantityChange:-n,reason:"派工領料",notes:`派工單 ${wo.workOrderNumber||wo.id}｜${wo.customerName||""}`,shipmentKey:`work-order:${id}`,occurredAt:new Date(),createdBy:req.user?.id??null});
+      }
+      return {alreadyConfirmed:false};
+    });res.json(result);
+  } catch(err){if(err instanceof WholesaleDeliveryError){res.status(err.status).json({error:err.message});return;}logger.error({err},"stock shipment failed");res.status(500).json({error:"庫存出貨失敗"});}
+});
+router.post("/work-orders/:id/confirm-delivery", requireFeature("inventory"), async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
   const id = parseInt(raw, 10);
   if (isNaN(id)) { res.status(400).json({ error: "Invalid id" }); return; }
   try {
-    const result = await confirmDeliveryWorkOrder(id, req.user);
+    const parsed=WholesaleSelection.safeParse(req.body);
+    if(!parsed.success){res.status(400).json({error:"請選擇出貨庫存"});return;}
+    const [wo]=await db.select().from(workOrdersTable).where(eq(workOrdersTable.id,id));
+    if(!wo){res.status(404).json({error:"找不到派工單"});return;}
+    if(req.user && !(await assertWorkOrderDataAccess(req.user,wo)).ok){res.status(403).json({error:"無權限"});return;}
+    const result = await confirmDeliveryWorkOrder(id, req.user, parsed.data.selections);
     res.json(result);
   } catch (err) {
     if (err instanceof WholesaleDeliveryError) {

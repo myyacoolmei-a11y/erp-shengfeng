@@ -59,6 +59,7 @@ const STATUS_BADGE: Record<string, "default" | "secondary" | "destructive" | "ou
   報廢: "destructive",
 };
 
+function localDateTime() { const d = new Date(); return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16); }
 function emptyForm() {
   return {
     brand: "",
@@ -147,6 +148,9 @@ export default function Inventory() {
   const [txQtyAbs, setTxQtyAbs] = useState("1");
   const [txSign, setTxSign] = useState<"+" | "-">("+");
   const [txNotes, setTxNotes] = useState("");
+  const [supplier,setSupplier] = useState("");
+  const [occurred,setOccurred] = useState(localDateTime);
+  const [initialQty,setInitialQty] = useState("1");
 
   const [historyItem, setHistoryItem] = useState<InventoryItem | null>(null);
 
@@ -171,7 +175,7 @@ export default function Inventory() {
     enabled: !!historyItem,
   });
 
-  const invalidate = () => qc.invalidateQueries({ queryKey: QUERY_KEY });
+  const invalidate = () => { qc.invalidateQueries({ queryKey: QUERY_KEY }); qc.invalidateQueries({queryKey:["inventory-transactions"]}); };
 
   const createMut = useMutation({
     mutationFn: createInventoryItem,
@@ -232,7 +236,7 @@ export default function Inventory() {
       return createInventoryTransaction(txItem.id, {
         reason: txReason,
         quantityChange: change,
-        notes: txNotes || null,
+        notes: txNotes || null, supplier, occurredAt: new Date(occurred).toISOString(),
       });
     },
     onSuccess: (res) => {
@@ -247,6 +251,7 @@ export default function Inventory() {
   });
 
   function openCreate() {
+    setSupplier(""); setOccurred(localDateTime()); setInitialQty("1");
     setEditing(null);
     setForm(emptyForm());
     setDialogOpen(true);
@@ -259,6 +264,7 @@ export default function Inventory() {
   }
 
   function openTx(item: InventoryItem) {
+    setSupplier(""); setOccurred(localDateTime());
     setTxItem(item);
     setTxReason("進貨");
     setTxQtyAbs("1");
@@ -292,7 +298,7 @@ export default function Inventory() {
     if (editing) {
       updateMut.mutate({ id: editing.id, data: { ...form, ...payload } as any });
     } else {
-      createMut.mutate(payload);
+      createMut.mutate({...payload, initialQuantity:Number(initialQty), supplier, occurredAt:new Date(occurred).toISOString()});
     }
   }
 
@@ -309,7 +315,7 @@ export default function Inventory() {
         </div>
         {canWrite && (
           <Button className="shrink-0 gap-1.5" onClick={openCreate}>
-            <Plus className="h-4 w-4" />新增品項
+            <Plus className="h-4 w-4" />新增品項／進貨
           </Button>
         )}
       </div>
@@ -419,13 +425,13 @@ export default function Inventory() {
                       <td className="p-3">
                         <div className="flex justify-end gap-0.5">
                           <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            title="庫存異動"
+                            variant="outline"
+                            size="sm"
+                            className="h-8 gap-1"
+                            title="登記進貨／庫存異動"
                             onClick={() => openTx(item)}
                           >
-                            <ArrowLeftRight className="h-3.5 w-3.5" />
+                            <ArrowLeftRight className="h-3.5 w-3.5" />進貨／異動
                           </Button>
                           <Button
                             variant="ghost"
@@ -512,7 +518,7 @@ export default function Inventory() {
                 {canWrite && (
                   <div className="flex flex-wrap gap-1 pt-1">
                     <Button size="sm" variant="outline" className="h-8 gap-1" onClick={() => openTx(item)}>
-                      <ArrowLeftRight className="h-3.5 w-3.5" />異動
+                      <ArrowLeftRight className="h-3.5 w-3.5" />進貨／異動
                     </Button>
                     <Button
                       size="sm"
@@ -549,8 +555,9 @@ export default function Inventory() {
           </DialogHeader>
           <form onSubmit={handleSave} className="space-y-3">
             <p className="text-xs text-muted-foreground rounded-md bg-muted/50 px-3 py-2">
-              數量不可直接修改。新增後請使用「庫存異動」登錄進貨或其他異動。
+              新增時可直接登記首批進貨；既有品項請使用庫存異動。
             </p>
+            {!editing && <div className="grid grid-cols-2 gap-3"><div><Label>進貨日期與時間</Label><Input type="datetime-local" required value={occurred} onChange={e=>setOccurred(e.target.value)}/></div><div><Label>供應廠商</Label><Input value={supplier} onChange={e=>setSupplier(e.target.value)}/></div><div><Label>進貨數量</Label><Input type="number" min="0" step="1" required value={initialQty} onChange={e=>setInitialQty(e.target.value)}/></div></div>}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label>品牌</Label>
@@ -663,6 +670,7 @@ export default function Inventory() {
                 </div>
               </div>
               <div className="space-y-1">
+                <Label>異動日期與時間</Label><Input type="datetime-local" value={occurred} onChange={e=>setOccurred(e.target.value)}/>{txReason === "進貨" && <><Label>供應廠商</Label><Input value={supplier} onChange={e=>setSupplier(e.target.value)}/></>}
                 <Label>異動原因</Label>
                 <Select value={txReason} onValueChange={(v) => onReasonChange(v as InventoryTxReason)}>
                   <SelectTrigger>
@@ -755,7 +763,7 @@ export default function Inventory() {
                       {tx.quantityChange}
                     </span>
                   </div>
-                  <div className="text-xs text-muted-foreground mt-0.5">{fmtDate(tx.createdAt)}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">{fmtDate(tx.occurredAt || tx.createdAt)} {tx.supplier && `｜${tx.supplier}`}</div>
                   {tx.notes && <div className="text-xs mt-1">{tx.notes}</div>}
                 </div>
               ))}

@@ -27,7 +27,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTrigger, SheetTitle } from "@/components/ui/sheet";
 import {
   useAuth,
   effectiveRoles,
@@ -41,7 +41,6 @@ import { APP_BRAND } from "@/lib/appBrand";
 import { PwaInstallBanner } from "@/components/pwa/PwaInstallBanner";
 import { NotificationBell } from "@/components/NotificationBell";
 import {
-  NAV_GROUP_LABELS,
   sidebarItemsForGroup,
   wholesaleSubItems,
   type NavIconName,
@@ -49,7 +48,7 @@ import {
 } from "../../../shared/navigationPermissions.ts";
 
 const NAV_ITEM_BASE =
-  "flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-[13px] font-medium transition-colors";
+  "flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors";
 const NAV_ITEM_ACTIVE = "bg-foreground text-background";
 const NAV_ITEM_INACTIVE = "text-muted-foreground hover:bg-muted/60 hover:text-foreground";
 
@@ -137,11 +136,22 @@ function NavSectionHeader({ title }: { title: string }) {
   );
 }
 
-function NavContent() {
-  const [location, navigate] = useLocation();
+function NavGroup({ title, active, children }: { title: string; active: boolean; children: React.ReactNode }) {
+  const [open, setOpen] = useState(active);
+  useEffect(() => { if (active) setOpen(true); }, [active]);
+  return <section className="mt-2 border-t border-border/60 pt-2">
+    <button type="button" aria-expanded={open} onClick={() => setOpen((v) => !v)} className="flex w-full items-center justify-between rounded-lg px-3 py-2.5 text-sm font-medium hover:bg-muted/60">
+      {title}<ChevronDown className={`h-4 w-4 transition-transform ${open ? "" : "-rotate-90"}`} />
+    </button>
+    {open && <div className="ml-2 border-l border-border/60 pl-2">{children}</div>}
+  </section>;
+}
+
+function NavContent({ onNavigate }: { onNavigate?: () => void }) {
+  const [location] = useLocation();
   const { user, logout } = useAuth();
   const isWholesalePath = location.startsWith("/wholesale");
-  const [wholesaleOpen, setWholesaleOpen] = useState(isWholesalePath);
+
 
   const userRoles = effectiveRoles(user);
   const showWholesale = !!(user && userHasFeature(user, "wholesale"));
@@ -151,26 +161,29 @@ function NavContent() {
 
   const workRaw = user ? filterByPermission(sidebarItemsForGroup("work_center"), user) : [];
   const dash = user ? pickDashboardItem(workRaw, userRoles) : null;
-  const workCenterItems = workRaw.filter((i) => i.key !== "dashboard" || i === dash);
+  const workCenterItems = workRaw.filter((i) => i.key !== "dashboard");
 
   const companyInternalItems = user
     ? filterByPermission(sidebarItemsForGroup("company_internal"), user)
     : [];
   const aiCenterItems = user ? filterByPermission(sidebarItemsForGroup("ai_center"), user) : [];
 
-  const workBeforeWholesale = workCenterItems.filter(
-    (i) => i.key !== "inventory" && i.key !== "warranty_maintenance" && i.key !== "wholesale",
-  );
-  const workAfterWholesale = workCenterItems.filter(
-    (i) => i.key === "inventory" || i.key === "warranty_maintenance",
-  );
-  const wholesaleSubs = wholesaleSubItems();
+  const resourceKeys = ["products", "inventory"];
+  const dailyItems = workCenterItems.filter((i) => !resourceKeys.includes(i.key));
+  const resourceItems = workCenterItems.filter((i) => resourceKeys.includes(i.key));
+  const reportItems = companyInternalItems.filter((i) => ["work_hours", "sales_stats"].includes(i.key));
+  const staffItems = companyInternalItems.filter((i) => !["work_hours", "sales_stats"].includes(i.key));
+  const wholesaleSubs = wholesaleSubItems().filter((i) => user && userCanAccessNav(user, i.path));
+  const showWholesaleMenu = showWholesale && wholesaleSubs.length > 0;
+  const active = (path: string) => location === path || (path !== "/" && location.startsWith(path + "/")) || (path === "/warranties" && location.startsWith("/maintenance"));
 
   function NavLink({ item }: { item: NavItemDef }) {
-    const isActive = location === item.path || (item.path !== "/" && location.startsWith(item.path));
+    const isActive = active(item.path);
     return (
       <Link
         href={item.path}
+        onClick={onNavigate}
+        aria-current={isActive ? "page" : undefined}
         className={`${NAV_ITEM_BASE} ${isActive ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE}`}
       >
         <NavIcon name={item.icon} active={isActive} />
@@ -182,109 +195,45 @@ function NavContent() {
   return (
     <div className="flex h-full flex-col py-4">
       <div className="px-4 py-3">
-        <Link href={dash?.path ?? "/"}>
+        <Link href={dash?.path ?? "/"} onClick={onNavigate}>
           <div className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity">
             <img src="/logo.png" alt={APP_BRAND.logoAlt} className="h-12 w-12 rounded-full object-cover shrink-0" />
             <div>
               <h1 className="text-base font-bold tracking-tight text-primary leading-tight">{APP_BRAND.brandEn}</h1>
-              <p className="text-[11px] text-muted-foreground leading-snug mt-0.5">{APP_BRAND.nameZh}</p>
-              <p className="text-[10px] text-muted-foreground/80 leading-snug">{APP_BRAND.nameEn}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{APP_BRAND.pwaShortName}</p>
             </div>
           </div>
         </Link>
       </div>
 
       <div className="flex-1 px-4 mt-2 overflow-y-auto">
-        <nav className="flex flex-col gap-0.5">
-          {(workBeforeWholesale.length > 0 || showWholesale || workAfterWholesale.length > 0) && (
-            <NavSectionHeader title={NAV_GROUP_LABELS.work_center} />
+        <nav aria-label="主要功能" className="flex flex-col gap-1">
+          <NavSectionHeader title="日常工作" />
+          {dash && <NavLink item={dash} />}
+          {dailyItems.map((item) => <NavLink key={item.path} item={item} />)}
+          {(resourceItems.length > 0 || showWholesaleMenu) && (
+            <NavGroup title="商品與批發" active={resourceItems.some((i) => active(i.path)) || isWholesalePath}>
+              {resourceItems.map((item) => <NavLink key={item.path} item={item} />)}
+              {showWholesaleMenu && <NavGroup title="批發管理" active={isWholesalePath}>
+                {wholesaleSubs.map((item) => <NavLink key={item.path} item={item} />)}
+              </NavGroup>}
+            </NavGroup>
           )}
-
-          {workBeforeWholesale.map((item) => (
-            <NavLink key={`${item.path}-${item.label}`} item={item} />
-          ))}
-
-          {showOperationCenter && (
-            <Link
-              href="/operation-center"
-              className={`${NAV_ITEM_BASE} ${
-                location === "/operation-center" || location.startsWith("/operation-center")
-                  ? NAV_ITEM_ACTIVE
-                  : NAV_ITEM_INACTIVE
-              }`}
-            >
-              <NavIcon
-                name="BarChart3"
-                active={location === "/operation-center" || location.startsWith("/operation-center")}
-              />
-              <span className="truncate">營運中心</span>
-            </Link>
+          {(showOperationCenter || reportItems.length > 0) && (
+            <NavGroup title="營運與報表" active={active("/operation-center") || reportItems.some((i) => active(i.path))}>
+              {showOperationCenter && <Link href="/operation-center" onClick={onNavigate} aria-current={active("/operation-center") ? "page" : undefined} className={`${NAV_ITEM_BASE} ${active("/operation-center") ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE}`}>
+                <NavIcon name="BarChart3" active={active("/operation-center")} />營運中心
+              </Link>}
+              {reportItems.map((item) => <NavLink key={item.path} item={item} />)}
+            </NavGroup>
           )}
-
-          {showWholesale && (
-            <div>
-              <button
-                type="button"
-                onClick={() => {
-                  if (!isWholesalePath) navigate("/wholesale/customers");
-                  setWholesaleOpen((v) => !v);
-                }}
-                className={`${NAV_ITEM_BASE} w-full ${isWholesalePath ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE}`}
-              >
-                <NavIcon name="ShoppingCart" active={isWholesalePath} />
-                <span className="truncate">批發管理</span>
-                <ChevronDown
-                  className={`ml-auto h-3.5 w-3.5 shrink-0 opacity-60 transition-transform duration-200 ${wholesaleOpen ? "" : "-rotate-90"}`}
-                />
-              </button>
-              {wholesaleOpen && (
-                <div className="ml-[18px] mt-0.5 flex flex-col gap-0.5 border-l border-border/40 pl-2.5">
-                  {wholesaleSubs.map((sub) => {
-                    const isActive = location === sub.path || location.startsWith(sub.path);
-                    return (
-                      <Link
-                        key={sub.path}
-                        href={sub.path}
-                        className={`${NAV_ITEM_BASE} ${isActive ? NAV_ITEM_ACTIVE : NAV_ITEM_INACTIVE}`}
-                      >
-                        <NavIcon name={sub.icon} active={isActive} />
-                        <span className="truncate">{sub.label}</span>
-                      </Link>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          )}
-
-          {workAfterWholesale.map((item) => (
-            <NavLink key={`${item.path}-${item.label}`} item={item} />
-          ))}
-
-          {companyInternalItems.length > 0 && (
-            <>
-              <NavSectionHeader title={NAV_GROUP_LABELS.company_internal} />
-              {companyInternalItems.map((item) => (
-                <NavLink key={`${item.path}-${item.label}`} item={item} />
-              ))}
-            </>
-          )}
-
-          {aiCenterItems.length > 0 && (
-            <>
-              <NavSectionHeader title={NAV_GROUP_LABELS.ai_center} />
-              {aiCenterItems.map((item) => (
-                <NavLink key={`${item.path}-${item.label}`} item={item} />
-              ))}
-            </>
-          )}
+          {staffItems.length > 0 && <NavGroup title="公司管理" active={staffItems.some((i) => active(i.path))}>
+            {staffItems.map((item) => <NavLink key={item.path} item={item} />)}
+          </NavGroup>}
+          {aiCenterItems.length > 0 && <NavGroup title="AI 與夥伴" active={aiCenterItems.some((i) => active(i.path))}>
+            {aiCenterItems.map((item) => <NavLink key={item.path} item={item} />)}
+          </NavGroup>}
         </nav>
-
-        <div className="mt-4 px-1 text-[10px] text-muted-foreground leading-relaxed border-t pt-3">
-          <p className="font-medium text-foreground/70 mb-1">About</p>
-          <p>{APP_BRAND.nameZh}</p>
-          <p className="mt-0.5">{APP_BRAND.nameEn}</p>
-        </div>
       </div>
 
       {user && (
@@ -320,7 +269,9 @@ function NavContent() {
 }
 
 export function Layout({ children }: { children: React.ReactNode }) {
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
+  const [mobileOpen, setMobileOpen] = useState(false);
+  useEffect(() => { setMobileOpen(false); }, [location]);
   const { user } = useAuth();
   const userRoles = effectiveRoles(user);
 
@@ -336,24 +287,25 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen bg-background">
-      <aside className="hidden w-60 flex-col border-r border-border/60 bg-card md:flex">
+      <aside className="hidden sticky top-0 h-dvh w-60 shrink-0 flex-col border-r border-border/60 bg-card md:flex">
         <NavContent />
       </aside>
 
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <header className="hidden md:flex h-12 items-center justify-end gap-2 border-b bg-card px-6 shadow-sm">
           {user && <NotificationBell />}
         </header>
         <header className="flex h-14 items-center gap-4 border-b bg-card px-6 md:hidden shadow-sm">
-          <Sheet>
+          <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon" className="md:hidden">
                 <Menu className="h-5 w-5" />
                 <span className="sr-only">Toggle navigation</span>
               </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="w-60 p-0">
-              <NavContent />
+            <SheetContent side="left" className="w-72 max-w-[85vw] p-0">
+              <SheetTitle className="sr-only">主要功能</SheetTitle>
+              <NavContent onNavigate={() => setMobileOpen(false)} />
             </SheetContent>
           </Sheet>
           <Link href="/">

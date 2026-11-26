@@ -24,6 +24,9 @@ export type InventoryTransaction = {
   reason: InventoryTxReason | string;
   quantityChange: number;
   notes: string | null;
+  supplier?: string | null;
+  occurredAt?: string | null;
+  shipmentKey?: string | null;
   createdBy: number | null;
   createdAt: string;
 };
@@ -32,6 +35,9 @@ export type InventoryItemInput = {
   brand?: string | null;
   category?: string | null;
   itemName: string;
+  initialQuantity?: number;
+  supplier?: string;
+  occurredAt?: string;
   model?: string | null;
   serialNumber?: string | null;
   unit?: string | null;
@@ -44,6 +50,8 @@ export type InventoryItemInput = {
 export type InventoryTxInput = {
   reason: InventoryTxReason | string;
   quantityChange: number;
+  supplier?: string;
+  occurredAt?: string;
   notes?: string | null;
 };
 

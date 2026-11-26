@@ -1,3 +1,4 @@
+import { invalidateStatistics } from "@/lib/invalidateStatistics";
 import { employeeOptions } from "../../../shared/employeePositions";
 import { useState } from "react";
 import { useLocation } from "wouter";
@@ -119,6 +120,7 @@ export default function Customers() {
     mutation: {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListCustomersQueryKey() });
+        invalidateStatistics(queryClient);
         setShowCreate(false);
         setCreateForm({ name: "", phone: "", address: "", email: "", discountScheme: "", notes: "", primarySalesRepId: 0 });
         toast({ title: "客戶新增成功" });
@@ -130,6 +132,7 @@ export default function Customers() {
     mutation: {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListCustomersQueryKey() });
+        invalidateStatistics(queryClient);
         setEditCustomer(null);
         toast({ title: "客戶資料已更新" });
       },
@@ -140,6 +143,7 @@ export default function Customers() {
     mutation: {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListCustomersQueryKey() });
+        invalidateStatistics(queryClient);
         setDeleteCustomer(null);
         toast({ title: "客戶已刪除" });
       },

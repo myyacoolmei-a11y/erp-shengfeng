@@ -2304,6 +2304,12 @@ components:
       type: object
       required: [quoteCount, quoteAmount, wonCount, wonAmount, winRate, collectedAmount, unpaidAmount, collectionRate, avgTicket, performanceAmount]
       properties:
+        caseCount: { type: integer }
+        salesInstallCount: { type: integer }
+        salesMaintenanceCount: { type: integer }
+        salesRepairCount: { type: integer }
+        salesOtherCount: { type: integer }
+        quoteWonInCohort: { type: integer }
         quoteCount: { type: integer }
         quoteAmount: { type: number }
         wonCount: { type: integer }

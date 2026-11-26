@@ -280,6 +280,12 @@ export interface EmployeeUpdate {
 }
 
 export interface SalesPerformance {
+  caseCount?: number;
+  salesInstallCount?: number;
+  salesMaintenanceCount?: number;
+  salesRepairCount?: number;
+  salesOtherCount?: number;
+  quoteWonInCohort?: number;
   quoteCount: number;
   quoteAmount: number;
   wonCount: number;

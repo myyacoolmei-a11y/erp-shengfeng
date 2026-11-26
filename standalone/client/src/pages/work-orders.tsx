@@ -1,3 +1,4 @@
+import { StockShipmentButton } from "@/components/stock-shipment-button";
 import { employeeOptions } from "../../../shared/employeePositions";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useSearch, useLocation, Link } from "wouter";
@@ -1612,26 +1613,7 @@ export default function WorkOrders() {
                           ))}
                         </DropdownMenuContent>
                       </DropdownMenu>
-                      {(o as any).wholesaleOrderId && !(o as any).deliveryConfirmedAt && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-11 sm:h-9 w-auto px-3 shrink-0"
-                          onClick={async () => {
-                            try {
-                              const res = await authFetch(`/api/work-orders/${o.id}/confirm-delivery`, { method: "POST" });
-                              const data = await res.json().catch(() => ({}));
-                              if (!res.ok) throw new Error(data.error || "出貨確認失敗");
-                              toast({ title: data.alreadyConfirmed ? "此出貨單已確認過" : "已確認出貨（列印不會改變狀態）" });
-                              queryClient.invalidateQueries({ queryKey: getListWorkOrdersQueryKey() });
-                            } catch (err: any) {
-                              toast({ title: err.message || "出貨確認失敗", variant: "destructive" });
-                            }
-                          }}
-                        >
-                          <Truck className="h-4 w-4 mr-1" />出貨確認
-                        </Button>
-                      )}
+                      {canWrite && !(o as any).parentWorkOrderId && <StockShipmentButton id={o.id} wholesale={!!(o as any).wholesaleOrderId}/>}
                       {(o as any).wholesaleOrderId && (o as any).jobTypesResolved?.types?.includes("送貨／出貨") && (
                         <Button
                           size="sm"

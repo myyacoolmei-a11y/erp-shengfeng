@@ -16,6 +16,7 @@ export interface SalesStatCase {
   caseKey: string;
   salesKey: SalesPersonKey;
   salesUserId: number | null;
+  salesEmployeeId?: number | null;
   salesName: string;
   date: string;
   customerName: string;
@@ -59,6 +60,7 @@ export interface SalesStatsResult {
 
 export interface SalesOption {
   id: number;
+  key?: string;
   name: string;
   isSales: boolean;
 }

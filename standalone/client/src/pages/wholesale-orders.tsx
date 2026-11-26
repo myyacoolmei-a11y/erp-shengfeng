@@ -1,3 +1,4 @@
+import { StockShipmentButton } from "@/components/stock-shipment-button";
 import { employeeOptions } from "../../../shared/employeePositions";
 import { useState, useEffect } from "react";
 import {
@@ -396,7 +397,7 @@ export default function WholesaleOrders() {
   async function submitOrderPayment() {
     if (!receivableOrder) return;
     if (receivableOrder.status !== "已出貨") {
-      toast({ title: "請先將訂單狀態改為「已出貨」", variant: "destructive" });
+      toast({ title: "請先確認出貨單的庫存出貨", variant: "destructive" });
       return;
     }
     if (!receivableOrder.customerId) {
@@ -588,7 +589,7 @@ export default function WholesaleOrders() {
                   <Label>訂單狀態</Label>
                   <Select value={form.status} onValueChange={v => setForm(f => ({ ...f, status: v }))}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>{ORDER_STATUSES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                    <SelectContent>{ORDER_STATUSES.filter(s=>s!=="已出貨" || editData?.status==="已出貨").map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
               </div>
@@ -730,7 +731,7 @@ export default function WholesaleOrders() {
             <p className="text-sm text-muted-foreground text-center py-6">找不到出貨單</p>
           ) : receivableOrder.status !== "已出貨" ? (
             <p className="text-sm text-muted-foreground text-center py-6">
-              尚無應收款。<br />將訂單狀態更新為「已出貨」後即可直接在此登記收款。
+              尚無應收款。<br />確認全部出貨後即可直接在此登記收款。
             </p>
           ) : (
             <div className="space-y-4">
@@ -890,7 +891,7 @@ export default function WholesaleOrders() {
                         <p className="text-muted-foreground">{d.primaryTechnician || d.assignedTo || "尚未指定配送人員"} · {d.scheduledDate || "未指定日期"}</p>
                       </div>
                       {!d.deliveryConfirmedAt && (
-                        <Button type="button" size="sm" variant="outline" onClick={() => beginEditDelivery(d)}>修改配送</Button>
+                        <div className="flex flex-wrap gap-1"><Button type="button" size="sm" variant="outline" onClick={() => beginEditDelivery(d)}>修改配送</Button>{!d.parentWorkOrderId && <StockShipmentButton id={d.id} wholesale onConfirmed={()=>{setDeliveryOrder(null);setEditingDelivery(null);}}/>}</div>
                       )}
                     </div>
                   ))}

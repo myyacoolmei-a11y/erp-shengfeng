@@ -1,3 +1,4 @@
+import { invalidateStatistics } from "@/lib/invalidateStatistics";
 import { employeeOptions } from "../../../shared/employeePositions";
 import { useState } from "react";
 import { useRoute, useLocation } from "wouter";
@@ -229,6 +230,7 @@ export default function CustomerDetail() {
     mutation: {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getGetCustomerQueryKey(id) });
+        invalidateStatistics(queryClient);
         setEditing(false);
         toast({ title: "客戶資料已更新" });
       }

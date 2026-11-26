@@ -97,6 +97,7 @@ export async function createDeliveryWorkOrder(opts: {
     .from(wholesaleOrdersTable)
     .where(eq(wholesaleOrdersTable.id, opts.wholesaleOrderId));
   if (!order) throw new WholesaleDeliveryError("找不到批發訂單", 404);
+  if (order.status === "已出貨") throw new WholesaleDeliveryError("此訂單已出貨，不可重複建立出貨單");
 
   const orderItems = await db
     .select()
@@ -224,7 +225,7 @@ export async function updateDeliveryWorkOrder(opts: {
     const [wo] = await tx.select().from(workOrdersTable).where(and(
       eq(workOrdersTable.id, opts.workOrderId),
       eq(workOrdersTable.wholesaleOrderId, opts.wholesaleOrderId),
-    ));
+    )).for("update");
     if (!wo) throw new WholesaleDeliveryError("找不到這筆批發出貨單", 404);
     if (wo.deliveryConfirmedAt) throw new WholesaleDeliveryError("已確認出貨，無法直接修改，請依退貨／更正流程處理", 409);
 
@@ -391,81 +392,43 @@ export async function createRelatedInstallWorkOrder(parentWorkOrderId: number) {
   return { workOrderId: created.id, workOrderNumber };
 }
 
-async function matchInventoryItem(opts: { productName?: string | null; brand?: string | null; model?: string | null }) {
-  const model = (opts.model ?? "").trim();
-  const name = (opts.productName ?? "").trim();
-  const brand = (opts.brand ?? "").trim();
-  const items = await db.select().from(inventoryItemsTable);
-  const scored = items
-    .map((it) => {
-      let score = 0;
-      if (model && it.model && it.model.trim() === model) score += 5;
-      if (name && it.itemName && it.itemName.trim() === name) score += 3;
-      if (brand && it.brand && it.brand.trim() === brand) score += 1;
-      return { it, score };
-    })
-    .filter((x) => x.score >= 5 || x.score >= 3)
-    .sort((a, b) => b.score - a.score);
-  return scored[0]?.it ?? null;
-}
+export async function confirmDeliveryWorkOrder(workOrderId: number, user?: JwtPayload | null, selections?: Array<{lineId:number; inventoryItemId:number}>) {
+  const result = await db.transaction(async tx => {
+    const [wo] = await tx.select().from(workOrdersTable).where(eq(workOrdersTable.id,workOrderId)).for("update");
+    if (!wo || !wo.wholesaleOrderId || wo.parentWorkOrderId) throw new WholesaleDeliveryError("找不到批發出貨單",404);
+    if (wo.deliveryConfirmedAt) return {alreadyConfirmed:true, deliveryConfirmedAt:wo.deliveryConfirmedAt, wholesaleOrderId:wo.wholesaleOrderId};
+    const [order] = await tx.select().from(wholesaleOrdersTable).where(eq(wholesaleOrdersTable.id,wo.wholesaleOrderId)).for("update");
+    if (!order || order.status === "已出貨") throw new WholesaleDeliveryError("訂單已出貨或不存在，請核對歷史資料");
+    const lines = await tx.select().from(workOrderDeliveryItemsTable).where(eq(workOrderDeliveryItemsTable.workOrderId,workOrderId)).for("update");
+    const orderLines = await tx.select().from(wholesaleOrderItemsTable).where(eq(wholesaleOrderItemsTable.orderId,wo.wholesaleOrderId));
+    const prior = await tx.select({lineId:workOrderDeliveryItemsTable.wholesaleOrderItemId,qty:sql<number>`coalesce(sum(${workOrderDeliveryItemsTable.shipQty}),0)::int`}).from(workOrderDeliveryItemsTable).innerJoin(workOrdersTable,eq(workOrderDeliveryItemsTable.workOrderId,workOrdersTable.id)).where(and(eq(workOrderDeliveryItemsTable.wholesaleOrderId,wo.wholesaleOrderId),isNotNull(workOrdersTable.deliveryConfirmedAt))).groupBy(workOrderDeliveryItemsTable.wholesaleOrderItemId);
+    const used = new Map(prior.map(x=>[x.lineId,Number(x.qty)]));
+    for (const line of lines) {const source=orderLines.find(x=>x.id===line.wholesaleOrderItemId); const next=(used.get(line.wholesaleOrderItemId)||0)+line.shipQty; if(!source||next>source.qty) throw new WholesaleDeliveryError("出貨數量超過訂單或原始品項已變更，請核對"); used.set(line.wholesaleOrderItemId,next);}
 
-export async function confirmDeliveryWorkOrder(workOrderId: number, user?: JwtPayload | null) {
-  const [wo] = await db.select().from(workOrdersTable).where(eq(workOrdersTable.id, workOrderId));
-  if (!wo) throw new WholesaleDeliveryError("找不到派工單", 404);
-  if (!wo.wholesaleOrderId) throw new WholesaleDeliveryError("此派工單不是批發出貨單");
-  if (wo.deliveryConfirmedAt) {
-    return { alreadyConfirmed: true, deliveryConfirmedAt: wo.deliveryConfirmedAt };
-  }
-
-  const lines = await db
-    .select()
-    .from(workOrderDeliveryItemsTable)
-    .where(eq(workOrderDeliveryItemsTable.workOrderId, workOrderId));
-
-  for (const line of lines) {
-    if (line.inventoryDeductedAt) continue;
-    const match = await matchInventoryItem({
-      productName: line.productName,
-      brand: line.brand,
-      model: line.model,
-    });
-    if (!match) continue;
-    const [{ qty }] = await db
-      .select({
-        qty: sql<number>`coalesce(sum(${inventoryTransactionsTable.quantityChange}), 0)::int`,
-      })
-      .from(inventoryTransactionsTable)
-      .where(eq(inventoryTransactionsTable.inventoryItemId, match.id));
-    const current = Number(qty) || 0;
-    const deduct = Math.min(line.shipQty, current);
-    if (deduct <= 0) continue;
-    await db.insert(inventoryTransactionsTable).values({
-      inventoryItemId: match.id,
-      reason: "批發出貨",
-      quantityChange: -deduct,
-      notes: `派工單 ${wo.workOrderNumber || `#${wo.id}`} 出貨確認`,
-      createdBy: user?.id ?? null,
-    });
-    await db
-      .update(workOrderDeliveryItemsTable)
-      .set({ inventoryItemId: match.id, inventoryDeductedAt: new Date() })
-      .where(eq(workOrderDeliveryItemsTable.id, line.id));
-  }
-
-  const confirmedAt = new Date();
-  await db
-    .update(workOrdersTable)
-    .set({
-      deliveryConfirmedAt: confirmedAt,
-      deliveryConfirmedBy: user?.id ?? null,
-      status: wo.status === "待施工" || wo.status === "待派工" ? "已完成" : wo.status,
-      completedDate: wo.completedDate || confirmedAt.toISOString().slice(0, 10),
-      updatedAt: confirmedAt,
-    })
-    .where(eq(workOrdersTable.id, workOrderId));
-
-  await maybeMarkWholesaleShipped(wo.wholesaleOrderId);
-  return { alreadyConfirmed: false, deliveryConfirmedAt: confirmedAt };
+    if (!lines.length) throw new WholesaleDeliveryError("無出貨品項");
+    const picks = new Map((selections || []).map(x=>[x.lineId,x.inventoryItemId]));
+    if (picks.size !== (selections || []).length || picks.size !== lines.filter(x=>!x.inventoryDeductedAt).length) throw new WholesaleDeliveryError("請選擇每一筆出貨的庫存品項");
+    const totals = new Map<number,number>();
+    for (const line of lines) {
+      if (line.inventoryDeductedAt) continue;
+      const id = picks.get(line.id);
+      if (!id || !Number.isInteger(line.shipQty) || line.shipQty <= 0) throw new WholesaleDeliveryError("出貨品項或數量錯誤");
+      totals.set(id,(totals.get(id)||0)+line.shipQty);
+    }
+    for (const [id,n] of [...totals].sort((a,b)=>a[0]-b[0])) {
+      const [item] = await tx.select().from(inventoryItemsTable).where(eq(inventoryItemsTable.id,id)).for("update");
+      if (!item || !["庫存中","待出貨"].includes(item.status)) throw new WholesaleDeliveryError("庫存品項不可出貨");
+      const [{qty}] = await tx.select({qty:sql<number>`coalesce(sum(${inventoryTransactionsTable.quantityChange}),0)::int`}).from(inventoryTransactionsTable).where(eq(inventoryTransactionsTable.inventoryItemId,id));
+      if (Number(qty)<n) throw new WholesaleDeliveryError(`${item.itemName} ${item.model||""} 庫存不足（剩 ${qty}，需 ${n}）`);
+      await tx.insert(inventoryTransactionsTable).values({inventoryItemId:id,reason:"批發出貨",quantityChange:-n,notes:`批發出貨單 ${wo.workOrderNumber||wo.id}｜${wo.customerName||""}`,shipmentKey:`work-order:${wo.id}`,occurredAt:new Date(),createdBy:user?.id??null});
+    }
+    const confirmedAt = new Date();
+    for (const line of lines) if (!line.inventoryDeductedAt) await tx.update(workOrderDeliveryItemsTable).set({inventoryItemId:picks.get(line.id)!,inventoryDeductedAt:confirmedAt}).where(eq(workOrderDeliveryItemsTable.id,line.id));
+    await tx.update(workOrdersTable).set({deliveryConfirmedAt:confirmedAt,deliveryConfirmedBy:user?.id??null,status:wo.status === "待施工" || wo.status === "待派工" ? "已完成":wo.status,completedDate:wo.completedDate||confirmedAt.toISOString().slice(0,10),updatedAt:confirmedAt}).where(eq(workOrdersTable.id,wo.id));
+    return {alreadyConfirmed:false,deliveryConfirmedAt:confirmedAt,wholesaleOrderId:wo.wholesaleOrderId};
+  });
+  await maybeMarkWholesaleShipped(result.wholesaleOrderId);
+  return result;
 }
 
 async function maybeMarkWholesaleShipped(wholesaleOrderId: number) {

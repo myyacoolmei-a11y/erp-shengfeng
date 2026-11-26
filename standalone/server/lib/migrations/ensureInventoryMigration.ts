@@ -56,6 +56,8 @@ export async function ensureInventoryMigration(): Promise<boolean> {
       ON inventory_transactions (inventory_item_id, created_at DESC);
     `);
 
+    await pool.query(`ALTER TABLE inventory_transactions ADD COLUMN IF NOT EXISTS supplier text, ADD COLUMN IF NOT EXISTS occurred_at timestamptz, ADD COLUMN IF NOT EXISTS shipment_key text`);
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS inventory_shipment_once ON inventory_transactions(shipment_key, inventory_item_id) WHERE shipment_key IS NOT NULL`);
     logger.info("DB migration: inventory_items + inventory_transactions ready");
     return true;
   } catch (err) {

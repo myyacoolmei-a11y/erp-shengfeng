@@ -642,6 +642,12 @@ export const UpdateEmployeeResponse = zod.object({
 })
 
 export const SalesPerformanceSchema = zod.object({
+  "caseCount": zod.number().optional(),
+  "salesInstallCount": zod.number().optional(),
+  "salesMaintenanceCount": zod.number().optional(),
+  "salesRepairCount": zod.number().optional(),
+  "salesOtherCount": zod.number().optional(),
+  "quoteWonInCohort": zod.number().optional(),
   "quoteCount": zod.number(),
   "quoteAmount": zod.number(),
   "wonCount": zod.number(),

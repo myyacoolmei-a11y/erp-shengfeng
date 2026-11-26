@@ -8,6 +8,7 @@ import {
   getListEmployeesQueryKey,
 } from "@workspace/api-client-react";
 import type { ListEmployeesPerformanceParams } from "@workspace/api-client-react";
+import { invalidateStatistics } from "@/lib/invalidateStatistics";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -65,15 +66,16 @@ function fmtPct(n: number) {
 function PerformanceSummary({ perf }: { perf?: { sales: any; technician: any } }) {
   if (!perf) return null;
   return (
-    <div className="text-[11px] text-muted-foreground mt-1 flex gap-x-3 gap-y-0.5 flex-wrap">
-      <span>報價 {perf.sales.quoteCount} 件 · {fmtMoney(perf.sales.quoteAmount)}</span>
-      <span>成交 {perf.sales.wonCount} 件 · {fmtMoney(perf.sales.wonAmount)}</span>
-      <span>成交率 {fmtPct(perf.sales.winRate)}</span>
-      <span>已收 {fmtMoney(perf.sales.collectedAmount ?? 0)}</span>
-      <span>未收 {fmtMoney(perf.sales.unpaidAmount ?? 0)}</span>
-      <span>安裝 {perf.technician.installCount}</span>
-      <span>保養 {perf.technician.maintenanceCount}</span>
-      <span>維修 {perf.technician.repairCount}</span>
+    <div className="mt-3 space-y-2">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-2">
+        {[["報價件數", perf.sales.quoteCount], ["業務案件", perf.sales.caseCount ?? perf.sales.wonCount], ["成交業績", fmtMoney(perf.sales.wonAmount)], ["已收款", fmtMoney(perf.sales.collectedAmount ?? 0)]].map(([label, value]) => (
+          <div key={label}><p className="text-[11px] text-muted-foreground">{label}</p><p className="text-sm font-semibold tabular-nums">{value}</p></div>
+        ))}
+      </div>
+      <details className="text-xs text-muted-foreground">
+        <summary className="cursor-pointer py-1 font-medium">查看完整績效</summary>
+        <PerformanceCards perf={perf} />
+      </details>
     </div>
   );
 }
@@ -86,9 +88,13 @@ function PerformanceCards({ perf }: { perf: { sales: any; technician: any } }) {
         {[
           ["報價件數", perf.sales.quoteCount],
           ["報價金額", fmtMoney(perf.sales.quoteAmount)],
-          ["成交件數", perf.sales.wonCount],
-          ["成交金額", fmtMoney(perf.sales.wonAmount)],
-          ["成交率", fmtPct(perf.sales.winRate)],
+          ["業務案件", perf.sales.caseCount ?? perf.sales.wonCount],
+          ["業務安裝", perf.sales.salesInstallCount ?? 0],
+          ["業務保養", perf.sales.salesMaintenanceCount ?? 0],
+          ["業務維修", perf.sales.salesRepairCount ?? 0],
+          ["業務其他", perf.sales.salesOtherCount ?? 0],
+          ["成交業績", fmtMoney(perf.sales.wonAmount)],
+          ["報價成交率", fmtPct(perf.sales.winRate)],
           ["已收金額", fmtMoney(perf.sales.collectedAmount ?? 0)],
           ["未收金額", fmtMoney(perf.sales.unpaidAmount ?? 0)],
           ["收款率", fmtPct(perf.sales.collectionRate ?? 0)],
@@ -146,13 +152,13 @@ export default function Employees() {
   const { user } = useAuth();
   const payrollOwner = hasRole(user, "owner", "super_admin");
   const { data: employees, isLoading } = useListEmployees({});
-  const { data: performanceList } = useListEmployeesPerformance(perfParams, {
-    query: { enabled: perfEnabled } as any,
+  const { data: performanceList, isError: performanceError, refetch: refreshPerformance } = useListEmployeesPerformance(perfParams, {
+    query: { enabled: perfEnabled, refetchInterval: 30000, refetchOnMount: "always", refetchOnWindowFocus: "always" } as any,
   });
   const { data: editPerformance } = useGetEmployeePerformance(
     editItem?.id ?? 0,
     perfParams,
-    { query: { enabled: !!editItem && perfEnabled } as any },
+    { query: { enabled: !!editItem && perfEnabled, refetchOnMount: "always" } as any },
   );
 
   const perfByEmployeeId = new Map((performanceList ?? []).map(p => [p.employeeId, p]));
@@ -161,6 +167,7 @@ export default function Employees() {
     mutation: {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListEmployeesQueryKey() });
+        invalidateStatistics(queryClient);
         setShowCreate(false);
         toast({ title: "員工已新增" });
       },
@@ -170,6 +177,7 @@ export default function Employees() {
     mutation: {
       onSuccess: () => {
         queryClient.invalidateQueries({ queryKey: getListEmployeesQueryKey() });
+        invalidateStatistics(queryClient);
         setEditItem(null);
         setDisableId(null);
         toast({ title: "員工資料已更新" });
@@ -191,7 +199,8 @@ export default function Employees() {
         group.records.push(employee);
         group.positions = uniquePositions([...group.positions, ...splitPositions(employee.position)]);
         // Prioritize active record for display, while retaining all original IDs.
-        if (group.employee.status !== "在職" && employee.status === "在職") group.employee = employee;
+        const rank = (status: string) => status === "在職" ? 0 : status === "配合" ? 1 : 2;
+        if (rank(employee.status) < rank(group.employee.status) || (rank(employee.status) === rank(group.employee.status) && employee.id < group.employee.id)) group.employee = employee;
       }
     }
     return [...groups.values()];
@@ -202,11 +211,11 @@ export default function Employees() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold">員工管理</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            每人一張名片，可兼任多個職務；登入角色和權限仍在「用戶管理」設定。相同姓名與電話的舊紀錄先合併顯示，原始員工 ID 不會自動刪除。
+            管理員工職務、狀態與工作績效。
           </p>
         </div>
         <Button size="sm" onClick={() => { setForm(emptyForm); setShowCreate(true); }}>
@@ -288,6 +297,7 @@ export default function Employees() {
         <span className="text-xs text-muted-foreground ml-auto self-center">共 {filtered.length} 人</span>
       </div>
 
+      {performanceError && <p className="text-sm text-red-600">績效資料讀取失敗，請重新查詢。 <Button variant="outline" size="sm" onClick={() => refreshPerformance()}>重新查詢</Button></p>}
       {isLoading ? (
         <div className="space-y-2">{[1, 2, 3].map(i => <Skeleton key={i} className="h-16 w-full" />)}</div>
       ) : filtered.length > 0 ? (
@@ -295,7 +305,7 @@ export default function Employees() {
           <CardContent className="p-0">
             <div className="divide-y">
               {filtered.map(({ employee: e, records, positions }) => (
-                <div key={e.id} className="px-4 py-3 flex items-center justify-between">
+                <div key={e.id} className="px-4 py-4 flex items-start justify-between gap-2">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-medium text-sm">{e.name}</span>

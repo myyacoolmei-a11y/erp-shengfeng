@@ -15,6 +15,8 @@ import {
   employeesTable,
   customersTable,
 } from "@workspace/db";
+import { buildEmployeeReportingIndex } from "../../../shared/employeeReporting.ts";
+import { hasEmployeePosition } from "../../../shared/employeePositions.ts";
 import { isQuoteWon } from "../../../shared/quoteStatus.ts";
 import { computeQuoteDisplayTotal } from "../quoteTotals";
 import { buildRepairCaseSalesOptions } from "../repairCases/salesOptions.ts";
@@ -202,7 +204,7 @@ export async function computeSalesStats(input: {
         linkedEmployeeId: usersTable.linkedEmployeeId,
       })
       .from(usersTable),
-    db.select({ id: employeesTable.id, name: employeesTable.name, position: employeesTable.position }).from(employeesTable),
+    db.select({ id: employeesTable.id, name: employeesTable.name, position: employeesTable.position, phone: employeesTable.phone, status: employeesTable.status }).from(employeesTable),
     db
       .select({
         id: customersTable.id,
@@ -218,6 +220,16 @@ export async function computeSalesStats(input: {
   const customerById = new Map(customers.map((c) => [c.id, c]));
 
   const identityMaps = { userById, userByEmployeeId, employeeById };
+  const reporting = buildEmployeeReportingIndex(employees, users);
+  function resolveReportingSales(input: { salesRepId?: number | null; salesUserId?: number | null }) {
+    const id = reporting.employeeId(input.salesRepId) ?? reporting.userEmployeeId(input.salesUserId);
+    if (id != null) {
+      const employee = reporting.byId.get(id)!;
+      const user = userByEmployeeId.get(id);
+      return { salesKey: `employee:${id}`, salesEmployeeId: id, salesUserId: user?.id ?? input.salesUserId ?? null, salesName: employee.name };
+    }
+    return { ...resolveSalesIdentity({ ...input, ...identityMaps }), salesEmployeeId: null };
+  }
 
   const itemsByQuote = new Map<number, typeof itemRows>();
   for (const item of itemRows) {
@@ -278,16 +290,10 @@ export async function computeSalesStats(input: {
   }
 
   function salesFromQuoteOrCustomer(salesRepId: number | null, customerId: number | null) {
-    const fromQuote = resolveSalesIdentity({
-      salesRepId,
-      ...identityMaps,
-    });
+    const fromQuote = resolveReportingSales({ salesRepId });
     if (fromQuote.salesKey !== UNASSIGNED_SALES_KEY) return fromQuote;
     const primary = customerId != null ? customerById.get(customerId)?.primarySalesRepId ?? null : null;
-    return resolveSalesIdentity({
-      salesRepId: primary ?? null,
-      ...identityMaps,
-    });
+    return resolveReportingSales({ salesRepId: primary ?? null });
   }
 
   const cases: SalesStatCase[] = [];
@@ -395,10 +401,7 @@ export async function computeSalesStats(input: {
     if (repair.status === "已取消") continue;
     const date = repair.appointmentDate || timestampToTaipeiDate(repair.createdAt);
     if (!dateInRange(date, from, to)) continue;
-    const sales = resolveSalesIdentity({
-      salesUserId: repair.salesUserId ?? null,
-      ...identityMaps,
-    });
+    const sales = resolveReportingSales({ salesUserId: repair.salesUserId ?? null });
     const content =
       (repair.problemDescription ?? "").trim() ||
       [repair.brand, repair.model].filter((p) => (p ?? "").trim()).join(" ").trim() ||
@@ -419,7 +422,11 @@ export async function computeSalesStats(input: {
     });
   }
 
-  const filtered = cases.filter((c) => matchesSalesFilter(c, input.salesUserId));
+  const requested = input.salesUserId;
+  const legacyUserId = requested && /^\d+$/.test(requested) ? Number(requested) : null;
+  const linkedFilter = reporting.userEmployeeId(legacyUserId);
+  const filter = linkedFilter != null ? `employee:${linkedFilter}` : requested;
+  const filtered = cases.filter((c) => matchesSalesFilter(c, filter));
   const result = aggregateSalesStats(filtered, { from, to });
 
   const salesOptions = buildRepairCaseSalesOptions({
@@ -434,7 +441,24 @@ export async function computeSalesStats(input: {
     })),
   });
 
-  return { ...result, salesOptions };
+  const optionsByKey = new Map<string, SalesOption>();
+  for (const e of employees) {
+    if (!['在職', '配合'].includes(e.status) || !hasEmployeePosition(e.position, '業務')) continue;
+    const id = reporting.employeeId(e.id)!;
+    const key = `employee:${id}`;
+    optionsByKey.set(key, { id, key, name: reporting.byId.get(id)!.name, isSales: true });
+  }
+  for (const option of salesOptions) {
+    if (reporting.userEmployeeId(option.id) != null) continue;
+    if (option.isSales) optionsByKey.set(`user:${option.id}`, { ...option, key: `user:${option.id}` });
+  }
+  // Keep historical assignees selectable, even if no longer active.
+  for (const item of cases) {
+    if (item.salesKey === UNASSIGNED_SALES_KEY || optionsByKey.has(item.salesKey)) continue;
+    const id = item.salesEmployeeId ?? item.salesUserId;
+    if (id != null) optionsByKey.set(item.salesKey, { id, key: item.salesKey, name: item.salesName, isSales: true });
+  }
+  return { ...result, salesOptions: [...optionsByKey.values()].sort((a,b) => a.name.localeCompare(b.name, 'zh-Hant')) };
 }
 
 export { UNASSIGNED_SALES_KEY, UNASSIGNED_SALES_NAME };

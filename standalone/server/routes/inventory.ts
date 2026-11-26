@@ -11,6 +11,7 @@ import { logger } from "../lib/logger";
 import {
   INVENTORY_STATUSES,
   INVENTORY_TX_REASONS,
+  defaultTxSign,
 } from "../../shared/inventoryConstants";
 
 const router: IRouter = Router();
@@ -62,6 +63,9 @@ const ItemInput = z.object({
   status: z.enum(INVENTORY_STATUSES, { error: "庫存狀態無效" }).optional(),
   costPrice: CostPriceInput.optional(),
   notes: z.preprocess(emptyToNull, z.string().nullable().optional()),
+  initialQuantity: z.coerce.number().int().min(0).optional(),
+  supplier: z.string().trim().max(250).optional(),
+  occurredAt: z.iso.datetime({ offset: true }).optional(),
 });
 
 const UpdateItemInput = ItemInput.partial().refine(
@@ -115,6 +119,8 @@ const TxInput = z.object({
   reason: z.enum(INVENTORY_TX_REASONS),
   quantityChange: z.coerce.number().int().refine((n) => n !== 0, "異動數量不可為 0"),
   notes: z.string().optional().nullable(),
+  supplier: z.string().trim().max(250).optional(),
+  occurredAt: z.iso.datetime({ offset: true }).optional(),
 });
 
 async function qtyMapForIds(ids: number[]): Promise<Map<number, number>> {
@@ -191,7 +197,8 @@ router.post("/inventory-items", async (req, res): Promise<void> => {
       res.status(409).json({ error: "此庫存品項已存在" });
       return;
     }
-    const [created] = await db
+    const created = await db.transaction(async (tx) => {
+    const [created] = await tx
       .insert(inventoryItemsTable)
       .values({
         brand,
@@ -206,8 +213,10 @@ router.post("/inventory-items", async (req, res): Promise<void> => {
         notes: d.notes ?? null,
       })
       .returning();
-    // 數量不存欄位：新建品項視為 0（無異動紀錄）
-    res.status(201).json(serializeItem(created, 0));
+    if (d.initialQuantity) await tx.insert(inventoryTransactionsTable).values({inventoryItemId: created.id, reason: "進貨", quantityChange: d.initialQuantity, supplier: d.supplier || null, occurredAt: d.occurredAt ? new Date(d.occurredAt) : new Date(), createdBy: req.user?.id ?? null});
+    return created;
+    });
+    res.status(201).json(serializeItem(created, d.initialQuantity ?? 0));
   } catch (err) {
     logInventoryError(err, "create");
     if (isUniqueViolation(err)) {
@@ -295,6 +304,8 @@ router.delete("/inventory-items/:id", async (req, res): Promise<void> => {
     res.status(400).json({ error: "無效的 ID" });
     return;
   }
+  const [history] = await db.select({id: inventoryTransactionsTable.id}).from(inventoryTransactionsTable).where(eq(inventoryTransactionsTable.inventoryItemId,id)).limit(1);
+  if (history) { res.status(409).json({error:"已有異動紀錄，不可刪除品項"}); return; }
   const [deleted] = await db
     .delete(inventoryItemsTable)
     .where(eq(inventoryItemsTable.id, id))
@@ -347,39 +358,21 @@ router.post(
       return;
     }
 
-    const qtyMap = await qtyMapForIds([id]);
-    const currentQty = qtyMap.get(id) ?? 0;
-    const nextQty = currentQty + parsed.data.quantityChange;
-    if (nextQty < 0) {
-      res.status(400).json({
-        error: `異動後數量不可為負（目前 ${currentQty}，異動 ${parsed.data.quantityChange}）`,
+    const sign = defaultTxSign(parsed.data.reason);
+    if(sign && Math.sign(parsed.data.quantityChange)!==sign){res.status(400).json({error:"異動方向與原因不符"});return;}
+    try {
+      const result = await db.transaction(async tx => {
+        const [locked] = await tx.select().from(inventoryItemsTable).where(eq(inventoryItemsTable.id,id)).for("update");
+        if (!locked) throw new Error("找不到庫存品項");
+        const [{qty}] = await tx.select({qty: sql<number>`coalesce(sum(${inventoryTransactionsTable.quantityChange}),0)::int`}).from(inventoryTransactionsTable).where(eq(inventoryTransactionsTable.inventoryItemId,id));
+        const nextQty = Number(qty) + parsed.data.quantityChange;
+        if (nextQty < 0) throw new Error("庫存不足");
+        const [created] = await tx.insert(inventoryTransactionsTable).values({inventoryItemId:id, reason:parsed.data.reason, quantityChange:parsed.data.quantityChange, notes:parsed.data.notes || null, supplier:parsed.data.supplier || null, occurredAt:parsed.data.occurredAt ? new Date(parsed.data.occurredAt) : new Date(), createdBy:req.user?.id ?? null}).returning();
+        await tx.update(inventoryItemsTable).set({updatedAt:new Date()}).where(eq(inventoryItemsTable.id,id));
+        return {transaction:created, quantity:nextQty, item:serializeItem(locked,nextQty)};
       });
-      return;
-    }
-
-    const userId = (req as any).user?.id as number | undefined;
-    const [created] = await db
-      .insert(inventoryTransactionsTable)
-      .values({
-        inventoryItemId: id,
-        reason: parsed.data.reason,
-        quantityChange: parsed.data.quantityChange,
-        notes: parsed.data.notes || null,
-        createdBy: userId ?? null,
-      })
-      .returning();
-
-    // Touch updatedAt on item
-    await db
-      .update(inventoryItemsTable)
-      .set({ updatedAt: new Date() })
-      .where(eq(inventoryItemsTable.id, id));
-
-    res.status(201).json({
-      transaction: created,
-      quantity: nextQty,
-      item: serializeItem(item, nextQty),
-    });
+      res.status(201).json(result);
+    } catch(err) { logInventoryError(err,"transaction"); res.status(400).json({error:err instanceof Error && err.message === "庫存不足" ? err.message : "庫存異動失敗"}); }
   },
 );
 

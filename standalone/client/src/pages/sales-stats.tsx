@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { ChevronDown, RefreshCw } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -42,9 +43,10 @@ export default function SalesStatsPage() {
     };
   }, [preset, from, to, salesUserId]);
 
-  const { data, isLoading, refetch, isFetching } = useQuery({
+  const { data, isLoading, refetch, isFetching, isError } = useQuery({
     queryKey: ["sales-stats", queryParams],
     queryFn: () => fetchSalesStats(queryParams),
+    refetchInterval: 30000, refetchOnMount: "always", refetchOnWindowFocus: "always",
   });
 
   const rows = data?.rows ?? [];
@@ -59,11 +61,9 @@ export default function SalesStatsPage() {
         <p className="text-sm text-muted-foreground mt-1">業務案件與成交業績統計</p>
       </div>
 
+      {isError && <p className="text-sm text-red-600">業務統計讀取失敗，請重新查詢。</p>}
       <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">篩選條件</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-3 p-4">
           <div className="flex flex-wrap gap-2">
             {([
               ["today", "今天"],
@@ -113,19 +113,25 @@ export default function SalesStatsPage() {
                 <SelectContent>
                   <SelectItem value="all">全部業務</SelectItem>
                   {salesOptions.map((u) => (
-                    <SelectItem key={u.id} value={String(u.id)}>{u.name}</SelectItem>
+                    <SelectItem key={u.key ?? String(u.id)} value={u.key ?? String(u.id)}>{u.name}</SelectItem>
                   ))}
                   <SelectItem value={UNASSIGNED_SALES_KEY}>{UNASSIGNED_SALES_NAME}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            <Button type="button" onClick={() => refetch()} disabled={isFetching}>
-              {isFetching ? "查詢中…" : "查詢"}
+            <Button type="button" variant="ghost" size="sm" onClick={() => refetch()} disabled={isFetching} aria-label="重新整理統計">
+              <RefreshCw className={`h-4 w-4 ${isFetching ? "animate-spin" : ""}`} />{isFetching ? "更新中…" : "重新整理"}
             </Button>
           </div>
         </CardContent>
       </Card>
 
+      {totals && !isError && <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {[["業務案件", formatSalesCount(totals.caseCount)], ["成交業績", formatSalesMoney(totals.wonAmount)], ["已收款", formatSalesMoney(totals.receivedAmount)]].map(([label, value]) => (
+          <div key={label} className="rounded-xl border bg-card p-4"><p className="text-xs text-muted-foreground">{label}</p><p className="mt-1 text-xl font-semibold tabular-nums">{value}</p></div>
+        ))}
+      </div>}
+      <p className="text-xs text-muted-foreground">點選業務姓名可查看案件明細；篩選條件變更後自動更新。</p>
       <Card>
         <CardContent className="p-0 overflow-x-auto">
           {isLoading ? (
@@ -153,10 +159,11 @@ export default function SalesStatsPage() {
                     <td className="px-3 py-2 whitespace-nowrap">
                       <button
                         type="button"
-                        className="text-primary hover:underline font-medium"
+                        className="inline-flex items-center gap-1 text-primary hover:underline font-medium"
+                        aria-expanded={expandedKey === r.salesKey}
                         onClick={() => setExpandedKey((cur) => (cur === r.salesKey ? null : r.salesKey))}
                       >
-                        {r.salesName}
+                        {r.salesName}<ChevronDown className={`h-3.5 w-3.5 ${expandedKey === r.salesKey ? "rotate-180" : ""}`} />
                       </button>
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap">{formatSalesCount(r.caseCount)}</td>

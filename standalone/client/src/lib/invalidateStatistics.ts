@@ -12,6 +12,8 @@ import {
 export function invalidateStatistics(queryClient: QueryClient, employeeId?: number) {
   queryClient.invalidateQueries({ queryKey: getGetDashboardSummaryQueryKey() });
   queryClient.invalidateQueries({ queryKey: getListEmployeesPerformanceQueryKey() });
+  queryClient.invalidateQueries({ queryKey: ["sales-stats"] });
+  queryClient.invalidateQueries({ predicate: q => typeof q.queryKey[0] === "string" && /^\/api\/employees\/\d+\/performance$/.test(q.queryKey[0]) });
   queryClient.invalidateQueries({ queryKey: getListReceivablesQueryKey() });
   // payments API retained for legacy data; dashboard/collection stats use receivables
   queryClient.invalidateQueries({ queryKey: getListPaymentsQueryKey() });

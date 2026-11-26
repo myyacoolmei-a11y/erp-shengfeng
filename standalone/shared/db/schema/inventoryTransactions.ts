@@ -16,6 +16,9 @@ export const inventoryTransactionsTable = pgTable("inventory_transactions", {
   reason: text("reason").notNull(),
   quantityChange: integer("quantity_change").notNull(),
   notes: text("notes"),
+  supplier: text("supplier"),
+  occurredAt: timestamp("occurred_at", { withTimezone: true }),
+  shipmentKey: text("shipment_key"),
   createdBy: integer("created_by").references(() => usersTable.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
