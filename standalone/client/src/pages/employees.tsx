@@ -1,3 +1,4 @@
+import { splitPositions, samePersonKey } from "../../../shared/employeePositions";
 import { useState, useMemo } from "react";
 import { Link } from "wouter";
 import { useAuth, hasRole } from "@/contexts/auth-context";
@@ -25,17 +26,8 @@ const POSITIONS = ["業務", "師傅技師", "行政", "會計", "老闆"];
 // The existing database stores a text position. Multiple responsibilities are
 // encoded as a comma-separated value for backward compatibility. They are NOT
 // login permissions; permissions remain in the user-account subsystem.
-function splitPositions(value: string | null | undefined): string[] {
-  return (value ?? "").split(/[、,，/]+/).map(v => v.trim()).filter(Boolean);
-}
 function uniquePositions(values: string[]): string[] {
   return [...new Set(values.filter(Boolean))];
-}
-function samePersonKey(e: { name: string; phone?: string | null; id: number }): string {
-  // Only collapse records with the SAME normalized name AND SAME nonempty phone.
-  // Names without a phone may belong to different people; retain those records.
-  const phone = (e.phone ?? "").replace(/[^0-9]/g, "");
-  return phone ? `${e.name.trim().replace(/\s+/g, "").toLocaleLowerCase()}|${phone}` : `id:${e.id}`;
 }
 
 const POSITION_COLORS: Record<string, string> = {

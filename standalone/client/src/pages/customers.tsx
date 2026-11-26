@@ -1,3 +1,4 @@
+import { employeeOptions } from "../../../shared/employeePositions";
 import { useState } from "react";
 import { useLocation } from "wouter";
 import {
@@ -110,7 +111,7 @@ export default function Customers() {
     includeOld: includeOld ? "true" : undefined,
   });
   const { data: employees } = useListEmployees({});
-  const salesEmployees = employees?.filter(e => e.position === "業務" && e.status !== "離職") ?? [];
+  const salesEmployees = employeeOptions(employees, "業務");
 
   const [createForm, setCreateForm] = useState({ name: "", phone: "", address: "", email: "", discountScheme: "", notes: "", primarySalesRepId: 0 });
 
@@ -371,7 +372,8 @@ export default function Customers() {
                 <SelectTrigger><SelectValue placeholder="選擇業務（選填）" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="0">（不指定）</SelectItem>
-                  {salesEmployees.map(e => <SelectItem key={e.id} value={String(e.id)}>{e.name}</SelectItem>)}
+                  {editForm.primarySalesRepId > 0 && !salesEmployees.some(e => e.id === editForm.primarySalesRepId) && <SelectItem value={String(editForm.primarySalesRepId)} disabled>{employees?.find(e => e.id === editForm.primarySalesRepId)?.name ?? `#${editForm.primarySalesRepId}`}（原負責人）</SelectItem>}
+                      {salesEmployees.map(e => <SelectItem key={e.id} value={String(e.id)}>{e.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>

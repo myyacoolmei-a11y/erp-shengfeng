@@ -1,3 +1,4 @@
+import { employeeOptions } from "../../../shared/employeePositions";
 import { useState, useEffect } from "react";
 import {
   useListWholesaleOrders, useCreateWholesaleOrder, useUpdateWholesaleOrder,
@@ -269,10 +270,8 @@ export default function WholesaleOrders() {
   const { data: products } = useListWholesaleProducts({ forSelection: "true" });
   const { data: employees } = useListEmployees();
   // 配送不限「技師」職位：兼任業務、行政的同仁也可能負責送貨。
-  // 依姓名去重，防止舊資料同一人以多種職位重複出現。
-  const technicianOptions = Array.from(new Map((employees ?? [])
-    .filter((e: any) => e.status !== "離職" && String(e.name ?? "").trim())
-    .map((e: any) => [String(e.name).trim(), e])).values());
+  // 僅依相同姓名與非空電話去重，避免混淆同名員工。
+  const technicianOptions = employeeOptions(employees);
   const { data: orderPayments = [], isPending: paymentsPending, refetch: refetchOrderPayments } = useQuery({
     queryKey: ["wholesale-order-payments", receivableOrderId],
     queryFn: () => listWholesalePaymentsByOrder(receivableOrderId!),

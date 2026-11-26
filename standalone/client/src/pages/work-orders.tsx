@@ -1,3 +1,4 @@
+import { employeeOptions } from "../../../shared/employeePositions";
 import { useState, useRef, useEffect, useMemo } from "react";
 import { useSearch, useLocation, Link } from "wouter";
 import {
@@ -975,7 +976,7 @@ export default function WorkOrders() {
   );
 
   // Technician options: employees whose position contains "技師" and are active
-  const technicianOptions = (employees ?? []).filter(e => e.position?.includes("技師") && e.status !== "離職");
+  const technicianOptions = employeeOptions(employees, "師傅技師");
 
   useEffect(() => {
     if (!focusId || !orders?.length) return;

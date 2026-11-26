@@ -1,3 +1,4 @@
+import { employeeOptions } from "../../../shared/employeePositions";
 import { useState, useEffect, useRef } from "react";
 import { useSearch, useLocation } from "wouter";
 import {
@@ -696,7 +697,7 @@ export default function QuotesPage() {
   const { data: customers } = useListCustomers();
   const { data: employees } = useListEmployees();
   const { data: quoteProducts } = useListProducts({ usageType: "engineering_quote", isActive: "true" });
-  const salesReps = employees?.filter((e: any) => e.position === "業務" && e.status !== "離職") ?? [];
+  const salesReps = employeeOptions(employees, "業務");
 
   const updateCustomerMutation = useUpdateCustomer({
     mutation: {
@@ -1690,6 +1691,7 @@ export default function QuotesPage() {
                     <SelectTrigger><SelectValue placeholder="選擇業務" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="0">（不指定）</SelectItem>
+                      {form.salesRepId > 0 && !salesReps.some(e => e.id === form.salesRepId) && <SelectItem value={String(form.salesRepId)} disabled>{employees?.find(e => e.id === form.salesRepId)?.name ?? `#${form.salesRepId}`}（原負責人）</SelectItem>}
                       {salesReps?.map(r => <SelectItem key={r.id} value={String(r.id)}>{r.name}</SelectItem>)}
                     </SelectContent>
                   </Select>

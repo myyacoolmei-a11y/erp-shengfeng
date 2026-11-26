@@ -1,3 +1,4 @@
+import { hasEmployeePosition } from "../../shared/employeePositions";
 import { Router, type IRouter } from "express";
 import { eq, and } from "drizzle-orm";
 import { db, employeesTable } from "@workspace/db";
@@ -30,7 +31,6 @@ function perfParams(query: Record<string, unknown>): StatsRangeParams {
 router.get("/employees", requireRole(...READ_ROLES), async (req, res): Promise<void> => {
   const { position, status } = req.query as { position?: string; status?: string };
   const conditions = [];
-  if (position) conditions.push(eq(employeesTable.position, position));
   if (status) conditions.push(eq(employeesTable.status, status));
 
   const employees = await db
@@ -39,7 +39,7 @@ router.get("/employees", requireRole(...READ_ROLES), async (req, res): Promise<v
     .where(conditions.length > 0 ? and(...conditions) : undefined)
     .orderBy(employeesTable.name);
 
-  res.json(employees.map(e => ({
+  res.json(employees.filter(e => !position || hasEmployeePosition(e.position, position)).map(e => ({
     ...e,
     createdAt: e.createdAt instanceof Date ? e.createdAt.toISOString() : e.createdAt,
     updatedAt: e.updatedAt instanceof Date ? e.updatedAt.toISOString() : e.updatedAt,
