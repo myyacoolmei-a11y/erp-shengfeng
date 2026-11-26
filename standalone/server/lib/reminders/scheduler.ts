@@ -1,3 +1,4 @@
+import { tickCalendarGroup } from "../line/calendarGroup";
 import { logger } from "../logger.ts";
 import { parseReminderTime, taipeiNowHm, taipeiToday } from "./dateUtils.ts";
 import { getNotificationSettings } from "./reminderSettingsService.ts";
@@ -64,6 +65,7 @@ export function startReminderScheduler() {
 
   const intervalMs = 60_000;
   setInterval(() => {
+    void tickCalendarGroup().catch(err=>logger.error({err},"calendar group reminder failed"));
     void tickReceivableCollectionReminder();
     void tickDailyMorningBriefing();
     void tickEveningReceivableReminder();

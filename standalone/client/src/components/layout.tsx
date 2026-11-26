@@ -210,6 +210,7 @@ function NavContent({ onNavigate }: { onNavigate?: () => void }) {
         <nav aria-label="主要功能" className="flex flex-col gap-1">
           <NavSectionHeader title="日常工作" />
           {dash && <NavLink item={dash} />}
+          {user && (userHasFeature(user,"dispatch_orders") || userRoles.some(r=>["owner","super_admin","admin","engineer","technician"].includes(r))) && <Link href="/calendar" onClick={onNavigate} className={NAV_ITEM_BASE+" "+NAV_ITEM_INACTIVE}><Clock className="h-4 w-4"/>共享行事曆</Link>}
           {dailyItems.map((item) => <NavLink key={item.path} item={item} />)}
           {(resourceItems.length > 0 || showWholesaleMenu) && (
             <NavGroup title="商品與批發" active={resourceItems.some((i) => active(i.path)) || isWholesalePath}>

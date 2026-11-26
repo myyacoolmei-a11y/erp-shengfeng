@@ -1,3 +1,4 @@
+import CalendarPage from "@/pages/calendar";
 import React from "react";
 import { Switch, Route, Router as WouterRouter, Redirect, useLocation } from "wouter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -223,14 +224,15 @@ function AppRoutes() {
   // Public customer upload page: no login required.
   if (!isAuthenticated) {
     if (!isPublicSubsidyUpload && location !== "/login") {
-      return <Redirect to="/login" />;
+      return <Redirect to={location === "/calendar" ? `/login?calendar=1&day=${encodeURIComponent(new URLSearchParams(window.location.search).get("day")||"")}` : "/login"} />;
     }
   } else if (user?.mustChangePassword) {
     if (location !== "/change-password") {
       return <Redirect to="/change-password" />;
     }
   } else if (location === "/login" || location === "/change-password") {
-    const dest = defaultPathForRole(user!);
+    const params = new URLSearchParams(window.location.search);
+    const dest = location === "/login" && params.get("calendar") === "1" ? `/calendar?day=${encodeURIComponent(params.get("day")||"")}` : defaultPathForRole(user!);
     if (dest !== location) {
       return <Redirect to={dest} />;
     }
@@ -239,6 +241,7 @@ function AppRoutes() {
   return (
     <Switch>
       <Route path="/login" component={LoginPage} />
+      <Route path="/calendar">{user && (hasRole(user,"super_admin","owner","admin","engineer","technician") || userHasFeature(user,"dispatch_orders")) ? <CalendarPage /> : <AccessDenied />}</Route>
       <Route path="/change-password" component={ChangePasswordPage} />
       <Route path="/subsidy-upload/:token" component={SubsidyUploadPage} />
       <Route>

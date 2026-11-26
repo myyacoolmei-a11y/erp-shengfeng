@@ -34,6 +34,7 @@ import partnerRouter from "./partner";
 import notificationsRouter from "./notifications";
 import aiWorkReminderSettingsRouter from "./aiWorkReminderSettings";
 import pushRouter from "./push";
+import calendarRouter from "./calendar";
 import inventoryRouter from "./inventory";
 import adminWorkbenchRouter from "./adminWorkbench";
 import subsidyCaseFilesRouter, { subsidyCaseFilesTokenRouter } from "./subsidyCaseFiles";
@@ -93,5 +94,6 @@ router.use(adminWorkbenchRouter);
 router.use(subsidyCaseFilesRouter);
 router.use(operationCenterRouter);
 router.use(inventoryRouter);
+router.use(calendarRouter);
 
 export default router;

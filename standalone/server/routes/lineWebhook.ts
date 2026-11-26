@@ -1,3 +1,4 @@
+import { handleCalendarGroup } from "../lib/line/calendarGroup";
 import type { Request, Response } from "express";
 import { verifyLineSignature } from "../lib/line/lineSignature.ts";
 import {
@@ -11,8 +12,8 @@ import { logger } from "../lib/logger.ts";
 interface LineWebhookEvent {
   type: string;
   replyToken?: string;
-  source?: { type?: string; userId?: string };
-  message?: { type?: string; text?: string };
+  source?: { type?: string; userId?: string; groupId?: string };
+  message?: { type?: string; text?: string; id?: string };
 }
 
 interface LineWebhookBody {
@@ -52,6 +53,12 @@ export async function handleLineWebhook(req: Request, res: Response): Promise<vo
     logger.info({ eventType: event.type }, "[LINE Webhook] event type");
 
     if (event.type === "message" && event.message?.type === "text" && event.source?.userId) {
+      if (event.source.type === "group") {
+        try { await handleCalendarGroup({groupId:event.source.groupId,userId:event.source.userId,messageId:event.message.id,text:event.message.text??"",replyToken:event.replyToken}); }
+        catch(err){logger.error({err},"calendar group webhook failed");}
+        continue;
+      }
+      if(event.source.type !== "user") continue;
       const code = parseLineBindingMessage(event.message.text ?? "");
       if (code) {
         await bindLineUserByCode({

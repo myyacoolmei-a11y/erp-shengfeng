@@ -1647,7 +1647,7 @@ export default function WorkOrders() {
                           onClick={() => {
                             const addr = String(o.installAddress);
                             window.open(
-                              `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}`,
+                              `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(addr)}&travelmode=driving&dir_action=navigate`,
                               "_blank",
                               "noopener,noreferrer",
                             );

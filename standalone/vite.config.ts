@@ -33,6 +33,7 @@ export default defineConfig({
         lang: "zh-TW",
         start_url: "/",
         scope: "/",
+        shortcuts: [{ name: "晟風共享行事曆", short_name: "行事曆", url: "/calendar", icons: [{src:"/icons/icon-192.png",sizes:"192x192"}] }],
         display: "standalone",
         orientation: "portrait-primary",
         theme_color: PWA_THEME,

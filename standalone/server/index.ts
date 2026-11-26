@@ -1,3 +1,4 @@
+import { ensureCalendar } from "./routes/calendar";
 import app from "./app";
 import { logger } from "./lib/logger";
 import { seedDefaultUser, ensureSuperAdmin, migrateUserRoles } from "./routes/auth";
@@ -106,5 +107,6 @@ app.listen(port, async (err) => {
   await ensureRepairCaseSalesUserMigration();
   await ensureWorkOrderDispatchUpgradeMigration();
   await ensureAttendancePayrollMigration();
+  await ensureCalendar();
   startReminderScheduler();
 });

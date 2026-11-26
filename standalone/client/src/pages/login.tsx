@@ -24,10 +24,12 @@ export default function LoginPage() {
     setError(null);
     setLoading(true);
     try {
+      const params = new URLSearchParams(window.location.search);
+      const dest = params.get("calendar") === "1" ? `/calendar?day=${encodeURIComponent(params.get("day")||"")}` : "/";
       await login(username, password);
       // Destination is finalized by AppRoutes (mustChangePassword / role home).
       // Soft-land on "/" once; AppRoutes will replace if needed.
-      navigate("/", { replace: true });
+      navigate(dest, { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : "登入失敗，請重試");
     } finally {
