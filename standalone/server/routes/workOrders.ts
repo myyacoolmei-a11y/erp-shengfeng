@@ -981,8 +981,10 @@ router.get("/work-orders/:id/stock-shipment", requireFeature("inventory"), async
   if(req.user && !(await assertWorkOrderDataAccess(req.user,wo)).ok){res.status(403).json({error:"無權限"});return;}
   const lines=await db.select().from(workOrderDeliveryItemsTable).where(eq(workOrderDeliveryItemsTable.workOrderId,id));
   const sourceId=wo.parentWorkOrderId || id;
-  const history=await db.select({id:inventoryTransactionsTable.id,inventoryItemId:inventoryTransactionsTable.inventoryItemId,quantityChange:inventoryTransactionsTable.quantityChange,notes:inventoryTransactionsTable.notes,occurredAt:inventoryTransactionsTable.occurredAt,createdAt:inventoryTransactionsTable.createdAt,brand:inventoryItemsTable.brand,itemName:inventoryItemsTable.itemName,model:inventoryItemsTable.model,serialNumber:inventoryItemsTable.serialNumber,unit:inventoryItemsTable.unit}).from(inventoryTransactionsTable).leftJoin(inventoryItemsTable,eq(inventoryItemsTable.id,inventoryTransactionsTable.inventoryItemId)).where(or(eq(inventoryTransactionsTable.shipmentKey,`work-order:${sourceId}`),like(inventoryTransactionsTable.shipmentKey,`work-order:${sourceId}:%`))).orderBy(desc(inventoryTransactionsTable.createdAt),desc(inventoryTransactionsTable.id));
-  res.json({wholesale:!!wo.wholesaleOrderId, parent:!!wo.parentWorkOrderId, confirmed:!!wo.deliveryConfirmedAt, lines,history});
+  const history=await db.select({id:inventoryTransactionsTable.id,shipmentKey:inventoryTransactionsTable.shipmentKey,inventoryItemId:inventoryTransactionsTable.inventoryItemId,quantityChange:inventoryTransactionsTable.quantityChange,notes:inventoryTransactionsTable.notes,occurredAt:inventoryTransactionsTable.occurredAt,createdAt:inventoryTransactionsTable.createdAt,brand:inventoryItemsTable.brand,itemName:inventoryItemsTable.itemName,model:inventoryItemsTable.model,serialNumber:inventoryItemsTable.serialNumber,unit:inventoryItemsTable.unit}).from(inventoryTransactionsTable).leftJoin(inventoryItemsTable,eq(inventoryItemsTable.id,inventoryTransactionsTable.inventoryItemId)).where(or(eq(inventoryTransactionsTable.shipmentKey,`work-order:${sourceId}`),like(inventoryTransactionsTable.shipmentKey,`work-order:${sourceId}:%`))).orderBy(desc(inventoryTransactionsTable.createdAt),desc(inventoryTransactionsTable.id));
+  const cancellationPrefix=`work-order:${sourceId}:cancel:`;
+  const reversals=new Map(history.filter(h=>h.quantityChange>0&&h.shipmentKey?.startsWith(cancellationPrefix)).map(h=>[Number(h.shipmentKey!.slice(cancellationPrefix.length)),h]));
+  res.json({wholesale:!!wo.wholesaleOrderId, parent:!!wo.parentWorkOrderId, confirmed:!!wo.deliveryConfirmedAt, lines,history:history.filter(h=>h.quantityChange<0).map(h=>({...h,cancelledAt:reversals.get(h.id)?.occurredAt||reversals.get(h.id)?.createdAt||null}))});
 });
 router.post("/work-orders/:id/stock-shipment", requireFeature("inventory"), async(req,res):Promise<void>=>{
   const id=Number(req.params.id), parsed=ShipmentInput.safeParse(req.body);
@@ -1008,6 +1010,30 @@ router.post("/work-orders/:id/stock-shipment", requireFeature("inventory"), asyn
       return {alreadyConfirmed:false};
     });res.json(result);
   } catch(err){if(err instanceof WholesaleDeliveryError){res.status(err.status).json({error:err.message});return;}logger.error({err},"stock shipment failed");res.status(500).json({error:"庫存出貨失敗"});}
+});
+// Reverse one actual engineering shipment, never erase the stock ledger.
+router.post("/work-orders/:id/stock-shipment/:movementId/cancel", requireFeature("inventory"), async(req,res):Promise<void>=>{
+  const id=Number(req.params.id), movementId=Number(req.params.movementId);
+  if(!Number.isSafeInteger(id)||id<1||!Number.isSafeInteger(movementId)||movementId<1){res.status(400).json({error:"無效出貨紀錄"});return;}
+  if(!req.user){res.status(401).json({error:"請先登入"});return;}
+  try {
+    const result=await db.transaction(async tx=>{
+      const [wo]=await tx.select().from(workOrdersTable).where(eq(workOrdersTable.id,id)).for("update");
+      if(!wo)throw new WholesaleDeliveryError("找不到派工單",404);
+      if(wo.wholesaleOrderId||wo.parentWorkOrderId)throw new WholesaleDeliveryError("批發出貨須另行辦理退貨及帳務調整");
+      if(!(await assertWorkOrderDataAccess(req.user!,wo)).ok)throw new WholesaleDeliveryError("無權限",403);
+      const [movement]=await tx.select().from(inventoryTransactionsTable).where(and(eq(inventoryTransactionsTable.id,movementId),or(eq(inventoryTransactionsTable.shipmentKey,`work-order:${id}`),like(inventoryTransactionsTable.shipmentKey,`work-order:${id}:%`))));
+      if(!movement||movement.quantityChange>=0)throw new WholesaleDeliveryError("找不到此派工單的出貨紀錄",404);
+      const key=`work-order:${id}:cancel:${movementId}`;
+      const [reversed]=await tx.select({id:inventoryTransactionsTable.id}).from(inventoryTransactionsTable).where(eq(inventoryTransactionsTable.shipmentKey,key)).limit(1);
+      if(reversed)return {alreadyCancelled:true};
+      const [item]=await tx.select().from(inventoryItemsTable).where(eq(inventoryItemsTable.id,movement.inventoryItemId)).for("update");
+      if(!item)throw new WholesaleDeliveryError("原庫存品項不存在");
+      await tx.insert(inventoryTransactionsTable).values({inventoryItemId:item.id,quantityChange:-movement.quantityChange,reason:"客戶退貨",notes:`取消派工出貨 ${wo.workOrderNumber||id}｜原異動 #${movementId}`,shipmentKey:key,occurredAt:new Date(),createdBy:req.user!.id});
+      await tx.update(inventoryItemsTable).set({updatedAt:new Date(),...(item.status==="已出貨"?{status:"庫存中"}:{})}).where(eq(inventoryItemsTable.id,item.id));
+      return {alreadyCancelled:false};
+    });res.json(result);
+  }catch(err){if(err instanceof WholesaleDeliveryError){res.status(err.status).json({error:err.message});return;}logger.error({err},"cancel stock shipment failed");res.status(500).json({error:"取消出貨失敗"});}
 });
 router.post("/work-orders/:id/confirm-delivery", requireFeature("inventory"), async (req, res): Promise<void> => {
   const raw = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
