@@ -193,30 +193,30 @@ router.post("/inventory-items", async (req, res): Promise<void> => {
   const model = d.model ?? null;
   const itemName = d.itemName;
   try {
-    if (await findDuplicateItem({ brand, itemName, model })) {
-      res.status(409).json({ error: "此庫存品項已存在" });
-      return;
-    }
-    const created = await db.transaction(async (tx) => {
-    const [created] = await tx
-      .insert(inventoryItemsTable)
-      .values({
-        brand,
-        category: d.category ?? null,
-        itemName,
-        model,
-        serialNumber: d.serialNumber ?? null,
-        unit: d.unit || "台",
-        warehouseLocation: d.warehouseLocation ?? null,
-        status: d.status || "庫存中",
-        costPrice: d.costPrice ?? null,
-        notes: d.notes ?? null,
-      })
-      .returning();
-    if (d.initialQuantity) await tx.insert(inventoryTransactionsTable).values({inventoryItemId: created.id, reason: "進貨", quantityChange: d.initialQuantity, supplier: d.supplier || null, occurredAt: d.occurredAt ? new Date(d.occurredAt) : new Date(), createdBy: req.user?.id ?? null});
-    return created;
+    const result = await db.transaction(async (tx) => {
+      // Serialize item creation/restocking so two concurrent receipts cannot create duplicates.
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(73192601)`);
+      const normalize = (v: string | null | undefined) => (v || "").trim().toLowerCase();
+      const candidates = await tx.select().from(inventoryItemsTable).where(and(
+        sql`lower(btrim(coalesce(${inventoryItemsTable.brand}, ''))) = ${normalize(brand)}`,
+        model ? sql`lower(btrim(coalesce(${inventoryItemsTable.model}, ''))) = ${normalize(model)}` : and(sql`coalesce(${inventoryItemsTable.model}, '') = ''`, sql`lower(btrim(${inventoryItemsTable.itemName})) = ${normalize(itemName)}`),
+      )).for("update");
+      const matches = candidates.filter(i => normalize(i.serialNumber) === normalize(d.serialNumber) && normalize(i.unit) === normalize(d.unit || "台") && normalize(i.warehouseLocation) === normalize(d.warehouseLocation));
+      if (matches.length > 1 || (candidates.length && !matches.length)) return { conflict: true as const };
+      let item = matches[0];
+      const existing = !!item;
+      if (existing && (!d.initialQuantity || !["庫存中", "待出貨", "已出貨"].includes(item.status))) return { conflict: true as const };
+      if (!item) {
+        [item] = await tx.insert(inventoryItemsTable).values({brand, category:d.category ?? null,itemName,model,serialNumber:d.serialNumber ?? null,unit:d.unit || "台",warehouseLocation:d.warehouseLocation ?? null,status:d.status || "庫存中",costPrice:d.costPrice ?? null,notes:d.notes ?? null}).returning();
+      } else {
+        [item] = await tx.update(inventoryItemsTable).set({updatedAt:new Date(), ...(item.status === "已出貨" ? {status:"庫存中"} : {})}).where(eq(inventoryItemsTable.id,item.id)).returning();
+      }
+      if (d.initialQuantity) await tx.insert(inventoryTransactionsTable).values({inventoryItemId:item.id,reason:"進貨",quantityChange:d.initialQuantity,supplier:d.supplier || null,occurredAt:d.occurredAt ? new Date(d.occurredAt) : new Date(),notes:d.notes || null,createdBy:req.user?.id ?? null});
+      const [{qty}] = await tx.select({qty:sql<number>`coalesce(sum(${inventoryTransactionsTable.quantityChange}),0)::int`}).from(inventoryTransactionsTable).where(eq(inventoryTransactionsTable.inventoryItemId,item.id));
+      return { conflict:false as const, item, qty:Number(qty), existing };
     });
-    res.status(201).json(serializeItem(created, d.initialQuantity ?? 0));
+    if (result.conflict) { res.status(409).json({error:"已有相近品項或狀態不符，請從庫存清單選擇正確品項後登記進貨，避免混入不同序號、單位或倉庫。"}); return; }
+    res.status(result.existing ? 200 : 201).json(serializeItem(result.item,result.qty));
   } catch (err) {
     logInventoryError(err, "create");
     if (isUniqueViolation(err)) {
@@ -368,7 +368,7 @@ router.post(
         const nextQty = Number(qty) + parsed.data.quantityChange;
         if (nextQty < 0) throw new Error("庫存不足");
         const [created] = await tx.insert(inventoryTransactionsTable).values({inventoryItemId:id, reason:parsed.data.reason, quantityChange:parsed.data.quantityChange, notes:parsed.data.notes || null, supplier:parsed.data.supplier || null, occurredAt:parsed.data.occurredAt ? new Date(parsed.data.occurredAt) : new Date(), createdBy:req.user?.id ?? null}).returning();
-        await tx.update(inventoryItemsTable).set({updatedAt:new Date()}).where(eq(inventoryItemsTable.id,id));
+        await tx.update(inventoryItemsTable).set({updatedAt:new Date(), ...(parsed.data.reason === "進貨" && locked.status === "已出貨" ? {status:"庫存中"} : {})}).where(eq(inventoryItemsTable.id,id));
         return {transaction:created, quantity:nextQty, item:serializeItem(locked,nextQty)};
       });
       res.status(201).json(result);

@@ -986,7 +986,8 @@ router.get("/work-orders/:id/stock-shipment", requireFeature("inventory"), async
 });
 router.post("/work-orders/:id/stock-shipment", requireFeature("inventory"), async(req,res):Promise<void>=>{
   const id=Number(req.params.id), parsed=ShipmentInput.safeParse(req.body);
-  if(!Number.isInteger(id)||id<1||!parsed.success){res.status(400).json({error:"請選擇出貨品項與正整數數量"});return;}
+  if(!Number.isInteger(id)||id<1){res.status(400).json({error:"派工單編號無效"});return;}
+  if(!parsed.success){const issue=parsed.error.issues[0];res.status(400).json({error:issue?.path[0]==="requestId"?"出貨畫面版本過舊或確認編號無效，請重新整理網頁後再操作（本次未扣庫存）":`出貨品項或數量格式錯誤：${issue?.path.join(".") || "items"}（本次未扣庫存）`});return;}
   try {
     const result=await db.transaction(async tx=>{
       const [wo]=await tx.select().from(workOrdersTable).where(eq(workOrdersTable.id,id)).for("update");

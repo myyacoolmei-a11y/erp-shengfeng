@@ -169,6 +169,7 @@ export default function Inventory() {
     queryFn: () => listInventoryItems(filters),
   });
 
+  const { data: allItems = [] } = useQuery({queryKey:[...QUERY_KEY,"receipt-picker"],queryFn:()=>listInventoryItems(),enabled:dialogOpen&&!editing});
   const { data: txHistory = [], isLoading: historyLoading } = useQuery({
     queryKey: ["inventory-transactions", historyItem?.id],
     queryFn: () => listInventoryTransactions(historyItem!.id),
@@ -184,7 +185,7 @@ export default function Inventory() {
       setDialogOpen(false);
       setEditing(null);
       setForm(emptyForm());
-      toast({ title: "新增成功" });
+      toast({ title: "進貨／品項已儲存，庫存已更新" });
     },
     onError: (e) => toast({ title: "新增失敗", description: errMsg(e), variant: "destructive" }),
   });
@@ -555,8 +556,9 @@ export default function Inventory() {
           </DialogHeader>
           <form onSubmit={handleSave} className="space-y-3">
             <p className="text-xs text-muted-foreground rounded-md bg-muted/50 px-3 py-2">
-              新增時可直接登記首批進貨；既有品項請使用庫存異動。
+              同品牌、型號、序號、單位及倉庫相符時，進貨數量會累加到原品項；也可直接選擇下方既有品項進貨。
             </p>
+            {!editing && <div className="space-y-1"><Label>既有品項快速進貨</Label><select className="w-full rounded border p-2 bg-background text-sm" value="" onChange={e=>{const item=allItems.find(i=>String(i.id)===e.target.value);if(item){setDialogOpen(false);openTx(item);}}}><option value="">選擇既有品項（直接增加數量）</option>{allItems.map(i=><option key={i.id} value={i.id}>{[i.brand,i.itemName,i.model,i.warehouseLocation,i.serialNumber].filter(Boolean).join(" / ")}｜剩 {i.quantity} {i.unit}</option>)}</select></div>}
             {!editing && <div className="grid grid-cols-2 gap-3"><div><Label>進貨日期與時間</Label><Input type="datetime-local" required value={occurred} onChange={e=>setOccurred(e.target.value)}/></div><div><Label>供應廠商</Label><Input value={supplier} onChange={e=>setSupplier(e.target.value)}/></div><div><Label>進貨數量</Label><Input type="number" min="0" step="1" required value={initialQty} onChange={e=>setInitialQty(e.target.value)}/></div></div>}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
